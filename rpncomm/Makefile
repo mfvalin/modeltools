@@ -13,7 +13,7 @@ MPIFC = mpif90
 all: lib
 
 clean:
-	rm -f *.o *.a *.mod
+	rm -f *.o *.a *.mod f77name.h
 
 lib: fortran_code c_code
 	ar rcv libtest.a *.o
