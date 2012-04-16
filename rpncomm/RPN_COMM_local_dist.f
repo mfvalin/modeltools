@@ -46,7 +46,7 @@
       do j =  1 , nrows
          if(pe_mex == table(1,1,j) .and. pe_mey == table(2,1,j)) then  ! I am the source for this row
             do i = 2, max_clients                                      ! count valid clients in row
-              if(table(1,i,j) <> 0) my_clients = my_clients + 1
+              if(table(1,i,j) .ne. 0) my_clients = my_clients + 1
             enddo
          endif
       enddo
@@ -62,7 +62,7 @@
       do j =  1 , nrows
          if(pe_mex == table(1,1,j) .and. pe_mey == table(2,1,j)) then  ! I am the source for this row
             do i = 2, max_clients                                      ! count valid clients in row
-              if(table(1,i,j) <> 0) then
+              if(table(1,i,j) .ne. 0) then
                  no_client = no_client + 1
                  dist_table(dist_table_entries)%send_table(1,no_client)
      %            = pe_id(table(1,i,j),table(2,i,j))
