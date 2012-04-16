@@ -1,7 +1,15 @@
-ifeq "$(EC_ARCH)" ""
-include Makefile.default
+ifneq (,$(PLAIN))
+  include Makefile.default
 else
-include Makefile.ECsetup
+  ifdef EC_ARCH
+    ifneq (,$(wildcard Makefile.$(BASE_ARCH)))
+      include $(wildcard Makefile.$(BASE_ARCH))
+    endif
+    ifneq (,$(wildcard $(subst /,.,Makefile.$(EC_ARCH))))
+      include $(wildcard $(subst /,.,Makefile.$(EC_ARCH)))
+    endif
+    include Makefile.ECsetup
+  endif
 endif
 
 all: lib
