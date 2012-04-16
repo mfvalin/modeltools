@@ -1,3 +1,8 @@
+
+ifeq "$(BASE_ARCH)" "$(EC_ARCH)"
+$(error FATAL: EC_ARCH is equal to BASE_ARCH, no compiler architecture is defined, ABORTING)
+endif
+
 $(info using EC setup)
 # this is for sites using the EC setup
 
