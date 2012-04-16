@@ -24,5 +24,13 @@ modules:
 fortran_code: modules
 	$(MPIFC) $(FCFLAGS) -c RPN_COMM*.f
 
-c_code:
+f77name:
+	cd ../tools ;\
+        gcc -c ftn-mangling-detect.c ;\
+        $(FC) $(FCFLAGS) ftn-mangling.f ftn-mangling-detect.o
+	../tools/a.out >f77name.h
+	cd ../tools ;\
+	rm -f a.out *.o
+
+c_code: f77name
 	$(CC) $(CFLAGS) -c RPN_COMM*.c
