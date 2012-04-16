@@ -1,0 +1,15 @@
+$(info using EC setup)
+# this is for sites using the EC setup
+
+CFLAGS =  -O 2
+FCFLAGS =  -O 2
+
+CC=s.cc
+FC=s.f77
+F90C=s.f90
+MPICC = s.cc -mpi
+MPIFC = s.f77 -mpi
+MPIF90C = s.f90 -mpi
+
+# end of EC setup
+
