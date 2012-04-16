@@ -1,2 +1,2 @@
-# TO BE DONE
-# added one line
+directory rpncomm:
+  RPN_COMM communication library for 2D grid based models
