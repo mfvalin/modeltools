@@ -208,7 +208,7 @@
 !     build a table entry describing a group of data exchanges described in array table
 !     and add it to the exchange table
 !
-!     table(-2,j) = offset for this row in data buffer (OUTPUT from this function)
+!     table(-2,j) = empty, will receive offset for this row in data buffer (OUTPUT from this function)
 !     table(-1,j) = number of values for this exchange (must be > 0)
 !     table( 0,j) = ordinal of root in communicator for this exchange (must be >= 0)
 !     table( i,j) = ordinal of a PE in communicator for this exchange (-1 means entry is void)
@@ -428,11 +428,11 @@
       integer RPN_COMM_get_dist_meta
       external RPN_COMM_get_dist_meta
       integer, dimension(-2:MAX_CLIENTS,npex*npey) :: my_table
-      integer :: maxpe, i, mype, ierr, pattern
+      integer :: maxpe, i, mype, ierr, pattern, j, low, up
       integer :: ndata, nmeta, nrows
       integer, dimension(20) :: localdata
       integer, pointer, dimension(:,:) :: metadata
-      real, pointer, dimension(:)      :: values
+      integer, pointer, dimension(:)   :: values
       integer, pointer, dimension(:)   :: offsets
       logical debug
 
@@ -481,13 +481,33 @@
       endif
       allocate(metadata(4,nmeta))
       allocate(values(ndata))
+      values = -1
 !
 !     step 3, put data into the proper places
 !
+      do i = 1, npex*npey
+         if(my_table(-2,i) /= -1) then     ! this row is active
+           if(my_table(0,i) == mype) then  ! I am the root for this exchange
+             low = my_table(-2,i)
+             up = low + my_table(-1,i) - 1
+             values(low:up) = mype + 100*i
+             print *,'<=',mype,'=>',low,up,values(low:up)
+           endif
+         endif
+      enddo
 !
 !     step 4, perform the exchange
 !
       ierr = RPN_COMM_do_dist(pattern,.true.,values,ndata)
+      do i = 1, npex*npey
+         if(my_table(-2,i) /= -1) then     ! this row is active
+           if(my_table(0,i) /= mype) then  ! I am a client for this exchange
+             low = my_table(-2,i)
+             up = low + my_table(-1,i) - 1
+             print *,'==',mype,'==',low,up,values(low:up)
+           endif
+         endif
+      enddo
       RPN_COMM_dist_test = 0
       return
       end
