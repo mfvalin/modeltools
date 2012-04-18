@@ -38,6 +38,7 @@
 !
 !     a "root" PE has multiple clients to send data to or receive data from
 !     an "exchange" is a "root" sending to / receiving from one or more "client(s)"
+!           root PE <--->  client PE 1 ,  client PE 2 , ..... , client PE N
 !
 !     function RPN_COMM_add_dist_entry receives a multi row array where each row
 !     describes such an exchange (number of values, root PE, client PE 1, ...., client PE n)
@@ -66,7 +67,8 @@
 ! ========================================================================================
 !
       integer function allocate_dist_table(nentries)
-!     create the distribution table with nentries entries (one needed per exchange pattern)
+!     create the distribution table with nentries entries 
+!     (one needed per group of exchange patterns)
 !     function returns -1 if failure
 !     function returns nentries upon success
       use local_distribution
@@ -76,11 +78,29 @@
       allocate_dist_table = -1       ! precondition to FAILED
       if(dist_table_size == -1 .and. nentries > 0)then
         allocate(dist_table(1:nentries))
-        dist_table_size = nentries       ! number of possible entries in table
+        dist_table_size     = nentries   ! number of possible entries in table
         allocate_dist_table = nentries   ! SUCCESS
-        dist_table_entries = 0           ! table is EMPTY
+        dist_table_entries  = 0          ! table is EMPTY
       endif
       return
+      end
+!
+! ========================================================================================
+!
+      subroutine RPN_COMM_get_dist_meta(pattern,metadata,nmeta)
+!
+!     get metadata table for an exchange group
+!
+!     metadata : describes what will be sent/received
+!         metadata(1,N) is offset of data in array values
+!         metadata(2,N) is number of data elements to be collected
+!         metadata(3,N) is the exchange number (<0 means this PE is a client)
+!     nmeta has been previously obtained from RPN_COMM_get_dist_dims
+!
+      use local_distribution
+      implicit none
+      integer, intent(IN) :: pattern, nmeta
+      integer, intent(OUT), dimension(3,nmeta) :: metadata
       end
 !
 ! ========================================================================================
@@ -102,13 +122,13 @@
       if(pattern > dist_table_entries) return  ! out of table
       if(pattern <= 0) return                  ! out of table
 
-      ndata = 0
+      ndata    = 0
       nclients = dist_table(pattern)%nclients
       nsources = dist_table(pattern)%nsources
-      do i = 1, nclients
+      do i = 1, nclients        ! where I am root
          ndata = ndata + dist_table(pattern)%clients(3,i)  ! add nb of values in this exchange
       enddo
-      do i = 1, nsources
+      do i = 1, nsources        ! where I am a client
          ndata = ndata + dist_table(pattern)%sources(3,i)  ! add nb of values in this exchange
       enddo
       nmeta = nclients + nsources
@@ -117,9 +137,10 @@
 ! ========================================================================================
 !
       integer function RPN_COMM_add_dist_entry
-     %        (table,max_clients,nrows,communicator)
+     %        (table,max_clients,nrows,communicator,ndata,nmeta)
 !
 !     build a table entry describing a group of data exchanges described in array table
+!     and add it to the exchange table
 !
 !     table(-1,j) = number of values for this exchange (must be > 0)
 !     table( 0,j) = ordinal of root in communicator for this exchange (must be >= 0)
@@ -129,6 +150,8 @@
 !     max_client: maximum number of clients in exchanges
 !     nrows : number of exchanges described in table
 !     communicator : RPN COMM communicator for this exchange ('GRID','SUPERGRID',...)
+!     ndata : size of the data buffer needed for the call to RPN_COMM_do_dist
+!     nmeta : second dimension of metadata table needed for the call to RPN_COMM_get_dist_meta
 !
 !     the function will return a pattern index to be used for the actual exchange 
 !     or -1 in case of failure
@@ -142,6 +165,7 @@
       integer, intent(IN) :: max_clients,nrows
       integer, dimension(-1:max_clients,nrows), intent(IN) :: table
       character *(*), intent(IN) :: communicator
+      integer, intent(OUT) :: ndata, nmeta
 
       integer RPN_COMM_comm
       external RPN_COMM_comm
@@ -152,46 +176,48 @@
       RPN_COMM_add_dist_entry = -1   ! precondition to FAILED
       if(dist_table_entries >= dist_table_size) return    ! OUCH, table is full
 
-      the_comm = RPN_COMM_comm(communicator)
-      call RPN_COMM_rank( communicator, this_pe ,ierr )
+      the_comm = RPN_COMM_comm(communicator)  ! translate communicator from RPN_COMM to MPI
+      call RPN_COMM_rank( communicator, this_pe ,ierr )     ! my rank in this communicator
       my_clients = 0
       my_sources = 0
-      dist_table_entries = dist_table_entries + 1           ! new table entry
-      do j =  1 , nrows                                     ! find number of clients and sources
-         if(table(0,j) == this_pe) then  ! I am the source for this row
-            do i = 2, max_clients                           ! count valid clients in row
-               if(table(i,j) >= 0) then                   ! I have a client
+      dist_table_entries = dist_table_entries + 1         ! new table entry
+      do j =  1 , nrows        ! find number of clients and sources fort this set of exchanges
+         if(table(0,j) == this_pe) then  ! I am the root for this exchange
+            ndata = ndata + table(-1,j)  ! count needed data buffer space
+            do i = 2, max_clients                         ! count valid clients in row
+               if(table(i,j) >= 0 .and. table(i,j) /= this_pe) then   ! I have a client other than myself
                   my_clients = my_clients + 1
                endif
             enddo
          else                             ! I am not the root, am i a client ?
             do i = 2, max_clients
                if(table(i,j) == this_pe) then ! I am a client
+                  ndata = ndata + table(-1,j) ! count needed data buffer space
                   my_sources = my_sources + 1
                   exit       ! I can only be client once in an exchange
                endif
             enddo
          endif
       enddo
-
+      nmeta = my_clients + my_sources
       allocate    ! allocate client table
      %  (dist_table(dist_table_entries)%clients(3,1:my_clients))
       allocate    ! allocate sources table
      %  (dist_table(dist_table_entries)%sources(3,1:my_sources))
-      no_client = 0
       dist_table(dist_table_entries)%nclients = my_clients  ! number of clients
       dist_table(dist_table_entries)%nsources = my_sources  ! number of root sources
       dist_table(dist_table_entries)%comm = the_comm        ! grid communicator
+      no_client = 0
       no_source = 0
 !
-!     rows in clients contain the exchange number, client PE ordinal, and data length
-!     rows in sources contain the exchange number, root PE ordinal, and data length
+!     rows in clients will contain the exchange number, client PE ordinal, and data length
+!     rows in sources will contain the exchange number,  root  PE ordinal, and data length
 !
       do j =  1 , nrows
         if(table(0,j) == this_pe) then  ! I am the root for this exchange
           no_client = no_client + 1
           do i = 2, max_clients                                  ! count valid clients in row
-            if(table(i,j) >= 0) then
+            if(table(i,j) >= 0 .and. table(i,j) /= this_pe) then         ! I have a client other than myself
                no_client = no_client + 1
                dist_table(dist_table_entries)%clients(1,no_client) = j   ! exchange number
                dist_table(dist_table_entries)%clients(2,no_client)
@@ -225,13 +251,15 @@
      %        metadata,nmeta,nrows,from_root)
 !
 !     pattern is the pattern number returned by RPN_COMM_add_dist_entry for this data exchange
+!     values buffer must have been filled according to what was obtained from subroutine
+!     RPN_COMM_get_dist_meta (root data if From_root, client data if >not from_root)
 !
 !     values : 1D array containing data to distribute or data to receive
 !     nvalues : dimension of array values, max number of values to be distributed/collected
-!     metadata : describes what was sent/received
+!     metadata : describes what will be sent/received
 !         metadata(1,N) is offset of data in array values
 !         metadata(2,N) is number of data elements to be collected
-!         metadata(3,N) is the exchange number
+!         metadata(3,N) is the exchange number (<0 means this PE was a client)
 !     nrows : number of exchanges
 !     from_root : distribution or collection flag
 !          .true. : data flows from root PE to client PEs
@@ -240,7 +268,7 @@
       use local_distribution
       implicit none
       integer, intent(IN) :: pattern, nvalues, nrows, nmeta
-      integer , dimension(3,nrows), intent(OUT) :: metadata
+      integer , dimension(3,nrows), intent(IN) :: metadata
       integer , dimension(nvalues), intent(INOUT) :: values
       logical, intent(IN) :: from_root
 
@@ -250,7 +278,7 @@
       integer, pointer, dimension(:,:) :: clients, sources
       integer, allocatable, dimension(:,:) :: statuses
       integer, allocatable, dimension(:) :: requests
-      integer nclients, nsources, the_comm, ierr
+      integer nclients, nsources, the_comm, ierr, the_pe
 
       RPN_COMM_do_dist = -1   ! precondition to FAILED
       if(pattern > dist_table_entries) return  ! out of table ?
@@ -261,58 +289,86 @@
       nclients = dist_table(pattern)%nclients ! number of clients
       nsources = dist_table(pattern)%nsources ! number of root data sources
       the_comm = dist_table(pattern)%comm     ! MPI communicator
-      allocate( statuses(MPI_STATUS_SIZE,nclients+nsources) )
+      allocate( statuses(MPI_STATUS_SIZE,nclients+nsources) ) ! asynchronous messages status
       allocate( requests(nclients+nsources) )
 
       request = 0
-      offset = 1
+      offset  = 1
       do j = 1 , nclients  ! as root send to / receive from clients
          request = request + 1
-         row = clients(1,j)
-         length = clients(3,j)
-         metadata(1,request) = offset
-         metadata(2,request) = length
-         metadata(3,request) = row
-         if(from_root) then ! send
+         row     = clients(1,j)
+         the_pe  = clients(2,j)
+         length  = clients(3,j)
+         if(metadata(1,request) /= offset ) return  ! metadata not consistent with table
+         if(metadata(2,request) /= length ) return  ! metadata not consistent with table
+         if(metadata(3,request) /= row    ) return  ! metadata not consistent with table
+         if(from_root) then ! send  to client, use row as communication tag
             call MPI_isend(values(offset),length,MPI_INTEGER,
-     %           clients(2,j),row,the_comm,requests(request),ierr)
-         else
+     %           the_pe,row,the_comm,requests(request),ierr)
+         else               ! receive from client, use row as communication tag
             call MPI_irecv(values(offset),length,MPI_INTEGER,
-     %           clients(2,j),row,the_comm,requests(request),ierr)
+     %           the_pe,row,the_comm,requests(request),ierr)
          endif
          offset = offset + length
       enddo
       do j = 1 , nsources  ! as client receive from / send to roots
          request = request + 1
-         row = sources(1,j)
-         length = sources(3,j)
-         metadata(1,request) = offset
-         metadata(2,request) = length
-         metadata(3,request) = row
-         if(from_root) then ! receive
+         row     = sources(1,j)
+         the_pe  = sources(2,j)
+         length  = sources(3,j)
+         if(metadata(1,request) /= offset ) return  ! metadata not consistent with table
+         if(metadata(2,request) /= length ) return  ! metadata not consistent with table
+         if(metadata(3,request) /= row    ) return  ! metadata not consistent with table
+         if(from_root) then ! receive from root, use row as communication tag
             call MPI_irecv(values(offset),length,MPI_INTEGER,
-     %           sources(2,j),row,the_comm,requests(request),ierr)
-         else
+     %           the_pe,row,the_comm,requests(request),ierr)
+         else               ! send  to root, use row as communication tag
             call MPI_isend(values(offset),length,MPI_INTEGER,
-     %           sources(2,j),row,the_comm,requests(request),ierr)
+     %           the_pe,row,the_comm,requests(request),ierr)
          endif
          offset = offset + length
       enddo
 !
-!     wait for all transfers to complete
+      call MPI_waitall(request,requests,statuses,ierr)    ! wait for all transfers to complete
 !
-      call MPI_waitall(request,requests,statuses,ierr)
+      RPN_COMM_do_dist = 0    ! SUCCESS
 !
       deallocate(statuses)
       deallocate(requests)
-      RPN_COMM_do_dist = 0    ! SUCCESS
       return
       end
 !
 ! ========================================================================================
 !
-      integer function RPN_COMM_test_dist()
+      integer function RPN_COMM_dist_test(npex,npey)
+      use local_distribution
       implicit none
-      RPN_COMM_test_dist = 0
+      integer, intent(IN) :: npex, npey
+
+      integer, parameter :: MAX_CLIENTS=3
+      integer :: RPN_COMM_add_dist_entry
+      external :: RPN_COMM_add_dist_entry
+      integer, dimension(-1:MAX_CLIENTS,npex*npey) :: my_table
+      integer :: maxpe, i, mype, ierr, pattern
+      integer :: ndata, nmeta, nrows
+      integer, dimension(20) :: localdata
+
+      maxpe = npex*npey -1
+      my_table = -1   ! void all entries
+      RPN_COMM_dist_test = -1
+      call RPN_COMM_rank( 'GRID', mype ,ierr )
+!
+!     step 1, establish communication pattern
+!
+      do i = 1, npex*npey
+        my_table(-1,i) = 2
+        my_table( 0,i) = maxpe / 2   ! middle PE will be the root
+        my_table( 1,i) = mod(i,maxpe)
+        my_table( 2,i) = mod(i+1,maxpe)
+      enddo
+      nrows = npex*npey
+      pattern = RPN_COMM_add_dist_entry
+     %          (my_table,MAX_CLIENTS,nrows,'GRID',ndata,nmeta)
+      RPN_COMM_dist_test = 0
       return
       end

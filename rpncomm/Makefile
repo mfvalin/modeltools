@@ -13,14 +13,18 @@ else
     include Makefile.ECsetup
   endif
 endif
+LIB = rpncomm
 
 all: lib
 
 clean:
+	rm -f *.o
+
+veryclean:
 	rm -f *.o *.a *.mod f77name.h
 
 lib: fortran_code c_code
-	ar rcv libtest.a *.o
+	ar rcv lib$(LIB)_$(RPN_COMM_version).a *.o
 
 modules:
 	$(MPIF90C) $(FCFLAGS) -c RPN_COMM_mod.f90
