@@ -20,21 +20,21 @@
       implicit none
       SAVE
 !
-!     dimension of clients is (3,1:nclients)
-!         clients(:,N) = exchange number, PE number, number of values (for Nth client)
+!     dimension of clients is (4,1:nclients)
+!         clients(:,N) = exchange number, PE number, number of values (for Nth client), data offset
 !
 !     with this PE as root of transfer, there will be nclients transfers
 !     clients(3,N) values will be sent to / received from  PE clients(2,N),
-!     data will be read from / written into the position associated with 
-!     exchange numbered clients(1,N) in buffer root_data
+!     data will be read from / written into 
+!     starting at buffer position clients(4,N)
 !
 !     dimension of sources is (3,1:nsources)
-!         sources(:,N) = exchange number, PE number, number of values (for Nth source)
+!         sources(:,N) = exchange number, PE number, number of values (for Nth source), data offset
 !
 !     with this PE as client for transfer, there will be nsources transfers
 !     sources(3,N) values will be sent to / received from  PE sources(2,N),
-!     data will be read from / written into the position associated with 
-!     exchange numbered sources(1,N) in buffer client_data
+!     data will be read from / written into 
+!     starting at buffer position sources(4,N)
 !
 !     a "root" PE has multiple clients to send data to or receive data from
 !     an "exchange" is a "root" sending to / receiving from one or more "client(s)"
@@ -54,8 +54,11 @@
       type :: dist_table_entry                        ! exchange table entry 
         integer, pointer, dimension(:,:) :: clients   ! list of exchange clients for this PE
         integer, pointer, dimension(:,:) :: sources   ! list of exchange "roots" for this PE
+        integer, pointer, dimension(:)   :: offsets   ! offset table into data for all rows
+!        integer, pointer, dimension(:)   :: data      ! data buffer pointer for this PE
         integer :: nclients                           ! number of exchanges where I am the root
         integer :: nsources                           ! number  of exchanges where I am a client
+        integer :: ndata                              ! data buffer dimension
         integer :: comm                               ! mpi communicator
       end type dist_table_entry
       type(dist_table_entry), pointer, dimension(:) :: dist_table
@@ -66,7 +69,7 @@
 !
 ! ========================================================================================
 !
-      integer function allocate_dist_table(nentries)
+      integer function RPN_COMM_alloc_dist_table(nentries)
 !     create the distribution table with nentries entries 
 !     (one needed per group of exchange patterns)
 !     function returns -1 if failure
@@ -75,19 +78,40 @@
       implicit none
       integer, intent(IN) :: nentries
 
-      allocate_dist_table = -1       ! precondition to FAILED
+      RPN_COMM_alloc_dist_table = -1       ! precondition to FAILED
       if(dist_table_size == -1 .and. nentries > 0)then
         allocate(dist_table(1:nentries))
-        dist_table_size     = nentries   ! number of possible entries in table
-        allocate_dist_table = nentries   ! SUCCESS
-        dist_table_entries  = 0          ! table is EMPTY
+        dist_table_size           = nentries   ! number of possible entries in table
+        RPN_COMM_alloc_dist_table = nentries   ! SUCCESS
+        dist_table_entries        = 0          ! table is EMPTY
       endif
       return
       end
 !
 ! ========================================================================================
 !
-      subroutine RPN_COMM_get_dist_meta(pattern,metadata,nmeta)
+      function RPN_COMM_dist_offsets(pattern,offsets,noffsets)
+      use local_distribution
+      implicit none
+      integer RPN_COMM_dist_offsets
+      integer, intent(IN) :: pattern, noffsets
+      integer, dimension(noffsets) :: offsets
+
+      RPN_COMM_dist_offsets = -1
+
+      if(pattern > dist_table_entries) return  ! out of table
+      if(pattern <= 0) return                  ! out of table
+      if(noffsets < size(dist_table(pattern)%offsets)) return   ! array offsets is too small
+
+      offsets(1:size(dist_table(pattern)%offsets)) = 
+     %        dist_table(pattern)%offsets
+      RPN_COMM_dist_offsets = size(dist_table(pattern)%offsets)
+      return
+      end
+!
+! ========================================================================================
+!
+      integer function RPN_COMM_get_dist_meta(pattern,metadata,nmeta)
 !
 !     get metadata table for an exchange group
 !
@@ -95,12 +119,54 @@
 !         metadata(1,N) is offset of data in array values
 !         metadata(2,N) is number of data elements to be collected
 !         metadata(3,N) is the exchange number (<0 means this PE is a client)
-!     nmeta has been previously obtained from RPN_COMM_get_dist_dims
+!         metadata(4,N) is the PE ordinal of the other end of the exchange
+!     nmeta has been previously obtained from RPN_COMM_add_dist_entry
 !
       use local_distribution
       implicit none
       integer, intent(IN) :: pattern, nmeta
-      integer, intent(OUT), dimension(3,nmeta) :: metadata
+      integer, intent(OUT), dimension(4,nmeta) :: metadata
+
+      integer, pointer, dimension(:,:) :: clients, sources
+      integer nclients, nsources, i, row, length, offset, request
+      integer the_pe
+
+      RPN_COMM_get_dist_meta = -1
+      if(pattern > dist_table_entries) return  ! out of table
+      if(pattern <= 0) return                  ! out of table
+
+      clients => dist_table(pattern)%clients  ! array describing my clients
+      sources => dist_table(pattern)%sources  ! array describing my root data sources
+      nclients = dist_table(pattern)%nclients ! number of clients
+      nsources = dist_table(pattern)%nsources ! number of root data sources
+      nclients = dist_table(pattern)%nclients
+
+      if(nmeta /= nclients + nsources) return  ! inconsistency in metadata size
+      request = 0
+      do i = 1 , nclients
+         request = request + 1
+         row     = clients(1,i)
+         the_pe  = clients(2,i)
+         length  = clients(3,i)
+         offset  = clients(4,i)
+         metadata(1,request) = offset
+         metadata(2,request) = length
+         metadata(3,request) = row
+         metadata(4,request) = the_pe
+      enddo
+      do i = 1 , nsources
+         request = request + 1
+         row     = sources(1,i)
+         the_pe  = sources(2,i)
+         length  = sources(3,i)
+         offset  = sources(4,i)
+         metadata(1,request) = offset
+         metadata(2,request) = length
+         metadata(3,request) = -row
+         metadata(4,request) = the_pe
+      enddo
+      RPN_COMM_get_dist_meta = 0
+      return
       end
 !
 ! ========================================================================================
@@ -142,6 +208,7 @@
 !     build a table entry describing a group of data exchanges described in array table
 !     and add it to the exchange table
 !
+!     table(-2,j) = offset for this row in data buffer (OUTPUT from this function)
 !     table(-1,j) = number of values for this exchange (must be > 0)
 !     table( 0,j) = ordinal of root in communicator for this exchange (must be >= 0)
 !     table( i,j) = ordinal of a PE in communicator for this exchange (-1 means entry is void)
@@ -163,34 +230,39 @@
 
       implicit none
       integer, intent(IN) :: max_clients,nrows
-      integer, dimension(-1:max_clients,nrows), intent(IN) :: table
+      integer, dimension(-2:max_clients,nrows), intent(INOUT) :: table
       character *(*), intent(IN) :: communicator
       integer, intent(OUT) :: ndata, nmeta
 
-      integer RPN_COMM_comm
-      external RPN_COMM_comm
+      integer RPN_COMM_comm, RPN_COMM_alloc_dist_table
+      external RPN_COMM_comm, RPN_COMM_alloc_dist_table
       integer the_comm, this_pe
       integer my_clients, my_sources, i, j, ierr
-      integer no_client, no_source
+      integer, pointer, dimension(:,:) :: clients, sources
+      integer no_client, no_source, offset
 
-      RPN_COMM_add_dist_entry = -1   ! precondition to FAILED
+      RPN_COMM_add_dist_entry = -1    ! precondition to FAILED
+      if(dist_table_size == -1) then  ! no table allocated, allocate 16 entries by default
+         ierr = RPN_COMM_alloc_dist_table(16)
+      endif
       if(dist_table_entries >= dist_table_size) return    ! OUCH, table is full
 
       the_comm = RPN_COMM_comm(communicator)  ! translate communicator from RPN_COMM to MPI
       call RPN_COMM_rank( communicator, this_pe ,ierr )     ! my rank in this communicator
       my_clients = 0
       my_sources = 0
+      ndata = 0
       dist_table_entries = dist_table_entries + 1         ! new table entry
       do j =  1 , nrows        ! find number of clients and sources fort this set of exchanges
          if(table(0,j) == this_pe) then  ! I am the root for this exchange
             ndata = ndata + table(-1,j)  ! count needed data buffer space
-            do i = 2, max_clients                         ! count valid clients in row
+            do i = 1, max_clients                         ! count valid clients in row
                if(table(i,j) >= 0 .and. table(i,j) /= this_pe) then   ! I have a client other than myself
                   my_clients = my_clients + 1
                endif
             enddo
          else                             ! I am not the root, am i a client ?
-            do i = 2, max_clients
+            do i = 1, max_clients
                if(table(i,j) == this_pe) then ! I am a client
                   ndata = ndata + table(-1,j) ! count needed data buffer space
                   my_sources = my_sources + 1
@@ -199,82 +271,89 @@
             enddo
          endif
       enddo
+
       nmeta = my_clients + my_sources
       allocate    ! allocate client table
-     %  (dist_table(dist_table_entries)%clients(3,1:my_clients))
+     %  (dist_table(dist_table_entries)%clients(4,1:my_clients))
+      clients => dist_table(dist_table_entries)%clients
       allocate    ! allocate sources table
-     %  (dist_table(dist_table_entries)%sources(3,1:my_sources))
-      dist_table(dist_table_entries)%nclients = my_clients  ! number of clients
-      dist_table(dist_table_entries)%nsources = my_sources  ! number of root sources
-      dist_table(dist_table_entries)%comm = the_comm        ! grid communicator
+     %  (dist_table(dist_table_entries)%sources(4,1:my_sources))
+      sources => dist_table(dist_table_entries)%sources
+      allocate(dist_table(dist_table_entries)%offsets(nrows)) ! table of offsets
+!      allocate(dist_table(dist_table_entries)%data(ndata))    ! allocate data buffer
+      dist_table(dist_table_entries)%clients = -999
+      dist_table(dist_table_entries)%nclients = my_clients    ! number of clients
+      dist_table(dist_table_entries)%sources = -999
+      dist_table(dist_table_entries)%nsources = my_sources    ! number of root sources
+      dist_table(dist_table_entries)%offsets = -1
+!      dist_table(dist_table_entries)%data = -1
+      dist_table(dist_table_entries)%ndata = ndata
+      dist_table(dist_table_entries)%comm = the_comm          ! grid communicator
       no_client = 0
       no_source = 0
 !
 !     rows in clients will contain the exchange number, client PE ordinal, and data length
 !     rows in sources will contain the exchange number,  root  PE ordinal, and data length
 !
+      offset = 1
       do j =  1 , nrows
         if(table(0,j) == this_pe) then  ! I am the root for this exchange
-          no_client = no_client + 1
-          do i = 2, max_clients                                  ! count valid clients in row
+          do i = 1, max_clients                                  ! count valid clients in row
             if(table(i,j) >= 0 .and. table(i,j) /= this_pe) then         ! I have a client other than myself
                no_client = no_client + 1
-               dist_table(dist_table_entries)%clients(1,no_client) = j   ! exchange number
-               dist_table(dist_table_entries)%clients(2,no_client)
-     %             = table(i,j)                                          ! PE ordinal
-               dist_table(dist_table_entries)%clients(3,no_client)
-     %             = table(-1,j)                                         ! data length
+               clients(1,no_client) = j           ! exchange number
+               clients(2,no_client) = table(i,j)  ! PE ordinal
+               clients(3,no_client) = table(-1,j) ! data length
+               clients(4,no_client) = offset      ! data length
             endif
           enddo
+          dist_table(dist_table_entries)%offsets(j) = offset
+          offset = offset + table(-1,j)      ! bump offset by data length
         else                                        ! I am not the root, am i a client ?
-           do i = 2, max_clients
+           do i = 1, max_clients
              if(table(i,j) == this_pe) then ! I am a client
                no_source = no_source + 1
-               dist_table(dist_table_entries)%sources(1,no_source) = j   ! row number
-               dist_table(dist_table_entries)%sources(2,no_source)
-     %             = table(1,j)                                          ! PE ordinal
-               dist_table(dist_table_entries)%sources(3,no_source)
-     %             = table(-1,j)                                         ! data length
+               sources(1,no_source) = j   ! row number
+               sources(2,no_source) = table(0,j)  ! PE ordinal
+               sources(3,no_source) = table(-1,j) ! data length
+               sources(4,no_source) = offset      ! data length
+               dist_table(dist_table_entries)%offsets(j) = offset
+               offset = offset + table(-1,j)      ! bump offset by data length
                exit        ! I can only be client once in an exchange
              endif
            enddo
          endif
       enddo
-
+      table(-2,:) = dist_table(dist_table_entries)%offsets
       RPN_COMM_add_dist_entry = dist_table_entries   !  SUCCESS
       return
       end
 !
 ! ========================================================================================
 !
-      integer function RPN_COMM_do_dist(pattern,values,nvalues,
-     %        metadata,nmeta,nrows,from_root)
+      function RPN_COMM_do_dist(pattern,from_root,values,nvalues)
 !
 !     pattern is the pattern number returned by RPN_COMM_add_dist_entry for this data exchange
-!     values buffer must have been filled according to what was obtained from subroutine
-!     RPN_COMM_get_dist_meta (root data if From_root, client data if >not from_root)
+!     values buffer must have been filled according to what was obtained when calling 
+!     RPN_COMM_add_dist_entry (data offsets are found in table(-2,:) )
+!     (root data if From_root, client data if >not from_root)
 !
-!     values : 1D array containing data to distribute or data to receive
+!     values : 1D array containing data to send / receive
 !     nvalues : dimension of array values, max number of values to be distributed/collected
-!     metadata : describes what will be sent/received
-!         metadata(1,N) is offset of data in array values
-!         metadata(2,N) is number of data elements to be collected
-!         metadata(3,N) is the exchange number (<0 means this PE was a client)
-!     nrows : number of exchanges
-!     from_root : distribution or collection flag
-!          .true. : data flows from root PE to client PEs
+!     from_root : distribution direction flag
+!          .true.  : data flows from root PE to client PEs
 !          .false. : data flows from client PEs to root PE
 !
       use local_distribution
       implicit none
-      integer, intent(IN) :: pattern, nvalues, nrows, nmeta
-      integer , dimension(3,nrows), intent(IN) :: metadata
-      integer , dimension(nvalues), intent(INOUT) :: values
+      integer :: RPN_COMM_do_dist
+      integer, intent(IN) :: pattern, nvalues
       logical, intent(IN) :: from_root
+      integer, dimension(nvalues), intent(INOUT) :: values
 
       include 'mpif.h'
 
-      integer row, j, nexchanges, request, offset, length
+      integer row, j, request, offset, length
       integer, pointer, dimension(:,:) :: clients, sources
       integer, allocatable, dimension(:,:) :: statuses
       integer, allocatable, dimension(:) :: requests
@@ -293,15 +372,12 @@
       allocate( requests(nclients+nsources) )
 
       request = 0
-      offset  = 1
       do j = 1 , nclients  ! as root send to / receive from clients
          request = request + 1
          row     = clients(1,j)
          the_pe  = clients(2,j)
          length  = clients(3,j)
-         if(metadata(1,request) /= offset ) return  ! metadata not consistent with table
-         if(metadata(2,request) /= length ) return  ! metadata not consistent with table
-         if(metadata(3,request) /= row    ) return  ! metadata not consistent with table
+         offset  = clients(4,j)
          if(from_root) then ! send  to client, use row as communication tag
             call MPI_isend(values(offset),length,MPI_INTEGER,
      %           the_pe,row,the_comm,requests(request),ierr)
@@ -316,9 +392,7 @@
          row     = sources(1,j)
          the_pe  = sources(2,j)
          length  = sources(3,j)
-         if(metadata(1,request) /= offset ) return  ! metadata not consistent with table
-         if(metadata(2,request) /= length ) return  ! metadata not consistent with table
-         if(metadata(3,request) /= row    ) return  ! metadata not consistent with table
+         offset  = sources(4,j)
          if(from_root) then ! receive from root, use row as communication tag
             call MPI_irecv(values(offset),length,MPI_INTEGER,
      %           the_pe,row,the_comm,requests(request),ierr)
@@ -346,29 +420,74 @@
       integer, intent(IN) :: npex, npey
 
       integer, parameter :: MAX_CLIENTS=3
-      integer :: RPN_COMM_add_dist_entry
-      external :: RPN_COMM_add_dist_entry
-      integer, dimension(-1:MAX_CLIENTS,npex*npey) :: my_table
+
+      integer RPN_COMM_dist_offsets, RPN_COMM_do_dist
+      external RPN_COMM_dist_offsets, RPN_COMM_do_dist
+      integer :: RPN_COMM_add_dist_entry, RPN_COMM_alloc_dist_table
+      external :: RPN_COMM_add_dist_entry, RPN_COMM_alloc_dist_table
+      integer RPN_COMM_get_dist_meta
+      external RPN_COMM_get_dist_meta
+      integer, dimension(-2:MAX_CLIENTS,npex*npey) :: my_table
       integer :: maxpe, i, mype, ierr, pattern
       integer :: ndata, nmeta, nrows
       integer, dimension(20) :: localdata
+      integer, pointer, dimension(:,:) :: metadata
+      real, pointer, dimension(:)      :: values
+      integer, pointer, dimension(:)   :: offsets
+      logical debug
 
+      debug = .false.
       maxpe = npex*npey -1
+      nrows = npex*npey
       my_table = -1   ! void all entries
       RPN_COMM_dist_test = -1
       call RPN_COMM_rank( 'GRID', mype ,ierr )
 !
-!     step 1, establish communication pattern
+!     step 0, allocate a communication table (optional if size <16)
+!
+      ierr = RPN_COMM_alloc_dist_table(10)
+!
+!     step 1, fill pattern table and create communication pattern
+!             then allocate data buffer
 !
       do i = 1, npex*npey
+        my_table(-1,i) = 1 + mod(i,3)
         my_table(-1,i) = 2
         my_table( 0,i) = maxpe / 2   ! middle PE will be the root
-        my_table( 1,i) = mod(i,maxpe)
-        my_table( 2,i) = mod(i+1,maxpe)
+        if(mod(i,maxpe+1) /= my_table( 0,i))
+     %     my_table( 1,i)=mod(i,maxpe+1)
+        if(mod(i+1,maxpe+1) /= my_table( 0,i))
+     %     my_table( 2,i)=mod(i+1,maxpe+1)
       enddo
-      nrows = npex*npey
+      if(mype ==0 .and. debug) then
+        do i = 1, npex*npey
+          print *,i,' = ',my_table(-1:MAX_CLIENTS,i)
+        enddo
+      endif
       pattern = RPN_COMM_add_dist_entry
      %          (my_table,MAX_CLIENTS,nrows,'GRID',ndata,nmeta)
+      print *,mype,'>>',my_table(-2,:)  ! offsets table
+       if(debug)
+     % print *,mype,' : pattern,ndata,nmeta= ',pattern,ndata,nmeta
+      if(dist_table(1)%nclients > 0 .and. debug) then
+          print *,'++',mype,'//',dist_table(1)%clients(1,:)
+          print *,'++',mype,'//',dist_table(1)%clients(2,:)
+          print *,'++',mype,'//',dist_table(1)%clients(3,:)
+      endif
+      if(dist_table(1)%nsources > 0 .and. debug) then
+          print *,'//',mype,'//',dist_table(1)%sources(1,:)
+          print *,'//',mype,'//',dist_table(1)%sources(2,:)
+          print *,'//',mype,'//',dist_table(1)%sources(3,:)
+      endif
+      allocate(metadata(4,nmeta))
+      allocate(values(ndata))
+!
+!     step 3, put data into the proper places
+!
+!
+!     step 4, perform the exchange
+!
+      ierr = RPN_COMM_do_dist(pattern,.true.,values,ndata)
       RPN_COMM_dist_test = 0
       return
       end
