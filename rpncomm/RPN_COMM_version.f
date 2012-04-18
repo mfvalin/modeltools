@@ -19,6 +19,8 @@
 * */
 
 	integer function RPN_COMM_version()
-	RPN_COMM_version=40009
+	implicit none
+	character *128 RPN_COMM_version_s
+	include 'RPN_COMM_version.inc'
 	return
 	end

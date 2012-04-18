@@ -1,3 +1,5 @@
+include RPN_COMM_version.inc
+$(info rpn_comm VERSION IS $(RPN_COMM_version_s))
 ifneq (,$(PLAIN))
   include Makefile.default
 else
