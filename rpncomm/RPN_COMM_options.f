@@ -33,6 +33,10 @@
 	   rpn_ew_ext_L=value_L
 	   return
 	endif
+	if(name_min(1:10).eq.'async_exch') then
+	   async_exch=value_L
+	   return
+	endif
 
 	RPN_COMM_option_L = -1
 	write(rpn_u,*) 'ERROR(RPN_COMM_option_L) option '

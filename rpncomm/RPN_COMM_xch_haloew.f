@@ -46,8 +46,6 @@
 	logical east,west,north,south
 	integer eastpe,westpe,northpe,southpe
 
-	logical :: asynchronous  ! use asynchronous code
-	common /RPN_COMM_ASYNC/asynchronous
 	integer tag_2e, tag_2w   ! tags for west_to_east and east_to_west moves
         integer, dimension(4) :: requests            ! table of requests
         integer, dimension(MPI_STATUS_SIZE,4) :: statuses  ! table of statuses
@@ -144,7 +142,7 @@
 	  enddo
 	endif
 !	mem_time=mem_time+time_base()-temp_time
-	if(ASYNCHRONOUS) THEN !  asynchronous simultaneous west to east and east to west moves
+	if(async_exch) THEN !  asynchronous simultaneous west to east and east to west moves
 	  nwds=halox*(jmax-jmin+1)*nk
 	  sendtag=pe_medomm 
 	  tag_2w=westpe

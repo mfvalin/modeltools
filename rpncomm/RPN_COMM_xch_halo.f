@@ -76,7 +76,6 @@
 	endif
 !
 	if(pe_opcv(1) .ne. ' ') then !  fill halo option present
-           
            r_land_fill=pe_oprv(1)
            if(pe_opcv(1) .eq. 'BAND') then
               if(iand(1,pe_opiv(1)) .ne. 0) then ! south band

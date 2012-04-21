@@ -5,8 +5,6 @@
 !
         program test_002
 	logical :: asynchronous  ! use asynchronous code
-	common /RPN_COMM_ASYNC/asynchronous
-	asynchronous = .true.
 !        print *,'I am version ',VeRsion
         call rpn_comm_test_002
         stop
@@ -26,17 +24,15 @@
         return
         end
         subroutine rpn_comm_test_002
-!!!!        use rpn_comm
         implicit none
 !
 !       dummy test program implemented as a subroutne
 !       because some compilers do not like POINTER
 !       statements with variable dimensions in a main program
 !
-!!!!        include 'mpif.h'
-!
         integer  nptsx,nptsy,nptsz,ihalox,ihaloy
-        common /the_problem/ nptsx,nptsy,nptsz,ihalox,ihaloy
+        common /the_problem/ nptsx,nptsy,nptsz,ihalox,ihaloy  ! common containing problem dimensions and halo size
+
         integer Pelocal,Petotal
         common /PEs/ Pelocal,Petotal
         integer, allocatable, dimension(:)  ::iarr,jarr
@@ -47,8 +43,8 @@
         integer min3,max3,ierr, istat
         integer mini,maxi,nil,nilmax,ni0,i0
         integer minj,maxj,njl,njlmax,nj0,j0
-        integer nzl, nzlmzx, nz0,irep
-        real*8 time1,time2,MPI_wtime
+        integer nzl, nzlmzx, nz0,irep,iter
+        real*8 time1,time2,MPI_wtime,time_min,time_max,time_tot
         external MPI_wtime
 !
         integer RPN_COMM_topo
@@ -57,13 +53,16 @@
         integer RPN_COMM_colors
         integer RPN_COMM_comm
         integer test_grids
+	integer RPN_COMM_option_L
         external RPN_COMM_mydomain
         external get_n_domains
         external test_grids
+	external RPN_COMM_option_L
         integer domains, mydomain,irank,isize
         integer n_domains
         integer peercomm, npeers
         common/ndomains/n_domains
+        character *6 is_async(2)
 !
 !
 !       force a "callback" type initialization
@@ -73,7 +72,24 @@
         call RPN_COMM_mydomain (get_n_domains, mydomain)
 !        print *,'This is member',mydomain+1,' of',n_domains,' domains'
 !
-        mygrid = RPN_COMM_init_multi_level(sss,Pelocal,Petotal,npex,npey,n_domains,2)
+        mygrid = RPN_COMM_init_multi_level(sss,Pelocal,Petotal,npex,npey,n_domains,1)
+!
+!       ============= determine resolution of MPI_wtine
+!
+        time1 = MPI_WTIME()
+        time_min=1.0
+        time_max=0.0
+        time_tot = 0.0
+        do irep = 1 , 100
+          time2 = MPI_WTIME()
+          time_min=min(time_min,time2-time1)
+          time_max=max(time_max,time2-time1)
+          time_tot = time_tot + time2-time1
+          time1 = time2
+        enddo
+        if (Pelocal.eq.0) then
+          print *,'MPI_WTIME cost(min,max,avg)=',real(time_min),real(time_max),real(time_tot)*.01
+        endif
 !
 !	============= TEST for WORLD/MULTIGRID/GRID ====================
 !
@@ -81,69 +97,81 @@
 !
 !	================= TEST for halo exchanger ===================
 !
-        call RPN_COMM_BCAST(nptsx,5,'MPI_INTEGER',0,'GRID',ierr)
+        call RPN_COMM_BCAST(nptsx,5,'MPI_INTEGER',0,'GRID',ierr)  ! broadcast problem dimensions to GRID
 !
-!       get data mapping (shoud really make 2 calls to
+!       get data mapping (should really make 2 calls to
 !       the 1D function RPN_COMM_topo)
 !
-        if(.not.RPN_COMM_grank('GRID')) goto 2222
+        if(.not.RPN_COMM_grank('GRID')) goto 2222    ! if this PE is not a member of 'GRID', bail out
 !
-           istat= RPN_COMM_topo(nptsx,mini,maxi,nil,nilmax,ihalox,ni0,.TRUE.,.FALSE.)
-           if(istat.ne.0) then
-              write(*,*) 'Invalid distribution over x, abort',nptsx,npex
-              call RPN_COMM_finalize(ierr)
-           endif
+        istat= RPN_COMM_topo(nptsx,mini,maxi,nil,nilmax,ihalox,ni0,.TRUE.,.FALSE.)
+        if(istat.ne.0) then
+           write(*,*) 'Invalid distribution over x, abort',nptsx,npex
+           goto 9999
+        endif
 !
-           istat= RPN_COMM_topo(nptsy,minj,maxj,njl,njlmax,ihaloy,nj0,.FALSE.,.FALSE.)
-           if(istat.ne.0) then
-              write(*,*) 'Invalid distribution over y, abort',nptsy,npey
-              call RPN_COMM_finalize(ierr)
-           endif
+        istat= RPN_COMM_topo(nptsy,minj,maxj,njl,njlmax,ihaloy,nj0,.FALSE.,.FALSE.)
+        if(istat.ne.0) then
+           write(*,*) 'Invalid distribution over y, abort',nptsy,npey
+           goto 9999
+        endif
 !
-           if (Pelocal.eq.0) then
-!             write(*,*) 'I AM ',Pelocal
-              print *,'nptsx,nptsy,nptsz,mini,maxi,minj,maxj=',nptsx,nptsy,nptsz,mini,maxi,minj,maxj
-              print *,'nil,njl,ihalox,ihaloy=',nil,njl,ihalox,ihaloy
-              print *,'nilmax,njlmax=',nilmax,njlmax
-           endif
+        if (Pelocal.eq.0) then  ! print dimensions from PE 0
+!          write(*,*) 'I AM ',Pelocal
+           print *,'nptsx,nptsy,nptsz,mini,maxi,minj,maxj=',nptsx,nptsy,nptsz,mini,maxi,minj,maxj
+           print *,'nil,njl,ihalox,ihaloy=',nil,njl,ihalox,ihaloy
+           print *,'nilmax,njlmax=',nilmax,njlmax
+        endif
 !
 !     allocate local arrays
 !
-           allocate(iarr(mini:maxi))
-           allocate(jarr(minj:maxj))
-           allocate(data(mini:maxi,minj:maxj,nptsz*2))
-           allocate(glob((nptsx+2*ihalox),minj:maxj,nptsz))
+        allocate(iarr(mini:maxi))
+        allocate(jarr(minj:maxj))
+        allocate(data(mini:maxi,minj:maxj,nptsz*2))
+        allocate(glob((nptsx+2*ihalox),minj:maxj,nptsz))
 !
 !     fill arrays with markers
 !
-!     write(*,*) 'ici3',Pelocal
-!
-           i0=ni0
-           j0=nj0
-           call set_ijarr(iarr,jarr,mini,maxi,minj,maxj,i0,j0,nptsx,nptsy)
-           call setup_arr(data,iarr,jarr,mini,maxi,minj,maxj,nptsz,nil,njl)
+        i0=ni0
+        j0=nj0
+        call set_ijarr(iarr,jarr,mini,maxi,minj,maxj,i0,j0,nptsx,nptsy)
+        call setup_arr(data,iarr,jarr,mini,maxi,minj,maxj,nptsz,nil,njl)
 !
 !     timing loop for halo exchange
 !
-!          write(*,*) 'ici2',Pelocal
-           time1=MPI_WTIME()
-           do irep=1,100
-              call RPN_COMM_xch_halo(data,mini,maxi,minj,maxj,nil,njl,nptsz,ihalox,ihaloy,.TRUE.,.TRUE.,nptsx,0)
-           enddo
-           time2=MPI_WTIME()-time1
+	is_async(1) = 'ASYNC'
+	is_async(2) = 'SYNC'
+	do iter = 1 , 2
+	ierr = RPN_COMM_option_L('async_exch',iter == 1)
+        time1 = MPI_WTIME()
+        time_min=1.0
+        time_max=0.0
+        time_tot = 0.0
+        do irep=1,100 ! 100 repetitions of fully periodic halo exchange
+          call RPN_COMM_xch_halo(data,mini,maxi,minj,maxj,nil,njl,nptsz,ihalox,ihaloy,.TRUE.,.TRUE.,nptsx,0)
+          time2 = MPI_WTIME()
+          time_min=min(time_min,time2-time1)
+          time_max=max(time_max,time2-time1)
+          time_tot = time_tot + time2-time1
+          time1 = time2
+        enddo
+        if (Pelocal.eq.0) then
+        endif
 !
 !          call affichage(data,mini,maxi,minj,maxj,nptsz) 
 !
-           if(Pelocal.eq.0 )then
-              print *,'pe=',Pelocal,                                          &
+        if(Pelocal.eq.0 )then
+           print *,is_async(iter)//'time (min,max,avg)=',real(time_min),real(time_max),real(time_tot)*.01
+           print *,'pe=',Pelocal,                                          &
      &             ' Number of exchanges=', irep-1,                           &
-     &             ' Exchange time=',nint(1000000*time2/(irep-1)),            &
+     &             ' Time per exchange=',nint(1000000*time_tot/(irep-1)),            &
      &             ' microseconds'
-           endif
+        endif
+	enddo
 !
 !     verify that there were no errors
 !
-           call vfy_arr(data,iarr,jarr,mini,maxi,minj,maxj,nptsz,nil,njl,ihalox,ihaloy)
+        call vfy_arr(data,iarr,jarr,mini,maxi,minj,maxj,nptsz,nil,njl,ihalox,ihaloy)
 !
 !	call RPN_COMM_FINALIZE(ierr)
 !	STOP

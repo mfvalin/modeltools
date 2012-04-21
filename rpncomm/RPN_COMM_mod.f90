@@ -85,6 +85,7 @@ module rpn_comm
   integer, allocatable, dimension(:,:) :: pe_id
   integer, allocatable, dimension(:) :: pe_xtab,pe_ytab
   integer, allocatable, dimension(:,:) :: pe_location   ! pe_x,pe_x,pe_ingrid,pe_insgrid,pe_indomain
+  logical :: async_exch=.true.
   character *4 pe_optn(MAX_OPTN)
   integer pe_opiv(MAX_OPTN)
   real *4 pe_oprv(MAX_OPTN)

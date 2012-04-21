@@ -49,8 +49,6 @@
 	logical east,west,north,south
 	integer eastpe,westpe,northpe,southpe
 
-	logical :: asynchronous  ! use asynchronous code
-	common /RPN_COMM_ASYNC/asynchronous
 	integer tag_2s, tag_2n   ! tags for north_to_south and south_to_north moves
         integer, dimension(4) :: requests            ! table of requests
         integer, dimension(MPI_STATUS_SIZE,4) :: statuses  ! table of statuses
@@ -93,7 +91,7 @@
 !	temp_time=time_base()
 
 !	call tmg_start(95,'COMM XCH NS')
-	if(ASYNCHRONOUS) THEN !  asynchronous simultaneous west to east and east to west moves
+	if(async_exch) THEN !  asynchronous simultaneous west to east and east to west moves
 	nwds=nk*haloy*(2*halox+ni)
 	sendtag=pe_medomm
 	messages = 0
