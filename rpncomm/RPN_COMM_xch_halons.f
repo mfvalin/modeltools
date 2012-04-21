@@ -48,6 +48,13 @@
 	integer status(MPI_STATUS_SIZE)
 	logical east,west,north,south
 	integer eastpe,westpe,northpe,southpe
+
+	logical :: asynchronous  ! use asynchronous code
+	common /RPN_COMM_ASYNC/asynchronous
+	integer tag_2s, tag_2n   ! tags for north_to_south and south_to_north moves
+        integer, dimension(4) :: requests            ! table of requests
+        integer, dimension(MPI_STATUS_SIZE,4) :: statuses  ! table of statuses
+        integer messages ! number of pending asynchronous messages
 	
 	east=(bnd_east) .and. (.not.periodx)
 	eastpe=pe_id(pe_mex+1,pe_mey)
@@ -58,6 +65,7 @@
 	south=(bnd_south) .and. (.not.periody)
 	southpe=pe_id(pe_mex,pe_mey-1)
 
+!	temp_time = time_base()
         if ( pe_ny.eq.1 ) then 
            if(periody)then
               do k=1,nk
@@ -69,6 +77,7 @@
               enddo
 	      enddo
            endif
+!	   mem_time=mem_time+time_base()-temp_time
            return
         endif
 
@@ -80,14 +89,37 @@
 	enddo
 	enddo
 	enddo
-
 !	mem_time=mem_time+time_base()-temp_time
 !	temp_time=time_base()
+
+!	call tmg_start(95,'COMM XCH NS')
+	if(ASYNCHRONOUS) THEN !  asynchronous simultaneous west to east and east to west moves
+	nwds=nk*haloy*(2*halox+ni)
+	sendtag=pe_medomm
+	messages = 0
+	if(.not. north) then
+          messages = messages + 1
+	  call MPI_ISEND(halo_to_north,nwds,MPI_INTEGER,northpe, ! send to north neighbor unless I am north PE
+     %         sendtag,PE_DEFCOMM,requests(messages),ierr)       ! tag is PE grid ordinal of sender
+          messages = messages + 1
+	  call MPI_IRECV(halo_from_north,nwds,MPI_INTEGER,northpe,! recv from north neighbor unless I am north PE
+     %         northpe,PE_DEFCOMM,requests(messages),ierr)        ! sender was northpe therefore tag is northpe
+	endif
+	if(.not. south) then
+          messages = messages + 1
+	  call MPI_ISEND(halo_to_south,nwds,MPI_INTEGER,southpe, ! send to south neighbor unless I am south PE
+     %         sendtag,PE_DEFCOMM,requests(messages),ierr)       ! tag is PE grid ordinal of sender
+          messages = messages + 1
+	  call MPI_IRECV(halo_from_south,nwds,MPI_INTEGER,southpe,! recv from south neighbor unless I am south PE
+     %         southpe,PE_DEFCOMM,requests(messages),ierr)        ! sender was southpe therefore tag is southpe
+	endif
+	  call MPI_waitall(messages,requests,statuses,ierr)  ! wait for all N-S and S-N messages to complete
+!
+	ELSE   ! THE FOLLOWING CODE WILL EVENTUALLY BE DEPRECATED WHEN async CODE IS FULLY DEBUGGED
 
 	nwds=nk*haloy*(2*halox+ni)
 	sendtag=pe_medomm
 	gettag=northpe
-!	call tmg_start(95,'COMM XCH NS')
 	if(north) then
 !	  send to south_neighbor
 	  if(.not.south)then
@@ -124,7 +156,11 @@
      %	       halo_from_south,nwds,MPI_INTEGER,southpe,gettag,
      %	       PE_DEFCOMM,status,ierr)
 	endif        
+!
+	ENDIF  ! END OF CODE TO BE DEPRECATED
+!
 !	call tmg_stop(95)
+!	temp_time = time_base()
  	if(.not.north)then
  	do k=1,nk
  	do m=1,haloy

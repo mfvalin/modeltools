@@ -45,8 +45,14 @@
 	integer status(MPI_STATUS_SIZE)
 	logical east,west,north,south
 	integer eastpe,westpe,northpe,southpe
-	
 
+	logical :: asynchronous  ! use asynchronous code
+	common /RPN_COMM_ASYNC/asynchronous
+	integer tag_2e, tag_2w   ! tags for west_to_east and east_to_west moves
+        integer, dimension(4) :: requests            ! table of requests
+        integer, dimension(MPI_STATUS_SIZE,4) :: statuses  ! table of statuses
+        integer messages ! number of pending asynchronous messages
+	
 	east=(bnd_east) .and. (.not.periodx)
 	eastpe=pe_id(pe_mex+1,pe_mey)
 	west=(bnd_west) .and. (.not.periodx)
@@ -138,15 +144,40 @@
 	  enddo
 	endif
 !	mem_time=mem_time+time_base()-temp_time
+	if(ASYNCHRONOUS) THEN !  asynchronous simultaneous west to east and east to west moves
+	  nwds=halox*(jmax-jmin+1)*nk
+	  sendtag=pe_medomm 
+	  tag_2w=westpe
+	  tag_2e=eastpe
+          messages = 0
+	  if(.not. east) then
+	    messages = messages + 1
+	    call MPI_ISEND(halo_to_east,nwds,MPI_INTEGER,eastpe,   ! send to east neighbor unless i am east PE
+     %           sendtag,PE_DEFCOMM,requests(messages),ierr)       ! tag is PE grid ordinal of sender
+	    messages = messages + 1
+            call MPI_IRECV(halo_from_east,nwds,MPI_INTEGER,eastpe, ! get from east neighbor unless i am east PE
+     %           eastpe,PE_DEFCOMM,requests(messages),ierr)        ! sender was eastpe therefore tag is eastpe
+          endif
+	  if(.not. west) then
+	    messages = messages + 1
+	    call MPI_ISEND(halo_to_west,nwds,MPI_INTEGER,westpe,  ! send to west neighbor unless i am west PE
+     %           sendtag,PE_DEFCOMM,requests(messages),ierr)      ! tag is PE grid ordinal of sender
+	    messages = messages + 1
+            call MPI_IRECV(halo_from_west,nwds,MPI_INTEGER,westpe, ! get from west neighbor unless i am west PE
+     %           westpe,PE_DEFCOMM,requests(messages),ierr)        ! sender was westpe therefore tag is westpe
+          endif
+	  call MPI_waitall(messages,requests,statuses,ierr)  ! wait for all E-W and W-E messages to complete
+!
+	ELSE   ! THE FOLLOWING CODE WILL EVENTUALLY BE DEPRECATED WHEN async CODE IS FULLY DEBUGGED
 !
 !  process west to east move
 !	
-
 !	temp_time=time_base()
 !
 	nwds=halox*(jmax-jmin+1)*nk
 	sendtag=pe_medomm
 	gettag=westpe
+	tag_2e=westpe
 !
 !	call tmg_start(94,'COMM XCH EW')
 	if(west) then
@@ -173,6 +204,7 @@
 	nwds=halox*(jmax-jmin+1)*nk
 	sendtag=pe_medomm
 	gettag=eastpe
+	tag_2w=eastpe
 !
 	
 	if(east) then
@@ -192,6 +224,9 @@
      %	       halo_from_east,nwds,MPI_INTEGER,eastpe,gettag,
      %	       PE_DEFCOMM,status,ierr)
 	endif
+!
+	ENDIF  ! END OF CODE TO BE DEPRECATED
+!
 !	call tmg_stop(94)
 !	exch_time=exch_time+time_base()-temp_time
 !
