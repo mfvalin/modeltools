@@ -32,8 +32,8 @@
 	character *(*), intent(IN) :: varname
 	character *(*), intent(OUT) :: value
 
-	integer status
+	integer status,length
 	call get_environment_variable
-     %       (varname,value,len(varname),status,.true.)
+     %       (varname,value,length,status,.true.)
 	return
 	end
