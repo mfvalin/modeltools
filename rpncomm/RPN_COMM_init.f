@@ -197,7 +197,7 @@
       allocate(colortab(0:pe_tot-1))
       my_color = 0
       SYSTEM_COMMAND=""
-      call get_environment_variable("RPN_COMM_DIAG",SYSTEM_COMMAND)
+      call get_env_var("RPN_COMM_DIAG",SYSTEM_COMMAND)
       if( SYSTEM_COMMAND .ne. " " ) then
           read(SYSTEM_COMMAND,*) diag_mode
       else
@@ -208,10 +208,10 @@
 *     this is used mainly by the r.mpirun family of scsripts
 *
       SYSTEM_COMMAND=""
-      call get_environment_variable("RPN_COMM_DOM",SYSTEM_COMMAND)
+      call get_env_var("RPN_COMM_DOM",SYSTEM_COMMAND)
       if( SYSTEM_COMMAND .ne. " " ) then
         SYSTEM_COMMAND_2=""
-        call get_environment_variable("RPN_COMM_DIRS",SYSTEM_COMMAND_2) ! get list of directories
+        call get_env_var("RPN_COMM_DIRS",SYSTEM_COMMAND_2) ! get list of directories
         read(SYSTEM_COMMAND,*) ncolors  ! ABS(ncolors) is number of subdomains
         if( abs(ncolors) .gt. pe_tot ) then
            write(rpn_u,*)'ERROR: there are more subdomains (',

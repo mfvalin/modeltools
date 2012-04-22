@@ -27,3 +27,13 @@
         RPN_COMM_chdir=f_RPN_COMM_chdir(trim(string)//achar(0))
         return
         end
+	subroutine get_env_var(varname,value)
+	implicit none
+	character *(*), intent(IN) :: varname
+	character *(*), intent(OUT) :: value
+
+	integer status
+	call get_environment_variable
+     %       (varname,value,len(varname),status,.true.)
+	return
+	end
