@@ -15,7 +15,7 @@
         integer ndomains, offset, err
         character (len=128) SYSTEM_COMMAND
 	SYSTEM_COMMAND="1"
-        call getenvc("TEST_DOMAINS",SYSTEM_COMMAND)
+        call get_environment_variable("TEST_DOMAINS",SYSTEM_COMMAND)
         if(SYSTEM_COMMAND == "" )SYSTEM_COMMAND="1"
         read(SYSTEM_COMMAND,*)ndomains
         n_domains=ndomains

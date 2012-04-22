@@ -136,6 +136,7 @@
 	character *4096 SYSTEM_COMMAND,SYSTEM_COMMAND_2
 	character *256 , dimension(:), allocatable :: directories
       character *256 :: my_directory, my_directory_file
+      character *32 access_mode
 	integer ncolors,my_color,directory_file_num
 	integer,dimension(:,:),allocatable::colors
 	integer,dimension(:),allocatable::colortab
@@ -195,7 +196,7 @@
 !
       allocate(colortab(0:pe_tot-1))
       my_color = 0
-      call getenvc("RPN_COMM_DIAG",SYSTEM_COMMAND)
+      call get_environment_variable("RPN_COMM_DIAG",SYSTEM_COMMAND)
       if( SYSTEM_COMMAND .ne. " " ) then
           read(SYSTEM_COMMAND,*) diag_mode
       else
@@ -203,13 +204,14 @@
       endif
 *
 *     if environment variable RPN_COMM_DOM is set, split into domains
+*     this is used mainly by the r.mpirun family of scsripts
 *
       SYSTEM_COMMAND=""
-      call getenvc("RPN_COMM_DOM",SYSTEM_COMMAND)
+      call get_environment_variable("RPN_COMM_DOM",SYSTEM_COMMAND)
       if( SYSTEM_COMMAND .ne. " " ) then
         SYSTEM_COMMAND_2=""
-        call getenvc("RPN_COMM_DIRS",SYSTEM_COMMAND_2) ! get list of directories
-        read(SYSTEM_COMMAND,*) ncolors
+        call get_environment_variable("RPN_COMM_DIRS",SYSTEM_COMMAND_2) ! get list of directories
+        read(SYSTEM_COMMAND,*) ncolors  ! ABS(ncolors) is number of subdomains
         if( abs(ncolors) .gt. pe_tot ) then
            write(rpn_u,*)'ERROR: there are more subdomains (',
      &                   abs(ncolors),') than PEs (',pe_tot,')'
@@ -217,17 +219,18 @@
            stop
         endif
         if(ncolors .gt. 0) then
+!         ncolors is followed by ncolors triplets ( first_pe, stride, last_pe )
           allocate(directories(0:ncolors))
           allocate(colors(3,ncolors))
           read(SYSTEM_COMMAND,*)ncolors,colors
-          colortab=0
-          do i=1,ncolors
+          colortab=0        ! the size of colortab is the total number of PEs
+          do i=1,ncolors    ! loop over subdomains
            do j=colors(1,i),colors(3,i),colors(2,i)
-            colortab(j)=i
+            colortab(j)=i   ! sweep the PEs for the current color(subdomain)
            enddo
           enddo
-          my_color=colortab(pe_me)                           ! my_color = 0 is an errror here
-          if( my_color .eq. 0) then
+          my_color=colortab(pe_me)        ! my_color = 0 is an errror at this point
+          if( my_color .eq. 0) then       ! it means that there are holes in the subdomain table
              ok=.false.
              write(rpn_u,*)'ERROR: pe ',pe_me,
      &                     ' belongs to no subdomain'
@@ -241,8 +244,10 @@
           endif
           read(SYSTEM_COMMAND,*)directories
           my_directory=directories(my_color)
-        else
-          my_color=pe_me/(pe_tot/abs(ncolors))               !  mod(pe_tot, abs(ncolors)) should be zero
+
+        else  ! (ncolors .gt. 0) ncolors < 0, all subdomains have the same size
+
+          my_color=pe_me/(pe_tot/abs(ncolors))               !  mod(pe_tot, abs(ncolors)) must be zero
           if( mod(pe_tot,abs(ncolors)) .ne. 0 ) then
              ok=.false.
              write(rpn_u,*)'ERROR: subdomains have different sizes'
@@ -254,30 +259,42 @@
              call RPN_COMM_finalize(ierr)
              stop
           endif
+!         RPN_COMM_DOM contains -ncolors followed by the name of the file that contains
+!         the directories to get into for the various subdomains (one line per subdomain)
           read(SYSTEM_COMMAND,*) ncolors,my_directory_file   ! get directory file
-          directory_file_num=0
-          ierr=fnom(directory_file_num,trim(my_directory_file),
-     &              'SEQ+OLD+FTN',0)                         ! open directory file
-          do i=0,my_color-1
-            read(directory_file_num,*)my_directory           ! skip to my directory
+          directory_file_num=9999
+          do i = 1 , 99  ! find an available unit number
+            inquire(UNIT=i,ACCESS=access_mode)
+            if(trim(access_mode) == 'UNDEFINED')then ! found
+              directory_file_num = i
+              exit
+            endif
           enddo
-          my_directory='.'
+!          ierr=fnom(directory_file_num,trim(my_directory_file),
+!     &              'SEQ+OLD+FTN',0)                        ! open file containing directory list
+         open(UNIT=directory_file_num,file=trim(my_directory_file),
+     %        FORM='FORMATTED',STATUS='OLD')                 ! this file MUST exist
+         do i=0,my_color-1
+            read(directory_file_num,*)my_directory           ! skip unwanted entries
+          enddo
+          my_directory='.'                                   ! default value
           read(directory_file_num,*)my_directory             ! get my directory
           close(directory_file_num)
-        endif
+        endif  ! (ncolors .gt.0)
+
         call MPI_COMM_SPLIT(WORLD_COMM_MPI,my_color,         ! split using my color
      &                     pe_me,pe_wcomm,ierr)
         RPN_COMM_init_multi_level = my_color
-        call RPN_COMM_chdir(trim(my_directory))              ! go to my directory
+        call RPN_COMM_chdir(trim(my_directory))              ! cd to my directory
         if(diag_mode.ge.2)
      &       write(rpn_u,*)"my directory is:",trim(my_directory)
         call MPI_COMM_RANK(pe_wcomm,pe_me,ierr)               ! my rank
         call MPI_COMM_SIZE(pe_wcomm,pe_tot,ierr)              ! size of my subdomain
 
-      endif ! environment variable RPN_COMM_DOM is set
-!
+      endif ! ( SYSTEM_COMMAND .ne. " " ) environment variable RPN_COMM_DOM is set
+!     subdomains done (if needed)
       RPN_COMM_init_multi_level = my_color
-      my_colors(1) = my_color
+      my_colors(1) = my_color    !  my domain number
 !
       pe_a_domain = pe_wcomm
       pe_me_a_domain = pe_me
@@ -320,7 +337,7 @@
         call MPI_COMM_RANK(pe_wcomm,pe_me,ierr)               ! my rank
         call MPI_COMM_SIZE(pe_wcomm,pe_tot,ierr)              ! size of my subdomain
       endif
-      my_colors(2) = my_color
+      my_colors(2) = my_color   ! my multigrid number
 !
       pe_multi_grid = pe_wcomm
       pe_me_multi_grid = pe_me
@@ -348,7 +365,7 @@
         call MPI_COMM_RANK(pe_wcomm,pe_me,ierr)               ! my rank
         call MPI_COMM_SIZE(pe_wcomm,pe_tot,ierr)              ! size of my subdomain
       endif
-      my_colors(3) = my_color
+      my_colors(3) = my_color   ! my grid number
 !
       pe_grid = pe_wcomm
       pe_me_grid = pe_me
