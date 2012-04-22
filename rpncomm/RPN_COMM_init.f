@@ -196,6 +196,7 @@
 !
       allocate(colortab(0:pe_tot-1))
       my_color = 0
+      SYSTEM_COMMAND=""
       call get_environment_variable("RPN_COMM_DIAG",SYSTEM_COMMAND)
       if( SYSTEM_COMMAND .ne. " " ) then
           read(SYSTEM_COMMAND,*) diag_mode
