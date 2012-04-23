@@ -241,6 +241,7 @@
       integer, pointer, dimension(:,:) :: clients, sources
       integer no_client, no_source, offset
 
+      table(-2,:) = 999999999
       RPN_COMM_add_dist_entry = -1    ! precondition to FAILED
       if(dist_table_size == -1) then  ! no table allocated, allocate 16 entries by default
          ierr = RPN_COMM_alloc_dist_table(16)
@@ -385,7 +386,6 @@
             call MPI_irecv(values(offset),length,MPI_INTEGER,
      %           the_pe,row,the_comm,requests(request),ierr)
          endif
-!         offset = offset + length
       enddo
       do j = 1 , nsources  ! as client receive from / send to roots
          request = request + 1
@@ -400,7 +400,6 @@
             call MPI_isend(values(offset),length,MPI_INTEGER,
      %           the_pe,row,the_comm,requests(request),ierr)
          endif
-!         offset = offset + length
       enddo
 !
       call MPI_waitall(request,requests,statuses,ierr)    ! wait for all transfers to complete
@@ -450,6 +449,7 @@
 !     step 1, fill pattern table and create communication pattern
 !             then allocate data buffer
 !
+      my_table = -1
       do i = 1, npex*npey
         my_table(-1,i) = 1 + mod(i,3)
         my_table(-1,i) = 2
@@ -459,25 +459,28 @@
         if(mod(i+1,maxpe+1) /= my_table( 0,i))
      %     my_table( 2,i)=mod(i+1,maxpe+1)
       enddo
-      if(mype ==0 .and. debug) then
+      if(mype == 0 .and. debug) then
         do i = 1, npex*npey
-          print *,i,' = ',my_table(-1:MAX_CLIENTS,i)
+          print 100,i,'/=/',my_table(-1:MAX_CLIENTS,i)
         enddo
       endif
       pattern = RPN_COMM_add_dist_entry
      %          (my_table,MAX_CLIENTS,nrows,'GRID',ndata,nmeta)
-      print *,mype,'>>',my_table(-2,:)  ! offsets table
+100   format(I3,A,20I4)
+      print 100,mype,': >>',my_table(0,:)  ! clients
+      print 100,mype,': ->',my_table(-2,:)  ! offsets table
        if(debug)
      % print *,mype,' : pattern,ndata,nmeta= ',pattern,ndata,nmeta
+102   format(A,I3,A,20I4)
       if(dist_table(1)%nclients > 0 .and. debug) then
-          print *,'++',mype,'//',dist_table(1)%clients(1,:)
-          print *,'++',mype,'//',dist_table(1)%clients(2,:)
-          print *,'++',mype,'//',dist_table(1)%clients(3,:)
+          print 102,'++',mype,'//',dist_table(1)%clients(1,:)
+          print 102,'++',mype,'//',dist_table(1)%clients(2,:)
+          print 102,'++',mype,'//',dist_table(1)%clients(3,:)
       endif
       if(dist_table(1)%nsources > 0 .and. debug) then
-          print *,'//',mype,'//',dist_table(1)%sources(1,:)
-          print *,'//',mype,'//',dist_table(1)%sources(2,:)
-          print *,'//',mype,'//',dist_table(1)%sources(3,:)
+          print 102,'//',mype,'//',dist_table(1)%sources(1,:)
+          print 102,'//',mype,'//',dist_table(1)%sources(2,:)
+          print 102,'//',mype,'//',dist_table(1)%sources(3,:)
       endif
       allocate(metadata(4,nmeta))
       allocate(values(ndata))
@@ -486,12 +489,13 @@
 !     step 3, put data into the proper places
 !
       do i = 1, npex*npey
-         if(my_table(-2,i) /= -1) then     ! this row is active
+         if(my_table(-2,i) /= 0) then     ! this row is active
            if(my_table(0,i) == mype) then  ! I am the root for this exchange
-             low = my_table(-2,i)
+             low = abs(my_table(-2,i))
              up = low + my_table(-1,i) - 1
              values(low:up) = mype + 100*i
-             print *,'<=',mype,'=>',low,up,values(low:up)
+             print 101,'<=',mype,' =>',low,up,values(low:up)
+101          format(A,I2,A,20I4)
            endif
          endif
       enddo
@@ -500,11 +504,12 @@
 !
       ierr = RPN_COMM_do_dist(pattern,.true.,values,ndata)
       do i = 1, npex*npey
-         if(my_table(-2,i) /= -1) then     ! this row is active
+         if(my_table(-2,i) /= 0) then     ! this row is active
            if(my_table(0,i) /= mype) then  ! I am a client for this exchange
-             low = my_table(-2,i)
+             low = abs(my_table(-2,i))
              up = low + my_table(-1,i) - 1
-             print *,'==',mype,'==',low,up,values(low:up)
+             print 101,'==',mype,' ==',low,up,values(low:up),
+     %               values(low:up) - ((maxpe / 2)+100*i)
            endif
          endif
       enddo
