@@ -27,13 +27,17 @@
         RPN_COMM_chdir=f_RPN_COMM_chdir(trim(string)//achar(0))
         return
         end
-	subroutine get_env_var(varname,value)
+*
+*       RPN_COMM_env_var : get value of environment variable
+*       returns blanks if variable does not exist
+*
+	subroutine RPN_COMM_env_var(varname,value)
 	implicit none
-	character *(*), intent(IN) :: varname
-	character *(*), intent(OUT) :: value
+	character (len=*), intent(IN) :: varname
+	character (len=*), intent(OUT) :: value
 
 	integer status,length
-	call get_environment_variable
-     %       (varname,value,length,status,.true.)
+        value = " "
+        call RPN_COMM_getenv(trim(varname)//achar(0),value,len(value))
 	return
 	end
