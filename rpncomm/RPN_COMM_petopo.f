@@ -120,4 +120,58 @@
       RPN_COMM_petopo = 0
       return
       end
-      
+!
+! ========================================================================================
+!
+      integer function RPN_COMM_get_pe(x,y,grd,sgrd,communicator)
+!
+!     get PE ordinal in grid/supergrid/domain
+!     x,y  : coordinates of PE in its own grid ( 0 -> pe_nx-1 , 0 -> pe_ny-1)
+!     grd  : grid number the PE belongs to (-1 = this PE's grid)
+!     sgrd : supergrid number the PE belongs to (-1 = this PE's supergrid)
+!     communicator : may be 'GRID', 'SUPERGRID', or 'ALLGRIDS'
+!          communicator                value returned by function
+!          'GRID'      : coordinates of PE x,y in current GRID (grd, sgrd must be -1)
+!          'SUPERGRID' : coordinates of PE x,y in current SUPERGRID (sgrd must be -1)
+!          'ALLGRIDS'  : coordinates of PE x,y in current domain (set of SUPERGRIDs)
+!
+      use rpn_comm
+      implicit none
+      integer, intent(IN) :: x,y,grd,sgrd
+      character *(*), intent(IN) :: communicator
+
+      integer ordinal
+
+      RPN_COMM_get_pe = -1
+      if(x >= pe_nx .or. y >= pe_ny .or. x < 0 .or. y < 0)  return    ! bad PE in grid coordinates
+      if(grd < -1 .or. grd > pe_tot_multi_grid/pe_tot_grid-1) return  ! bad grid number
+      if(sgrd < -1 .or. sgrd > pe_tot_a_domain/pe_tot_multi_grid) 
+     %                                                      return    ! bad multigrid number
+
+      if(trim(communicator) == 'GRID') then        ! PE ordinal in own grid
+         ordinal = pe_id(x,y)
+      endif
+      if(trim(communicator) == 'MULTIGRID') then   ! PE ordinal in own supergrid
+         if(grd == -1) then
+            ordinal = pe_id(x,y) + (my_colors(3))*pe_tot_grid   ! add own grid offset if grd = -1
+         else
+            ordinal = pe_id(x,y) + (grd-1)*pe_tot_grid          ! add grid offset
+         endif
+      endif
+      if(trim(communicator) == 'ALLGRIDS') then     ! PE ordinal in own domain
+         ordinal = pe_id(x,y)                               ! PE ordinal in own grid
+         if(grd == -1) then
+            ordinal = ordinal + my_colors(3)*pe_tot_grid    ! add own grid offset if grd = -1
+         else
+            ordinal = ordinal + (grd-1)*pe_tot_grid         ! add grid offset
+         endif
+         if(sgrd == -1) then
+            ordinal = ordinal + my_colors(2)*pe_tot_grid    ! add own supergrid offset if grd = -1
+         else
+            ordinal = ordinal + (sgrd-1)*pe_tot_multi_grid  ! add supergrid offset
+         endif
+      endif
+
+      RPN_COMM_get_pe = ordinal
+      return
+      end
