@@ -15,7 +15,7 @@
         integer ndomains, offset, err
         character (len=128) SYSTEM_COMMAND
 	SYSTEM_COMMAND="1"
-        call get_env_var("TEST_DOMAINS",SYSTEM_COMMAND)
+        call RPN_COMM_env_var("TEST_DOMAINS",SYSTEM_COMMAND)
         if(SYSTEM_COMMAND == "" )SYSTEM_COMMAND="1"
         read(SYSTEM_COMMAND,*)ndomains
         n_domains=ndomains
