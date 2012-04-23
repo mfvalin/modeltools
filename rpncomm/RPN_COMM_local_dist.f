@@ -216,9 +216,9 @@
 !     information will be sent from root PE to client PEs or gathered on root PE from client PEs
 !     max_client: maximum number of clients in exchanges
 !     nrows : number of exchanges described in table
-!     communicator : RPN COMM communicator for this exchange ('GRID','SUPERGRID',...)
-!     ndata : size of the data buffer needed for the call to RPN_COMM_do_dist
-!     nmeta : second dimension of metadata table needed for the call to RPN_COMM_get_dist_meta
+!     communicator : RPN COMM communicator for this exchange ('GRID','SUPERGRID','ALLGRIDS',....)
+!     ndata : size of the data buffer needed for the call to RPN_COMM_do_dist  (OUTPUT)
+!     nmeta : second dimension of metadata table needed for the call to RPN_COMM_get_dist_meta  (OUTPUT)
 !
 !     the function will return a pattern index to be used for the actual exchange 
 !     or -1 in case of failure
@@ -285,7 +285,7 @@
       dist_table(dist_table_entries)%nclients = my_clients    ! number of clients
       dist_table(dist_table_entries)%sources = -999
       dist_table(dist_table_entries)%nsources = my_sources    ! number of root sources
-      dist_table(dist_table_entries)%offsets = -1
+      dist_table(dist_table_entries)%offsets = 0              ! 0 means offset is not valid
 !      dist_table(dist_table_entries)%data = -1
       dist_table(dist_table_entries)%ndata = ndata
       dist_table(dist_table_entries)%comm = the_comm          ! grid communicator
@@ -307,7 +307,7 @@
                clients(4,no_client) = offset      ! data length
             endif
           enddo
-          dist_table(dist_table_entries)%offsets(j) = offset
+          dist_table(dist_table_entries)%offsets(j) = offset  ! positive offset means a root
           offset = offset + table(-1,j)      ! bump offset by data length
         else                                        ! I am not the root, am i a client ?
            do i = 1, max_clients
@@ -316,8 +316,8 @@
                sources(1,no_source) = j   ! row number
                sources(2,no_source) = table(0,j)  ! PE ordinal
                sources(3,no_source) = table(-1,j) ! data length
-               sources(4,no_source) = offset      ! data length
-               dist_table(dist_table_entries)%offsets(j) = offset
+               sources(4,no_source) = -offset      ! data length
+               dist_table(dist_table_entries)%offsets(j) = -offset  ! negative offset means a client
                offset = offset + table(-1,j)      ! bump offset by data length
                exit        ! I can only be client once in an exchange
              endif
@@ -385,14 +385,14 @@
             call MPI_irecv(values(offset),length,MPI_INTEGER,
      %           the_pe,row,the_comm,requests(request),ierr)
          endif
-         offset = offset + length
+!         offset = offset + length
       enddo
       do j = 1 , nsources  ! as client receive from / send to roots
          request = request + 1
          row     = sources(1,j)
          the_pe  = sources(2,j)
          length  = sources(3,j)
-         offset  = sources(4,j)
+         offset  = abs(sources(4,j))
          if(from_root) then ! receive from root, use row as communication tag
             call MPI_irecv(values(offset),length,MPI_INTEGER,
      %           the_pe,row,the_comm,requests(request),ierr)
@@ -400,7 +400,7 @@
             call MPI_isend(values(offset),length,MPI_INTEGER,
      %           the_pe,row,the_comm,requests(request),ierr)
          endif
-         offset = offset + length
+!         offset = offset + length
       enddo
 !
       call MPI_waitall(request,requests,statuses,ierr)    ! wait for all transfers to complete
