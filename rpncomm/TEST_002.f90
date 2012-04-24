@@ -175,12 +175,14 @@
 !
 !          call affichage(data,mini,maxi,minj,maxj,nptsz) 
 !
-        if(Pelocal.eq.-1 )then
+        if(Pelocal.eq.0 )then
            print *,is_async(iter)//'time (min,max,avg)=',real(time_min),real(time_max),real(time_tot)*.05
            print *,'pe=',Pelocal,                                          &
      &             ' Number of exchanges=', irep-1,                           &
      &             ' Time per exchange=',nint(1000000*time_tot/(irep-1)),            &
      &             ' microseconds'
+        endif
+        if(Pelocal.eq.-1 )then
            print *,'------COPIES------'
            print *,times(4,1:20)-times(3,1:20)+times(2,1:20)-times(1,1:20)
            print *,'-------MPI-------'
