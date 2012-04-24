@@ -148,21 +148,25 @@
 	  tag_2w=westpe
 	  tag_2e=eastpe
           messages = 0
-	  if(.not. east) then
+	  if(.not. west) then
 	    messages = messages + 1
-	    call MPI_ISEND(halo_to_east,nwds,MPI_INTEGER,eastpe,   ! send to east neighbor unless i am east PE
-     %           sendtag,PE_DEFCOMM,requests(messages),ierr)       ! tag is PE grid ordinal of sender
+            call MPI_IRECV(halo_from_west,nwds,MPI_INTEGER,westpe, ! get from west neighbor unless i am west PE
+     %           100000+westpe,PE_DEFCOMM,requests(messages),ierr)        ! sender was westpe therefore tag is westpe
+          endif
+	  if(.not. east) then
 	    messages = messages + 1
             call MPI_IRECV(halo_from_east,nwds,MPI_INTEGER,eastpe, ! get from east neighbor unless i am east PE
      %           eastpe,PE_DEFCOMM,requests(messages),ierr)        ! sender was eastpe therefore tag is eastpe
           endif
+	  if(.not. east) then
+	    messages = messages + 1
+	    call MPI_ISEND(halo_to_east,nwds,MPI_INTEGER,eastpe,   ! send to east neighbor unless i am east PE
+     %           100000+pe_medomm,PE_DEFCOMM,requests(messages),ierr)       ! tag is PE grid ordinal of sender
+          endif
 	  if(.not. west) then
 	    messages = messages + 1
 	    call MPI_ISEND(halo_to_west,nwds,MPI_INTEGER,westpe,  ! send to west neighbor unless i am west PE
-     %           sendtag,PE_DEFCOMM,requests(messages),ierr)      ! tag is PE grid ordinal of sender
-	    messages = messages + 1
-            call MPI_IRECV(halo_from_west,nwds,MPI_INTEGER,westpe, ! get from west neighbor unless i am west PE
-     %           westpe,PE_DEFCOMM,requests(messages),ierr)        ! sender was westpe therefore tag is westpe
+     %           pe_medomm,PE_DEFCOMM,requests(messages),ierr)      ! tag is PE grid ordinal of sender
           endif
 	  call MPI_waitall(messages,requests,statuses,ierr)  ! wait for all E-W and W-E messages to complete
 !

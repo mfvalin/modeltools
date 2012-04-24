@@ -59,14 +59,24 @@
         external test_grids
 	external RPN_COMM_option_L
         integer domains, mydomain,irank,isize
-        integer n_domains
+        integer n_domains,j
         integer peercomm, npeers
         common/ndomains/n_domains
         character *6 is_async(2)
+
+        common /TMG_halons2/times2(4,1024),pass2
+        real *8 times2
+        integer pass2
+        common /TMG_haloew/times(4,1024),pass
+        real *8 times
+        integer pass
+        integer cache_flush(4000*4000)
 !
 !
 !       force a "callback" type initialization
 !
+        times = 0.0
+        times2 = 0.0
         npex=0
         npey=0
         call RPN_COMM_mydomain (get_n_domains, mydomain,ierr)
@@ -82,7 +92,7 @@
         time_tot = 0.0
         do irep = 1 , 100
           time2 = MPI_WTIME()
-          time_min=min(time_min,time2-time1)
+          if(time2-time1 > 0)time_min=min(time_min,time2-time1)
           time_max=max(time_max,time2-time1)
           time_tot = time_tot + time2-time1
           time1 = time2
@@ -142,30 +152,43 @@
 	is_async(1) = 'ASYNC'
 	is_async(2) = 'SYNC'
 	do iter = 1 , 2
+        pass = 0
+        pass2 = 0
 	ierr = RPN_COMM_option_L('async_exch',iter == 1)
+101     format(I3,15I9)
+!        print *,'----------------'
         time1 = MPI_WTIME()
         time_min=1.0
         time_max=0.0
         time_tot = 0.0
-        do irep=1,100 ! 100 repetitions of fully periodic halo exchange
-          call RPN_COMM_xch_halo(data,mini,maxi,minj,maxj,nil,njl,nptsz,ihalox,ihaloy,.TRUE.,.TRUE.,nptsx,0)
+        do irep=1,20 ! 100 repetitions of fully periodic halo exchange
+          cache_flush = cache_flush + 1
+          time1 = MPI_WTIME()
+          call RPN_COMM_xch_halo(data,mini,maxi,minj,maxj,nil,njl,nptsz,ihalox,ihaloy,.true.,.true.,nptsx,0)
           time2 = MPI_WTIME()
+          cache_flush = cache_flush + 1
           time_min=min(time_min,time2-time1)
           time_max=max(time_max,time2-time1)
           time_tot = time_tot + time2-time1
           time1 = time2
         enddo
-        if (Pelocal.eq.0) then
-        endif
 !
 !          call affichage(data,mini,maxi,minj,maxj,nptsz) 
 !
-        if(Pelocal.eq.0 )then
-           print *,is_async(iter)//'time (min,max,avg)=',real(time_min),real(time_max),real(time_tot)*.01
+        if(Pelocal.eq.-1 )then
+           print *,is_async(iter)//'time (min,max,avg)=',real(time_min),real(time_max),real(time_tot)*.05
            print *,'pe=',Pelocal,                                          &
      &             ' Number of exchanges=', irep-1,                           &
      &             ' Time per exchange=',nint(1000000*time_tot/(irep-1)),            &
      &             ' microseconds'
+           print *,'------COPIES------'
+           print *,times(4,1:20)-times(3,1:20)+times(2,1:20)-times(1,1:20)
+           print *,'-------MPI-------'
+           print *,times(3,1:20)-times(2,1:20)
+           print *,'------COPIES------'
+           print *,times2(4,1:20)-times2(3,1:20)+times2(2,1:20)-times2(1,1:20)
+           print *,'-------MPI-------'
+           print *,times2(3,1:20)-times2(2,1:20)
         endif
 	enddo
 !
@@ -195,7 +218,7 @@
 !
              call RPN_COMM_transpose(data,mini,maxi,nptsx,(maxj-minj+1),min3,max3,nptsz,data2,1,2)
 !
-             call vfy_xpos(data2,jarr,minj,maxj,njl,nz0,nzl,min3,max3,nptsx)
+             call vfy_xpos(data2,jarr,minj,maxj,njl,nz0,nzl,min3,max3,nptsx,j0)
 !
              call RPN_COMM_transpose(data,mini,maxi,nptsx,(maxj-minj+1),min3,max3,nptsz,data2,-1,2)
 !
@@ -203,7 +226,7 @@
 !
              call RPN_COMM_transpose(data,mini,maxi,nptsx,(maxj-minj+1),min3,max3,nptsz,data2,1,2)
 !
-             call vfy_xpos(data2,jarr,minj,maxj,njl,nz0,nzl,min3,max3,nptsx)
+             call vfy_xpos(data2,jarr,minj,maxj,njl,nz0,nzl,min3,max3,nptsx,j0)
 !
              call RPN_COMM_transpose(data,mini,maxi,nptsx,(maxj-minj+1),min3,max3,nptsz,data2,-1,2)
 !
@@ -220,7 +243,7 @@
         stop
         end
 !
-        subroutine vfy_xpos(z,jtab,minj,maxj,njl,nz0,nzl,min3,max3,nptsx)
+        subroutine vfy_xpos(z,jtab,minj,maxj,njl,nz0,nzl,min3,max3,nptsx,j0)
 !!!!        use rpn_comm
         implicit none 
         integer Pelocal,Petotal
@@ -229,7 +252,7 @@
 !        verify array containing markers
 !
 !
-        integer minj,maxj,njl,min3,max3,nptsx,nzl,nz0
+        integer minj,maxj,njl,min3,max3,nptsx,nzl,nz0,j0
         integer z(2,minj:maxj,min3:max3,nptsx)
         integer jtab(minj:maxj)
         integer i,j,k
@@ -238,8 +261,8 @@
         do i=1,nptsx
         do k=1,nzl
         do j=1,njl
-            if(z(1,j,k,i)/32768 .ne. i+100) error=error+1
-            if(iand(z(1,j,k,i),32767) .ne. jtab(j)) error=error+1
+            if(z(1,j,k,i)/100000 .ne. i) error=error+1
+            if(mod(z(1,j,k,i), 100000)/100 .ne. j0+j-1) error=error+1
             if(z(2,j,k,i).ne.( nz0-1+k )) error = error + 1
         enddo
         enddo
@@ -269,7 +292,7 @@
          k0=mod(k,3)
           do j=1,njl
           do i=1,nil
-            if(z(1,i,j,k).ne.( itab(i)*32768 + jtab(j))) error = error + 1
+            if(z(1,i,j,k).ne.jtab(j)*100+itab(i)*100000) error = error + 1
             if(z(2,i,j,k).ne.( k ))  error = error + 1
           enddo
           enddo
@@ -301,12 +324,15 @@
         integer itab(minx:maxx),jtab(miny:maxy)
         integer error,k0
         integer i,j,k
+        integer ref
         error=0
         do k=1,nk
-         k0=mod(k,3)
           do j=1-ihaloy,njl+ihaloy
           do i=1-ihalox,nil+ihalox
-            if(z(i,j,k).ne.( itab(i)*16384 + jtab(j)*4 )*4 + k0) error = error + 1
+            ref = k
+            ref = ref + jtab(j)*100
+            ref = ref + itab(i)*100000
+            if(z(i,j,k).ne.ref) error = error + 1
           enddo
           enddo
         enddo
@@ -336,17 +362,15 @@
         integer itab(minx:maxx),jtab(miny:maxy)
         integer i,j
         do i=minx,maxx
-          itab(i)=i0+i-1 + 100
-          if(i+i0-1 .lt. 1)itab(i)=itab(i)+nptsx
-          if(i+i0-1 .gt. nptsx) itab(i)=itab(i)-nptsx
+          itab(i)=i0+i-1
+          if(itab(i).gt.nptsx) itab(i)=itab(i)-nptsx
+          if(itab(i).le.0    ) itab(i)=itab(i)+nptsx
         enddo
         do j=miny,maxy
-          jtab(j)=j0+j-1 + 100
-          if(j+j0-1.lt.1)jtab(j)=jtab(j)+nptsy
-          if(j+j0-1.gt.nptsy) jtab(j)=jtab(j)-nptsy
+          jtab(j)=j0+j-1
+          if(jtab(j).gt.nptsy) jtab(j)=jtab(j)-nptsy
+          if(jtab(j).le.0    ) jtab(j)=jtab(j)+nptsy
         enddo
-!        if(Pelocal.eq.3) print *,'i0,nptsx,itab=',i0,nptsx,itab
-!        if(Pelocal.eq.3) print *,'j0,nptsy,jtab=',j0,nptsy,jtab
         return
         end
 !
@@ -362,17 +386,13 @@
         integer nil,njl,z(2,minx:maxx,miny:maxy,nk)
         integer itab(minx:maxx),jtab(miny:maxy)
         integer i,j,k
+        z = -1
         do k=1,nk
-          do j=miny,maxy
-          do i=minx,maxx
-            z(1,i,j,k)=-1
-            z(2,i,j,k)=-1
-          enddo
-          enddo
           do j=1,njl
           do i=1,nil
-            z(1,i,j,k)=( itab(i)*32768 + jtab(j) )
-            z(2,i,j,k)=k
+              z(1,i,j,k) = jtab(j)*100
+              z(1,i,j,k) = z(1,i,j,k) + itab(i)*100000
+              z(2,i,j,k) = k
           enddo
           enddo
         enddo
@@ -398,17 +418,14 @@
         integer nil,njl,z(minx:maxx,miny:maxy,nk)
         integer itab(minx:maxx),jtab(miny:maxy)
         integer i,j,k,k0
+        z = -1
         do k=1,nk
-         k0=mod(k,3)
-          do j=miny,maxy
-          do i=minx,maxx
-            z(i,j,k)=-1
-          enddo
-          enddo
           do j=1,njl
-          do i=1,nil
-            z(i,j,k)=( itab(i)*16384 + jtab(j)*4 )*4 + k0
-          enddo
+            do i=1,nil
+              z(i,j,k) = k
+              z(i,j,k) = z(i,j,k) + jtab(j)*100
+              z(i,j,k) = z(i,j,k) + itab(i)*100000
+            enddo
           enddo
         enddo
         if((maxy-miny+1)*(maxx-minx+1) .gt. 25) return
@@ -416,8 +433,8 @@
           do j=maxy,miny,-1
             print 100,(z(i,j,1),i=minx,maxx)
           enddo
-100            format(10z10)
         endif
+100     format(10z10)
         return
         end
 !

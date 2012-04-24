@@ -93,26 +93,28 @@
 !	call tmg_start(95,'COMM XCH NS')
 	if(async_exch) THEN !  asynchronous simultaneous west to east and east to west moves
 	nwds=nk*haloy*(2*halox+ni)
-	sendtag=pe_medomm
 	messages = 0
 	if(.not. north) then
           messages = messages + 1
-	  call MPI_ISEND(halo_to_north,nwds,MPI_INTEGER,northpe, ! send to north neighbor unless I am north PE
-     %         sendtag,PE_DEFCOMM,requests(messages),ierr)       ! tag is PE grid ordinal of sender
-          messages = messages + 1
 	  call MPI_IRECV(halo_from_north,nwds,MPI_INTEGER,northpe,! recv from north neighbor unless I am north PE
-     %         northpe,PE_DEFCOMM,requests(messages),ierr)        ! sender was northpe therefore tag is northpe
+     %         100000+northpe,PE_DEFCOMM,requests(messages),ierr)        ! sender was northpe therefore tag is northpe
 	endif
 	if(.not. south) then
-          messages = messages + 1
-	  call MPI_ISEND(halo_to_south,nwds,MPI_INTEGER,southpe, ! send to south neighbor unless I am south PE
-     %         sendtag,PE_DEFCOMM,requests(messages),ierr)       ! tag is PE grid ordinal of sender
           messages = messages + 1
 	  call MPI_IRECV(halo_from_south,nwds,MPI_INTEGER,southpe,! recv from south neighbor unless I am south PE
      %         southpe,PE_DEFCOMM,requests(messages),ierr)        ! sender was southpe therefore tag is southpe
 	endif
-	  call MPI_waitall(messages,requests,statuses,ierr)  ! wait for all N-S and S-N messages to complete
-!
+	if(.not. south) then
+          messages = messages + 1
+	  call MPI_ISEND(halo_to_south,nwds,MPI_INTEGER,southpe, ! send to south neighbor unless I am south PE
+     %         100000+pe_medomm,PE_DEFCOMM,requests(messages),ierr)       ! tag is PE grid ordinal of sender
+        endif
+	if(.not. north) then
+          messages = messages + 1
+	  call MPI_ISEND(halo_to_north,nwds,MPI_INTEGER,northpe, ! send to north neighbor unless I am north PE
+     %         pe_medomm,PE_DEFCOMM,requests(messages),ierr)       ! tag is PE grid ordinal of sender
+        endif
+	call MPI_waitall(messages,requests,statuses,ierr)  ! wait for all N-S and S-N messages to complete
 	ELSE   ! THE FOLLOWING CODE WILL EVENTUALLY BE DEPRECATED WHEN async CODE IS FULLY DEBUGGED
 
 	nwds=nk*haloy*(2*halox+ni)
