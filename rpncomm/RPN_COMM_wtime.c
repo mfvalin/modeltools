@@ -71,10 +71,12 @@ void f77_name(rpn_comm_wtime_set)(double (*function)())
 #ifdef TEST
 #include <stdio.h>
 #include <mpi.h>
-int main(int argc,char **argv)
+void main(int argc,char **argv)
 {
   int i;
-  int ierr = MPI_Init(&argc, &argv);
+  int ierr;
+  
+  ierr = MPI_Init(&argc, &argv);
   
   fprintf(stdout,"Phase 1, dummy timing function\n");
   for (i=0 ; i<5 ; i++){
