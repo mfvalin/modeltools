@@ -56,12 +56,16 @@ double f77name(rpn_comm_timeofday)()
 
 /* set wall clock function used by rpn_comm_wtime to arbitrary clock function */
 /* that function MUST return a 64 bit real number (e.g MPI clock MPI_Wtime) */
-/* example FORTRAN call : call rpn_comm_wtime_set(MPI_Wtime) */
-/* example FORTRAN call : call rpn_comm_wtime_set(RPN_COMM_Timeofday) */
+/* example FORTRAN call : call RPN_COM_Wtime_set(MPI_Wtime) */
+/* example FORTRAN call : call RPN_COM_Wtime_set(RPN_COMM_Timeofday)   */
+/* special case :                                                      */
+/*   call RPN_COM_Wtime_set(RPN_COM_Wtime_set)                         */
+/*   resets the clock to the very fast dummy internal clock            */
 void f77_name(rpn_comm_wtime_set)(double (*function)())
 {
   fn = function;
-  time0 = (*function)();
+  if(fn == (void *)f77_name(rpn_comm_wtime_set)) fn = (void *)dummy_wtime;
+  time0 = (*fn)();
 }
 
 #ifdef TEST
@@ -96,7 +100,7 @@ int main(int argc,char **argv)
     fprintf(stdout,"TIME2= %G\n",x);
   }
   fprintf(stdout,"Phase 4, dummy timing function\n");
-  f77_name(rpn_comm_wtime_set)(dummy_wtime);
+  f77_name(rpn_comm_wtime_set)((void *)f77_name(rpn_comm_wtime_set));
   for (i=0 ; i<5 ; i++){
     double x = f77_name(rpn_comm_wtime)();
     fprintf(stdout,"TIME1= %G\n",x);
