@@ -37,10 +37,10 @@
 c	integer, allocatable :: za(:,:,:,:)
 c	integer, allocatable :: zb(:,:,:,:)
 *
-	real *8 za8(size/2,min1:max1,n2,n3g)
-	real *8 zb8(size/2,n2,min3:max3,n1g)
-c	real*8, allocatable ::  za8(:,:,:,:)
-c	real*8, allocatable ::  zb8(:,:,:,:)
+	integer *8 za8(size/2,min1:max1,n2,n3g)
+	integer *8 zb8(size/2,n2,min3:max3,n1g)
+c	integer*8, allocatable ::  za8(:,:,:,:)
+c	integer*8, allocatable ::  zb8(:,:,:,:)
 	pointer (za8_,za8)
 	pointer (zb8_,zb8)
 
@@ -49,9 +49,9 @@ c	real*8, allocatable ::  zb8(:,:,:,:)
 	include 'mpif.h'
 *
 c	integer, dimension(size,n2,min3:max3,n1partiel,npe) :: ta
-c	real*8, dimension(size/2,n2,min3:max3,n1partiel,npe) :: ta8
+c	integer*8, dimension(size/2,n2,min3:max3,n1partiel,npe) :: ta8
 	integer, allocatable :: ta(:,:,:,:,:)
-	real*8 :: ta8(size/2,n2,min3:max3,n1partiel,npe)
+	integer*8 :: ta8(size/2,n2,min3:max3,n1partiel,npe)
 *
 	pointer (ta8_,ta8)
 	

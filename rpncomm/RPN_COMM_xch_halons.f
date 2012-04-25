@@ -1,5 +1,5 @@
 !/* RMNLIB - Library of useful routines for C and FORTRAN programming
-! * Copyright (C) 1975-2001  Division de Recherche en Prevision Numerique
+! * Copyright (C) 1975-2012  Division de Recherche en Prevision Numerique
 ! *                          Environnement Canada
 ! *
 ! * This library is free software; you can redistribute it and/or

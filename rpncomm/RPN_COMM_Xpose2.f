@@ -32,8 +32,8 @@
 	integer za(size,min1:max1,n2,n3g)
 	integer zb(size,n2,min3:max3,n1g)
 *
-	real *8 za8(size/2,min1:max1,n2,n3g)
-	real *8 zb8(size/2,n2,min3:max3,n1g)
+	integer *8 za8(size/2,min1:max1,n2,n3g)
+	integer *8 zb8(size/2,n2,min3:max3,n1g)
 	pointer (za8_,za8)
 	pointer (zb8_,zb8)
 *
@@ -43,7 +43,7 @@
 c	integer, dimension(size,n2,min3:max3,n1partiel,npe) :: ta
 	integer, allocatable :: ta(:,:,:,:,:)
 c	pointer(ta_,ta)
-	real *8, dimension(size/2,n2,min3:max3,n1partiel,npe) :: ta8
+	integer *8, dimension(size/2,n2,min3:max3,n1partiel,npe) :: ta8
 	pointer(ta8_,ta8)
 *
 
