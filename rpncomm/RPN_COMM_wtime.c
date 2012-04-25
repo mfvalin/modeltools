@@ -71,7 +71,7 @@ void f77_name(rpn_comm_wtime_set)(double (*function)())
 #ifdef TEST
 #include <stdio.h>
 #include <mpi.h>
-void main(int argc,char **argv)
+int main(int argc,char **argv)
 {
   int i;
   int ierr;
@@ -108,5 +108,6 @@ void main(int argc,char **argv)
     fprintf(stdout,"TIME1= %G\n",x);
   }
   MPI_Finalize();
+  return 0;
 }
 #endif
