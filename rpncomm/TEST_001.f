@@ -10,22 +10,10 @@
 	call RPN_COMM_init(UserInit,Pelocal,Petotal,Pex,Pey)
 !	print *,' Pelocal,Petotal,Pex,Pey =',
 !     %          Pelocal,Petotal,Pex,Pey
-        ierr=RPN_COMM_dist_test(Petotal,1)
+        ierr=RPN_COMM_dist_test(Petotal)
         call RPN_COMM_finalize(ierr)
 	stop
 	end
 	subroutine UserInit(NX,NY)
-	return
-	end
-	subroutine rpn_comm_unbind_process
-	return
-	end
-	subroutine getenvc(name,value)
-	character *(*) :: name, value
-	value=""
-	return
-	end
-	integer function fnom()
-	fnom = -1
 	return
 	end

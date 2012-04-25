@@ -43,7 +43,7 @@
 !     function RPN_COMM_add_dist_entry receives a multi row array where each row
 !     describes such an exchange (number of values, root PE, client PE 1, ...., client PE n)
 !     a value of -1 for the client PE means a non existent PE (not all exchanges have the same
-!     number of "clients" and all rows mus have the same dimension)
+!     number of "clients" and all rows must have the same dimension)
 !     this function adds an entry into the local PE's distribution table and returns the
 !     table index of this entry to the caller
 !
@@ -55,7 +55,6 @@
         integer, pointer, dimension(:,:) :: clients   ! list of exchange clients for this PE
         integer, pointer, dimension(:,:) :: sources   ! list of exchange "roots" for this PE
         integer, pointer, dimension(:)   :: offsets   ! offset table into data for all rows
-!        integer, pointer, dimension(:)   :: data      ! data buffer pointer for this PE
         integer :: nclients                           ! number of exchanges where I am the root
         integer :: nsources                           ! number  of exchanges where I am a client
         integer :: ndata                              ! data buffer dimension
@@ -95,7 +94,7 @@
       implicit none
       integer RPN_COMM_dist_offsets
       integer, intent(IN) :: pattern, noffsets
-      integer, dimension(noffsets) :: offsets
+      integer, dimension(noffsets), intent(OUT) :: offsets
 
       RPN_COMM_dist_offsets = -1
 
@@ -111,9 +110,24 @@
 !
 ! ========================================================================================
 !
+      integer function RPN_COMM_dist_pattern(pattern)  ! is pattern valid ?
+      use local_distribution
+      implicit none
+      integer, intent(IN) :: pattern
+
+      RPN_COMM_dist_pattern = -1  ! precondition to failure
+      if(pattern > dist_table_entries) return  ! out of table
+      if(pattern <= 0) return                  ! out of table
+
+      RPN_COMM_dist_pattern = pattern  ! pattern is valid
+      return
+      end
+!
+! ========================================================================================
+!
       integer function RPN_COMM_get_dist_meta(pattern,metadata,nmeta)
 !
-!     get metadata table for an exchange group
+!     get metadata for an exchange pattern
 !
 !     metadata : describes what will be sent/received
 !         metadata(1,N) is offset of data in array values
@@ -305,7 +319,7 @@
                clients(1,no_client) = j           ! exchange number
                clients(2,no_client) = table(i,j)  ! PE ordinal
                clients(3,no_client) = table(-1,j) ! data length
-               clients(4,no_client) = offset      ! data length
+               clients(4,no_client) = offset      ! offset
             endif
           enddo
           dist_table(dist_table_entries)%offsets(j) = offset  ! positive offset means a root
@@ -317,7 +331,7 @@
                sources(1,no_source) = j   ! row number
                sources(2,no_source) = table(0,j)  ! PE ordinal
                sources(3,no_source) = table(-1,j) ! data length
-               sources(4,no_source) = -offset      ! data length
+               sources(4,no_source) = -offset      ! offset
                dist_table(dist_table_entries)%offsets(j) = -offset  ! negative offset means a client
                offset = offset + table(-1,j)      ! bump offset by data length
                exit        ! I can only be client once in an exchange
@@ -413,10 +427,10 @@
 !
 ! ========================================================================================
 !
-      integer function RPN_COMM_dist_test(npex,npey)
+      integer function RPN_COMM_dist_test(npetot)
       use local_distribution
       implicit none
-      integer, intent(IN) :: npex, npey
+      integer, intent(IN) :: npetot
 
       integer, parameter :: MAX_CLIENTS=3
 
@@ -426,7 +440,7 @@
       external :: RPN_COMM_add_dist_entry, RPN_COMM_alloc_dist_table
       integer RPN_COMM_get_dist_meta
       external RPN_COMM_get_dist_meta
-      integer, dimension(-2:MAX_CLIENTS,npex*npey) :: my_table
+      integer, dimension(-2:MAX_CLIENTS,npetot) :: my_table
       integer :: maxpe, i, mype, ierr, pattern, j, low, up
       integer :: ndata, nmeta, nrows
       integer, dimension(20) :: localdata
@@ -436,8 +450,8 @@
       logical debug
 
       debug = .false.
-      maxpe = npex*npey -1
-      nrows = npex*npey
+      maxpe = npetot -1
+      nrows = npetot
       my_table = -1   ! void all entries
       RPN_COMM_dist_test = -1
       call RPN_COMM_rank( 'GRID', mype ,ierr )
@@ -450,7 +464,7 @@
 !             then allocate data buffer
 !
       my_table = -1
-      do i = 1, npex*npey
+      do i = 1, npetot
         my_table(-1,i) = 1 + mod(i,3)
         my_table(-1,i) = 2
         my_table( 0,i) = maxpe / 2   ! middle PE will be the root
@@ -459,16 +473,26 @@
         if(mod(i+1,maxpe+1) /= my_table( 0,i))
      %     my_table( 2,i)=mod(i+1,maxpe+1)
       enddo
+      if(mype == 0) then
+        print *,'ROOT PE will be PE no', maxpe / 2 
+      endif
       if(mype == 0 .and. debug) then
-        do i = 1, npex*npey
+        do i = 1, npetot
           print 100,i,'/=/',my_table(-1:MAX_CLIENTS,i)
         enddo
       endif
       pattern = RPN_COMM_add_dist_entry
      %          (my_table,MAX_CLIENTS,nrows,'GRID',ndata,nmeta)
 100   format(I3,A,20I4)
-      print 100,mype,': >>',my_table(0,:)  ! clients
-      print 100,mype,': ->',my_table(-2,:)  ! offsets table
+      if(mype == maxpe / 2) then
+        print 100,mype,': CLIENTS',dist_table(pattern)%clients(2,:)  ! clients
+        print 100,mype,': EXCHNG ',dist_table(pattern)%clients(1,:)
+        print 100,mype,': LENGTH ',dist_table(pattern)%clients(3,:)
+        print 100,mype,': OFFSET ',dist_table(pattern)%clients(4,:)
+      else
+        print 100,mype,': ROOTPE ',my_table(0,:)  ! clients
+        print 100,mype,': OFFSETS',my_table(-2,:)  ! offsets table
+      endif
        if(debug)
      % print *,mype,' : pattern,ndata,nmeta= ',pattern,ndata,nmeta
 102   format(A,I3,A,20I4)
@@ -488,7 +512,7 @@
 !
 !     step 3, put data into the proper places
 !
-      do i = 1, npex*npey
+      do i = 1, npetot
          if(my_table(-2,i) /= 0) then     ! this row is active
            if(my_table(0,i) == mype) then  ! I am the root for this exchange
              low = abs(my_table(-2,i))
@@ -503,7 +527,7 @@
 !     step 4, perform the exchange
 !
       ierr = RPN_COMM_do_dist(pattern,.true.,values,ndata)
-      do i = 1, npex*npey
+      do i = 1, npetot
          if(my_table(-2,i) /= 0) then     ! this row is active
            if(my_table(0,i) /= mype) then  ! I am a client for this exchange
              low = abs(my_table(-2,i))

@@ -2,8 +2,10 @@ include RPN_COMM_version.inc
 $(info rpn_comm VERSION IS $(RPN_COMM_version_s))
 ifneq (,$(PLAIN))
   include Makefile.default
+  LIBDIR := .
 else
   ifdef EC_ARCH
+    LIBDIR := $(EC_ARCH)
     ifneq (,$(wildcard Makefile.$(BASE_ARCH)))
       include $(wildcard Makefile.$(BASE_ARCH))
     endif
@@ -24,7 +26,8 @@ veryclean:
 	rm -f *.o *.a *.mod f77name.h
 
 lib: fortran_code c_code
-	ar rcv lib$(LIB)_$(RPN_COMM_version).a *.o
+	mkdir -p $(LIBDIR)
+	ar rcv $(LIBDIR)/lib$(LIB)_$(RPN_COMM_version).a *.o
 
 modules:
 	$(MPIF90C) $(FCFLAGS) -c RPN_COMM_mod.f90
@@ -42,3 +45,6 @@ f77name:
 
 c_code: f77name
 	$(CC) $(CFLAGS) -c RPN_COMM*.c
+
+test001:
+	$(MPIF90C) $(FCFLAGS) TEST_001.f -L$(LIBDIR) -l$(LIB)_$(RPN_COMM_version) -o TEST_001
