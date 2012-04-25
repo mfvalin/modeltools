@@ -48,3 +48,6 @@ c_code: f77name
 
 test001:
 	$(MPIF90C) $(FCFLAGS) TEST_001.f -L$(LIBDIR) -l$(LIB)_$(RPN_COMM_version) -o TEST_001
+
+test002:
+	$(MPIF90C) $(FCFLAGS) TEST_002.f90 -L$(LIBDIR) -l$(LIB)_$(RPN_COMM_version) -o TEST_002

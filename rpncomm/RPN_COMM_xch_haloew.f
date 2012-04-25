@@ -50,7 +50,11 @@
         integer, dimension(4) :: requests            ! table of requests
         integer, dimension(MPI_STATUS_SIZE,4) :: statuses  ! table of statuses
         integer messages ! number of pending asynchronous messages
-	
+
+        external RPN_COMM_Wtime
+        real *8 RPN_COMM_Wtime,T1,T2,T3,T4
+
+        T1 = RPN_COMM_Wtime()
 	east=(bnd_east) .and. (.not.periodx)
 	eastpe=pe_id(pe_mex+1,pe_mey)
 	west=(bnd_west) .and. (.not.periodx)
@@ -73,14 +77,14 @@
 	    enddo
 	    enddo
 	  endif
-	  return
+          T2 = RPN_COMM_Wtime()
+          T3 = T2
+          T4 = T2
+          goto 9999   ! return
 	endif
 !
 !  extract east and west halos simultaneously (cache usage)
 !
-!	exch_time=0
-!	mem_time=0
-!	temp_time=time_base()
 	if(halox.eq.4)then
 	  do k=1,nk
 	  do j=jmin,jmax
@@ -141,7 +145,7 @@
 	  enddo
 	  enddo
 	endif
-!	mem_time=mem_time+time_base()-temp_time
+        T2 = RPN_COMM_Wtime()
 	if(async_exch) THEN !  asynchronous simultaneous west to east and east to west moves
 	  nwds=halox*(jmax-jmin+1)*nk
 	  sendtag=pe_medomm 
@@ -174,14 +178,9 @@
 !
 !  process west to east move
 !	
-!	temp_time=time_base()
-!
 	nwds=halox*(jmax-jmin+1)*nk
 	sendtag=pe_medomm
 	gettag=westpe
-	tag_2e=westpe
-!
-!	call tmg_start(94,'COMM XCH EW')
 	if(west) then
 !	  send to east_neighbor
 	  if(.not.east)then
@@ -206,9 +205,7 @@
 	nwds=halox*(jmax-jmin+1)*nk
 	sendtag=pe_medomm
 	gettag=eastpe
-	tag_2w=eastpe
-!
-	
+!	
 	if(east) then
 !	  send to west_neighbor
 	  if(.not.west) then
@@ -228,13 +225,10 @@
 	endif
 !
 	ENDIF  ! END OF CODE TO BE DEPRECATED
-!
-!	call tmg_stop(94)
-!	exch_time=exch_time+time_base()-temp_time
+        T3 = RPN_COMM_Wtime()
 !
 !  put halos back into array simultaneously (cache usage)
 !
-!	temp_time=time_base()
 	if(halox.eq.4)then
 	  do k=1,nk
 	  do j=jmin,jmax
@@ -312,22 +306,19 @@
 	      do m=1,halox
 	        g(m-halox,j,k  )=halo_from_west(m,j,k  )
 	        g(m-halox,j,k+1)=halo_from_west(m,j,k+1)
-!	        g(m-halox,j,k+2)=halo_from_west(m,j,k+2)
-!	        g(m-halox,j,k+3)=halo_from_west(m,j,k+3)
 	      enddo
 	    endif
 	    if(.not.east)then
 	      do m=1,halox
 	        g(ni+m,j,k  )=halo_from_east(m,j,k  )
 	        g(ni+m,j,k+1)=halo_from_east(m,j,k+1)
-!	        g(ni+m,j,k+2)=halo_from_east(m,j,k+2)
-!	        g(ni+m,j,k+3)=halo_from_east(m,j,k+3)
 	      enddo
 	    endif
 	  enddo
 	  enddo
 	endif
-
-
+        T4 = RPN_COMM_Wtime()
+9999    continue
+!       T1, T2, T3, T4 further processing goes here
         return
         end

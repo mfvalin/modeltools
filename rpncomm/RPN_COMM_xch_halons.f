@@ -31,10 +31,8 @@
 !	integer *8 mem_time, exch_time, ewtime
 	integer g(minx:maxx,miny:maxy,nk)
 !
-	
 	include 'mpif.h'
 !
-!	integer *8 time_base,temp_time
 	integer halo_to_east(halox,nj,nk),halo_to_west(halox,nj,nk)
 	integer halo_from_east(halox,nj,nk),halo_from_west(halox,nj,nk)
 	integer halo_to_north(1-halox:ni+halox,haloy,nk)
@@ -54,6 +52,10 @@
         integer, dimension(MPI_STATUS_SIZE,4) :: statuses  ! table of statuses
         integer messages ! number of pending asynchronous messages
 	
+        external RPN_COMM_Wtime
+        real *8 RPN_COMM_Wtime,T1,T2,T3,T4
+
+        T1 = RPN_COMM_Wtime()
 	east=(bnd_east) .and. (.not.periodx)
 	eastpe=pe_id(pe_mex+1,pe_mey)
 	west=(bnd_west) .and. (.not.periodx)
@@ -63,7 +65,6 @@
 	south=(bnd_south) .and. (.not.periody)
 	southpe=pe_id(pe_mex,pe_mey-1)
 
-!	temp_time = time_base()
         if ( pe_ny.eq.1 ) then 
            if(periody)then
               do k=1,nk
@@ -75,8 +76,10 @@
               enddo
 	      enddo
            endif
-!	   mem_time=mem_time+time_base()-temp_time
-           return
+           T2 = RPN_COMM_Wtime()
+           T3 = T2
+           T4 = T2
+           goto 9999   ! return
         endif
 
 	do k=1,nk
@@ -87,10 +90,8 @@
 	enddo
 	enddo
 	enddo
-!	mem_time=mem_time+time_base()-temp_time
-!	temp_time=time_base()
 
-!	call tmg_start(95,'COMM XCH NS')
+        T2 = RPN_COMM_Wtime()
 	if(async_exch) THEN !  asynchronous simultaneous west to east and east to west moves
 	nwds=nk*haloy*(2*halox+ni)
 	messages = 0
@@ -158,9 +159,8 @@
 	endif        
 !
 	ENDIF  ! END OF CODE TO BE DEPRECATED
+        T3 = RPN_COMM_Wtime()
 !
-!	call tmg_stop(95)
-!	temp_time = time_base()
  	if(.not.north)then
  	do k=1,nk
  	do m=1,haloy
@@ -181,10 +181,8 @@
 	enddo
 	enddo
 	endif
-!	endif
-!	mem_time=mem_time+time_base()-temp_time
-!
-	continue
-!
+        T4 = RPN_COMM_Wtime()
+9999    continue
+!       T1, T2, T3, T4 further processing goes here
 	return
         end
