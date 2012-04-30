@@ -58,7 +58,7 @@
 
 1	continue
 	
-	call RPN_COMM_tmg_in
+!	call RPN_COMM_tmg_in
 	east=(bnd_east) .and. (.not.periodx)
 	eastpe=pe_id(pe_mex+1,pe_mey)
 	west=(bnd_west) .and. (.not.periodx)
@@ -166,7 +166,6 @@
 	      endif
            endif
         endif
-
 !
 !       if no halo along x, bypass
 !	call tmg_start(90,'RPN_COMM_haloew')
@@ -193,7 +192,7 @@
 !	   call tmg_stop(92)
 
         endif
-	call RPN_COMM_tmg_out
+!	call RPN_COMM_tmg_out
 	return
 
 

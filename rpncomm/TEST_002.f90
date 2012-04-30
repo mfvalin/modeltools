@@ -43,7 +43,7 @@
         integer min3,max3,ierr, istat
         integer mini,maxi,nil,nilmax,ni0,i0
         integer minj,maxj,njl,njlmax,nj0,j0
-        integer nzl, nzlmzx, nz0,irep,iter
+        integer nzl, nzlmzx, nz0,irep,iter,irep2
         real*8 time1,time2,MPI_wtime,time_min,time_max,time_tot
         external MPI_wtime
 !
@@ -64,19 +64,15 @@
         common/ndomains/n_domains
         character *6 is_async(2)
 
-        common /TMG_halons2/times2(4,1024),pass2
-        real *8 times2
-        integer pass2
-        common /TMG_haloew/times(4,1024),pass
-        real *8 times
-        integer pass
         integer cache_flush(4000*4000)
+        real time_ew(0:1024), time_ns(0:1024)
 !
+	call RPN_COMM_xch_halo(time_ew,-1024,0,0,0,1,0,0,1,0,.true.,.true.,0,-1) ! fake call, set EW timing array
+	call RPN_COMM_xch_halo(time_ns,-1024,0,0,0,1,0,0,0,1,.true.,.true.,0,-1) ! fake call, set NS timing array
+
 !
 !       force a "callback" type initialization
 !
-        times = 0.0
-        times2 = 0.0
         npex=0
         npey=0
         call RPN_COMM_mydomain (get_n_domains, mydomain,ierr)
@@ -138,7 +134,7 @@
         allocate(iarr(mini:maxi))
         allocate(jarr(minj:maxj))
         allocate(data(mini:maxi,minj:maxj,nptsz*2))
-        allocate(glob((nptsx+2*ihalox),minj:maxj,nptsz))
+        allocate(glob(1-ihalox:nptsx+ihalox,minj:maxj,nptsz))
 !
 !     fill arrays with markers
 !
@@ -146,14 +142,22 @@
         j0=nj0
         call set_ijarr(iarr,jarr,mini,maxi,minj,maxj,i0,j0,nptsx,nptsy)
         call setup_arr(data,iarr,jarr,mini,maxi,minj,maxj,nptsz,nil,njl)
+        glob = -1
+        glob(1:nil,minj:maxj,1:nptsz) = data(1:nil,minj:maxj,1:nptsz)
+        call RPN_COMM_xch_halosl(glob,mini,nptsx+ihalox,minj,maxj, &
+              & nil,njl,nptsz,ihalox,ihaloy,.true.,.true.,nptsx,0,nilmax)
+        if (Pelocal.eq.0 .and. nptsx < 10 .and. njl < 5) then 
+          do j=maxj,minj,-1
+            print 101,j,glob(:,j,1)
+          enddo
+        endif
+        call vfy_arr_glb(glob,jarr,1-ihalox,nptsx+ihalox,minj,maxj,nptsz,nptsx,njl,ihalox)
 !
 !     timing loop for halo exchange
 !
 	is_async(1) = 'ASYNC'
 	is_async(2) = 'SYNC'
 	do iter = 1 , 2
-        pass = 0
-        pass2 = 0
 	ierr = RPN_COMM_option_L('async_exch',iter == 1)
 101     format(I3,15I9)
 !        print *,'----------------'
@@ -161,12 +165,14 @@
         time_min=1.0
         time_max=0.0
         time_tot = 0.0
-        do irep=1,20 ! 100 repetitions of fully periodic halo exchange
+        call rpn_comm_wtime_set(MPI_Wtime)
+        do irep=1,15 ! 100 repetitions of fully periodic halo exchange
           cache_flush = cache_flush + 1
+          call RPN_COMM_barrier('GRID',ierr)
+          glob(1:nil,minj:maxj,1:nptsz) = data(1:nil,minj:maxj,1:nptsz)
           time1 = MPI_WTIME()
           call RPN_COMM_xch_halo(data,mini,maxi,minj,maxj,nil,njl,nptsz,ihalox,ihaloy,.true.,.true.,nptsx,0)
           time2 = MPI_WTIME()
-          cache_flush = cache_flush + 1
           time_min=min(time_min,time2-time1)
           time_max=max(time_max,time2-time1)
           time_tot = time_tot + time2-time1
@@ -176,22 +182,33 @@
 !          call affichage(data,mini,maxi,minj,maxj,nptsz) 
 !
         if(Pelocal.eq.0 )then
-           print *,is_async(iter)//'time (min,max,avg)=',real(time_min),real(time_max),real(time_tot)*.05
+           print *,is_async(iter)//'time (min,max,avg)=',real(time_min),real(time_max),real(time_tot)/15.0
            print *,'pe=',Pelocal,                                          &
      &             ' Number of exchanges=', irep-1,                           &
      &             ' Time per exchange=',nint(1000000*time_tot/(irep-1)),            &
      &             ' microseconds'
         endif
-        if(Pelocal.eq.-1 )then
-           print *,'------COPIES------'
-           print *,times(4,1:20)-times(3,1:20)+times(2,1:20)-times(1,1:20)
-           print *,'-------MPI-------'
-           print *,times(3,1:20)-times(2,1:20)
-           print *,'------COPIES------'
-           print *,times2(4,1:20)-times2(3,1:20)+times2(2,1:20)-times2(1,1:20)
-           print *,'-------MPI-------'
-           print *,times2(3,1:20)-times2(2,1:20)
+        if(Pelocal.eq.0 )then
+            irep=time_ew(0)-1
+            irep2=time_ns(0)-1
+            call timing_report(irep/3,time_ew(1),is_async(iter)//'time_ew')
+            call timing_report(irep2/3,time_ns(1),is_async(iter)//'time_ns')
+!            print *,is_async(iter)//'time_ew',irep
+!            print 111,'T1 ',nint(time_ew(1:irep:3)*1000000)
+!            print 111,'T2 ',nint(time_ew(2:irep:3)*1000000 - time_ew(1:irep:3)*1000000)
+!            print 111,'T3 ',nint(time_ew(3:irep:3)*1000000 - time_ew(2:irep:3)*1000000)
+111         format(A,15I6)
+!           print *,'------COPIES------'
+!           print *,times(4,1:20)-times(3,1:20)+times(2,1:20)-times(1,1:20)
+!           print *,'-------MPI-------'
+!           print *,times(3,1:20)-times(2,1:20)
+!           print *,'------COPIES------'
+!           print *,times2(4,1:20)-times2(3,1:20)+times2(2,1:20)-times2(1,1:20)
+!           print *,'-------MPI-------'
+!           print *,times2(3,1:20)-times2(2,1:20)
         endif
+	call RPN_COMM_xch_halo(time_ew,-1024,0,0,0,1,0,0,1,0,.true.,.true.,0,-1) ! fake call, reset EW timing array
+	call RPN_COMM_xch_halo(time_ns,-1024,0,0,0,1,0,0,0,1,.true.,.true.,0,-1) ! fake call, reset NS timing array
 	enddo
 !
 !     verify that there were no errors
@@ -300,9 +317,10 @@
           enddo
         enddo
         if(error.ne.0) then 
-          print *,error,' VERIFICATION ERRORS for Pe ',Pelocal
+          print 1,'vfy_arr2:',error,' VERIFICATION ERRORS for Pe ',Pelocal,' (',(nil)*(njl)*nk,' points)'
+1       format(A,I4,A,I4,A,I5,A)
         endif
-        if(Pelocal.eq.0) print *,'vfy_arr2 : Verification performed, number of errors was ',error
+        if(Pelocal.eq.0) print *,'vfy_arr2 : Verification performed,',error,' errors on PE 0'
         if((maxy-miny+1)*(maxx-minx+1) .gt. 25) return
         if(Pelocal.eq.0) then
           do j=maxy,miny,-1
@@ -313,6 +331,43 @@
         return
         end
 !
+        subroutine vfy_arr_glb(z,jtab,minx,maxx,miny,maxy,nk,gni,njl,ihalox)
+!!!!        use rpn_comm
+        implicit none
+        integer :: minx,maxx,miny,maxy,nk,gni,njl,ihalox
+        integer, dimension(minx:maxx,miny:maxy,nk) :: z
+        integer, dimension(miny:maxy) :: jtab
+
+        integer Pelocal,Petotal
+        common /PEs/ Pelocal,Petotal
+!
+!        verify global (along X) array containing markers
+!
+        integer i,j,k,ref,error,ii
+
+        error = 0
+        do k=1,nk
+         do j=1,njl
+          do i=minx,maxx
+            ii = i
+            if(ii < 1) ii = ii + gni
+            if(ii > gni) ii = ii - gni
+            ref = k
+            ref = ref + jtab(j)*100
+            ref = ref + ii*100000
+            if(z(i,j,k).ne.ref) then
+              error = error + 1
+            endif
+          enddo
+         enddo
+        enddo
+        if(error.ne.0) then 
+          print 1,'vfy_arr_glb:',error,' VERIFICATION ERRORS for Pe ',Pelocal,' (',(maxx-minx+1)*njl*nk,' points)'
+1       format(A,I4,A,I4,A,I5,A)
+        endif
+        if(Pelocal.eq.0) print *,'vfy_arr_glb : Verification performed,',error,' errors on PE 0'
+        return
+        end
         subroutine vfy_arr(z,itab,jtab,minx,maxx,miny,maxy,nk,nil,njl,ihalox,ihaloy)
 !!!!        use rpn_comm
         implicit none 
@@ -339,9 +394,10 @@
           enddo
         enddo
         if(error.ne.0) then 
-          print *,error,' VERIFICATION ERRORS for Pe ',Pelocal
+          print 1,'vfy_arr:',error,' VERIFICATION ERRORS for Pe ',Pelocal,' (',(nil+2*ihalox)*(njl+2*ihaloy)*nk,' points)'
+1       format(A,I4,A,I4,A,I5,A)
         endif
-        if(Pelocal.eq.0) print *,'vfy_arr : Verification performed, number of errors was ',error
+        if(Pelocal.eq.0) print *,'vfy_arr : Verification performed,',error,' errors on PE 0'
         if((maxy-miny+1)*(maxx-minx+1) .gt. 25) return
         if(Pelocal.eq.0) then
           do j=maxy,miny,-1
@@ -527,3 +583,43 @@
         test_grids = 0
 	return
 	end
+        subroutine timing_report(n,times,label)
+        implicit none
+        integer :: n
+        character (len=*) :: label
+        real, dimension(3,n) :: times
+        real tmin(3), tmax(3)
+        real *8 ttot(3), ttot2(3)
+        integer i,j
+        character (len=10) :: labels(3)
+
+        labels(1)=' PRE COPY '
+        labels(2)=' MPI CALL '
+        labels(3)=' POST COPY'
+
+!            print *,label,' N=',n
+!            print 111,'T1 ',nint(times(1,:)*1000000)
+!            print 111,'T2 ',nint(times(2,:)*1000000 - times(1,:)*1000000)
+!            print 111,'T3 ',nint(times(3,:)*1000000 - times(2,:)*1000000)
+!111         format(A,15I6)
+!        return
+        times = times * 1000000
+        ttot = 0.0
+        tmin = 1000000000.0
+        tmax = 0.0
+        do j = 1 , n
+         times(3,j) = times(3,j) - times(2,j)
+         times(2,j) = times(2,j) - times(1,j)
+         do i = 1 , 3
+          tmin(i)=min(tmin(i),times(i,j))
+          tmax(i)=max(tmax(i),times(i,j))
+          ttot(i)=ttot(i)+times(i,j)
+         enddo
+        enddo
+        ttot = ttot / n
+        do I = 1 , 3
+          print 222,label//labels(i)//' (min,max,avg) microsec',nint(tmin(i)),nint(tmax(i)),nint(ttot(i))
+        enddo
+222     format(A,3I8)
+        return
+        end

@@ -17,7 +17,9 @@ else
 endif
 LIB = rpncomm
 
-all: lib
+all: lib tests
+
+tests:	test001 test002
 
 clean:
 	rm -f *.o
@@ -28,6 +30,7 @@ veryclean:
 lib: fortran_code c_code
 	mkdir -p $(LIBDIR)
 	ar rcv $(LIBDIR)/lib$(LIB)_$(RPN_COMM_version).a *.o
+	rm *.o
 
 modules:
 	$(MPIF90C) $(FCFLAGS) -c RPN_COMM_mod.f90

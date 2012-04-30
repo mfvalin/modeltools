@@ -1,5 +1,5 @@
 !/* RMNLIB - Library of useful routines for C and FORTRAN programming
-! * Copyright (C) 1975-2001  Division de Recherche en Prevision Numerique
+! * Copyright (C) 1975-2012  Division de Recherche en Prevision Numerique
 ! *                          Environnement Canada
 ! *
 ! * This library is free software; you can redistribute it and/or
@@ -51,10 +51,17 @@
         integer, dimension(MPI_STATUS_SIZE,4) :: statuses  ! table of statuses
         integer messages ! number of pending asynchronous messages
 
-        external RPN_COMM_Wtime
-        real *8 RPN_COMM_Wtime,T1,T2,T3,T4
+        include 'RPN_COMM_times.inc'
 
-        T1 = RPN_COMM_Wtime()
+        if(maxx == 0 .and. maxy == 0 .and. haloy == 0) then  ! special call to set pointer to EW timing array
+           times_ = loc(g)
+           ntimes = 1
+           ntimes_sz = maxx-minx  ! max number of timings that the array can contain
+           times(0) = ntimes      ! keep intex to next entry in times(0)
+           return
+        endif
+
+        T0 = RPN_COMM_Wtime()
 	east=(bnd_east) .and. (.not.periodx)
 	eastpe=pe_id(pe_mex+1,pe_mey)
 	west=(bnd_west) .and. (.not.periodx)
@@ -77,9 +84,9 @@
 	    enddo
 	    enddo
 	  endif
-          T2 = RPN_COMM_Wtime()
-          T3 = T2
-          T4 = T2
+          T1 = RPN_COMM_Wtime() - T0
+          T2 = T1
+          T3 = T1
           goto 9999   ! return
 	endif
 !
@@ -145,7 +152,7 @@
 	  enddo
 	  enddo
 	endif
-        T2 = RPN_COMM_Wtime()
+        T1 = RPN_COMM_Wtime() - T0
 	if(async_exch) THEN !  asynchronous simultaneous west to east and east to west moves
 	  nwds=halox*(jmax-jmin+1)*nk
 	  sendtag=pe_medomm 
@@ -225,7 +232,7 @@
 	endif
 !
 	ENDIF  ! END OF CODE TO BE DEPRECATED
-        T3 = RPN_COMM_Wtime()
+        T2 = RPN_COMM_Wtime() - T0
 !
 !  put halos back into array simultaneously (cache usage)
 !
@@ -317,8 +324,9 @@
 	  enddo
 	  enddo
 	endif
-        T4 = RPN_COMM_Wtime()
+        T3 = RPN_COMM_Wtime() - T0
 9999    continue
-!       T1, T2, T3, T4 further processing goes here
+!       T1, T2, T3 processing and storage
+        include 'RPN_COMM_times_post.inc'
         return
         end
