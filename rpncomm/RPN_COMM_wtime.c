@@ -18,6 +18,7 @@
  * Boston, MA 02111-1307, USA.
  */
 #include <stdlib.h>
+#include <stdio.h>
 #include <sys/time.h>
 #include <time.h>
 #include "f77name.h"
@@ -40,6 +41,84 @@ static double time0 = 0.0;
 double f77_name(rpn_comm_wtime)()
 {
   return (*fn)() - time0;
+}
+
+/* returns time stamp counter as a 64 bit real number */
+#if defined(linux)
+typedef unsigned long long ticks;
+static int t0_=0;
+static ticks t0;
+static double cpu_mult=1.0E-9;  /* 1GHz */
+static ticks getticks(void)
+{
+     unsigned a, d;
+     asm("cpuid");
+     asm volatile("rdtsc" : "=a" (a), "=d" (d));
+
+     return (((ticks)a) | (((ticks)d) << 32));
+}
+
+#endif
+#if defined(AIX)
+static int t0_=0;
+static timebasestruct_t t0;
+#endif
+double f77name(rpn_comm_tsc)()
+{
+  double temp;
+#if defined(linux)
+  ticks value;
+  FILE *cpuInfo;
+  char buffer[1024];
+  char *pbuf=buffer;
+  float freq=1000.0;
+  if(t0_ == 0) {
+    if( (cpuInfo = fopen("/proc/cpuinfo", "r")) != NULL  ) {
+      while(1) {
+	fgets(buffer,sizeof(buffer),cpuInfo);
+	if(buffer[4]=='M' && buffer[5]=='H' && buffer[6]=='z') {
+	  while(*pbuf != ':') pbuf++; pbuf++;
+	  sscanf(pbuf,"%f",&freq);
+	  freq *= 1000000.0;
+	  cpu_mult = 1.0 / freq;
+	  printf("freq = %f Hz, cpu_mult=%G\n",freq,cpu_mult);
+	  break;
+	}
+      }
+      fclose(cpuInfo);
+    }
+    t0=getticks();
+    t0_=1;
+  }
+  value = getticks();
+  temp = value - t0;
+  temp *= cpu_mult;   /* translate ticks to seconds */
+#endif
+#if defined(AIX)
+  timebasestruct_t t;
+  if(t0_ == 0) {
+    read_real_time(&t0,TIMEBASE_SZ);
+    time_base_to_time(&t0,TIMEBASE_SZ);
+    t0_=1;
+  }
+  read_real_time(&t,TIMEBASE_SZ);
+  time_base_to_time(&t,TIMEBASE_SZ);
+  t.tb_low = t.tb_low - t0.tb_low;
+  t.tb_high = t.tb_high - t0.tb_high;
+  if(t.tb_low < 0){
+    t.tb_high--;
+    t.tb_low += 1000000000;
+  }
+  temp = t.tb_low;
+  temp *= 1.0E-9;
+  temp += t.tb_high;
+
+#endif
+#if ! defined(linux) && ! defined(AIX)
+  temp = dummy_time;
+  dummy_time += 1.0E-09;
+#endif
+return temp;
 }
 
 /* returns time of day as a 64 bit real number */
@@ -75,37 +154,63 @@ int main(int argc,char **argv)
 {
   int i;
   int ierr;
+  double dummy, dummy2, dummy3, dummy4;
+  ticks t1, t2, t3, t4, t5;
   
   ierr = MPI_Init(&argc, &argv);
+  
+  dummy = f77name(rpn_comm_tsc)();
+  
+  t1 = getticks();
+  t2 = getticks();
+  t3 = getticks();
+  t4 = getticks();
+  t5 = getticks();
+  fprintf(stdout,"%u %u %u %u \n",t2-t1,t3-t2,t4-t3,t5-t4);
   
   fprintf(stdout,"Phase 1, dummy timing function\n");
   for (i=0 ; i<5 ; i++){
     double x = f77_name(rpn_comm_wtime)();
-    fprintf(stdout,"TIME1= %G\n",x);
+    double x1 = f77_name(rpn_comm_wtime)();
+    int loop = 1;
+    while(x == x1) { x1 = f77_name(rpn_comm_wtime)(); loop++; }
+    fprintf(stdout,"TIME1= %G %d\n",x1-x,loop);
   }
-  fprintf(stdout,"Phase 2a, using MPI function MPI_Wtime\n");
+  fprintf(stdout,"Phase 2, using MPI function MPI_Wtime\n");
   f77_name(rpn_comm_wtime_set)(MPI_Wtime);
   for (i=0 ; i<5 ; i++){
     double x = f77_name(rpn_comm_wtime)();
-    fprintf(stdout,"TIME2= %G\n",x);
-  }
-  fprintf(stdout,"Phase 2b, using MPI function MPI_Wtime\n");
-  f77_name(rpn_comm_wtime_set)(MPI_Wtime);
-  for (i=0 ; i<5 ; i++){
-    double x = f77_name(rpn_comm_wtime)();
-    fprintf(stdout,"TIME2= %G\n",x);
+    double x1 = f77_name(rpn_comm_wtime)();
+    int loop = 1;
+    while(x == x1) { x1 = f77_name(rpn_comm_wtime)(); loop++; }
+    fprintf(stdout,"TIME2= %G %d\n",x1-x,loop);
   }
   fprintf(stdout,"Phase 3, using get_time_of_day\n");
   f77_name(rpn_comm_wtime_set)(f77name(rpn_comm_timeofday));
   for (i=0 ; i<5 ; i++){
     double x = f77_name(rpn_comm_wtime)();
-    fprintf(stdout,"TIME2= %G\n",x);
+    double x1 = f77_name(rpn_comm_wtime)();
+    int loop = 1;
+    while(x == x1) { x1 = f77_name(rpn_comm_wtime)(); loop++; }
+    fprintf(stdout,"TIME3= %G %d\n",x1-x,loop);
   }
   fprintf(stdout,"Phase 4, dummy timing function\n");
   f77_name(rpn_comm_wtime_set)((void *)f77_name(rpn_comm_wtime_set));
   for (i=0 ; i<5 ; i++){
     double x = f77_name(rpn_comm_wtime)();
-    fprintf(stdout,"TIME1= %G\n",x);
+    double x1 = f77_name(rpn_comm_wtime)();
+    int loop = 1;
+    while(x == x1) { x1 = f77_name(rpn_comm_wtime)(); loop++; }
+    fprintf(stdout,"TIME4= %G %d\n",x1-x,loop);
+  }
+  fprintf(stdout,"Phase 5, TSC timing function\n");
+  f77_name(rpn_comm_wtime_set)((void *)f77_name(rpn_comm_tsc));
+  for (i=0 ; i<5 ; i++){
+    double x = f77_name(rpn_comm_wtime)();
+    double x1 = f77_name(rpn_comm_wtime)();
+    int loop = 1;
+    while(x == x1) { x1 = f77_name(rpn_comm_wtime)(); loop++; }
+    fprintf(stdout,"TIME5= %G %d\n",x1-x,loop);
   }
   MPI_Finalize();
   return 0;
