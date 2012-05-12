@@ -1,12 +1,14 @@
 #if ! defined(FTEST)
 
-#  include <stddef.h>
-#  ifndef __size_t
-#   define __size_t size_t
-#  endif
-#include <glob.h>
 #include <stdlib.h>
 #include <stdio.h>
+
+/* following 3 lines added for Portland Group C compiler */
+#ifndef __size_t
+#define __size_t size_t
+#endif
+
+#include <glob.h>
 
 /* modified strncpy that blank fills insteead of zero filling */
 static char *strncpy_f(char *dest, const char *src, size_t n)
