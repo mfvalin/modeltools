@@ -1,8 +1,8 @@
 $(info using default setup)
 # this is for vanilla gcc/gfortran/mpicc/mpif90 to be adjusted on target system
 
-CFLAGS = -fpic
-FCFLAGS = -fpic -fno-second-underscore -fcray-pointer
+CFLAGS = -fpic -O2
+FCFLAGS = -fpic -fno-second-underscore -fcray-pointer -O2
 
 CC=gcc
 FC=gfortran
