@@ -3,9 +3,11 @@
 #include <stdlib.h>
 #include <stdio.h>
 
-/* following 3 lines added for Portland Group C compiler */
+/* following lines added for Portland Group C compiler */
+#if defined(linux)
 #ifndef __size_t
 #define __size_t size_t
+#endif
 #endif
 
 #include <glob.h>
