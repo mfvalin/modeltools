@@ -1,4 +1,9 @@
 #if ! defined(FTEST)
+
+#  include <stddef.h>
+#  ifndef __size_t
+#   define __size_t size_t
+#  endif
 #include <glob.h>
 #include <stdlib.h>
 #include <stdio.h>
