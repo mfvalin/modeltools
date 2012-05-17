@@ -49,7 +49,7 @@
       endif
 
       globname1 = trim(names)
-      if(0 == name_is_a_dir(trim(globname1)//NULL)) then   ! names is a directory
+      if(0 == name_is_a_dir(trim(names)//NULL)) then   ! names is a directory
         print *,'DIR: ',trim(names)
         globname1 = trim(names)//'/*.fst'                   ! open names/*.fst if names/.dir not found
         if(0 == name_is_a_file(trim(names)//'/.dir'//NULL)) then
@@ -57,6 +57,7 @@
           list = get_free_fortran_unit(99)
           open(unit=list,file=trim(names)//'/.dir',form='FORMATTED')   ! open list of names
 1         read(list,*,end=2)globname2                            ! for each name
+          globname2=trim(names)//'/'//globname2
           nunits = nunits + 1                                  ! bump file count
           status = fnom(units(nunits),globname2,'STD+RND',0)   ! assign name to file
           if(status /= 0) goto 222                             ! error in fnom
