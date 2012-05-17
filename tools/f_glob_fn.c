@@ -84,6 +84,7 @@ int name_is_a_file(char *name)
   struct stat temp;
   int status;
   status = stat(name,&temp);
+  if(status != 0) return(-1);
   if( S_IFREG & temp.st_mode ) return (0); /* it is a regular file */
   return (-1);                             /* not a regular file */
 }
@@ -96,6 +97,7 @@ int name_is_a_dir(char *name)
   struct stat temp;
   int status;
   status = stat(name,&temp);
+  if(status != 0) return(-1);
   if( S_IFDIR & temp.st_mode ) return (0); /* it is a directory */
   return (-1);                             /* not a directory */
 }

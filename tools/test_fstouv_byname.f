@@ -18,7 +18,7 @@
       name='mydir2'
       status = fstouv_byname(name,iun,'RND')
       print *,'========================================'
-      return
+      stop
       end
       integer function fnom(iun,name,attr,lng)
       implicit none
