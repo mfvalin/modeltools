@@ -2,6 +2,8 @@
 
 #include <stdlib.h>
 #include <stdio.h>
+#include <sys/types.h>
+#include <sys/stat.h>
 
 /* following lines added for Portland Group C compiler */
 #if defined(linux)
@@ -73,22 +75,67 @@ int f_next_glob(char *name, int *maxlen)
   in_use++;
   return 0;
 }
+
+/* is name an ordinary file ? */
+#pragma weak name_is_a_file_=name_is_a_file
+#pragma weak name_is_a_file__=name_is_a_file
+int name_is_a_file(char *name)
+{
+  struct stat temp;
+  int status;
+  status = stat(name,&temp);
+  if( S_IFREG & temp.st_mode ) return (0); /* it is a regular file */
+  return (-1);                             /* not a regular file */
+}
+
+/* is name a directory ? */
+#pragma weak name_is_a_dir_=name_is_a_dir
+#pragma weak name_is_a_dir__=name_is_a_dir
+int name_is_a_dir(char *name)
+{
+  struct stat temp;
+  int status;
+  status = stat(name,&temp);
+  if( S_IFDIR & temp.st_mode ) return (0); /* it is a directory */
+  return (-1);                             /* not a directory */
+}
+
 #if defined(TEST)
 int main(int argc, char **argv)
 {
   char buffer[33];
   int buflen=32;
   int status, size;
+  char *name;
   
   buffer[32]='\0';
   status=f_set_glob(argv[1]);
-  size = tglob.gl_pathc
+  size = tglob.gl_pathc;
   printf("matches = %d, status=%d\n",size,status);
   while( (status=f_next_glob(buffer,&buflen)) == 0) {
     printf("%d:%d %s\n",status,in_use,buffer);
   }
   printf("%d:\n",status);
   f_free_glob();
+  
+  system("mkdir taratata");
+  system("touch taratata2");
+
+  name="taratata";
+  status=name_is_a_dir(name);
+  printf("%s is a dir = %d\n",name,status);
+  status=name_is_a_file(name);
+  printf("%s is a file = %d\n",name,status);
+  
+  name="taratata2";
+  status=name_is_a_dir(name);
+  printf("%s is a dir = %d\n",name,status);
+  status=name_is_a_file(name);
+  printf("%s is a file = %d\n",name,status);
+  
+  system("rmdir taratata");
+  system("rm taratata2");
+  
   return 0;
 }
 #endif
@@ -129,7 +176,10 @@ character *32 buffer
 character *32 target
 integer f_set_glob, f_next_glob
 external f_set_glob, f_free_glob, f_next_glob
+integer name_is_a_dir, name_is_a_file
+external name_is_a_dir, name_is_a_file
 integer status
+character *32 name
 
 target="raaffdfiudfh" ! look for non existent file
 status=f_set_glob(trim(target)//achar(0))
@@ -155,6 +205,24 @@ do while(f_next_glob(buffer,32) == 0)
   print *,'"'//trim(buffer)//'"'
 enddo
 call f_free_glob()
+
+call  system("mkdir taratata");
+call  system("touch taratata2");
+
+name="taratata";
+status=name_is_a_dir(trim(name)//achar(0));
+print *,name,' is a dir=',status
+status=name_is_a_file(trim(name)//achar(0));
+print *,name,' is a file=',status
+name="taratata2";
+status=name_is_a_dir(trim(name)//achar(0));
+print *,name,' is a dir=',status
+status=name_is_a_file(trim(name)//achar(0));
+print *,name,' is a file=',status
+
+call  system("rmdir taratata");
+call  system("rm taratata2");
+
 
 stop
 end
