@@ -32,6 +32,14 @@
       name='mydir2'
       units=0
       status = fstouv_byname(name,units,MAXUNITS,nunits,'.Dir','')
+      print *,'=============== file+bad+.. =========='
+      name='+file1.tfs++mydir/file1.Fst+file2.tfs+bad++++'
+      units=0
+      status = fstouv_byname(name,units,MAXUNITS,nunits,'.Dir','')
+      print *,'=============== file+file2+.. =========='
+      name='+file1.tfs++mydir/file1.Fst+file2.tfs+mydir2/file1.bbb++++'
+      units=0
+      status = fstouv_byname(name,units,MAXUNITS,nunits,'.Dir','')
       print *,'========================================'
       stop
       end
@@ -39,6 +47,11 @@
       implicit none
       integer :: iun, lng
       character (len=*) :: name, attr
+      integer, save :: baseunit=9999
+      if(iun == 0) then
+        iun = baseunit
+        baseunit = baseunit - 1
+      endif
       print *,'FNOM: iun,name,attr',iun,trim(name),' ',trim(attr)
       fnom = 0
       return
@@ -54,7 +67,8 @@
       subroutine  fstlnk(units,nunits)
       integer :: nunits
       integer, dimension(nunits) :: units
-      print *,'FSTLNK: nunits=',nunits
+!      print *,'FSTLNK: nunits=',nunits
+      print *,'FSTLNK: units=',units(1:nunits)
       return
       end
       subroutine  fstfrm(unit)

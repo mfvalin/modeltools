@@ -131,13 +131,16 @@
         goto 111                                             ! and return
       endif
 !     if we get here, we have a plus sign (+) separated list of names
-      istart = 1
-      iend = 1
-      ilen = len(names)
+      istart = 0
+      iend = 0
+      ilen = len(trim(names))
       do while(istart < ilen)
+        istart = iend + 1
+        iend = iend + 1
         do while(names(iend:iend) /= '+' .and. iend <= ilen)
           iend = iend + 1
         enddo
+        if(names(istart:iend) == '+') cycle ! null file name
         globname2=names(istart:iend-1)
         if(0 == name_is_a_file(trim(globname2)//NULL)) then    ! file exists ?
           nunits = nunits + 1
@@ -146,8 +149,11 @@
           if(status /= 0) goto 333                             ! error in fnom
           status = fstouv(units(nunits),mode)                  ! open standard file
           if(status /= 0) goto 333                             ! error in fstouv
+        else                                                   ! bad file name, error
+          print *,"BAD FILE NAME: '"//trim(globname2)//"'"
+          status = -1
+          goto 333
         endif
-        istart = iend + 1
       enddo
       call fstlnk(units,nunits)
       status = 0
@@ -156,7 +162,7 @@
       return
 
 222   close(list)               ! error, close .dir file
-333   do i = 1 , nunits-1       ! errors detected, close all the standard files that we opened
+333   do i = 1 , nunits         ! errors detected, close all the standard files that we opened
         call fstfrm(units(i))
       enddo
       call f_free_glob()        ! harmless if not needed
