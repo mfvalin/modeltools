@@ -10,21 +10,27 @@
       iun=0
       print *,'=============== file1.tfs =============='
       name='file1.tfs'
+      units=0
       status = fstouv_byname(name,units,MAXUNITS,nunits,'','')
       print *,'===============   *.tfs   =============='
       name='*.tfs'
+      units=0
       status = fstouv_byname(name,units,MAXUNITS,nunits,'','')
       print *,'=============== dir/*.fst =============='
       name='mydir'
+      units=0
       status = fstouv_byname(name,units,MAXUNITS,nunits,'','')
       print *,'=============== dir/*.Fst =============='
       name='mydir'
+      units=0
       status = fstouv_byname(name,units,MAXUNITS,nunits,'','*.Fst')
       print *,'================ dir/.dir (.aaa)========'
       name='mydir2'
+      units=0
       status = fstouv_byname(name,units,MAXUNITS,nunits,'','')
       print *,'================ dir/.Dir (.bbb)========'
       name='mydir2'
+      units=0
       status = fstouv_byname(name,units,MAXUNITS,nunits,'.Dir','')
       print *,'========================================'
       stop
