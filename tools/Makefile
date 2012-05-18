@@ -21,8 +21,13 @@ testfst: fstouv_byname.o test_fstouv_byname.o
 	touch file1.tfs file2.tfs file3.tfs
 	mkdir -p mydir mydir2
 	touch mydir/file1.fst mydir/file2.fst mydir/file3.fst mydir/file4.fst
+	touch mydir/file1.Fst mydir/file2.Fst mydir/file3.Fst mydir/file4.Fst
 	touch mydir2/file1.aaa mydir2/file2.aaa mydir2/file3.aaa
-	rm -f mydir2/.dir
+	touch mydir2/file1.bbb mydir2/file2.bbb mydir2/file3.bbb
+	rm -f mydir2/.dir  mydir2/.Dir
+	echo file1.bbb > mydir2/.Dir
+	echo file2.bbb >> mydir2/.Dir
+	echo file2.bbb >> mydir2/.Dir
 	echo file1.aaa > mydir2/.dir
 	echo file2.aaa >> mydir2/.dir
 	echo file3.aaa >> mydir2/.dir

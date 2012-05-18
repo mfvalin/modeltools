@@ -4,19 +4,28 @@
       character *132 name
       integer iun
       integer fstouv_byname
+      integer, parameter :: MAXUNITS=1024
+      integer nunits,units(MAXUNITS)
 
       iun=0
+      print *,'=============== file1.tfs =============='
       name='file1.tfs'
-      status = fstouv_byname(name,iun,'RND')
-      print *,'========================================'
+      status = fstouv_byname(name,units,MAXUNITS,nunits,'','')
+      print *,'===============   *.tfs   =============='
       name='*.tfs'
-      status = fstouv_byname(name,iun,'RND')
-      print *,'========================================'
+      status = fstouv_byname(name,units,MAXUNITS,nunits,'','')
+      print *,'=============== dir/*.fst =============='
       name='mydir'
-      status = fstouv_byname(name,iun,'RND')
-      print *,'========================================'
+      status = fstouv_byname(name,units,MAXUNITS,nunits,'','')
+      print *,'=============== dir/*.Fst =============='
+      name='mydir'
+      status = fstouv_byname(name,units,MAXUNITS,nunits,'','*.Fst')
+      print *,'================ dir/.dir (.aaa)========'
       name='mydir2'
-      status = fstouv_byname(name,iun,'RND')
+      status = fstouv_byname(name,units,MAXUNITS,nunits,'','')
+      print *,'================ dir/.Dir (.bbb)========'
+      name='mydir2'
+      status = fstouv_byname(name,units,MAXUNITS,nunits,'.Dir','')
       print *,'========================================'
       stop
       end
