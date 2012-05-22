@@ -18,16 +18,31 @@
 * * Boston, MA 02111-1307, USA.
 * */
 
+      subroutine RPN_COMM_set_petopo(sizx,sizy)
+      use rpn_comm
+      implicit none
+      include 'mpif.h'
+      integer sizx,sizy
+
+      deltai = sizx
+      deltaj = sizy
+
+      return
+      end
+
       integer function RPN_COMM_petopo(pex,pey)
       use rpn_comm
       implicit none
       include 'mpif.h'
       integer pex,pey
 
-      integer count, ierr,i,j
+      integer count, ierr,i,j,i0,j0
 
       pe_nx=pex
       pe_ny=pey
+      deltai = min(pe_nx,max(1,deltai))
+      deltaj = min(pe_ny,max(1,deltaj))
+
       RPN_COMM_petopo = -1
 
       if(pex*pey .ne. pe_dommtot) then
@@ -56,8 +71,20 @@
          ord_tab(i)=-1
       enddo
       ord_max=0
-      do j=0,pe_ny-1
-         do i=0,pe_nx-1
+*
+*     deltai = deltaj = 1          : as before, X increasing, then Y increasing (horizontal stripes, bottom to top)
+*     deltai = 1, deltaj = pe_ny   : Y increasing, then X increasing (vertical stripes, left ro right)
+*     otherwise                    : blocks of deltai by deltaj, X increasing, then Y increasing 
+*                                    blocks going left to right, then bottom to top
+*     in the latter case, deltai * deltaj = number of PEs per 
+      do j0 = 0 , pe_ny-1 , deltaj   ! distribute by blocks of size deltai by deltaj
+      do i0 = 0 , pe_nx-1 , deltai
+         do j=j0,min(pe_ny-1 , j0+deltaj-1)
+         do i=i0,min(pe_nx-1 , i0+deltai-1)
+            if(count == pe_me) then  ! this is me, get pe_mex and pe_mey
+               pe_mex = i
+               pe_mey = j
+            endif
             pe_id(i,j)=count-pe_pe0
             pe_xtab(count)=i
             pe_ytab(count)=j
@@ -65,6 +92,8 @@
             ord_max=ord_max+1
             count=count+1
          enddo
+         enddo
+      enddo
       enddo
       ord_max = ord_max -1
 *     
@@ -97,8 +126,8 @@
 *     a value of -1 for X or Y means "OUT OF GRID"
 *     
 
-      pe_mex=mod(pe_me-pe_pe0,pe_nx)
-      pe_mey=(pe_me-pe_pe0)/pe_nx
+*      pe_mex=mod(pe_me-pe_pe0,pe_nx)  ! this is no longer true
+*      pe_mey=(pe_me-pe_pe0)/pe_nx     ! this is no longer true
       pe_extra=0
 *     
 *     are we on a boundary ?

@@ -34,7 +34,7 @@ $(subst .f,.o,$(wildcard RPN_COMM*.f)):	RPN_COMM_mod.o
 
 $(LIBRARY): $(FMODULES) f77name.h $(FOBJECTS) $(COBJECTS)
 	mkdir -p $(LIBDIR)
-	ar rcv $(LIBRARY) $(FOBJECTS) $(COBJECTS)
+	ar rcv $(LIBRARY) $(FOBJECTS) $(COBJECTS) $(FMODULES)
 
 TEST_001: $(LIBRARY) TEST_001.f
 	$(MPIF90C) $(FCFLAGS) TEST_001.f -L$(LIBDIR) -l$(LIB)_$(RPN_COMM_version) -o TEST_001

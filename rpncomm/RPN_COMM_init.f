@@ -303,7 +303,8 @@
 
       if(pe_me_a_domain .eq.0 .and. diag_mode .ge. 1) 
      &   write(rpn_u,1000)my_color,pe_tot,MultiGrids,Grids
-1000  format('domain='I1I4' PEs,'I3' SuperGrids with'I3' Grids each')
+1000  format('domain=',I1,I4,' PEs,',I3,' SuperGrids with',
+     &       I3,' Grids each')
 !      write(rpn_u, *)'pe_tot_a_domain=',pe_tot_a_domain
       call MPI_COMM_GROUP(pe_a_domain,pe_gr_a_domain,ierr)
 !      write(rpn_u, *)'pe_gr_a_domain=',pe_gr_a_domain
@@ -373,6 +374,15 @@
       pe_tot_grid = pe_tot
 !      write(rpn_u,*)'pe_tot_grid=',pe_tot_grid
       call MPI_COMM_GROUP(pe_grid,pe_gr_grid,ierr)
+*
+*     make communicator for PEs on same host
+*
+      my_color = f_gethostid()  ! coloring by host identifier
+      call MPI_COMM_SPLIT(pe_grid,my_color,
+     &                    pe_me_grid,pe_grid_host,ierr)        ! same (sub)grid, same host node communicator
+      call MPI_COMM_RANK(pe_grid_host,pe_me_grid_host,ierr)    ! my rank on this host
+      call MPI_COMM_SIZE(pe_grid_host,pe_tot_grid_host,ierr)   ! population of this host
+      call MPI_COMM_GROUP(pe_grid_host,pe_gr_grid_host,ierr)   ! group communicator
 *
 *     subgrid split done, each sub domain is now on its own
 *

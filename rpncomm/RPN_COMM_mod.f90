@@ -18,6 +18,7 @@
 ! * Boston, MA 02111-1307, USA.
 ! */
 module rpn_comm
+  use iso_c_binding
   save
   integer MAX_OPTN
   parameter(MAX_OPTN=10)
@@ -61,6 +62,8 @@ module rpn_comm
   integer diag_mode
   logical :: WORLD_COMM_MPI_INIT=.false.
   logical :: RPM_COMM_IS_INITIALIZED=.false.
+  integer :: deltai=1   ! deltai and deltaj are used by RPN_COMM_petopo to distribute grid over PEs
+  integer :: deltaj=1   ! default PE distribution is X increasing, then Y increasing
   integer pe_me,pe_mex,pe_mey,pe_myrow,pe_mycol
   integer pe_tot,pe_nx,pe_ny,pe_pe0,pe_extra
   integer pe_gr_extra,pe_gr_myrow,pe_gr_mycol
@@ -81,9 +84,11 @@ module rpn_comm
   integer pe_me_grid, pe_tot_grid                ! a single grid
   integer pe_grid_peers, pe_gr_grid_peers        ! PEs with same rank on different grids of same multigrid
   integer pe_me_peer, pe_tot_peer                ! PEs with same rank on different grids of same multigrid
+  integer pe_grid_host, pe_gr_grid_host          ! PEs on same host node (belonging to same "grid")
+  integer pe_me_grid_host, pe_tot_grid_host      ! PEs on same host node (belonging to same "grid")
   integer my_colors(3)                           ! domain/multigrid/grid color
   integer, allocatable, dimension(:,:) :: pe_id
-  integer, allocatable, dimension(:) :: pe_xtab,pe_ytab
+  integer, allocatable, dimension(:)   :: pe_xtab,pe_ytab
   integer, allocatable, dimension(:,:) :: pe_location   ! pe_x,pe_x,pe_ingrid,pe_insgrid,pe_indomain
   logical :: async_exch=.true.
   character *4 pe_optn(MAX_OPTN)
@@ -150,5 +155,16 @@ module rpn_comm
   end type domm
   integer domm_size, domm_num
   type(domm), allocatable, dimension(:) :: pe_domains
+
+!
+! interface to gethostid
+! get the 32 bit host identifier
+!
+  interface
+    integer(C_INT) function f_gethostid()BIND(C,name='gethostid')
+      use iso_c_binding
+    end function f_gethostid
+  end interface
+
 
 end module rpn_comm

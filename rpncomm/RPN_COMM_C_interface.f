@@ -41,3 +41,12 @@
         call RPN_COMM_getenv(trim(varname)//achar(0),value,len(value))
 	return
 	end
+*
+*       get the 32 bit host identifier
+*
+        integer function RPN_COMM_hostid()
+        use rpn_comm
+        implicit none
+        RPN_COMM_hostid=f_gethostid()
+        return
+        end

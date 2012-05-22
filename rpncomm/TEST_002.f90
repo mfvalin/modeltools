@@ -78,6 +78,7 @@
         call RPN_COMM_mydomain (get_n_domains, mydomain,ierr)
 !        print *,'This is member',mydomain+1,' of',n_domains,' domains'
 !
+        call RPN_COMM_set_petopo(2,2)   ! force vertically striped distribution
         mygrid = RPN_COMM_init_multi_level(sss,Pelocal,Petotal,npex,npey,n_domains,1)
 !
 !       ============= determine resolution of MPI_wtine
