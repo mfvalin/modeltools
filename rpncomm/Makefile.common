@@ -5,7 +5,7 @@
 .f90.o:
 	$(MPIF90C) -c $(FCFLAGS) $<
 .c.o:
-	$(CC) -c $(CFLAGS) $<
+	$(MPICC) -c $(CFLAGS) $<
 
 ifneq (,$(PLAIN))
   include Makefile.default

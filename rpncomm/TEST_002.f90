@@ -30,8 +30,10 @@
 !       because some compilers do not like POINTER
 !       statements with variable dimensions in a main program
 !
-        integer  nptsx,nptsy,nptsz,ihalox,ihaloy
+        integer :: nptsx,nptsy,nptsz,ihalox,ihaloy
         common /the_problem/ nptsx,nptsy,nptsz,ihalox,ihaloy  ! common containing problem dimensions and halo size
+        integer :: nodex, nodey
+        common /pernode/ nodex, nodey
 
         integer Pelocal,Petotal
         common /PEs/ Pelocal,Petotal
@@ -64,8 +66,11 @@
         common/ndomains/n_domains
         character *6 is_async(2)
 
-        integer cache_flush(4000*4000)
-        real time_ew(0:1024), time_ns(0:1024)
+        integer cache_flush(2000*2000)
+        integer, parameter :: NEXCH=256
+        real, parameter :: SCAL=1.0/NEXCH
+        real time_ew(0:5*NEXCH), time_ns(0:5*NEXCH)
+        integer nbytes, nodebytes
 !
 	call RPN_COMM_xch_halo(time_ew,-1024,0,0,0,1,0,0,1,0,.true.,.true.,0,-1) ! fake call, set EW timing array
 	call RPN_COMM_xch_halo(time_ns,-1024,0,0,0,1,0,0,0,1,.true.,.true.,0,-1) ! fake call, set NS timing array
@@ -78,7 +83,7 @@
         call RPN_COMM_mydomain (get_n_domains, mydomain,ierr)
 !        print *,'This is member',mydomain+1,' of',n_domains,' domains'
 !
-        call RPN_COMM_set_petopo(2,2)   ! force vertically striped distribution
+        call RPN_COMM_set_petopo(1,1000)   ! force vertically striped distribution
         mygrid = RPN_COMM_init_multi_level(sss,Pelocal,Petotal,npex,npey,n_domains,1)
 !
 !       ============= determine resolution of MPI_wtine
@@ -166,11 +171,13 @@
         time_min=1.0
         time_max=0.0
         time_tot = 0.0
+        nbytes=2*(ihaloy*nil + (maxj-minj+1)*ihalox) * nptsz * 2 * 4
+        nodebytes=2*(ihaloy*nodex + nodey*ihalox) * nptsz * 2 * 4
         call rpn_comm_wtime_set(MPI_Wtime)
-        do irep=1,15 ! 100 repetitions of fully periodic halo exchange
+        do irep=1,NEXCH ! NEXCH repetitions of fully periodic halo exchange
           cache_flush = cache_flush + 1
-          call RPN_COMM_barrier('GRID',ierr)
           glob(1:nil,minj:maxj,1:nptsz) = data(1:nil,minj:maxj,1:nptsz)
+          call RPN_COMM_barrier('GRID',ierr)
           time1 = MPI_WTIME()
           call RPN_COMM_xch_halo(data,mini,maxi,minj,maxj,nil,njl,nptsz,ihalox,ihaloy,.true.,.true.,nptsx,0)
           time2 = MPI_WTIME()
@@ -183,11 +190,12 @@
 !          call affichage(data,mini,maxi,minj,maxj,nptsz) 
 !
         if(Pelocal.eq.0 )then
-           print *,is_async(iter)//'time (min,max,avg)=',real(time_min),real(time_max),real(time_tot)/15.0
+           print *,is_async(iter)//'time_tot (min,max,avg)=',real(time_min),real(time_max),real(time_tot)/NEXCH
            print *,'pe=',Pelocal,                                          &
      &             ' Number of exchanges=', irep-1,                           &
      &             ' Time per exchange=',nint(1000000*time_tot/(irep-1)),            &
-     &             ' microseconds'
+     &             ' microseconds', nint(.000001 * nbytes * NEXCH / time_tot),' MB/s',  &
+     &             ' node BW=',nint(.000001 * nodebytes * NEXCH / time_tot),' MB/s'
         endif
         if(Pelocal.eq.0 )then
             irep=time_ew(0)-1
@@ -504,14 +512,20 @@
 !        "callback routine" used to get initial topology
 !        information
 !
+        integer :: nodex, nodey
+        common /pernode/ nodex, nodey
         common /the_problem/ nptsx,nptsy,nptsz,ihalox,ihaloy
         integer nptsx,nptsy,nptsz,ihalox,ihaloy
+        integer deltai,deltaj
         open(5,file='TEST_data_001',form='FORMATTED')
         print *,'PEs =',nx*ny
-        read(5,*)nx,ny,nptsx,nptsy,nptsz,ihalox,ihaloy
+        read(5,*)nx,ny,nptsx,nptsy,nptsz,ihalox,ihaloy,deltai,deltaj,nodex,nodey
         print *, ' problem size is ',nptsx,' by ',nptsy,' by ',nptsz
         print *, ' halo size is ',ihalox,' by ',ihaloy
         print *, ' topology = ',nx,' by ',ny
+        print *, ' PE block topology = ',deltai,' by ',deltaj
+        print *, 'Node tiles = ',nodex,' by ',nodey
+        call RPN_COMM_set_petopo(deltai,deltaj)
         return
         end
 !

@@ -109,8 +109,11 @@ module rpn_comm
 !
 !	WORLD_pe(1) number of PEs along x in grid
 !	WORLD_pe(2) number of PEs along y in grid
+!	WORLD_pe(3) deltai, size of PE blocks along x
+!	WORLD_pe(4) deltaj, size of PE blocks along Y
+!	WORLD_pe(5:10) provision for future expansion
 !
-  integer WORLD_pe(2)
+  integer WORLD_pe(10)
 !
 !	TIMING information (being reworked at this time)
 !

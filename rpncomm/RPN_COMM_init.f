@@ -465,17 +465,23 @@
 	call MPI_COMM_rank(pe_indomm,pe_medomm,ierr)
 	pe_defcomm = pe_indomm
 	pe_defgroup = pe_gr_indomm
-	
-	call MPI_BCAST(WORLD_pe,2,MPI_INTEGER,0,
+!
+!       broadcast number of PEs along X and Y axis
+!       broadcast PE block sizes (deltai and deltaj)
+!
+        WORLD_pe(3) = deltai
+        WORLD_pe(4) = deltaj
+	call MPI_BCAST(WORLD_pe,size(WORLD_pe),MPI_INTEGER,0,
      &	               pe_indomm,ierr)
-	
+	pe_nx  = WORLD_pe(1)
+	pe_ny  = WORLD_pe(2)
+	deltai = WORLD_pe(3)
+	deltaj = WORLD_pe(4)
+*
 	if ( Pex.eq.0 .or. Pey.eq.0  ) then ! return processor topology
 	  Pex = WORLD_pe(1)
 	  Pey = WORLD_pe(2)
 	endif
-*
-	pe_nx=WORLD_pe(1)
-	pe_ny=WORLD_pe(2)
 *
 *	pe_pe0 is not equal to 0 if there are more than one domain
 *	computational grid
