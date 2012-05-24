@@ -39,10 +39,10 @@ module rpn_comm
 !	pe_mey	 y coordinate of this PE in domain (origin 0)
 !	pe_myrow communicator for PEs in same ROW(same pe_mey)
 !	pe_mycol communicator for PEs in same COLUMN(same pe_mex)
-!	pe_tot	 total number of PEs involved
-!	pe_nx	 number of PEs along x axis
-!	pe_ny	 number of PEs along y axis
-!	pe_pe0	 PE number of first PE in grid
+!	pe_tot	 total number of PEs involved in a grid
+!	pe_nx	 number of PEs along x axis in a grid
+!	pe_ny	 number of PEs along y axis in a grid
+!	pe_pe0	 PE number of first PE in a grid (normally zero)
 !	pe_extra flag =1 if pe in compute grid, =0 otherwise
 !	pe_grid	 communicator for PEs in grid and out of grid
 !       pe_ingrid  communicator for PEs in grid
