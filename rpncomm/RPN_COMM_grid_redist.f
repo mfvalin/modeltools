@@ -48,82 +48,101 @@
       integer, allocatable, dimension(:)   :: recvcounts, rdispls
       integer, allocatable, dimension(:)   :: recvbuf
       integer, allocatable, dimension(:,:) :: reorder
-      integer :: i, j, k, i0, ilast, j0, offset, ierr
+      integer :: i, j, k, i0, ilast, j0, offset, ierr, the_target
+      integer :: lminx, lmaxx, mxi
+      integer, allocatable, dimension(:)   :: countx, offsetx
+      integer :: lminy, lmaxy, mxj
+      integer, allocatable, dimension(:)   :: county, offsety
 !
       allocate(recvcounts(max(pe_nx,pe_ny)))
       allocate(rdispls(max(pe_nx,pe_ny)))
       allocate(sendcounts(max(pe_nx,pe_ny)))
       allocate(sdispls(max(pe_nx,pe_ny)))
 !
+      allocate(countx(pe_nx),offsetx(pe_nx))
+      allocate(county(pe_ny),offsety(pe_ny))
+!
+      call RPN_COMM_limit(pe_mex,pe_nx,1,gni,lminx,lmaxx,countx,offsetx)
+      mxi = countx(1)   ! max tile size along x
+      call RPN_COMM_limit(pe_mey,pe_ny,1,gnj,lminy,lmaxy,county,offsety)
+      mxj = county(1)   ! max tile size along y
+!
 !     zin data shape  (lni,lnj,nk) on PE( 0:pe_nx-1  ,0:pe_ny-1 )
 !
       if(nk <= pe_nx) then    ! alltoallv along x, then reorder, then gather along y
-        sendcounts = 1        ! should be 0 but zero length can hang allgatherv
-        sendcounts(1:nk) = lni*lnj
-        if(pe_mex < nk) then    ! real data will only be sent to first nk PEs along X
-          recvcounts = lni*lnj  ! data pieces lni by lnj
-          allocate(recvbuf(lni*lnj*pe_nx))  ! receive buffer for pe_nx data pieces
-          allocate(reorder(gni,lnj))   ! reorder buffer, input to gatherv
+        sendcounts = 1        ! because zero length can hang some implementations of allgatherv
+        sendcounts(1:nk) = lni*lnj   ! sending nk pieces of size lni by lnj, rest with size 1
+        if(pe_mex < nk) then                ! real data will only be sent to first nk PEs along X
+          recvcounts(1:pe_nx) = countx(1:pe_nx)*lnj  ! received data pieces countx(i) by lnj
+          allocate(recvbuf(mxi*lnj*pe_nx))  ! receive buffer for pe_nx (max size along x) data pieces
+          allocate(reorder(gni,lnj))        ! reorder buffer, input to gatherv
         else
-          recvcounts = 1               ! dummy collect and no need to reorder
-          allocate(recvbuf(pe_nx))
-          allocate(reorder(1,1))
+          recvcounts = 1                     ! dummy collect with no need to reorder
+          allocate(recvbuf(pe_nx))           ! will receive pe_nx words
+          allocate(reorder(1,1))             ! no reorder buffer
         endif
-        do i = 1 , pe_nx
-          sdispls(i) = 1 + (min(i,nk)-1)*lni*lnj  ! offset of level I, no greater than nk
-          if(pe_mex < nk) then
-            rdispls(i) = 1 + (i-1)*lni*lnj  ! this pe will collect pe_nx pieces of data
-          else
-            rdispls(i) = I      ! this pe only gets one word (because zero hangs)
+        do k = 1 , pe_nx
+          sdispls(k) = 1 + (min(k,nk)-1)*lni*lnj  ! offset of level k, no greater than nk
+          if(pe_mex < nk) then         ! this pe will collect pe_nx pieces of data
+            rdispls(k) = 1 + (k-1)*mxi*lnj
+          else                         ! this pe only gets one word (because zero length might hang)
+            rdispls(k) = k
           endif
         enddo
         call MPI_alltoallv(zin,    sendcounts,sdispls,MPI_INTEGER,
      %                     recvbuf,recvcounts,rdispls,MPI_INTEGER,
      %                     pe_myrow,ierr)
 !
-!       recvbuf data shape (lni,lnj,pe_nx) on PE( 0:nk , 0:pe_ny-1 )
+!       recvbuf data shape (lni,lnj,pe_nx) on PE( 0:nk-1 , 0:pe_ny-1 )
 !
         if(pe_mex < nk) then   ! reorder and collect along Y into zout (first nk PEs only)
-          i0 = 1
           do k = 1 , pe_nx     ! time to get full x axis together
-            offset = (k-1) * lni*lnj  ! offset in recv buffer for i piece no k, row 1
-            ilast = min( gni , i0+lni-1 )
-            do j = 1 , lnj      ! copy one slice
+            offset = (k-1) * mxi*lnj  ! offset in recv buffer for i piece no k, row 1
+            i0 = offsetx(k) + 1
+            ilast = i0 + countx(k) -1
+            do j = 1 , lnj      ! copy and insert one slice
               reorder(i0:ilast,j) = recvbuf(offset:offset+ilast-i0)  ! i piece no k, row j
               offset = offset + lnj                                  ! next row
             enddo
-            i0 = i0 + lni   ! next piece of i values
           enddo
 !
 !       reorder data shape (gni,lnj) on PE( 0:nk , 0:pe_ny-1 )
 !
-          recvcounts        = gni * lnj
-          recvcounts(pe_ny) = gni * (gnj - lnj*(pe_ny-1))
-          do j = 1 , pe_ny
-            rdispls(j) = (j-1) * gni*lnj + 1
-          enddo
+          recvcounts(1:pe_ny) = gni*county(1:pe_ny)
+          rdispls(1:pe_ny)    = gni*offsety(1:pe_ny) + 1
+          the_target = mod(pe_mex,pe_ny)
           call MPI_gatherv(reorder,gni*lnj,            MPI_INTEGER,
      %                     zout,   recvcounts,rdispls, MPI_INTEGER,
-     %                     mod(pe_mex,pe_ny),pe_mycol,ierr)      ! root PEs on diagonal
+     %                     the_target,pe_mycol,ierr)      ! root PEs on diagonal
 !
-!       zout data shape (gni,lnj) on PE(l,m) (l=0:nk-1 , m=  l mod pe_ny)
+!       zout data shape (gni,gnj) on PE(l,m) (l=0:nk-1 , m=  l mod pe_ny)
 !
         endif
         goto 1111        ! clean exit
       endif
-
+!
+!     zin data shape  (lni,lnj,nk) on PE( 0:pe_nx-1  ,0:pe_ny-1 )
+!
       if(nk <= pe_ny) then    ! alltoallv along y, then gather along x, then reorder
         sendcounts = 1        ! should be 0 but zero length can hang allgatherv
         sendcounts(1:nk) = lni*lnj
         if(pe_mey < nk) then  ! will be collecting and reordering lni by gnj
-          recvcounts = lni*lnj
-          allocate(recvbuf(lni*lnj*pe_ny))
-          allocate(reorder(lni*lnj*pe_ny,pe_nx))
+          recvcounts(1:pe_ny) = county(1:pe_ny)*lni
+          allocate(recvbuf(lni*gnj))
+          allocate(reorder(mxi*gnj,pe_nx))
         else                  ! dummy collect and no reorder
           recvcounts = 1
           allocate(recvbuf(pe_ny))
           allocate(reorder(1,1))
         endif
+        do k = 1 , pe_ny
+          sdispls(k) = 1 + (min(k,nk)-1)*lni*lnj  ! offset of level k, no greater than nk
+          if(pe_mey < nk) then         ! this pe will collect pe_nx pieces of data
+            rdispls(k) = lni*offsety(k)
+          else                         ! this pe only gets one word (because zero length might hang)
+            rdispls(k) = k
+          endif
+        enddo
         call MPI_alltoallv(zin,    sendcounts,sdispls,MPI_INTEGER,
      %                     recvbuf,recvcounts,rdispls,MPI_INTEGER,
      %                     pe_mycol,ierr)
@@ -131,26 +150,27 @@
 !       recvbuf data shape (lni,lnj,pe_ny) on PE( 0:nk-1 ,0:pe_ny-1 )
 !
         if(pe_mey < nk) then                ! gather and reorder
-          recvcounts = lni*gnj              ! lni by gnj slices
-          recvcounts(pe_nx) = gnj * (gni - lni*(pe_nx-1))  ! last PEs lni may be shorter
+          recvcounts(1:pe_nx) = countx(1:pe_nx)*gnj              ! lni by gnj slices
           do i = 1 , pe_nx
-            rdispls(i) = (i-1) *lni*gnj + 1
+            rdispls(i) = (i-1)*mxi*gnj + 1
           enddo
+          the_target = mod(pe_mey,pe_nx)
           call MPI_gatherv(recvbuf, lni*gnj,            MPI_INTEGER,
      %                     reorder, recvcounts,rdispls, MPI_INTEGER,
-     %                     mod(pe_mey,pe_nx),pe_myrow,ierr)      ! root PEs on diagonal
+     %                     the_target,pe_myrow,ierr)      ! root PEs on diagonal
 !
-!       reorder data shape (lni,gnj,pe_nx) on PE(m,l) (l=0:nk-1 , m=  l mod pe_nx)
+!       reorder data shape (mxi*gnj,pe_nx) on PE(m,l) (l=0:nk-1 , m=  l mod pe_nx)
 !
-         i0 = 1
-         do k = 1 , pe_nx      ! time to reorder, pe_nx slices along i
-           ilast = min( gni , i0+lni-1 )
-           do j = 1 , gnj
-             offset = (j-1) * lni
-             zout(i0:ilast,j) = reorder(offset:offset+ilast-i0,k)
-           enddo
-           i0 = i0 + lni
-         enddo
+          if(pe_mex == the_target) then
+            do i = 1 , pe_nx      ! time to reorder, pe_nx slices along i
+              i0 = offsetx(i) + 1
+              ilast = i0 + countx(i) - 1
+              do j = 1 , gnj
+                offset = (j-1) * mxi
+                zout(i0:ilast,j) = reorder(offset:offset+ilast-i0,i)
+              enddo
+            enddo
+          endif
         endif
 !
 !       zout data shape (gni,lnj) on PE(l,m) (l=0:nk-1 , m=  l mod pe_ny)
