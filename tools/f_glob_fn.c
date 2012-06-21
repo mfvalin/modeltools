@@ -89,6 +89,27 @@ int name_is_a_file(char *name)
   return (-1);                             /* not a regular file */
 }
 
+/* is name a text file ? */
+#pragma weak name_is_txt_file_=name_is_txt_file
+#pragma weak name_is_txt_file__=name_is_txt_file
+int name_is_txt_file(char *name)
+{
+  int fd, status;
+  unsigned char buffer[32];
+  ssize_t nc;
+  status = open(name,0);  /* try to open file */
+  if(status != 0) return(-1);  /* failed */
+  nc=read(fd,buffer,32);
+  close(fd);
+  if(nc<1) return(-1);
+  nc--;
+  while(nc>=0) 
+  {
+    if(buffer[nc] < 0x0a) return(-1);  /* control characters detected */
+  }
+  return (0);   /* is a text file */
+}
+
 /* is name a directory ? */
 #pragma weak name_is_a_dir_=name_is_a_dir
 #pragma weak name_is_a_dir__=name_is_a_dir
