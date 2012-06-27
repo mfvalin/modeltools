@@ -90,24 +90,57 @@ int name_is_a_file(char *name)
 }
 
 /* is name a text file ? */
+/* if no character lower than \r is detected within the first 32 characters of a file, a text file is assumed */
 #pragma weak name_is_txt_file_=name_is_txt_file
 #pragma weak name_is_txt_file__=name_is_txt_file
 int name_is_txt_file(char *name)
 {
   int fd, status;
-  unsigned char buffer[32];
+  unsigned char buffer[128];
   ssize_t nc;
-  status = open(name,0);  /* try to open file */
-  if(status != 0) return(-1);  /* failed */
-  nc=read(fd,buffer,32);
+  fd = open(name,0);  /* try to open file */
+  if(fd < 0) return(-1);  /* failed */
+  nc=read(fd,buffer,128);
   close(fd);
   if(nc<1) return(-1);
   nc--;
   while(nc>=0) 
   {
     if(buffer[nc] < 0x0a) return(-1);  /* control characters detected */
+    nc--;
   }
   return (0);   /* is a text file */
+}
+
+
+/* is name a standard (RPN) file ?  (89 or 98 flavor) */
+#define SIGN_STD89_RND  0x55555555
+#pragma weak name_is_std_file_=name_is_std_file
+#pragma weak name_is_std_file__=name_is_std_file
+int name_is_std_file(char *nom) 
+{
+      FILE *pf;
+      int buffer[4];
+      char *cbuffer;
+      int nc;
+
+      pf = fopen(nom,"rb");
+      if (pf == NULL) return(-1);
+      cbuffer = (char *) &buffer[0];
+      buffer[0]=0;
+      buffer[1]=0;
+      buffer[2]=0;
+      buffer[3]=0;
+      nc=fread(buffer,sizeof(int),4,pf);
+
+     /* RANDOM89 */
+      if (buffer[0] == SIGN_STD89_RND && buffer[1] == SIGN_STD89_RND)
+	 return(0);
+    /* STANDARD 98 RANDOM */
+      if (cbuffer[8] == 'X' && cbuffer[9] == 'D' && cbuffer[12] == 'S' && cbuffer[10] == 'F' && 
+          cbuffer[13] == 'T' && cbuffer[14] == 'D' && cbuffer[15] == 'R') 
+             return(0);
+      return(-1);  /* not recognized */
 }
 
 /* is name a directory ? */
