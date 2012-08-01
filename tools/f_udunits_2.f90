@@ -157,6 +157,7 @@
 	integer, intent(IN) :: count
 
 	type(C_PTR) :: dummy
+	integer(C_SIZE_T) :: temp
 
 	interface
 	type(C_PTR) function cv_convert_floats(converter,what,count,dest) bind(C,name='cv_convert_floats')
@@ -169,7 +170,8 @@
 	end function
 	end interface
 
-	dummy = cv_convert_floats(converter%ptr,what,count,dest)
+	temp = count
+	dummy = cv_convert_floats(converter%ptr,what,temp,dest)
 
 	end subroutine f_cv_convert_floats
 !=============================================================================
@@ -182,6 +184,7 @@
 	integer, intent(IN) :: count
 
 	type(C_PTR) :: dummy
+	integer(C_SIZE_T) :: temp
 
 	interface
 	type(C_PTR) function cv_convert_doubles(converter,what,count,dest) bind(C,name='cv_convert_doubles')
@@ -194,7 +197,8 @@
 	end function
 	end interface
 
-	dummy = cv_convert_doubles(converter%ptr,what,count,dest)
+	temp = count
+	dummy = cv_convert_doubles(converter%ptr,what,temp,dest)
 
 	end subroutine f_cv_convert_doubles
 !=============================================================================
