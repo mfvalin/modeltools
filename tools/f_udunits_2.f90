@@ -40,7 +40,7 @@
 	subroutine ut_free_system(system) bind(C,name='ut_free_system')
 	use ISO_C_BINDING
 	implicit none
-	type(C_PTR) :: system
+	type(C_PTR), value :: system
         end subroutine ut_free_system
 	end interface
 
@@ -48,7 +48,7 @@
 	return
 	end subroutine f_ut_free_system
 !=============================================================================
-	type(UT_UNIT_PTR) function f_ut_get_unit_by_name(ut_system,name)
+	type(UT_UNIT_PTR) function f_ut_get_unit_by_name(ut_system,name)  ! not recommended
 	use ISO_C_BINDING
 	implicit none
 	type(UT_SYSTEM_PTR), intent(IN), target :: ut_system
@@ -70,7 +70,7 @@
 
 	end function f_ut_get_unit_by_name
 !=============================================================================
-	type(UT_UNIT_PTR) function f_ut_get_unit_by_symbol(ut_system,symbol)
+	type(UT_UNIT_PTR) function f_ut_get_unit_by_symbol(ut_system,symbol)  ! not recommended
 	use ISO_C_BINDING
 	implicit none
 	type(UT_SYSTEM_PTR), intent(IN), target :: ut_system
@@ -92,6 +92,86 @@
 
 	end function f_ut_get_unit_by_symbol
 !=============================================================================
+	integer function f_ut_format(ut_unit,buffer,options)  ! this is the most useful routine
+	use ISO_C_BINDING
+	implicit none
+	type(UT_UNIT_PTR), intent(IN), target :: ut_unit
+	character (len=*), intent(OUT) :: buffer
+	integer, intent(IN) :: options
+
+	integer(C_SIZE_T) :: buflen
+	character (len=1), dimension(len(buffer)), target :: temp
+	integer(C_INT) :: opt
+	integer :: i, blen
+
+	interface
+	integer(C_INT) function ut_format(ut_unit,buffer,buflen,options)  bind(C,name='ut_format')
+	use ISO_C_BINDING
+	type(C_PTR), value :: ut_unit
+	type(C_PTR), value :: buffer
+	integer(C_SIZE_T), value :: buflen
+	integer(C_INT), value :: options
+	end function ut_format
+	end interface
+
+	buflen=len(buffer)
+	opt = options + UT_ASCII
+	temp=" "
+	blen = ut_format(ut_unit%ptr,c_loc(temp),buflen,opt)
+	f_ut_format = blen
+	if(blen <= 0) then
+	  buffer="ERROR"
+	  return
+	endif
+	buffer = ""
+	do i=1,blen
+	  buffer(i:i)=temp(i)
+	enddo
+
+	end function f_ut_format
+!=============================================================================
+	type(UT_UNIT_PTR) function f_ut_parse(ut_system,symbol)  ! this is the most useful routine
+	use ISO_C_BINDING
+	implicit none
+	type(UT_SYSTEM_PTR), intent(IN), target :: ut_system
+	character (len=*), intent(IN) :: symbol
+
+	integer(C_INT) :: encoding
+	character (len=1), dimension(len_trim(symbol)+1), target :: temp
+
+	interface
+	type(C_PTR) function ut_parse(ut_system,symbol,encoding) bind(C,name='ut_parse')
+	use ISO_C_BINDING
+	implicit none
+	type(C_PTR), value :: ut_system
+	type(C_PTR), value :: symbol
+	integer(C_INT), value :: encoding
+	end function ut_parse
+	end interface
+
+	encoding = UT_ASCII
+	temp = transfer( trim(symbol)//achar(0) , temp )
+	f_ut_parse%ptr = ut_parse(ut_system%ptr,c_loc(temp),encoding)
+
+	end function f_ut_parse
+!=============================================================================
+	subroutine f_ut_free(ut_unit)
+	use ISO_C_BINDING
+	implicit none
+	type(UT_UNIT_PTR), intent(IN), target :: ut_unit
+
+	interface
+	subroutine ut_free(ut_unit) bind(C,name='ut_free')
+	use ISO_C_BINDING
+	implicit none
+	type(C_PTR), value :: ut_unit
+        end subroutine ut_free
+	end interface
+
+	call ut_free(ut_unit%ptr)
+	return
+	end subroutine f_ut_free
+!=============================================================================
 	type(CV_CONVERTER_PTR) function f_ut_get_converter(from,to)
 	use ISO_C_BINDING
 	implicit none
@@ -106,7 +186,7 @@
 	end function ut_get_converter
 	end interface
 
-	f_ut_get_converter%ptr = ut_get_converter(c_loc(from),c_loc(to))
+	f_ut_get_converter%ptr = ut_get_converter(from%ptr,to%ptr)
 
 	end function f_ut_get_converter
 !=============================================================================
@@ -119,7 +199,7 @@
 	subroutine cv_free(converter) bind(C,name='cv_free')
 	use ISO_C_BINDING
 	implicit none
-	type(C_PTR) :: converter
+	type(C_PTR), value :: converter
         end subroutine cv_free
 	end interface
 
