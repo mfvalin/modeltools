@@ -123,7 +123,7 @@
         end subroutine cv_free
 	end interface
 
-	call ut_free_system(converter%ptr)
+	call cv_free(converter%ptr)
 	return
 	end subroutine f_cv_free
 !=============================================================================
