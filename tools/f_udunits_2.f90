@@ -44,7 +44,7 @@
         end subroutine ut_free_system
 	end interface
 
-	call ut_free_system(C_LOC(ut_system))
+	call ut_free_system(ut_system%ptr)
 	return
 	end subroutine f_ut_free_system
 !=============================================================================
@@ -109,6 +109,23 @@
 	f_ut_get_converter%ptr = ut_get_converter(c_loc(from),c_loc(to))
 
 	end function f_ut_get_converter
+!=============================================================================
+	subroutine f_cv_free(converter)
+	use ISO_C_BINDING
+	implicit none
+	type(CV_CONVERTER_PTR), intent(IN) :: converter
+
+	interface
+	subroutine cv_free(converter) bind(C,name='cv_free')
+	use ISO_C_BINDING
+	implicit none
+	type(C_PTR) :: converter
+        end subroutine cv_free
+	end interface
+
+	call ut_free_system(converter%ptr)
+	return
+	end subroutine f_cv_free
 !=============================================================================
 	real function f_cv_convert_float(converter,what)
 	use ISO_C_BINDING
