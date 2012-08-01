@@ -1,7 +1,8 @@
 	program test_f_udunits_2
-	use ISO_C_BINDING
+!	use ISO_C_BINDING
+	use f_udunits_2
 	implicit none
-	include 'f_udunits_2.inc'
+!	include 'f_udunits_2.inc'
 	integer, target :: scrap
 	type(ut_system_ptr) :: sys
 
