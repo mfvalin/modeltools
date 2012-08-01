@@ -163,7 +163,8 @@
 	use ISO_C_BINDING
 	implicit none
 	type(C_PTR), value :: converter
-	real(C_FLOAT), dimension(*) :: what, dest
+	real(C_FLOAT), intent(IN), dimension(*) :: what
+	real(C_FLOAT), intent(OUT), dimension(*) :: dest
 	integer(C_SIZE_T), value :: count
 	end function
 	end interface
@@ -187,7 +188,8 @@
 	use ISO_C_BINDING
 	implicit none
 	type(C_PTR), value :: converter
-	real(C_DOUBLE), dimension(*) :: what, dest
+	real(C_DOUBLE), intent(IN), dimension(*) :: what
+	real(C_DOUBLE), intent(OUT), dimension(*) :: dest
 	integer(C_SIZE_T), value :: count
 	end function
 	end interface
