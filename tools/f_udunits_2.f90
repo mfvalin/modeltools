@@ -158,7 +158,7 @@
 	subroutine f_ut_free(ut_unit)
 	use ISO_C_BINDING
 	implicit none
-	type(UT_UNIT_PTR), intent(IN), target :: ut_unit
+	type(UT_UNIT_PTR), intent(IN) :: ut_unit
 
 	interface
 	subroutine ut_free(ut_unit) bind(C,name='ut_free')
@@ -172,10 +172,246 @@
 	return
 	end subroutine f_ut_free
 !=============================================================================
+	integer function f_ut_compare(unit1,unit2)
+	use ISO_C_BINDING
+	implicit none
+	type(UT_UNIT_PTR), intent(IN) :: unit1,unit2
+
+	interface
+	integer(C_INT) function ut_compare(unit1,unit2) bind(C,name='ut_compare')
+	use ISO_C_BINDING
+	implicit none
+	type(C_PTR), value :: unit1
+	type(C_PTR), value :: unit2
+	end function ut_compare
+	end interface
+
+	f_ut_compare = ut_compare(unit1%ptr,unit2%ptr)
+
+	end function f_ut_compare
+!=============================================================================
+	logical function f_ut_same_system(unit1,unit2)
+	use ISO_C_BINDING
+	implicit none
+	type(UT_UNIT_PTR), intent(IN) :: unit1,unit2
+
+	interface
+	integer(C_INT) function ut_same_system(unit1,unit2) bind(C,name='ut_same_system')
+	use ISO_C_BINDING
+	implicit none
+	type(C_PTR), value :: unit1
+	type(C_PTR), value :: unit2
+	end function ut_same_system
+	end interface
+
+	f_ut_same_system = ut_same_system(unit1%ptr,unit2%ptr) .ne. 0
+
+	end function f_ut_same_system
+!=============================================================================
+	logical function f_ut_is_dimensionless(unit1)
+	use ISO_C_BINDING
+	implicit none
+	type(UT_UNIT_PTR), intent(IN) :: unit1
+
+	interface
+	integer(C_INT) function ut_is_dimensionless(unit1) bind(C,name='ut_is_dimensionless')
+	use ISO_C_BINDING
+	implicit none
+	type(C_PTR), value :: unit1
+	end function ut_is_dimensionless
+	end interface
+
+	f_ut_is_dimensionless = ut_is_dimensionless(unit1%ptr) .ne. 0
+
+	end function f_ut_is_dimensionless
+!=============================================================================
+	logical function f_ut_are_convertible(unit1,unit2)
+	use ISO_C_BINDING
+	implicit none
+	type(UT_UNIT_PTR), intent(IN) :: unit1,unit2
+
+	interface
+	integer(C_INT) function ut_are_convertible(unit1,unit2) bind(C,name='ut_are_convertible')
+	use ISO_C_BINDING
+	implicit none
+	type(C_PTR), value :: unit1
+	type(C_PTR), value :: unit2
+	end function ut_are_convertible
+	end interface
+
+	f_ut_are_convertible = ut_are_convertible(unit1%ptr,unit2%ptr) .ne. 0
+
+	end function f_ut_are_convertible
+!=============================================================================
+	type(UT_UNIT_PTR) function f_ut_root(unit1,base)
+	use ISO_C_BINDING
+	implicit none
+	type(UT_UNIT_PTR), intent(IN) :: unit1
+	integer(C_INT), intent(IN) :: base
+
+	interface
+	type(C_PTR) function ut_root(unit1,base) bind(C,name='ut_root')
+	use ISO_C_BINDING
+	implicit none
+	type(C_PTR), value :: unit1
+	integer(C_INT), value :: base
+	end function ut_root
+	end interface
+
+	f_ut_root%ptr = ut_root(unit1%ptr,base)
+
+	end function f_ut_root
+!=============================================================================
+	type(UT_UNIT_PTR) function f_ut_raise(unit1,base)
+	use ISO_C_BINDING
+	implicit none
+	type(UT_UNIT_PTR), intent(IN) :: unit1
+	integer(C_INT), intent(IN) :: base
+
+	interface
+	type(C_PTR) function ut_raise(unit1,base) bind(C,name='ut_raise')
+	use ISO_C_BINDING
+	implicit none
+	type(C_PTR), value :: unit1
+	integer(C_INT), value :: base
+	end function ut_raise
+	end interface
+
+	f_ut_raise%ptr = ut_raise(unit1%ptr,base)
+
+	end function f_ut_raise
+!=============================================================================
+	type(UT_UNIT_PTR) function f_ut_offset(unit1,base)
+	use ISO_C_BINDING
+	implicit none
+	type(UT_UNIT_PTR), intent(IN) :: unit1
+	real(C_DOUBLE), intent(IN) :: base
+
+	interface
+	type(C_PTR) function ut_offset(unit1,base) bind(C,name='ut_offset')
+	use ISO_C_BINDING
+	implicit none
+	type(C_PTR), value :: unit1
+	real(C_DOUBLE), value :: base
+	end function ut_offset
+	end interface
+
+	f_ut_offset%ptr = ut_offset(unit1%ptr,base)
+
+	end function f_ut_offset
+!=============================================================================
+	type(UT_UNIT_PTR) function f_ut_scale(base,unit1)
+	use ISO_C_BINDING
+	implicit none
+	type(UT_UNIT_PTR), intent(IN) :: unit1
+	real(C_DOUBLE), intent(IN) :: base
+
+	interface
+	type(C_PTR) function ut_scale(base,unit1) bind(C,name='ut_scale')
+	use ISO_C_BINDING
+	implicit none
+	type(C_PTR), value :: unit1
+	real(C_DOUBLE), value :: base
+	end function ut_scale
+	end interface
+
+	f_ut_scale%ptr = ut_scale(base,unit1%ptr)
+
+	end function f_ut_scale
+!=============================================================================
+	type(UT_UNIT_PTR) function f_ut_log(base,unit1)
+	use ISO_C_BINDING
+	implicit none
+	type(UT_UNIT_PTR), intent(IN) :: unit1
+	real(C_DOUBLE), intent(IN) :: base
+
+	interface
+	type(C_PTR) function ut_log(base,unit1) bind(C,name='ut_log')
+	use ISO_C_BINDING
+	implicit none
+	type(C_PTR), value :: unit1
+	real(C_DOUBLE), value :: base
+	end function ut_log
+	end interface
+
+	f_ut_log%ptr = ut_log(base,unit1%ptr)
+
+	end function f_ut_log
+!=============================================================================
+	type(UT_UNIT_PTR) function f_ut_clone(unit1)
+	use ISO_C_BINDING
+	implicit none
+	type(UT_UNIT_PTR), intent(IN) :: unit1
+
+	interface
+	type(C_PTR) function ut_clone(unit1) bind(C,name='ut_clone')
+	use ISO_C_BINDING
+	implicit none
+	type(C_PTR), value :: unit1
+	end function ut_clone
+	end interface
+
+	f_ut_clone%ptr = ut_clone(unit1%ptr)
+
+	end function f_ut_clone
+!=============================================================================
+	type(UT_UNIT_PTR) function f_ut_invert(unit1)
+	use ISO_C_BINDING
+	implicit none
+	type(UT_UNIT_PTR), intent(IN) :: unit1
+
+	interface
+	type(C_PTR) function ut_invert(unit1) bind(C,name='ut_invert')
+	use ISO_C_BINDING
+	implicit none
+	type(C_PTR), value :: unit1
+	end function ut_invert
+	end interface
+
+	f_ut_invert%ptr = ut_invert(unit1%ptr)
+
+	end function f_ut_invert
+!=============================================================================
+	type(UT_UNIT_PTR) function f_ut_multiply(unit1,unit2)
+	use ISO_C_BINDING
+	implicit none
+	type(UT_UNIT_PTR), intent(IN) :: unit1,unit2
+
+	interface
+	type(C_PTR) function ut_multiply(unit1,unit2) bind(C,name='ut_multiply')
+	use ISO_C_BINDING
+	implicit none
+	type(C_PTR), value :: unit1
+	type(C_PTR), value :: unit2
+	end function ut_multiply
+	end interface
+
+	f_ut_multiply%ptr = ut_multiply(unit1%ptr,unit2%ptr)
+
+	end function f_ut_multiply
+!=============================================================================
+	type(UT_UNIT_PTR) function f_ut_divide(unit1,unit2)
+	use ISO_C_BINDING
+	implicit none
+	type(UT_UNIT_PTR), intent(IN) :: unit1,unit2
+
+	interface
+	type(C_PTR) function ut_divide(unit1,unit2) bind(C,name='ut_divide')
+	use ISO_C_BINDING
+	implicit none
+	type(C_PTR), value :: unit1
+	type(C_PTR), value :: unit2
+	end function ut_divide
+	end interface
+
+	f_ut_divide%ptr = ut_divide(unit1%ptr,unit2%ptr)
+
+	end function f_ut_divide
+!=============================================================================
 	type(CV_CONVERTER_PTR) function f_ut_get_converter(from,to)
 	use ISO_C_BINDING
 	implicit none
-	type(UT_UNIT_PTR), intent(IN), target :: from, to
+	type(UT_UNIT_PTR), intent(IN) :: from, to
 
 	interface
 	type(C_PTR) function ut_get_converter(from,to) bind(C,name='ut_get_converter')
