@@ -1,5 +1,5 @@
 	module f_udunits_2
-!	FORTRAN interface to the C library udunits2
+!	FORTRAN interface to the C library udunits2 (C) Copyright UCAR/Unidata
 !	Michel Valin
 !	Université du Québec à Montréal
 !	August 2012
