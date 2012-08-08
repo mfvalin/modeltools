@@ -1,13 +1,14 @@
 	program test_f_udunits_2
-	use ISO_C_BINDING
+!	use ISO_C_BINDING
 	use f_udunits_2
 	implicit none
 
 	integer, target :: scrap
 	type(UT_SYSTEM_PTR) :: sys
-	type(CV_CONVERTER_PTR) :: conv1, conv2, conv3
+	type(CV_CONVERTER_PTR) :: conv1, conv2, conv3, time_cvt, time_cvt0
 	type(UT_UNIT_PTR) :: unit1, unit2, unit3, unit4, unit5
 	type(UT_UNIT_PTR) :: unit0, unit6, unit7, unit8, unit9, unit06
+	type(UT_UNIT_PTR) :: erg, watt, watt_s, sec, time_base, sec0, time_base0
 	character (len=*), parameter :: machin1 = "km/hour"
 	character (len=*), parameter :: machin2 = "m/second"
 	character (len=*), parameter :: machin3 = "2 knots"
@@ -19,20 +20,46 @@
 	real *8, parameter :: THREE = 3.03
 	real *8, parameter :: FOUR = 4.04
 	real *8, parameter :: TEN = 10.0
+	real *8, parameter :: ZERO = 0.0
 	real :: A,B
 	real *8 :: AA, BB
 	integer :: junk
+	integer :: charset
+	integer hour,minute,year,month,day
+	real(C_DOUBLE) :: second, time, resolution
 
+	charset = UT_ASCII
 	sys = f_ut_read_xml("")
 
-	unit1 = f_ut_parse(sys,machin1)
+	year=2012 ; month=8 ; day=8 ; hour=15 ; minute=45 ; second=15.55 ; resolution=0.0
+	time = f_ut_encode_time(year,month,day,hour,minute,second)
+	print *,"TIME=",time," =<",year,month,day,hour,minute,real(second)
+	year=0 ; month=0 ; day=0 ; hour=0 ; minute=0 ; second=0.0 ; resolution=-999.999
+	call f_ut_decode_time(time,year,month,day,hour,minute,second,resolution)
+	print *,"TIME=",time," =>",year,month,day,hour,minute,real(second)," +-",real(resolution)
+
+	sec0 = f_ut_parse(sys,"second",charset)
+	time_base = f_ut_offset_by_time(sec0,f_ut_encode_time(2012,08,08,15,00,ZERO))
+	time_base0 = f_ut_offset_by_time(sec0,f_ut_encode_time(2001,01,01,00,00,ZERO))
+	time_cvt = f_ut_get_converter(sec0,time_base)
+	if(.not. c_associated(time_cvt%ptr)) print *,'ERROR in time_cvt'
+	time_cvt0 = f_ut_get_converter(sec0,time_base0)
+	if(.not. c_associated(time_cvt0%ptr)) print *,'ERROR in time_cvt0'
+	junk = f_ut_format(time_base,buffer,UT_NAMES)
+	print *,"DEBUG: new unit of time_base='",trim(buffer),"'"
+	print *,"converted time =",f_cv_convert_double(time_cvt,time)
+	junk = f_ut_format(time_base0,buffer,UT_NAMES)
+	print *,"DEBUG: new unit of time_base='",trim(buffer),"'"
+	print *,"converted time =",f_cv_convert_double(time_cvt0,time)
+
+	unit1 = f_ut_parse(sys,machin1,charset)
 	if(.not. c_associated(unit1%ptr)) print *,'ERROR in unit1'
 	junk = f_ut_format(unit1,buffer,UT_NAMES)
 	print *,"DEBUG: unit UT_NAMES of ",machin1,"='",trim(buffer),"'"
 	junk = f_ut_format(unit1,buffer,UT_DEFINITION)
 	print *,"DEBUG: unit UT_DEFINITION of ",machin1,"='",trim(buffer),"'"
 
-	unit2 = f_ut_parse(sys,machin2)
+	unit2 = f_ut_parse(sys,machin2,charset)
 	if(.not. c_associated(unit2%ptr)) print *,'ERROR in unit2'
 	junk = f_ut_format(unit2,buffer,UT_NAMES)
 	print *,"DEBUG: unit UT_NAMES of ",machin2,"='",trim(buffer),"'"
@@ -46,7 +73,7 @@
 	B = f_cv_convert_float(conv1,A)
 	print *,a,machin1,' is the same as',b,machin2
 
-	unit3 = f_ut_parse(sys,machin3)
+	unit3 = f_ut_parse(sys,machin3,charset)
 	if(.not. c_associated(unit3%ptr)) print *,'ERROR in unit3'
 	junk = f_ut_format(unit3,buffer,UT_NAMES)
 	print *,"DEBUG: unit UT_NAMES of ",machin3,"='",trim(buffer),"'"
@@ -75,12 +102,12 @@
 	print *,"COMPARE ",machin2," with ",machin3," = ",f_ut_compare(unit2,unit3), &
                 ", same system =",f_ut_same_system(unit2,unit3)
 
-	unit4 = f_ut_parse(sys,machin4)
+	unit4 = f_ut_parse(sys,machin4,charset)
 	if(.not. c_associated(unit4%ptr)) print *,'ERROR in unit4'
 	if(.not. f_ut_are_convertible(unit3,unit4))  print *,machin3," cannot be converted into ",machin4, &
 	                                             ", same system =",f_ut_same_system(unit3,unit4)
 	print *,machin4," is dimensionless =",f_ut_is_dimensionless(unit4)
-	unit5 = f_ut_parse(sys,machin5)
+	unit5 = f_ut_parse(sys,machin5,charset)
 	if(.not. c_associated(unit5%ptr)) print *,'ERROR in unit5'
 	print *,machin5," is dimensionless =",f_ut_is_dimensionless(unit5)
 
@@ -135,6 +162,16 @@
 	unit0=f_ut_root(unit9,3)
 	junk = f_ut_format(unit0,buffer,UT_NAMES)
 	print *,"DEBUG: new unit = '",trim(buffer),"'"
+
+	watt = f_ut_parse(sys,"watt",charset)
+	sec = f_ut_parse(sys,"second",charset)
+	erg = f_ut_parse(sys,"erg",charset)
+	watt_s = f_ut_multiply(watt,sec)
+	junk = f_ut_format(watt_s,buffer,UT_NAMES)
+	print *,"DEBUG: watt_s = '",trim(buffer),"'"
+	junk = f_ut_format(erg,buffer,UT_NAMES)
+	print *,"DEBUG: erg = '",trim(buffer),"'"
+	if(f_ut_are_convertible(watt_s,erg))  print *,"watt.s can be converted into erg"
 
 	call f_ut_free(unit1)
 	call f_ut_free(unit2)
