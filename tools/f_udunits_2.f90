@@ -57,10 +57,9 @@
 	character (len=1), dimension(len_trim(path)+1), target :: temp
 
 	interface
-	function ut_read_xml(mypath) result(ut_system) bind(C,name='ut_read_xml')
+	type(C_PTR) function ut_read_xml(mypath) bind(C,name='ut_read_xml')
 	use ISO_C_BINDING
 	implicit none
-	type(C_PTR) :: ut_system
 	type(C_PTR), value :: mypath
 	end function ut_read_xml
 	end interface
@@ -142,7 +141,7 @@
 	type(UT_UNIT_PTR) function f_ut_new_base_unit(ut_system)
 	use ISO_C_BINDING
 	implicit none
-	type(UT_SYSTEM_PTR), intent(IN), target :: ut_system
+	type(UT_SYSTEM_PTR), intent(IN) :: ut_system
 
 	interface
 	type(C_PTR) function ut_new_base_unit(system) bind(C,name='ut_new_base_unit')
@@ -159,7 +158,7 @@
 	type(UT_UNIT_PTR) function f_ut_new_dimensionless_unit(ut_system)
 	use ISO_C_BINDING
 	implicit none
-	type(UT_SYSTEM_PTR), intent(IN), target :: ut_system
+	type(UT_SYSTEM_PTR), intent(IN) :: ut_system
 
 	interface
 	type(C_PTR) function ut_new_dimensionless_unit(system) bind(C,name='ut_new_dimensionless_unit')
@@ -176,7 +175,7 @@
 	type(UT_UNIT_PTR) function f_ut_get_dimensionless_unit_one(ut_system)
 	use ISO_C_BINDING
 	implicit none
-	type(UT_SYSTEM_PTR), intent(IN), target :: ut_system
+	type(UT_SYSTEM_PTR), intent(IN) :: ut_system
 
 	interface
 	type(C_PTR) function ut_get_dimensionless_unit_one(system) bind(C,name='ut_get_dimensionless_unit_one')
@@ -193,7 +192,7 @@
 	subroutine f_ut_free_system(ut_system)
 	use ISO_C_BINDING
 	implicit none
-	type(UT_SYSTEM_PTR), intent(IN), target :: ut_system
+	type(UT_SYSTEM_PTR), intent(IN) :: ut_system
 
 	interface
 	subroutine ut_free_system(system) bind(C,name='ut_free_system')
@@ -453,7 +452,7 @@
 	integer(C_INT) function f_ut_add_name_prefix(ut_system,name,value)
 	use ISO_C_BINDING
 	implicit none
-	type(UT_SYSTEM_PTR), intent(IN), target :: ut_system
+	type(UT_SYSTEM_PTR), intent(IN) :: ut_system
 	character (len=*), intent(IN) :: name
 	real(C_DOUBLE), intent(IN) :: value
 
@@ -477,7 +476,7 @@
 	integer(C_INT) function f_ut_add_symbol_prefix(ut_system,name,value)
 	use ISO_C_BINDING
 	implicit none
-	type(UT_SYSTEM_PTR), intent(IN), target :: ut_system
+	type(UT_SYSTEM_PTR), intent(IN) :: ut_system
 	character (len=*), intent(IN) :: name
 	real(C_DOUBLE), intent(IN) :: value
 
@@ -520,7 +519,7 @@
 	integer function f_ut_format(ut_unit,buffer,options)
 	use ISO_C_BINDING
 	implicit none
-	type(UT_UNIT_PTR), intent(IN), target :: ut_unit
+	type(UT_UNIT_PTR), intent(IN) :: ut_unit
 	character (len=*), intent(OUT) :: buffer
 	integer, intent(IN) :: options
 
@@ -558,7 +557,7 @@
 	type(UT_UNIT_PTR) function f_ut_parse(ut_system,symbol,charset)
 	use ISO_C_BINDING
 	implicit none
-	type(UT_SYSTEM_PTR), intent(IN), target :: ut_system
+	type(UT_SYSTEM_PTR), intent(IN) :: ut_system
 	character (len=*), intent(IN) :: symbol
 	integer, intent(IN) :: charset  ! ignored for the time being
 
