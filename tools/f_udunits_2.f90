@@ -1,4 +1,48 @@
 	module f_udunits_2
+!	FORTRAN interface to the C library udunits2
+!	Michel Valin
+!	Université du Québec à Montréal
+!	August 2012
+!
+!	a version of the FORTRAN compiler that supports
+!	use ISO_C_BINDING
+!	is needed (development/testing done with gfortran 4.6)
+!	recent versions of the Portland group / Intel / IBM xlf compilers
+!	should also work  (testing to be done soon)
+!
+!	for all C functions that have been interfaced:
+!
+!	1-  the FORTRAN name is the C name prefixed with f_
+!	    FORTRAN function f_ut_read_xml calls C function ut_read_xml
+!
+!	2-  when the C function needs a typed pointer, the fortran function uses
+!	    a typed object
+!	    type(UT_SYSTEM_PTR)     for ut_system*
+!	    type(UT_UNIT_PTR)       for ut_unit*
+!	    type(CV_CONVERTER_PTR)  for cv_converter*
+!
+!	3-  when the C function has a void return, a subroutine is used
+!
+!	4-  when the C function returns zero/nonzero for a C style true/false
+!	    the FORTRAN function returns a FORTRAN logical
+!
+!	5-  where a C arguument is char *, argument, the FORTRAN code uses FORTRAN character (len=*)
+!	    copy to a zero terminated string is handled internally
+!
+!	6-  ut_status is an integer, symbols with the same name are available to FORTRAN
+!
+!	7-  ut_encoding is an integer, symbols with the same name are available to FORTRAN
+!
+!	NOTES:
+!
+!	FORTRAN interface for functions returning char * (ut_get_name, ut_trim, ut_get_symbol) 
+!	are not implemented (yet) (unsure as to which method to use)
+!
+!	"visitor" functions FORTRAN interfaces are not implemented
+!	
+!	FORTRAN interface for functions using a variable argument list and message handler 
+!	are not implemented
+!
 	use ISO_C_BINDING
 	implicit none
 	include 'f_udunits_2.inc'
