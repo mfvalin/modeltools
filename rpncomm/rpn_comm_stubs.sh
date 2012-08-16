@@ -348,10 +348,10 @@ int MPI_Comm_size(MPI_Comm comm, int *size){
 int MPI_Allgather(void *outx, int nout, MPI_Datatype outtype, void *inx, int nin, MPI_Datatype intype, MPI_Comm comm){
    int *out = outx;
    int *in = inx;
-   *out = *in;
    if( nin != 1 || nout != 1 || outtype != MPI_INTEGER || intype != MPI_INTEGER ) {
       fprintf(stderr,"ERROR: MPI_Allgather, number of elements is not one or type is not MPI_INTEGER\n");
       exit(1);
+   *out = *in;
    }
    return(MPI_SUCCESS);
 }
