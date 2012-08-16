@@ -27,8 +27,20 @@ c	lien entre datatype et MPI_datatype
 !        include 'mpif.h'
         character(len=*) op
         character(len=32) operation
+        integer :: i
 
         call rpn_comm_low2up(op,operation)
+
+        RPN_COMM_oper = -999999  ! precondition to error return
+
+        do i = 1 , size(op_tab)
+          if(op_tab(i)%string == operation) then
+            RPN_COMM_oper = op_tab(i)%number
+            return
+          endif
+        enddo
+
+        goto 777
 
         if (operation(1:11).eq.'MPI_OP_NULL') then
            RPN_COMM_oper=MPI_OP_NULL
@@ -84,8 +96,8 @@ c	lien entre datatype et MPI_datatype
         endif
 
 
-        write(rpn_u,*) 'Unknown operation, aborting'
-          stop
+777     write(rpn_u,*) 'Unknown operation ',op,' aborting'
+        stop
           
         return
         end

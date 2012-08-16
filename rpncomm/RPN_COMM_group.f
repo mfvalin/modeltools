@@ -22,66 +22,75 @@
 c      Luc Corbeil, 2000-11-21
 c
 c      lien entre chaine de caractere de groupe
-c      'GRID', 'EW' et 'NS' et leur numero assigne par
+c      GRID, EW et NS et leur numero assigne par
 c      MPI.
 c
       use rpn_comm
       implicit none
-!      include 'mpif.h'
-!      include 'rpn_comm.h'
+!      include mpif.h
+!      include rpn_comm.h
       character(len=*) com
       character(len=32) comm
       integer ierr,world_group
       call rpn_comm_low2up(com,comm)
 
-      if (comm(1:9).eq.'GRIDPEERS') then
+      if (comm(1:9) == RPN_COMM_GRIDPEERS) then
          RPN_COMM_group=pe_gr_grid_peers
          return
       endif
-      if (comm(1:4).eq.'GRID' .or. comm(1:4).eq.'DOMM') then
+      if (comm(1:4) == RPN_COMM_GRID) then
          RPN_COMM_group=pe_gr_indomm
          return
       endif
-      if (comm(1:5).eq.'WORLD' .or. comm(1:10).eq.'ALLDOMAINS') then
+      if (comm(1:4) == RPN_COMM_DOMM) then
+         RPN_COMM_group=pe_gr_indomm
+         return
+      endif
+      if (comm(1:5) == RPN_COMM_WORLD) then
          call MPI_COMM_GROUP(WORLD_COMM_MPI,world_group,ierr)
          RPN_COMM_group=world_group
          return
       endif
-      if (comm(1:9).eq.'ALLGRIDS') then
+      if (comm(1:10) == RPN_COMM_ALLDOMAINS) then
+         call MPI_COMM_GROUP(WORLD_COMM_MPI,world_group,ierr)
+         RPN_COMM_group=world_group
+         return
+      endif
+      if (comm(1:9) == RPN_COMM_ALLGRIDS) then
          RPN_COMM_group=pe_gr_a_domain
          return
       endif
-      if (comm(1:9).eq.'MULTIGRID') then
+      if (comm(1:9) == RPN_COMM_MULTIGRID) then
          RPN_COMM_group=pe_gr_indomms
          return
       endif
-      if (comm(1:3).eq.'ALL') then
+      if (comm(1:3) == RPN_COMM_ALL) then
          RPN_COMM_group=pe_gr_wcomm
          return
       endif
-      if(comm(1:4).eq.'DEFO') then
+      if(comm(1:4) == RPN_COMM_DEFAULT) then
          RPN_COMM_group=pe_defgroup
          return
       endif
-      if (comm(1:2).eq.'EW') then
+      if (comm(1:2) == RPN_COMM_EW) then
          RPN_COMM_group=pe_gr_myrow
          return
       endif
-      if (comm(1:2).eq.'NS') then
+      if (comm(1:2) == RPN_COMM_NS) then
          RPN_COMM_group=pe_gr_mycol
          return
       endif
-      if (comm(1:10).eq.'BLOCMASTER') then
+      if (comm(1:10) == RPN_COMM_BLOCMASTER) then
          RPN_COMM_group=pe_gr_blocmaster
          return
       endif
-      if (comm(1:4).eq.'BLOC') then
+      if (comm(1:4) == RPN_COMM_BLOCK) then
          RPN_COMM_group=pe_gr_bloc
          return
       endif
 
 
-      write(rpn_u,*) 'Unknown group, aborting'
+      write(rpn_u,*) 'Unknown group ',com,', aborting'
         stop
         
       return

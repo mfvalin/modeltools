@@ -23,67 +23,76 @@
 c	Luc Corbeil, 2000-11-21
 c
 c	lien entre chaine de caractere de communicateur
-c	'GRID', 'EW' et 'NS' et leur numero assigne par
+c	GRID, EW et NS et leur numero assigne par
 c	MPI.
 c
       use rpn_comm
       implicit none
-!      include 'mpif.h'
-!        include 'rpn_comm.h'
+!      include mpif.h
+!        include rpn_comm.h
       character(len=*) com
       character(len=32) comm
 
       call rpn_comm_low2up(com,comm)
 
-      if (comm(1:9).eq.'GRIDPEERS') then
+      RPN_COMM_comm = MPI_COMM_NULL
+
+      if (trim(comm) == RPN_COMM_GRIDPEERS) then
          RPN_COMM_comm=pe_grid_peers
          return
       endif
-      if (comm(1:4).eq.'GRID' .or. comm(1:4).eq.'DOMM') then
+      if (trim(comm) == RPN_COMM_GRID) then
          RPN_COMM_comm=pe_indomm  ! alias pe_grid
          return
       endif
-      if (comm(1:5).eq.'WORLD' .or. comm(1:10).eq.'ALLDOMAINS') then
+      if(trim(comm) == RPN_COMM_DOMM) then
+         RPN_COMM_comm=pe_indomm  ! alias pe_grid
+         return
+      endif
+      if (trim(comm) == RPN_COMM_WORLD) then
          RPN_COMM_comm=WORLD_COMM_MPI  ! alias pe_all_domains
          return
       endif
-      if (comm(1:8).eq.'ALLGRIDS') then
+      if(trim(comm) == RPN_COMM_ALLDOMAINS) then
+         RPN_COMM_comm=WORLD_COMM_MPI  ! alias pe_all_domains
+         return
+      endif
+      if (trim(comm) == RPN_COMM_ALLGRIDS) then
          RPN_COMM_comm=pe_a_domain
          return
       endif
-      if (comm(1:9).eq.'MULTIGRID') then
+      if (trim(comm) == RPN_COMM_MULTIGRID) then
          RPN_COMM_comm=pe_indomms ! alias pe_multi_grid
          return
       endif
-      if (comm(1:3).eq.'ALL') then
+      if (trim(comm) == RPN_COMM_ALL) then
         RPN_COMM_comm=pe_wcomm  ! alias pe_grid
         return
       endif
-      if(comm(1:4).eq.'DEFO') then
+      if(trim(comm) == RPN_COMM_DEFAULT) then
         RPN_COMM_comm=pe_defcomm
         return
       endif
-      if (comm(1:2).eq.'EW') then
+      if (trim(comm) == RPN_COMM_EW) then
          RPN_COMM_comm=pe_myrow
          return
       endif
-      if (comm(1:2).eq.'NS') then
+      if (trim(comm) == RPN_COMM_NS) then
          RPN_COMM_comm=pe_mycol
          return
       endif
-      if (comm(1:10).eq.'BLOCMASTER') then
+      if (trim(comm) == RPN_COMM_BLOCMASTER) then
          RPN_COMM_comm=pe_blocmaster
          return
       endif
-      if (comm(1:4).eq.'BLOC') then
+      if (trim(comm) == RPN_COMM_BLOCK) then
          RPN_COMM_comm=pe_bloc
          return
       endif
-      if (comm(1:8).eq.'UNIVERSE') then
+      if (trim(comm) == RPN_COMM_UNIVERSE) then
          RPN_COMM_comm=MPI_COMM_WORLD
          return
       endif
-
 
       write(rpn_u,*) 'Unknown communicator ',comm,', aborting'
       stop

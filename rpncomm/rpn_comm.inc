@@ -17,60 +17,61 @@
 ! * Free Software Foundation, Inc., 59 Temple Place - Suite 330,
 ! * Boston, MA 02111-1307, USA.
 ! */
+      include 'RPN_COMM_constants.inc'
 !
-      integer,parameter :: RPN_COMM_MASTER = 0
+!     integer,parameter :: RPN_COMM_MASTER = 0
 !
-      character(len=*),parameter :: RPN_COMM_WORLD      = 'world'      ! PLS do not use
-      character(len=*),parameter :: RPN_COMM_ALLGRIDS   = 'allgrids'   ! use rather than RPN_COMM_WORLD
-      character(len=*),parameter :: RPN_COMM_MULTIGRID  = 'multigrid'
-      character(len=*),parameter :: RPN_COMM_GRID       = 'grid'       ! use rather than RPN_COMM_DOMM
-      character(len=*),parameter :: RPN_COMM_DEFAULT    = 'defo'
-      character(len=*),parameter :: RPN_COMM_BLOCMASTER = 'blocmaster'
-      character(len=*),parameter :: RPN_COMM_BLOC_COMM  = 'bloc'
-      character(len=*),parameter :: RPN_COMM_EW         = 'ew'
-      character(len=*),parameter :: RPN_COMM_ROW        = 'ew'
-      character(len=*),parameter :: RPN_COMM_NS         = 'ns'
-      character(len=*),parameter :: RPN_COMM_COLUMN     = 'ns'
-      !
-      character(len=*),parameter :: RPN_COMM_INTEGER             =       &
-     &                             'MPI_INTEGER'
-      character(len=*),parameter :: RPN_COMM_INTEGER2            =       &
-     &                             'MPI_INTEGER2'
-      character(len=*),parameter :: RPN_COMM_COMPLEX             =       &
-     &                             'MPI_COMPLEX'
-      character(len=*),parameter :: RPN_COMM_DOUBLE_COMPLEX      =       &
-     &                             'MPI_DOUBLE_COMPLEX'
-      character(len=*),parameter :: RPN_COMM_DOUBLE_PRECISION    =       &
-     &                             'MPI_DOUBLE_PRECISION'
-      character(len=*),parameter :: RPN_COMM_REAL                =       &
-     &                             'MPI_REAL'
-      character(len=*),parameter :: RPN_COMM_REAL4               =       &
-     &                             'MPI_REAL4'
-      character(len=*),parameter :: RPN_COMM_REAL8               =       &
-     &                             'MPI_REAL8'
-      character(len=*),parameter :: RPN_COMM_LOGICAL             =       &
-     &                             'MPI_LOGICAL'
-      character(len=*),parameter :: RPN_COMM_CHARACTER           =       &
-     &                             'MPI_CHARACTER'
-      !
-      character(len=*),parameter :: RPN_COMM_SUM     = 'MPI_SUM'
-      character(len=*),parameter :: RPN_COMM_MIN     = 'MPI_MIN'
-      character(len=*),parameter :: RPN_COMM_MAX     = 'MPI_MAX'
-      character(len=*),parameter :: RPN_COMM_PROD    = 'MPI_PROD'
-      character(len=*),parameter :: RPN_COMM_LAND    = 'MPI_LAND'
-      character(len=*),parameter :: RPN_COMM_BAND    = 'MPI_BAND'
-      character(len=*),parameter :: RPN_COMM_LOR     = 'MPI_LOR'
-      character(len=*),parameter :: RPN_COMM_BOR     = 'MPI_BOR'
-      character(len=*),parameter :: RPN_COMM_LXOR    = 'MPI_LXOR'
-      character(len=*),parameter :: RPN_COMM_BXOR    = 'MPI_BXOR'
-      character(len=*),parameter :: RPN_COMM_OP_NULL = 'MPI_OP_NULL'
-      character(len=*),parameter :: RPN_COMM_MAXLOC  = 'MPI_MAXLOC'
-      character(len=*),parameter :: RPN_COMM_MINLOC  = 'MPI_MINLOC'
-      !
-      logical,parameter :: RPN_COMM_TOPO_X      = .true.
-      logical,parameter :: RPN_COMM_TOPO_Y      = .false.
-      logical,parameter :: RPN_COMM_TOPO_FILL   = .true.
-      logical,parameter :: RPN_COMM_TOPO_NOFILL = .false.
+!      character(len=*),parameter :: RPN_COMM_WORLD      = 'world'      ! PLS do not use
+!      character(len=*),parameter :: RPN_COMM_ALLGRIDS   = 'allgrids'   ! use rather than RPN_COMM_WORLD
+!      character(len=*),parameter :: RPN_COMM_MULTIGRID  = 'multigrid'
+!      character(len=*),parameter :: RPN_COMM_GRID       = 'grid'       ! use rather than RPN_COMM_DOMM
+!      character(len=*),parameter :: RPN_COMM_DEFAULT    = 'defo'
+!      character(len=*),parameter :: RPN_COMM_BLOCMASTER = 'blocmaster'
+!      character(len=*),parameter :: RPN_COMM_BLOC_COMM  = 'bloc'
+!      character(len=*),parameter :: RPN_COMM_EW         = 'ew'
+!      character(len=*),parameter :: RPN_COMM_ROW        = 'ew'
+!      character(len=*),parameter :: RPN_COMM_NS         = 'ns'
+!      character(len=*),parameter :: RPN_COMM_COLUMN     = 'ns'
+!
+!      character(len=*),parameter :: RPN_COMM_INTEGER             =       &
+!     &                             'MPI_INTEGER'
+!      character(len=*),parameter :: RPN_COMM_INTEGER2            =       &
+!     &                             'MPI_INTEGER2'
+!      character(len=*),parameter :: RPN_COMM_COMPLEX             =       &
+!     &                             'MPI_COMPLEX'
+!      character(len=*),parameter :: RPN_COMM_DOUBLE_COMPLEX      =       &
+!     &                             'MPI_DOUBLE_COMPLEX'
+!      character(len=*),parameter :: RPN_COMM_DOUBLE_PRECISION    =       &
+!     &                             'MPI_DOUBLE_PRECISION'
+!      character(len=*),parameter :: RPN_COMM_REAL                =       &
+!     &                             'MPI_REAL'
+!      character(len=*),parameter :: RPN_COMM_REAL4               =       &
+!     &                             'MPI_REAL4'
+!      character(len=*),parameter :: RPN_COMM_REAL8               =       &
+!     &                             'MPI_REAL8'
+!      character(len=*),parameter :: RPN_COMM_LOGICAL             =       &
+!     &                             'MPI_LOGICAL'
+!      character(len=*),parameter :: RPN_COMM_CHARACTER           =       &
+!     &                             'MPI_CHARACTER'
+!
+!      character(len=*),parameter :: RPN_COMM_SUM     = 'MPI_SUM'
+!      character(len=*),parameter :: RPN_COMM_MIN     = 'MPI_MIN'
+!      character(len=*),parameter :: RPN_COMM_MAX     = 'MPI_MAX'
+!      character(len=*),parameter :: RPN_COMM_PROD    = 'MPI_PROD'
+!      character(len=*),parameter :: RPN_COMM_LAND    = 'MPI_LAND'
+!      character(len=*),parameter :: RPN_COMM_BAND    = 'MPI_BAND'
+!      character(len=*),parameter :: RPN_COMM_LOR     = 'MPI_LOR'
+!      character(len=*),parameter :: RPN_COMM_BOR     = 'MPI_BOR'
+!      character(len=*),parameter :: RPN_COMM_LXOR    = 'MPI_LXOR'
+!      character(len=*),parameter :: RPN_COMM_BXOR    = 'MPI_BXOR'
+!      character(len=*),parameter :: RPN_COMM_OP_NULL = 'MPI_OP_NULL'
+!      character(len=*),parameter :: RPN_COMM_MAXLOC  = 'MPI_MAXLOC'
+!      character(len=*),parameter :: RPN_COMM_MINLOC  = 'MPI_MINLOC'
+!
+!      logical,parameter :: RPN_COMM_TOPO_X      = .true.
+!      logical,parameter :: RPN_COMM_TOPO_Y      = .false.
+!      logical,parameter :: RPN_COMM_TOPO_FILL   = .true.
+!      logical,parameter :: RPN_COMM_TOPO_NOFILL = .false.
 !
       interface
 !

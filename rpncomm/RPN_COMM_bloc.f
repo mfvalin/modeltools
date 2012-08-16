@@ -19,7 +19,7 @@
 * */
 
       integer function RPN_COMM_bloc(nblocx,nblocy)
-	use rpn_comm
+      use rpn_comm
       implicit none
       integer nblocx, nblocy
 *arguments

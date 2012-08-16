@@ -25,10 +25,22 @@ c	lien entre datatype et MPI_datatype
         implicit none
 !        include 'mpif.h'
 !        include 'rpn_comm.h'
-        character(len=*) data_int
-        character(len=32) datatype
+        character(len=*) :: data_int
+        character(len=32) :: datatype
+        integer :: i
 
         call rpn_comm_low2up(data_int,datatype)
+
+        RPN_COMM_datyp = -999999  ! precondition to error return
+
+        do i = 1 , size(type_tab)
+          if(type_tab(i)%string == datatype) then
+            RPN_COMM_datyp = type_tab(i)%number
+            return
+          endif
+        enddo
+
+        goto 777
 
         if (datatype(1:13).eq.'MPI_CHARACTER') then
            RPN_COMM_datyp=MPI_CHARACTER
@@ -71,8 +83,8 @@ c	lien entre datatype et MPI_datatype
            return
         endif
 
-        write(rpn_u,*) 'Unknown datatype, aborting'
-          stop
+777     write(rpn_u,*) 'Unknown datatype ',datatype,' aborting'
+        stop
           
         return
         end
