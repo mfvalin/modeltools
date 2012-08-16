@@ -2,6 +2,7 @@
         character (len=32), parameter :: RPN_COMM_ANY_TAG='MPI_ANY_TAG'
         character (len=32), parameter :: RPN_COMM_DATATYPE_NULL='MPI_DATATYPE_NULL'
         character (len=32), parameter :: RPN_COMM_COMM_NULL='MPI_COMM_NULL'
+        character (len=32), parameter :: RPN_COMM_GROUP_NULL='MPI_GROUP_NULL'
         character (len=32), parameter :: RPN_COMM_COMM_WORLD='MPI_COMM_WORLD'
         character (len=32), parameter :: RPN_COMM_SUCCESS='MPI_SUCCESS'
         character (len=32), parameter :: RPN_COMM_BYTE='MPI_BYTE'
