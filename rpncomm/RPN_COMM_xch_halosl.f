@@ -24,7 +24,7 @@
 !     nj, haloy, periody, npol_row : NOT USED
       use rpn_comm
       implicit none
-      include 'mpif.h'
+!      include 'mpif.h'
 *     
 *     exchange a halo with neighbours, semi-lagrangian fashion for E-W part of exchange
 *     (really an allgather, G needs to be large enough for the entire E-W dimension)

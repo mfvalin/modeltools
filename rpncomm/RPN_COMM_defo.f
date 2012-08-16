@@ -24,7 +24,7 @@
 	character(len=*) com
 	integer comm, rpn_comm_comm
 
-        include 'mpif.h'
+!        include 'mpif.h'
 *
         comm=rpn_comm_comm(com)
 	pe_defcomm = comm

@@ -26,7 +26,7 @@
 *     I	nblocx, nblocy: number of blocks on the subgrid in x-y direction
 *     O RPN_COMM_bloc : error status (-1 if error, else 0)
 !      include 'rpn_comm.h'
-      include 'mpif.h'
+!      include 'mpif.h'
 *
       integer nblocs, ierr, indices(nblocx*nblocy)
       integer longx, longy, i,j,n

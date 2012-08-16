@@ -26,7 +26,7 @@
 *  I	Iun	file to write timings into
 **
 !        include 'rpn_comm.h'
-        include 'mpif.h'
+!        include 'mpif.h'
 *
 	external r8ivecc, r8ifpec, r8irtc
 	real *8 r8ivecc, r8ifpec

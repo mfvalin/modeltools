@@ -26,7 +26,7 @@
 	implicit none
 *
 !	include 'rpn_comm.h'
-	include 'mpif.h'
+!	include 'mpif.h'
 *
 	integer ghalox,ghaloy,gmini,gmaxi,gmaxj,gminj
 	integer nig,njg,size,mini,maxi,minj,maxj,nk,status
@@ -61,7 +61,7 @@
 	implicit none
 *
 !	include 'rpn_comm.h'
-	include 'mpif.h'
+!	include 'mpif.h'
 *
 	integer ghalox,ghaloy,gmini,gmaxi,gmaxj,gminj
 	integer nig,njg,size,mini,maxi,minj,maxj,nk,status

@@ -27,7 +27,7 @@ c	mpi finalize
         integer ierr
         
 **
-        include 'mpif.h'
+!        include 'mpif.h'
 
 !       if(allocated(pe_domains)) deallocate(pe_domains)
         if(allocated(pe_id))      deallocate(pe_id)

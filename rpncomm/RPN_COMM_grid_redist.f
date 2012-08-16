@@ -42,7 +42,7 @@
       integer, dimension(lni,lnj,nk), intent(IN) :: zin
       integer, dimension(gni,gnj), intent(OUT) :: zout
 !
-      include 'mpif.h'
+!      include 'mpif.h'
 !
       integer, allocatable, dimension(:)   :: sendcounts, sdispls
       integer, allocatable, dimension(:)   :: recvcounts, rdispls

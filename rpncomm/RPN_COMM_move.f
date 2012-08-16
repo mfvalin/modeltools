@@ -24,7 +24,7 @@
         use rpn_comm
         implicit none
 !        include 'rpn_comm.h'
-        include 'mpif.h'
+!        include 'mpif.h'
 
         integer sendbuf, sendcount, recvbuf, recvcount
         integer sendtag, recvtag, ierr

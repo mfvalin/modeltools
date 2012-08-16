@@ -21,7 +21,7 @@
 	subroutine RPN_COMM_qadl(ipe,ni,nj,i0,in,j0,jn)
 	use rpn_comm
 !	include 'rpn_comm.h'
-	include 'mpif.h'
+!	include 'mpif.h'
 	ilim = (ni + pe_nx -1) / pe_nx
 	jlim = (nj + pe_ny -1) / pe_ny
 	ifact = ipe/pe_nx

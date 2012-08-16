@@ -146,7 +146,7 @@
 
       use rpn_comm
       implicit none
-      include 'mpif.h'
+!      include 'mpif.h'
       integer sizx,sizy
 
       deltai = sizx
@@ -158,7 +158,7 @@
       integer function RPN_COMM_petopo(pex,pey)
       use rpn_comm
       implicit none
-      include 'mpif.h'
+!      include 'mpif.h'
       integer pex,pey
 
       integer count, ierr,i,j,i0,j0

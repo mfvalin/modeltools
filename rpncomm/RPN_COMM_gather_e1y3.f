@@ -29,7 +29,7 @@
 	real srcr(size,min1:max1,min2:max2,n3)
 *
 !	include 'rpn_comm.h'
-	include 'mpif.h'
+!	include 'mpif.h'
 *
 	real, allocatable :: zxij(:,:,:)
 c	real, dimension(size,2*((n2*n3)/2)+1,6) :: zxij

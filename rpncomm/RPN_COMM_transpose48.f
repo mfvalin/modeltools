@@ -29,7 +29,7 @@
 	real*8 a_8,b_8
 *
 !	include 'rpn_comm.h'
-	include 'mpif.h'
+!	include 'mpif.h'
 *
 	integer n3partiel,n1partiel,npe,pecomm
 *

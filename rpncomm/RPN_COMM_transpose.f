@@ -27,7 +27,7 @@
 	integer zb(size,n2,min3:max3,n1g)
 *
 !	include 'rpn_comm.h'
-	include 'mpif.h'
+!	include 'mpif.h'
 *
 	integer n3partiel,n1partiel,npe,pecomm
 *

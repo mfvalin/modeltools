@@ -27,7 +27,7 @@
 *	Calls RPN_COMM_xch_halo for n-length words
 *       n=1 -> real*4, n=2 -> real*8 and so on...
 !        include 'rpn_comm.h'
-        include 'mpif.h'
+!        include 'mpif.h'
 
 	integer minx,maxx,miny,maxy,ni,nj,nk,halox,haloy
 	integer gni,npol_row,n
@@ -52,7 +52,7 @@
 *       n=1 -> real*4, n=2 -> real*8 and so on...
 *
 !        include 'rpn_comm.h'
-        include 'mpif.h'
+!        include 'mpif.h'
 
 	integer minx,maxx,miny,maxy,ni,nj,nk,halox,haloy
 	integer minx2,maxx2,miny2,maxy2

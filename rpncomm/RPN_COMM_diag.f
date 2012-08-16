@@ -29,7 +29,7 @@
 	real *8 R_8(Nk,Nr), Tmp_8(Miny:Maxy,Nk,Nr)
 *
 !	include 'rpn_comm.h'
-	include 'mpif.h'
+!	include 'mpif.h'
 *
 	integer nelem,ierr
 	integer status(mpi_status_size)

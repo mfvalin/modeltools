@@ -37,7 +37,7 @@
 *       instead of g_adj = wk (mathematical operation)
 
 !	include 'rpn_comm.h'
-	include 'mpif.h'
+!	include 'mpif.h'
 *
 	integer, target, allocatable, dimension(:) :: wk
 	integer wkxs,wkxr,wkys,wkyr,wks,wkr,wkslag,wkgth

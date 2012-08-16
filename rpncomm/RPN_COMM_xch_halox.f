@@ -39,7 +39,7 @@
 	logical adjoint
 *
 !	include 'rpn_comm.h'
-	include 'mpif.h'
+!	include 'mpif.h'
 *
 	integer i,j,k,borneminx,bornemaxx,borneminy,bornemaxy
 	integer nimax,ierr

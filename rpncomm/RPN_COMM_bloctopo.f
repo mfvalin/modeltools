@@ -24,7 +24,7 @@
       implicit none
       integer, intent(out) :: blocme,blocmex,blocmey
       integer, intent(out) :: blocsizex, blocsizey
-      include 'mpif.h'
+!      include 'mpif.h'
 *
 
       blocsizex    = BLOC_sizex

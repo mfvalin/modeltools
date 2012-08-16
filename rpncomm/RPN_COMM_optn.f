@@ -26,7 +26,7 @@
 	real *4 op_rval
 **
 !        include 'rpn_comm.h'
-        include 'mpif.h'
+!        include 'mpif.h'
 *
 	integer i
 *

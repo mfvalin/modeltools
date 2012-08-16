@@ -29,7 +29,7 @@
 *  O	Me_y	Y coordinate of PE in computational grid
 **
 !	include 'rpn_comm.h'
-	include 'mpif.h'
+!	include 'mpif.h'
 *
 	Me = pe_medomm
 	Me_x = pe_mex

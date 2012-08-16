@@ -45,7 +45,7 @@ c	real*8, allocatable ::  zb8(:,:,:,:)
 
 *
 !	include 'rpn_comm.h'
-	include 'mpif.h'
+!	include 'mpif.h'
 *
 c	integer, dimension(size,n2,min3:max3,n1partiel,npe) :: ta
 c	real*8, dimension(size/2,n2,min3:max3,n1partiel,npe) :: ta8

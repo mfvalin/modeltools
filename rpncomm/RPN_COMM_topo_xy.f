@@ -27,7 +27,7 @@
 	logical peri,perj
 *
 !	include 'rpn_comm.h'
-	include 'mpif.h'
+!	include 'mpif.h'
 *
 	mini = 1-haloi
 	minj = 1-haloj

@@ -30,7 +30,7 @@
 *     I nblocx, nblocy: number of blocks on the subgrid in x-y direction
 *     O RPN_COMM_bloc : error status (-1 if error, else 0)
 !      include 'rpn_comm.h'
-      include 'mpif.h'
+!      include 'mpif.h'
 *
       npex     = pe_nx
       npey     = pe_ny

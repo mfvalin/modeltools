@@ -23,7 +23,7 @@ c	Luc Corbeil, 2000-11-20
 c	lien entre datatype et MPI_datatype
         use rpn_comm
         implicit none
-        include 'mpif.h'
+!        include 'mpif.h'
 !        include 'rpn_comm.h'
         character(len=*) data_int
         character(len=32) datatype

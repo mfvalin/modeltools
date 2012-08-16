@@ -24,7 +24,7 @@ c	Luc Corbeil, 2000-11-20
 c	lien entre datatype et MPI_datatype
 
         implicit none
-        include 'mpif.h'
+!        include 'mpif.h'
         character(len=*) op
         character(len=32) operation
 

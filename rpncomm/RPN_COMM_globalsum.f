@@ -24,7 +24,7 @@
       implicit none
 
 !      include 'rpn_comm.h'
-      include 'mpif.h'
+!      include 'mpif.h'
 
       integer minx,maxx,miny,maxy,nptsz,nil,njl
       integer gnj,njlmax

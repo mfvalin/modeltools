@@ -20,7 +20,7 @@
 
 	subroutine RPN_COMM_const(IER)
 	use rpn_comm
-	include "mpif.h"
+!	include "mpif.h"
 !	include "rpn_comm.h"
 	external MPI_BCAST
 	if(pe_me .eq.pe_pe0) then

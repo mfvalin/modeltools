@@ -24,7 +24,7 @@
       external call_back
       integer mydomain
 !
-      include 'mpif.h'
+!      include 'mpif.h'
 
 	logical mpi_started
       integer ierr, err, err_all, pe_tot2, pe_me2, npe_per_domain,
@@ -120,7 +120,7 @@
 **
 *
 *	include 'rpn_comm.h'
-	include 'mpif.h'
+!	include 'mpif.h'
 *
 	integer ierr, i, j, count, npe, reste, nslots, key
 	logical mpi_started

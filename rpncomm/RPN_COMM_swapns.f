@@ -45,7 +45,7 @@
 	implicit none
 *
 !	include 'rpn_comm.h'
-	include 'mpif.h'
+!	include 'mpif.h'
 *
 	integer nwen,wden(nwen),nwes,wdes(nwes)
 	integer nwin,nwrn,wdin(nwin),nwis,nwrs,wdis(nwis),status

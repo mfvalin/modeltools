@@ -45,7 +45,7 @@
 
 *
 !	include 'rpn_comm.h'
-	include 'mpif.h'
+!	include 'mpif.h'
 *
 
 	integer i,j,k,ierr,n3w

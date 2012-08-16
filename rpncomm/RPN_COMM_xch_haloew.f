@@ -32,7 +32,7 @@
 	integer g(minx:maxx,miny:maxy,nk)
 !
 	
-	include 'mpif.h'
+!	include 'mpif.h'
 !
 !	integer *8 time_base,temp_time
 	integer, dimension(halox,jmin:jmax,nk) :: halo_to_east,

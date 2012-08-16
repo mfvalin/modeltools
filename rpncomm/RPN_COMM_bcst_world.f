@@ -42,7 +42,7 @@ c
 	integer buff(2),ierr
 	integer length
 **
-        include 'mpif.h'
+!        include 'mpif.h'
 
 	if (mode.eq.0) then ! broadcast habituel
 	  length=(loc(end(2))-loc(start(1)))/(loc(buff(2))-loc(buff(1)))

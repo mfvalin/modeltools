@@ -27,7 +27,7 @@ c      MPI.
 c
       use rpn_comm
       implicit none
-      include 'mpif.h'
+!      include 'mpif.h'
 !      include 'rpn_comm.h'
       character(len=*) com
       character(len=32) comm
