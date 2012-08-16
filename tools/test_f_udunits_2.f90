@@ -31,7 +31,7 @@
 	charset = UT_ASCII
 	sys = f_ut_read_xml("")
 
-	year=2012 ; month=8 ; day=8 ; hour=15 ; minute=45 ; second=15.55 ; resolution=0.0
+	year=-2000 ; month=8 ; day=8 ; hour=15 ; minute=45 ; second=15.55 ; resolution=0.0
 	time = f_ut_encode_time(year,month,day,hour,minute,second)
 	print *,"TIME=",time," =<",year,month,day,hour,minute,real(second)
 	year=0 ; month=0 ; day=0 ; hour=0 ; minute=0 ; second=0.0 ; resolution=-999.999
