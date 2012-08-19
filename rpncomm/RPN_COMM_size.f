@@ -28,7 +28,7 @@ c	mpi reduce
         integer RPN_COMM_datyp,RPN_COMM_oper,RPN_COMM_comm
         logical RPN_COMM_grank
 **
-        include 'mpif.h'
+!        include 'mpif.h'
 
 	comm=rpn_comm_comm(com)
         if(.not.RPN_COMM_grank(com)) return

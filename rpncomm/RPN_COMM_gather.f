@@ -30,7 +30,7 @@ c	mpi gather
         integer RPN_COMM_datyp,RPN_COMM_oper,RPN_COMM_comm
 	logical RPN_COMM_grank        
 **
-        include 'mpif.h'
+!        include 'mpif.h'
 
         datyp=rpn_comm_datyp(sendtype)
         datyp2=rpn_comm_datyp(rectype)

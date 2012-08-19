@@ -30,7 +30,7 @@ c	mpi broadcast
 	logical RPN_COMM_grank
 **
 !        include 'rpn_comm.h'
-        include 'mpif.h'
+!        include 'mpif.h'
 	comm=rpn_comm_comm(com)
         datyp=rpn_comm_datyp(datatype)
 
@@ -53,7 +53,7 @@ c	mpi broadcast
 	logical RPN_COMM_grank
 **
 !        include 'rpn_comm.h'
-        include 'mpif.h'
+!        include 'mpif.h'
 	comm=rpn_comm_comm(com)
         datyp=rpn_comm_datyp(datatype)
 

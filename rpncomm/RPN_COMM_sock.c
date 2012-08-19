@@ -17,6 +17,9 @@
  * Free Software Foundation, Inc., 59 Temple Place - Suite 330,
  * Boston, MA 02111-1307, USA.
  */
+#define f77name(a) a ## _
+#define f77_name(a) a ## _
+#define ftnword int
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -34,7 +37,7 @@
 
 #include <mpi.h>
 
-#include <rpnmacros.h>
+/*  sharp include <rpnmacros.h> */
 
 static int must_init_signal=1;
 

@@ -31,7 +31,7 @@ c	mpi reduce
         integer RPN_COMM_datyp,RPN_COMM_oper,RPN_COMM_comm
         logical RPN_COMM_grank
 **
-        include 'mpif.h'
+!        include 'mpif.h'
 
         datyp=rpn_comm_datyp(datatype)
         oper=rpn_comm_oper(op)

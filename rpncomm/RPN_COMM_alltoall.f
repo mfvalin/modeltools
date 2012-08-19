@@ -31,7 +31,7 @@ c	mpi alltoall
         integer RPN_COMM_datyp,RPN_COMM_comm
         logical RPN_COMM_grank
 **
-        include 'mpif.h'
+!        include 'mpif.h'
 
         sendt=rpn_comm_datyp(sendtype)
         recvt=rpn_comm_datyp(recvtype)

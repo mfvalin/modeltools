@@ -29,7 +29,7 @@ c	mpi barrier
 **
 	integer RPN_COMM_comm
         logical RPN_COMM_grank
-        include 'mpif.h'
+!        include 'mpif.h'
 
 	comm=rpn_comm_comm(com)
 

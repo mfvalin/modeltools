@@ -32,7 +32,7 @@ c	mpi irecv
         integer RPN_COMM_datyp,RPN_COMM_comm
         logical RPN_COMM_grank
 **
-        include 'mpif.h'
+!        include 'mpif.h'
 **
         datyp=rpn_comm_datyp(datatype)
 	comm=rpn_comm_comm(com)

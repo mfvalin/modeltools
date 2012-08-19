@@ -32,7 +32,7 @@ c     mpi gather
       
 *     
 *
-      include 'mpif.h'
+!      include 'mpif.h'
       
       datyp=rpn_comm_datyp(sendtype)
       datyp2=rpn_comm_datyp(rectype)
