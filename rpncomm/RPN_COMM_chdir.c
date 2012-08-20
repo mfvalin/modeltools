@@ -21,12 +21,13 @@
 #include <stdio.h>
 #include <unistd.h>
 #include <stdlib.h>
-#include "f77name.h"
 
 /* FORTRAN callable code, supports 3 popular name manglings (0,1,2 underscores at end of name) */
 /* FORTRAN routine MUST ensure null terminated string ( trim(string)//achar(0) )   */
 
-int f77_name(f_rpn_comm_chdir)(char *in_reper)
+#pragma weak f_rpn_comm_chdir__=f_rpn_comm_chdir
+#pragma weak f_rpn_comm_chdir_=f_rpn_comm_chdir
+int f_rpn_comm_chdir(char *in_reper)
 {
   int ierr;
   fprintf(stderr,"reper='%s' \n",in_reper);
