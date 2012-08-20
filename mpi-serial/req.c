@@ -39,7 +39,7 @@ int MPI_Test(MPI_Request *request, int *flag, MPI_Status *status)
     {
       status->MPI_SOURCE= req->source;
       status->MPI_TAG= req->tag;
-      status->MPI_COUNT= req->size;
+      status->MPI_COUNT= req->size/req->datatype;
       status->MPI_ERROR= MPI_SUCCESS;
 
       mpi_free_handle(*request);

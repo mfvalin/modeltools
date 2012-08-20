@@ -44,6 +44,7 @@ typedef struct
   int tag;
   int complete;
   int size;
+  int datatype;
 
 } Req;
 
