@@ -1,2 +1,10 @@
 directory rpncomm:
   RPN_COMM communication library for 2D grid based models
+directory tools:
+  fstouv_byname.... open a group of "RPN standard files" as on file
+directory mpi-serial:
+  MPI serial library extracted from the Modeling Coupling Toolkit (MCT) Software
+  Copyright © 2011, UChicago Argonne, LLC as Operator of Argonne National Laboratory.
+  All rights reserved.
+  (For use with RPN_COMM communication library)
+  (A few routines have been/will be added)
