@@ -1,0 +1,27 @@
+######################################################################
+slightly modified version of the mpi-serial library from 
+(the following functions have been added, more info now available from status)
+mpi_group_size
+mpi_group_rank
+mpi_get_count
+
+M.Valin
+Université du Québec à Montréal
+August 2012
+mfvalin@gmail.com
+
+version 2.8 of the Model Coupling Toolkit (MCT)
+
+originally from 
+
+ -- Mathematics + Computer Science Div. / Argonne National Laboratory
+
+    Model Coupling Toolkit (MCT)
+
+    Jay Larson
+    Robert Jacob
+    Everest Ong
+    Ray Loy
+(see Copyright file)
+######################################################################
+
