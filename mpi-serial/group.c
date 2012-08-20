@@ -8,17 +8,12 @@
 FC_FUNC( mpi_group_size, MPI_GROUP_SIZE)
      (int *group, int *size, int *ierror)
 {
-  *ierror= MPI_Group_Size(*group, size);
+  *ierror= MPI_Group_size(*group, size);
 }
 
-int MPI_Group_Size(MPI_Group group,  int *size)
+int MPI_Group_size(MPI_Group group,  int *size)
 {
-  if (group==MPI_GROUP_NULL)
-    {
-      *size = -1;
-      return MPI_ERR_GROUP;
-    }
-  else if (group==MPI_GROUP_EMPTY)
+  if (group==MPI_GROUP_EMPTY)
     {
       *size = 0;
       return MPI_SUCCESS;
@@ -29,6 +24,7 @@ int MPI_Group_Size(MPI_Group group,  int *size)
       return MPI_SUCCESS;
     }
   *size = -1;
+  fprintf(stderr,"MPI_Group_size: invalid group\n");
   return(MPI_ERR_GROUP);
 }
 
@@ -39,17 +35,12 @@ int MPI_Group_Size(MPI_Group group,  int *size)
 FC_FUNC( mpi_group_rank, MPI_GROUP_RANK)
      (int *group, int *rank, int *ierror)
 {
-  *ierror= MPI_Group_Rank(*group, rank);
+  *ierror= MPI_Group_rank(*group, rank);
 }
 
-int MPI_Group_Rank(MPI_Group group,  int *rank)
+int MPI_Group_rank(MPI_Group group,  int *rank)
 {
-  if (group==MPI_GROUP_NULL)
-    {
-      *rank = -1;
-      return MPI_ERR_GROUP;
-    }
-  else if (group==MPI_GROUP_EMPTY)
+  if (group==MPI_GROUP_EMPTY)
     {
       *rank = 0;
       return MPI_SUCCESS;
@@ -60,6 +51,7 @@ int MPI_Group_Rank(MPI_Group group,  int *rank)
       return MPI_SUCCESS;
     }
   *rank = -1;
+  fprintf(stderr,"MPI_Group_rank: invalid group\n");
   return MPI_ERR_GROUP;
 }
 
