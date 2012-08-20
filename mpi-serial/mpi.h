@@ -149,6 +149,7 @@ typedef struct                  /* Fortran: INTEGER status(MPI_STATUS_SIZE) */
   MPI_Status_int MPI_SOURCE;    /* Fortran: status(MPI_SOURCE) */
   MPI_Status_int MPI_TAG;       /* Fortran: status(MPI_TAG) */
   MPI_Status_int MPI_ERROR;     /* Fortran: status(MPI_ERROR) */
+  MPI_Status_int MPI_COUNT;     /* Fortran: status(MPI_COUNT) */
 
 } MPI_Status;
 

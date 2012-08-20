@@ -43,6 +43,7 @@ typedef struct
   int source;
   int tag;
   int complete;
+  int size;
 
 } Req;
 

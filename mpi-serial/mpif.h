@@ -128,7 +128,7 @@
 
 
         INTEGER MPI_STATUS_SIZE
-        PARAMETER (MPI_STATUS_SIZE=3)
+        PARAMETER (MPI_STATUS_SIZE=4)
 
         INTEGER MPI_SOURCE, MPI_TAG, MPI_ERROR
         PARAMETER(MPI_SOURCE=1, MPI_TAG=2, MPI_ERROR=3)
@@ -171,6 +171,9 @@
 
 	integer MPI_COMPLEX
 	parameter (MPI_COMPLEX=2*MPI_REAL)
+
+	integer MPI_DOUBLE_COMPLEX
+	parameter (MPI_DOUBLE_COMPLEX=2*MPI_DOUBLE_PRECISION)
 
         integer MPI_2REAL
         parameter (MPI_2REAL=2*MPI_REAL)
@@ -236,6 +239,21 @@
         INTEGER MPI_LOR, MPI_BOR, MPI_LXOR, MPI_BXOR, MPI_MINLOC
         INTEGER MPI_MAXLOC
         INTEGER MPI_OP_NULL
+        INTEGER MPI_REPLACE
+        parameter (MPI_OP_NULL=0)
+        parameter (MPI_MAX=1)
+        parameter (MPI_MIN=2)
+        parameter (MPI_SUM=3)
+        parameter (MPI_PROD=4)
+        parameter (MPI_LAND=5)
+        parameter (MPI_BAND=6)
+        parameter (MPI_LOR=7)
+        parameter (MPI_BOR=8)
+        parameter (MPI_LXOR=9)
+        parameter (MPI_BXOR=10)
+        parameter (MPI_MAXLOC=11)
+        parameter (MPI_MINLOC=12)
+        parameter (MPI_REPLACE=13)
 
 !
 ! MPI_Wtime
@@ -265,4 +283,10 @@
         PARAMETER (MPI_MODE_RDWR=2)
 
 
+!
+! Miscellaneous
+!
+        INTEGER MPI_UB, MPI_LB
+        parameter (MPI_UB=3)
+        parameter (MPI_LB=4)
 

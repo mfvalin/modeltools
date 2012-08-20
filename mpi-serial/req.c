@@ -23,6 +23,8 @@ int MPI_Test(MPI_Request *request, int *flag, MPI_Status *status)
     {
       status->MPI_TAG= MPI_ANY_TAG;
       status->MPI_SOURCE= MPI_ANY_SOURCE;
+      status->MPI_ERROR= MPI_SUCCESS;
+      status->MPI_COUNT= 0;
       *flag=1;
       return(MPI_SUCCESS);
     }
@@ -31,11 +33,14 @@ int MPI_Test(MPI_Request *request, int *flag, MPI_Status *status)
   req=mpi_handle_to_ptr(*request);
 
   *flag=req->complete;
+  status->MPI_COUNT= -1;
 
   if (*flag)
     {
       status->MPI_SOURCE= req->source;
       status->MPI_TAG= req->tag;
+      status->MPI_COUNT= req->size;
+      status->MPI_ERROR= MPI_SUCCESS;
 
       mpi_free_handle(*request);
       *request=MPI_REQUEST_NULL;
@@ -44,7 +49,16 @@ int MPI_Test(MPI_Request *request, int *flag, MPI_Status *status)
   return(MPI_SUCCESS);
 }
 
+FC_FUNC( mpi_get_count, MPI_GET_COUNT)(int *status, int *datatype, int *count, int *ierror)
+{
+  *ierror=MPI_Get_count(status,*datatype,count);
+}
 
+int MPI_Get_count(MPI_Status *status, MPI_Datatype datatype, int *count)
+{
+  *count = MPI_UNDEFINED;
+  if(status->MPI_COUNT >= 0) *count = status->MPI_COUNT / datatype;
+}
 
 FC_FUNC( mpi_wait , MPI_WAIT )(int *request, int *status, int *ierror)
 {

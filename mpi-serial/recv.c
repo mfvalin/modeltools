@@ -66,6 +66,7 @@ int MPI_Irecv(void *buf, int count, MPI_Datatype datatype,
       rreq->complete=1;
       rreq->source=MPI_PROC_NULL;
       rreq->tag=MPI_ANY_TAG;
+      rreq->size=0;
 
       return(MPI_SUCCESS);
     }
@@ -76,10 +77,12 @@ int MPI_Irecv(void *buf, int count, MPI_Datatype datatype,
       sreq=(Req *)AP_listitem_data(match);
       AP_list_delete_item(mycomm->sendlist,match);
 
-      memcpy(buf,sreq->buf,count * datatype);
+/*      memcpy(buf,sreq->buf,count * datatype);   */
+      memcpy(buf,sreq->buf,sreq->size);
       rreq->complete=1;
       rreq->source=0;
       rreq->tag=sreq->tag;                   /* in case tag was MPI_ANY_TAG */
+      rreq->size=sreq->size;
 
       sreq->complete=1;
 
@@ -94,6 +97,7 @@ int MPI_Irecv(void *buf, int count, MPI_Datatype datatype,
   rreq->buf=buf;
   rreq->tag=tag;
   rreq->complete=0;
+  rreq->size=-1;
   rreq->listitem=AP_list_append(mycomm->recvlist,rreq);
 
 #ifdef INFO

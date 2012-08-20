@@ -60,6 +60,7 @@ int MPI_Isend(void *buf, int count, MPI_Datatype datatype,
   if (dest==MPI_PROC_NULL)
     {
       sreq->complete=1;
+      sreq->size=count*datatype;
       return(MPI_SUCCESS);
     }
 
@@ -72,8 +73,10 @@ int MPI_Isend(void *buf, int count, MPI_Datatype datatype,
       rreq->complete=1;
       rreq->source=0;
       rreq->tag=tag;                    /* in case rreq->tag was MPI_ANY_TAG */
+      rreq->size=count*datatype;
 
       sreq->complete=1;
+      sreq->size=count*datatype;
 
 #ifdef DEBUG
       printf("Completion(send) value=%d tag=%d\n",
@@ -86,6 +89,7 @@ int MPI_Isend(void *buf, int count, MPI_Datatype datatype,
   sreq->buf=buf;
   sreq->tag=tag;
   sreq->complete=0;
+  sreq->size=count*datatype;
   sreq->listitem=AP_list_append(mycomm->sendlist,sreq);
 
 #ifdef INFO
