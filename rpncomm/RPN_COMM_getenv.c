@@ -21,7 +21,6 @@
 #include <stdio.h>
 #include <unistd.h>
 #include <stdlib.h>
-#include "f77name.h"
 
 /* FORTRAN routine MUST ensure null terminated string ( trim(string)//achar(0) )   */
 
@@ -38,7 +37,9 @@ strncpy_(char *dest, const char *src, size_t n){
     return dest;
 }
 
-int f77_name(rpn_comm_getenv)(char *name,char *value, int *length)
+#pragma weak rpn_comm_getenv__=rpn_comm_getenv
+#pragma weak rpn_comm_getenv_=rpn_comm_getenv
+int rpn_comm_getenv(char *name,char *value, int *length)
 {
   char *temp=getenv(name);
   if(temp != NULL) strncpy_(value,temp,(size_t) *length);

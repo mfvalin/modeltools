@@ -21,7 +21,6 @@
 #include <stdio.h>
 #include <sys/time.h>
 #include <time.h>
-#include "f77name.h"
 
 /* dummy wall time clock, pseudo clock increases at one nanosecond per call */
 static double dummy_time=0.0;
@@ -38,7 +37,10 @@ static double time0 = 0.0;
 /* example FORTRAN CALL:                     */
 /* real *8 time                              */
 /* time = RPN_COMM_Wtime()                   */
-double f77_name(rpn_comm_wtime)()
+
+#pragma weak rpn_comm_wtime__=rpn_comm_wtime
+#pragma weak rpn_comm_wtime_=rpn_comm_wtime
+double rpn_comm_wtime()
 {
   return (*fn)() - time0;
 }
@@ -63,7 +65,10 @@ static ticks getticks(void)
 static int t0_=0;
 static timebasestruct_t t0;
 #endif
-double f77name(rpn_comm_tsc)()
+
+#pragma weak rpn_comm_tsc__=rpn_comm_tsc
+#pragma weak rpn_comm_tsc_=rpn_comm_tsc
+double rpn_comm_tsc()
 {
   double temp;
 #if defined(linux)
@@ -122,7 +127,10 @@ return temp;
 }
 
 /* returns time of day as a 64 bit real number */
-double f77name(rpn_comm_timeofday)()
+
+#pragma weak rpn_comm_timeofday__=rpn_comm_timeofday
+#pragma weak rpn_comm_timeofday__=rpn_comm_timeofday
+double rpn_comm_timeofday()
 {
   double temp;
   struct timeval tv;
@@ -140,10 +148,14 @@ double f77name(rpn_comm_timeofday)()
 /* special case :                                                      */
 /*   call RPN_COM_Wtime_set(RPN_COM_Wtime_set)                         */
 /*   resets the clock to the very fast dummy internal clock            */
-void f77_name(rpn_comm_wtime_set)(double (*function)())
+
+
+#pragma weak rpn_comm_wtime_set__=rpn_comm_wtime_set
+#pragma weak rpn_comm_wtime_set_=rpn_comm_wtime_set
+void rpn_comm_wtime_set(double (*function)())
 {
   fn = function;
-  if(fn == (void *)f77_name(rpn_comm_wtime_set)) fn = (void *)dummy_wtime;
+  if(fn == (void *)rpn_comm_wtime_set) fn = (void *)dummy_wtime;
   time0 = (*fn)();
 }
 
@@ -159,7 +171,7 @@ int main(int argc,char **argv)
   
   ierr = MPI_Init(&argc, &argv);
   
-  dummy = f77name(rpn_comm_tsc)();
+  dummy = rpn_comm_tsc();
   
   t1 = getticks();
   t2 = getticks();
@@ -170,46 +182,46 @@ int main(int argc,char **argv)
   
   fprintf(stdout,"Phase 1, dummy timing function\n");
   for (i=0 ; i<5 ; i++){
-    double x = f77_name(rpn_comm_wtime)();
-    double x1 = f77_name(rpn_comm_wtime)();
+    double x = rpn_comm_wtime();
+    double x1 = rpn_comm_wtime();
     int loop = 1;
-    while(x == x1) { x1 = f77_name(rpn_comm_wtime)(); loop++; }
+    while(x == x1) { x1 = rpn_comm_wtime(); loop++; }
     fprintf(stdout,"TIME1= %G %d\n",x1-x,loop);
   }
   fprintf(stdout,"Phase 2, using MPI function MPI_Wtime\n");
-  f77_name(rpn_comm_wtime_set)(MPI_Wtime);
+  rpn_comm_wtime_set(MPI_Wtime);
   for (i=0 ; i<5 ; i++){
-    double x = f77_name(rpn_comm_wtime)();
-    double x1 = f77_name(rpn_comm_wtime)();
+    double x = rpn_comm_wtime();
+    double x1 = rpn_comm_wtime();
     int loop = 1;
-    while(x == x1) { x1 = f77_name(rpn_comm_wtime)(); loop++; }
+    while(x == x1) { x1 = rpn_comm_wtime(); loop++; }
     fprintf(stdout,"TIME2= %G %d\n",x1-x,loop);
   }
   fprintf(stdout,"Phase 3, using get_time_of_day\n");
-  f77_name(rpn_comm_wtime_set)(f77name(rpn_comm_timeofday));
+  rpn_comm_wtime_set(rpn_comm_timeofday);
   for (i=0 ; i<5 ; i++){
-    double x = f77_name(rpn_comm_wtime)();
-    double x1 = f77_name(rpn_comm_wtime)();
+    double x = rpn_comm_wtime();
+    double x1 = rpn_comm_wtime();
     int loop = 1;
-    while(x == x1) { x1 = f77_name(rpn_comm_wtime)(); loop++; }
+    while(x == x1) { x1 = rpn_comm_wtime(); loop++; }
     fprintf(stdout,"TIME3= %G %d\n",x1-x,loop);
   }
   fprintf(stdout,"Phase 4, dummy timing function\n");
-  f77_name(rpn_comm_wtime_set)((void *)f77_name(rpn_comm_wtime_set));
+  rpn_comm_wtime_set((void *)rpn_comm_wtime_set);
   for (i=0 ; i<5 ; i++){
-    double x = f77_name(rpn_comm_wtime)();
-    double x1 = f77_name(rpn_comm_wtime)();
+    double x = rpn_comm_wtime();
+    double x1 = rpn_comm_wtime();
     int loop = 1;
-    while(x == x1) { x1 = f77_name(rpn_comm_wtime)(); loop++; }
+    while(x == x1) { x1 = rpn_comm_wtime(); loop++; }
     fprintf(stdout,"TIME4= %G %d\n",x1-x,loop);
   }
   fprintf(stdout,"Phase 5, TSC timing function\n");
-  f77_name(rpn_comm_wtime_set)((void *)f77_name(rpn_comm_tsc));
+  rpn_comm_wtime_set((void *)rpn_comm_tsc);
   for (i=0 ; i<5 ; i++){
-    double x = f77_name(rpn_comm_wtime)();
-    double x1 = f77_name(rpn_comm_wtime)();
+    double x = rpn_comm_wtime();
+    double x1 = rpn_comm_wtime();
     int loop = 1;
-    while(x == x1) { x1 = f77_name(rpn_comm_wtime)(); loop++; }
+    while(x == x1) { x1 = rpn_comm_wtime(); loop++; }
     fprintf(stdout,"TIME5= %G %d\n",x1-x,loop);
   }
   MPI_Finalize();
