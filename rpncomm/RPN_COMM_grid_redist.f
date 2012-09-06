@@ -27,20 +27,24 @@
 *              B U G G E D              *
 *                                       *
 *****************************************
-      subroutine RPN_COMM_grid_redist(zin,lni,lnj,nk,zout,gni,gnj)
+      subroutine RPN_COMM_grid_redist_2(zin,lni,lnj,nk,zout,gni,gnj,outpe_x,noutpe_x,outpe_y,noutpe_y)
+!     zout only needs to be defined on PEs doing I/O (pe_mex in outpe_x AND pe_mey in outpe_y)
 !
 ! NOTE:
-!     lni should really be nilmax
-!     lnj should really be njlmax
+!     lni should probably really be nilmax
+!     lnj should probably really be njlmax
+!     ltok necessaire ?
 !
 !     this MUST be fixed or disaster will strike
 !     we may want to use RPN_COMM_topo2 here to compute things properly
 !
       use rpn_comm
       implicit none
-      integer, intent(IN) :: lni,lnj,nk,gni,gnj
+      integer, intent(IN) :: lni,lnj,nk,gni,gnj,noutpe_x,noutpe_y
       integer, dimension(lni,lnj,nk), intent(IN) :: zin
       integer, dimension(gni,gnj), intent(OUT) :: zout
+      integer, dimension(noutpe_x) :: outpe_x    ! list of columns where there are PEs doing IO
+      integer, dimension(noutpe_y) :: outpe_y    ! list of rows where there are PEs doing IO
 !
 !      include 'mpif.h'
 !
@@ -48,11 +52,14 @@
       integer, allocatable, dimension(:)   :: recvcounts, rdispls
       integer, allocatable, dimension(:)   :: recvbuf
       integer, allocatable, dimension(:,:) :: reorder
-      integer :: i, j, k, i0, ilast, j0, offset, ierr, the_target
+      integer :: i, j, k, l, i0, ilast, j0, offset, ierr, the_target
       integer :: lminx, lmaxx, mxi
       integer, allocatable, dimension(:)   :: countx, offsetx
-      integer :: lminy, lmaxy, mxj
+      integer :: lminy, lmaxy, mxj, slot
       integer, allocatable, dimension(:)   :: county, offsety
+      integer, dimension(noutpe_x) :: level_x
+!
+      if(nk > noutpe_x*noutpe_y) call abort !  ouch, or maybe only do the  first noutpe_x*noutpe_y
 !
       allocate(recvcounts(max(pe_nx,pe_ny)))
       allocate(rdispls(max(pe_nx,pe_ny)))
@@ -66,6 +73,44 @@
       mxi = countx(1)   ! max tile size along x
       call RPN_COMM_limit(pe_mey,pe_ny,1,gnj,lminy,lmaxy,county,offsety)
       mxj = county(1)   ! max tile size along y
+!
+      level_x = 0
+      do i = 1 , nk
+        slot = 1 + mod(i-1,noutpe_x)
+        level_x(slot) = level_x(slot) + 1
+      enddo
+      k = 1
+      do l = 1 , noutpe_x
+        if(pe_mex == outpe_x(l)) allocate(recvbuf(mxi*lnj*level_x(l)*pe_nx))
+        recvcounts(1) = countx(1)*lnj*level_x(l)
+        rdispls(1) = 1
+        do i = 2 , pe_nx
+          recvcounts(i) = countx(i)*lnj*level_x(l)
+          rdispls(i) = rdispls(i-1) + recvcounts(i-1)
+        enddo
+        call MPI_Gatherv(zin(1,1,k),lni*lnj*level_x(l),MPI_INTEGER,
+     %                   recvbuf,recvcounts,rdispls,MPI_INTEGER,
+     %                   outpe_x(l),pe_myrow,ierr)
+        k = k + level_x(l)
+      enddo
+      if(pe_mex /= outpe_x(l)) goto 111   ! if I am not in an active column, nothing more to do
+      allocate(reorder(gni,lnj))  ! reorder buffer
+      do l = 1 , noutpe_y
+!       fill reorder(gni,lnj) from recvbuf("lni",lnj,"lnk",pe_nx) level l
+        recvcounts(1) = gni*county(1)
+        rdispls(1) = 1
+        do j = 2 , pe_ny
+          recvcounts(j) = gni*county(j)
+          rdispls(j) = rdispls(j-1) + recvcounts(j-1)
+        enddo
+        call MPI_Gatherv(reorder,gni*lnj,MPI_INTEGER,
+     %                   zout,recvcounts,rdispls,MPI_INTEGER,
+     %                   outpe_y(l),pe_mycol,ierr)
+      enddo
+111   deallocate(recvbuf)
+      deallocate(reorder)
+!
+      return
 !
 !     zin data shape  (lni,lnj,nk) on PE( 0:pe_nx-1  ,0:pe_ny-1 )
 !
