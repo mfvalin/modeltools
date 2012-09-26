@@ -17,8 +17,6 @@
  * Free Software Foundation, Inc., 59 Temple Place - Suite 330,
  * Boston, MA 02111-1307, USA.
  */
-#define f77name(a) a ## _
-#define f77_name(a) a ## _
 #define ftnword int
 
 #include <stdio.h>
@@ -222,24 +220,28 @@ static int bind_to_port(int *port, int *ipaddress)
 
 /* ------------------- END OF CODE BORROWED AND/OR ADAPTED FROM gossip_sock  ----------------- */
 
-int f77_name(f_omp_get_max_threads)();
-int f77_name(f_omp_set_num_threads)();
+int f_omp_get_max_threads();
+int f_omp_set_num_threads();
 static int omp_max_threads=1;
 
-static void f77_name(save_openmp_state)()
+#pragma weak save_openmp_state__=save_openmp_state
+#pragma weak save_openmp_state_=save_openmp_state
+static void save_openmp_state()
 {
   int ONE=1;
 
-  omp_max_threads=f77_name(f_omp_get_max_threads)();
-  f77_name(f_omp_set_num_threads)(&ONE);
+  omp_max_threads=f_omp_get_max_threads();
+  f_omp_set_num_threads(&ONE);
 /*
   printf("Saved state : %d CPUs\n",omp_max_threads);
   printf("Number of threads set to %d\n",ONE);
 */
 }
-void f77_name(restore_openmp_state)()
+#pragma weak restore_openmp_state__=restore_openmp_state
+#pragma weak restore_openmp_state_=restore_openmp_state
+void restore_openmp_state()
 {
-  f77_name(f_omp_set_num_threads)(&omp_max_threads);
+  f_omp_set_num_threads(&omp_max_threads);
 /*
   printf("Number of threads set to %d\n",omp_max_threads);
 */
@@ -253,7 +255,7 @@ struct set_of_ports {
 	int *list_port;             /* pointer to list of other's port numbers */
 	int pe_me;                  /* own pe number in communicator space */
 	int nprocs;                 /* number of PEs in communicator space */
-	int comm;                   /* communicator */
+	MPI_Comm comm;                   /* communicator */
 	struct set_of_ports *next;  /* pointer to next set_of_ports in chain */
        };
 static struct set_of_ports *chain = NULL;  /* chain of set_of_ports */
@@ -269,28 +271,31 @@ static struct set_of_ports *init_set_of_ports()
 	p->list_port=NULL;
 	p->pe_me=-1;
 	p->nprocs=-1;
-	p->comm=-1;
+	p->comm=MPI_COMM_NULL;
 	p->next=NULL;
 	
 	return(p);
 }
 
-ftnword f77_name(rpn_comm_softbarrier_init)(ftnword *comm)  /* bind to port, return pointer to structure */
+#pragma weak rpn_comm_softbarrier_init__=rpn_comm_softbarrier_init
+#pragma weak rpn_comm_softbarrier_init_=rpn_comm_softbarrier_init
+ftnword rpn_comm_softbarrier_init(ftnword *ftn_comm)  /* bind to port, return pointer to structure */
 {
         struct set_of_ports *p=chain; /* verifier s'il n'existe pas deja un setup pour ce communicateur */
+	MPI_Comm comm=MPI_Comm_f2c(*ftn_comm);
 
-        while ( (p!=NULL) && (p->comm != *comm) ) p = p->next ;
+        while ( (p!=NULL) && (p->comm != comm) ) p = p->next ;
         if ( p == NULL ) p=(struct set_of_ports *)malloc(sizeof(struct set_of_ports));
-        else return(*comm);      /* already initialized, return communicator */
+        else return(*ftn_comm);      /* already initialized, return communicator */
 	
 	if(p == NULL) return(-1);   /* something went wrong with malloc */
 	
 	p->my_server=bind_to_port(&(p->my_port),&(p->my_ip));   /* bind to a port, get address */
-	MPI_Comm_rank(*comm,&(p->pe_me));                       /* get my rank and size of communicator */
-	MPI_Comm_size(*comm,&(p->nprocs));
+	MPI_Comm_rank(comm,&(p->pe_me));                       /* get my rank and size of communicator */
+	MPI_Comm_size(comm,&(p->nprocs));
 	p->list_server= malloc(p->nprocs*sizeof(int));          /* allocate list of servers and list of ports */
 	p->list_port  = malloc(p->nprocs*sizeof(int));
-	p->comm       = *comm;                                  /* remember communicator associated with all this */
+	p->comm       = comm;                                   /* remember communicator associated with all this */
 	p->next       = chain;                                  /* insert in table chain */
 	
 	chain         = p;
@@ -298,19 +303,21 @@ ftnword f77_name(rpn_comm_softbarrier_init)(ftnword *comm)  /* bind to port, ret
 	listen(p->my_server,2);                                 /* initialize listener socket */
         /* everybody gets list of ips and ports associated to this communicator */
 	if( p->nprocs > 1 ) {                  /* only one processor, there is nothing to gather */
-	  MPI_Allgather(&(p->my_ip)  ,1,MPI_INTEGER,p->list_server,1,MPI_INTEGER,*comm);
-	  MPI_Allgather(&(p->my_port),1,MPI_INTEGER,p->list_port  ,1,MPI_INTEGER,*comm);
+	  MPI_Allgather(&(p->my_ip)  ,1,MPI_INTEGER,p->list_server,1,MPI_INTEGER,comm);
+	  MPI_Allgather(&(p->my_port),1,MPI_INTEGER,p->list_port  ,1,MPI_INTEGER,comm);
 	}
 #ifdef DEBUG
 	if(p->pe_me==0){
 	  for(pe=0;pe<p->nprocs;pe++) printf("PE=%d, IP=%x, port=%d\n",pe,p->list_server[pe],p->list_port[pe]);
 	}
 #endif
-	return(*comm);
+	return(MPI_Comm_c2f(comm));
 }
-ftnword f77_name(rpn_comm_softbarrier_init_all)(){
-	ftnword world=MPI_COMM_WORLD;
-	return(f77_name(rpn_comm_softbarrier_init)(&world));
+#pragma weak rpn_comm_softbarrier_init_all__=rpn_comm_softbarrier_init_all
+#pragma weak rpn_comm_softbarrier_init_all_=rpn_comm_softbarrier_init_all
+ftnword rpn_comm_softbarrier_init_all(){
+	ftnword world=MPI_Comm_c2f(MPI_COMM_WORLD);
+	return(rpn_comm_softbarrier_init(&world));
 }
 
 /* sequence of operations
@@ -327,19 +334,23 @@ ftnword f77_name(rpn_comm_softbarrier_init_all)(){
    close(PE 1)               close(PE 2)                 NO-OP
 
 */
-int f77_name(rpn_comm_softbarrier)(ftnword *comm)   /* perform a soft sync */
+
+#pragma weak rpn_comm_softbarrier__=rpn_comm_softbarrier
+#pragma weak rpn_comm_softbarrier_=rpn_comm_softbarrier
+int rpn_comm_softbarrier(ftnword *ftn_comm)   /* perform a soft sync */
 {
+  MPI_Comm comm=MPI_Comm_f2c(*ftn_comm);
   char buf[1024];
   int fdesc_up=-1, fdesc_down=-1;
   int status=-1;
   struct set_of_ports *p=chain;
   
-  while ( (p!=NULL) && (p->comm != *comm) ) p = p->next ;
+  while ( (p!=NULL) && (p->comm != comm) ) p = p->next ;
   if ( p == NULL ) return(-1);
   
   if (  p->nprocs == 1 ) return 0 ;     /* only one processor, nothing much to do !! */
 
-  f77_name(save_openmp_state)();
+  save_openmp_state();
 #ifdef DEBUG
   printf("Entering rpn_comm_soft_sync, PE=%d\n",p->pe_me);
   fflush(stdout);
@@ -367,7 +378,7 @@ int f77_name(rpn_comm_softbarrier)(ftnword *comm)   /* perform a soft sync */
 
   if(fdesc_up != -1) close(fdesc_up);
   if(fdesc_down != -1) close(fdesc_down);
-  f77_name(restore_openmp_state)();
+  restore_openmp_state();
   status=0;
   return(status);
 }
