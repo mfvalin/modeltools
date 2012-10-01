@@ -377,7 +377,7 @@
 *
 *     make communicator for PEs on same host
 *
-      my_color = f_gethostid()  ! coloring by host identifier
+      my_color = abs(f_gethostid())  ! coloring by host identifier
       call MPI_COMM_SPLIT(pe_grid,my_color,
      &                    pe_me_grid,pe_grid_host,ierr)        ! same (sub)grid, same host node communicator
       call MPI_COMM_RANK(pe_grid_host,pe_me_grid_host,ierr)    ! my rank on this host
