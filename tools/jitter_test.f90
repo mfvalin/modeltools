@@ -2,7 +2,7 @@
       implicit none
       include 'mpif.h'
       integer, parameter :: niter=50
-      integer, parameter :: nis=3000
+      integer, parameter :: nis=1000
       integer, parameter :: njs=400
       integer, parameter :: nks=120
       integer iter,ierr,irank,iterext,isize
@@ -10,7 +10,7 @@
       real *8, dimension(niter) :: timea, timeb, timec, timed, timee, timef, time1, time2, time3
       real *8, dimension(:,:), pointer :: time1all, time2all, time3all
       real *8 tjitter,t0,t1,t2,tstart,tend
-      real *8 tmax, tmin, tmean, tsum, tsum2, tdev
+      real *8 tmax, tmin, tmean, tsum, tsum2, tdev, tminmax, tmaxmin
       real *8, dimension(:,:,:), pointer :: r,a,b
 
 external report_cpu_binding
@@ -79,34 +79,47 @@ integer bind_thread_to_cpu
       tend=mpi_wtime()
       
       timed = timeb-timea  ! compute time
-      timee = timec-timeb  ! barrier time
-      timef = timec-timea  ! iteration time
-      call mpi_reduce(timed,time1,niter,MPI_DOUBLE_PRECISION,MPI_MAX,0,MPI_COMM_WORLD,ierr)
+!      call mpi_reduce(timed,time1,niter,MPI_DOUBLE_PRECISION,MPI_MAX,0,MPI_COMM_WORLD,ierr)
       call mpi_gather(timed,niter,MPI_DOUBLE_PRECISION,time1all,niter,MPI_DOUBLE_PRECISION,0,MPI_COMM_WORLD,ierr)
-      call mpi_reduce(timee,time2,niter,MPI_DOUBLE_PRECISION,MPI_MAX,0,MPI_COMM_WORLD,ierr)
+
+      timee = timec-timeb  ! barrier time
+!      call mpi_reduce(timee,time2,niter,MPI_DOUBLE_PRECISION,MPI_MAX,0,MPI_COMM_WORLD,ierr)
       call mpi_gather(timee,niter,MPI_DOUBLE_PRECISION,time2all,niter,MPI_DOUBLE_PRECISION,0,MPI_COMM_WORLD,ierr)
-      call mpi_reduce(timef,time3,niter,MPI_DOUBLE_PRECISION,MPI_MAX,0,MPI_COMM_WORLD,ierr)
+
+      timef = timec-timea  ! iteration time
+!      call mpi_reduce(timef,time3,niter,MPI_DOUBLE_PRECISION,MPI_MAX,0,MPI_COMM_WORLD,ierr)
       call mpi_gather(timef,niter,MPI_DOUBLE_PRECISION,time3all,niter,MPI_DOUBLE_PRECISION,0,MPI_COMM_WORLD,ierr)
+
       if(irank==0)then
 !        do iter=1,niter
 !          print 99,'iteration(',iterext,'):',iter,' time=',time1(iter),time2(iter),time3(iter)
-99        format(A,I1,A,i4,a,4F12.6)
+!99        format(A,I1,A,i4,a,4F12.6)
 !        enddo
-        print 100,'Diag(',1000*iterext,'): MAX,MIN,RATIO time for computation   =',maxval(time1(1:niter)),minval(time1(1:niter)),maxval(time1(1:niter))/minval(time1(1:niter))
-        print 100,'Diag(',1000*iterext,'): MAX,MIN,RATIO time for an iteration  =',maxval(time3(1:niter)),minval(time3(1:niter)),maxval(time3(1:niter))/minval(time3(1:niter))
-        print 100,'Diag(',1000*iterext,'): MAX,MIN,RATIO longest wait on barrier=',maxval(time2(1:niter)),minval(time2(1:niter)),maxval(time2(1:niter))/minval(time2(1:niter))
+!        print 100,'Diag(',1000*iterext,'): MAX,MIN,RATIO time for computation   =', &
+!                  maxval(time1(1:niter)),minval(time1(1:niter)),maxval(time1(1:niter))/minval(time1(1:niter))
+!        print 100,'Diag(',1000*iterext,'): MAX,MIN,RATIO time for an iteration  =', &
+!                  maxval(time3(1:niter)),minval(time3(1:niter)),maxval(time3(1:niter))/minval(time3(1:niter))
+!        print 100,'Diag(',1000*iterext,'): MAX,MIN,RATIO longest wait on barrier=', &
+!                  maxval(time2(1:niter)),minval(time2(1:niter)),maxval(time2(1:niter))/minval(time2(1:niter))
+
         print 100,'Diag(',1000*iterext,'): END to END time                      =',tend-tstart
 100     format(A,I4,A,5F12.6)
+
+        tminmax=0.0
+        tmaxmin=999999999.0
         do iter=1,niter
           tmax=maxval(time1all(iter,:))   ! max compute for all MPI tiles (this iteration)
+          tmaxmin=min(tmaxmin,tmax)
           tmin=minval(time1all(iter,:))   ! min compute for all MPI tiles (this iteration)
+          tminmax=max(tminmax,tmin)
           tsum=sum(time1all(iter,:))
           tsum2=sum(time1all(iter,:)**2)
           tmean=tsum/isize
           timeb(iter)=tmean               ! average compute (this iteration)
           timec(iter)=sqrt(  sum(  ( time1all(iter,:)-tmean )**2  )  )   ! RMS 
           timea(iter)=timea(iter)/minval(time1all(iter,:))  ! compute jitter ratio for an iteration
-          print 100,'DIAG(',iter+1000*iterext,')CPU jitter(min/max/avg/rms%):',tmin,tmax,timeb(iter),100.0*timec(iter)/timeb(iter)
+          print 100,'DIAG(',iter+1000*iterext,')CPU jitter(min/max/avg/< >%):',tmin,tmax,timeb(iter),100.0*(tmax-tmin)/tmin
+!          print 100,'DIAG(',iter+1000*iterext,')CPU jitter(min/max/avg/rms%):',tmin,tmax,timeb(iter),100.0*timec(iter)/timeb(iter)
         enddo
         tmax=maxval(time1all)
         tmin=minval(time1all)
@@ -114,7 +127,10 @@ integer bind_thread_to_cpu
         tsum2=sum(time1all**2)
         tmean=tsum/(niter*isize)
         tdev=sqrt(  sum(  ( time1all-tmean )**2  )  )   ! RMS
-        print 100,'DIAG(',1000*iterext,')TOT jitter(min/max/avg/rms%):',tmin,tmax,tmean,100*tdev/tmean
+        print 100,'DIAG(',1000*iterext,')TOT jitter(min/max/avg/< >%):',tmin,tmax,tmean,100*(tmax-tmin)/tmean
+!        print 100,'DIAG(',1000*iterext,')TOT jitter(min/max/avg/rms%):',tmin,tmax,tmean,100*tdev/tmean
+        print 100,'DIAG(',1000*iterext,')MIN/MAX/AVG jitter(%)       :',100*(tminmax-tmin)/tmin,100*(tmax-tmaxmin)/tmaxmin, &
+                                                                        100*(maxval(timeb)-minval(timeb))/minval(timeb)
       endif
 
 !      deallocate(r,a,b)
