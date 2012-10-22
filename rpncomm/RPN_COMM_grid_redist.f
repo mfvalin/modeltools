@@ -17,7 +17,101 @@
 * * Free Software Foundation, Inc., 59 Temple Place - Suite 330,
 * * Boston, MA 02111-1307, USA.
 * */
+      integer function RPN_COMM_grid_redist_test()
+      use rpn_comm
+      implicit none
+      integer :: RPN_COMM_grid_redist
+      external :: RPN_COMM_grid_redist
+      integer, pointer, dimension(:,:,:) :: localarray
+      integer, pointer, dimension(:,:,:) :: globalarray
+      integer :: lni, lnj, gni, gnj
+      integer :: lminx,lmaxx,lminy,lmaxy
+      integer, dimension(pe_nx) :: countx,offsetx
+      integer, dimension(pe_ny) :: county,offsety
+      integer :: i, j, jj, k, ierr, ltok, status
+      integer :: i0, in, j0, jn
+      integer, dimension(2) :: outpe_x, outpe_y
+      integer, dimension(2) :: zlist
+      integer :: nk, nz
+      
+      if(pe_me==0) write(rpn_u,*)'grid redistribution test',
+     %    pe_tot_grid,pe_nx,pe_ny
 
+      outpe_x = (/ 0,pe_nx-1 /)
+      outpe_y = (/ 0,pe_ny-1 /)
+      gni = pe_nx*5
+      gnj = pe_ny*7
+      nk = 4
+      call RPN_COMM_limit(pe_mex,pe_nx,1,gni,lminx,lmaxx,countx,offsetx)
+      call RPN_COMM_limit(pe_mey,pe_ny,1,gnj,lminy,lmaxy,county,offsety)
+      allocate(localarray(lminx-1:lmaxx+2,lminy-2:lmaxy+1,nk))
+      localarray = 0
+      do k = 1,nk
+      do j = lminy,lmaxy
+      do i = lminx,lmaxx
+        localarray(i,j,k) = k + 10*j + 1000*i
+      enddo
+      enddo
+      enddo
+      if(pe_me==0) then
+        write(rpn_u,*)'local array allocated',lminx,lmaxx,lminy,lmaxy
+        do j = lmaxy,lminy,-1
+          write(rpn_u,100) localarray(lminx:lmaxx,j,nk-1)
+        enddo
+100     format(10I7.5)
+      endif
+      if(pe_me==0)then
+        write(rpn_u,*)'outpe_x =',outpe_x
+        write(rpn_u,*)'outpe_y =',outpe_y
+      endif
+      call mpi_barrier(MPI_COMM_WORLD,ierr)
+      nullify(globalarray)
+      i0 = 1
+      in = gni
+      j0 = 1
+      jn = gnj
+      do j = 1,2
+      do i = 1,2
+        if(outpe_x(i)==pe_mex .and. outpe_y(j)==pe_mey)then
+          allocate(globalarray(i0:in,j0:jn,2))
+          write(rpn_u,*)'global array allocated',i0, in, j0, jn
+        endif
+      enddo
+      enddo
+      if(.not. associated(globalarray))allocate(globalarray(1,1,2))
+      globalarray = 0
+      call mpi_barrier(MPI_COMM_WORLD,ierr)
+      write(rpn_u,*)'global array dims',i0, in, j0, jn
+      
+      zlist = -1
+      nz = 2
+      ltok = 1
+      if(.true.)then
+      status = RPN_COMM_grid_redist(
+     % localarray,1-1,5+2,1,5,1-2,7+1,1,7,nk,
+     % globalarray,i0,in,j0,jn,nz,zlist,
+     % gni,gnj,outpe_x,2,outpe_y,2,
+     % ltok)
+      RPN_COMM_grid_redist_test = status
+      if(pe_me==0)write(rpn_u,*)'status=',status
+      endif
+      do j = 1,2
+      do i = 1,2
+        call mpi_barrier(MPI_COMM_WORLD,ierr)
+        if(outpe_x(i)==pe_mex .and. outpe_y(j)==pe_mey)then
+          write(rpn_u,101)'global array =',pe_mex,pe_mey,i0,in,j0,jn
+101       format(A,6I5)
+          do jj = jn,j0,-5
+!            write(rpn_u,*)jj,i0,in,5
+            write(rpn_u,100)globalarray(i0:in:5,jj,1)
+          enddo
+        endif
+      enddo
+      enddo
+      if(associated(globalarray)) deallocate(globalarray)
+      deallocate(localarray)
+      return
+      end function RPN_COMM_grid_redist_test
 *****************************************
 *                                       *
 *             W A R N I N G             *
@@ -27,10 +121,11 @@
 *              B U G G E D              *
 *                                       *
 *****************************************
-      integer function RPN_COMM_grid_redist(ltok,
+      integer function RPN_COMM_grid_redist(
      %           zin,mini,maxi,i0,in,minj,maxj,j0,jn,nk,
      %           zout,ix0,ixn,jy0,jyn,nz,zlist,
-     %           gni,gnj,outpe_x,noutpe_x,outpe_y,noutpe_y)
+     %           gni,gnj,outpe_x,noutpe_x,outpe_y,noutpe_y,
+     %           ltok)
       use rpn_comm
       implicit none
       integer, intent(IN) :: mini,maxi,i0,in,minj,maxj,j0,jn,nk,ltok
@@ -62,6 +157,13 @@
       RPN_COMM_grid_redist = -1  ! return -1 if an error occurred
       if(ltok .ne. 1 ) return   ! for now, ltok MUST be = 1 (feature not implemented yet)
       if(nk > noutpe_x*noutpe_y) return !  OUCH !! , or maybe only do the first noutpe_x*noutpe_y
+      nullify(dest,dest2,source,source2,ptr1d)
+      if(pe_me==-1)then
+        write(rpn_u,*)mini,maxi,i0,in,minj,maxj,j0,jn,nk
+        write(rpn_u,*)ix0,ixn,jy0,jyn,nz
+        write(rpn_u,*)zlist
+        write(rpn_u,*)gni,gnj,outpe_x,noutpe_x,outpe_y,noutpe_y,ltok
+      endif
       narrays = nk
       needed_for_pass2 = .false.
       size_error = .false.
@@ -78,35 +180,57 @@
       enddo
 !
       do j = 1 , pe_ny   ! start and end of valid data on PE(any,j) along y in global space
-        jstart_g(j) = max(jy0,offsety(j))
-        jend_g(j)   = min(jyn,offsety(j) + county(j) -1)
+        jstart_g(j) = max(jy0,1+offsety(j))
+        jend_g(j)   = min(jyn,offsety(j) + county(j))
       enddo
-      jstart = jstart_g(pe_mey)  ! same as above but for my row
-      jend   = jend_g(pe_mey)
+      jstart = jstart_g(pe_mey+1)  ! same as above but for my row
+      jend   = jend_g(pe_mey+1)
       do i = 1 , pe_nx   ! start and end of valid data on PE(i,any) along x in global space
-        istart_g(i) = max(ix0,offsetx(i))
-        iend_g(i)   = min(ixn,offsetx(i) + countx(i) -1)
+        istart_g(i) = max(ix0,1+offsetx(i))
+        iend_g(i)   = min(ixn,offsetx(i) + countx(i))
       enddo
-      istart = istart_g(pe_mex)  ! same as above but for my column
-      iend   = iend_g(pe_mex)
+      istart = istart_g(pe_mex+1)  ! same as above but for my column
+      iend   = iend_g(pe_mex+1)
       if((in-i0).ne.(iend-istart) .or. (jn-j0).ne.(jend-jstart)) then  ! size consistency problem ?
         if(istart<=iend) size_error = .true.  ! add error message 
+        if(istart<=iend)then
+          write(rpn_u,100)'error on pe',pe_mex,pe_mey,' =',
+     %          i0,in,istart,iend,j0,jn,jstart,jend
+100       format(A,2I2,A,10I8)
+        endif
+      endif
+      if(pe_me==-1)then
+        write(rpn_u,001)'countx=',countx
+        write(rpn_u,001)'offsetx=',offsetx
+        write(rpn_u,001)'county=',county
+        write(rpn_u,001)'offsety=',offsety
+        write(rpn_u,001)'JS limits=',jstart_g
+        write(rpn_u,001)'JE limits=',jend_g
+        write(rpn_u,001)'IS limits=',istart_g
+        write(rpn_u,001)'IE limits=',iend_g
+001     format(A,20I3)
       endif
 !     check if a size error occurred somewhere in pe_grid, if so return -1
       call MPI_allreduce(MPI_IN_PLACE,size_error,1,MPI_LOGICAL,MPI_LOR,
      %                   pe_grid,ierr)
       if(size_error) return
 !
+      if(.false.)then
+      write(rpn_u,001)'start of pass 1, pe=',
+     %      pe_me,pe_mex,pe_mey,istart,iend,jstart,jend,
+     %      istart_g,iend_g,jstart_g,jend_g,
+     %      ix0,ixn,jy0,jyn
+      return
+      endif
       if(jstart <= jend) then  ! there is something to do during pass 1 for this PE row
         do i = 1 , pe_nx                                  ! horizontal size of 2D fragments
           gsize_x(i)  = max(0,iend_g(i)-istart_g(i)+1) *  ! gsize_x may be zero for some PEs
      %                  max(0,jend-jstart+1)
         enddo
 !
-        kbot = 0
+        kbot = 1
         do l = 1 , noutpe_x
           if(level_x(l)==0) cycle  ! no output to do on this column
-          kbot = kbot + level_x(l)
           ktop = kbot + level_x(l) - 1
 !         calculate counts and displacements for gatherv along x
           gcounts_x = gsize_x * level_x(l)  ! horizontal size * number of "levels" to gather
@@ -116,6 +240,8 @@
           enddo
 !
           if(istart<=iend) then ! something to gather from this PE
+          write(rpn_u,*)'allocating',istart,iend,jstart,jend,kbot,ktop
+          call flush(rpn_u)
             allocate(source(istart:iend,jstart:jend,kbot:ktop))     ! source buffer
             source(istart:iend,jstart:jend,kbot:ktop) = 
      %         zin(i0:in,j0:jn,kbot:ktop)
@@ -133,6 +259,7 @@
      %                     dest,gcounts_x+1,gdispl_x,MPI_INTEGER,
      %                     outpe_x(l),pe_myrow,ierr)
           deallocate(source)
+          kbot = kbot + level_x(l)
         enddo
       else  ! no action on this row, allocate dummy source2 used in y direction gatherv
         do l = 1 , noutpe_x
@@ -143,6 +270,8 @@
           endif
         enddo
       endif   ! (jstart <= jend)
+      write(rpn_u,*)'end of pass 1, pe=',pe_me
+      needed_for_pass2=.false.
       if(needed_for_pass2) then
         nullify(dest2)
         temp = 0
@@ -195,10 +324,13 @@
           endif
         
         enddo  ! k = 1 , n2d
-        if(associated(dest2)) deallocate(dest2)
-        deallocate(dest,source2)
+        write(rpn_u,*)'end of pass 2, pe=',pe_me
       endif
+      if(associated(dest2)) deallocate(dest2)
+      if(associated(dest)) deallocate(dest)
+      if(associated(source2)) deallocate(source2)
 !
+      write(rpn_u,*)'end of pass 1+2, pe=',pe_me
       RPN_COMM_grid_redist = 1  ! number of 2D reassembled fields returned
       return
 !

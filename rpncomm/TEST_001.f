@@ -1,5 +1,7 @@
 	program test_001
 	implicit none
+	external :: RPN_COMM_grid_redist_test
+	integer :: RPN_COMM_grid_redist_test
 	external RPN_COMM_init, TestUserInit, get_a_free_unit
         integer :: get_a_free_unit
 	integer :: RPN_COMM_dist_test
@@ -18,6 +20,9 @@
         close(UNIT=iun)
         if(IAND(test_to_perform,1)==1)then
           ierr=RPN_COMM_dist_test(Petotal)
+        endif
+        if(IAND(test_to_perform,2)==2)then
+          ierr=RPN_COMM_grid_redist_test()
         endif
         call RPN_COMM_finalize(ierr)
 	stop
