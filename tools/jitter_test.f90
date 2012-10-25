@@ -51,7 +51,7 @@ integer bind_thread_to_cpu
       allocate(a(nis,njs,nks))
       allocate(b(nis,njs,nks))
 
-      do iterext=1,3
+      do iterext=1,7
       r = 2.1+iterext
       a = 0.5+iterext
       b = 2.3+iterext
@@ -62,13 +62,13 @@ integer bind_thread_to_cpu
       tstart=mpi_wtime()
       do iter=1,niter
         timea(iter) = mpi_wtime()
-        if(iterext==1) then
+        if(iand(iterext,4)==4) then
           call computefornothing_a(r,a,b,nis,njs,nks)
         endif
-        if(iterext==2) then
+        if(iand(iterext,2)==2) then
           call computefornothing_b(r,a,b,nis,njs,nks)
         endif
-        if(iterext==3) then
+        if(iand(iterext,1)==1) then
           call computefornothing_c(r,a,b,nis,njs,nks)
         endif
         timeb(iter)=mpi_wtime()
