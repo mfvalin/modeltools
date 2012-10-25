@@ -20,7 +20,7 @@ integer omp_get_thread_num
 external omp_get_max_threads
 integer omp_get_max_threads
 external bind_thread_to_cpu
-integer bind_thread_to_cpu
+integer bind_thread_to_cpu,bind_thread
 
 !print *,'MAX threads=',omp_get_max_threads()
 !      call omp_set_num_threads(max(1,omp_get_max_threads()-1))
@@ -40,11 +40,12 @@ integer bind_thread_to_cpu
         allocate(time3all(niter,1))
       endif
 !$OMP parallel
-      print *,'thread',omp_get_thread_num(),' bound to cpu',  bind_thread_to_cpu()
+      bind_thread=bind_thread_to_cpu()
+!      print *,'thread',omp_get_thread_num(),' bound to cpu',  bind_thread
 !$OMP end parallel
 
 !$OMP parallel
-      print *,'before from thread', 1+omp_get_thread_num(),' of',omp_get_max_threads(),' bound to',report_cpu_binding()
+!      print *,'before from thread', 1+omp_get_thread_num(),' of',omp_get_max_threads(),' bound to',report_cpu_binding()
 !$OMP end parallel
 
       allocate(r(nis,njs,nks))
@@ -102,9 +103,6 @@ integer bind_thread_to_cpu
 !        print 100,'Diag(',1000*iterext,'): MAX,MIN,RATIO longest wait on barrier=', &
 !                  maxval(time2(1:niter)),minval(time2(1:niter)),maxval(time2(1:niter))/minval(time2(1:niter))
 
-        print 100,'Diag(',1000*iterext,'): END to END time                      =',tend-tstart
-100     format(A,I4,A,5F12.6)
-
         tminmax=0.0
         tmaxmin=999999999.0
         do iter=1,niter
@@ -131,6 +129,9 @@ integer bind_thread_to_cpu
 !        print 100,'DIAG(',1000*iterext,')TOT jitter(min/max/avg/rms%):',tmin,tmax,tmean,100*tdev/tmean
         print 100,'DIAG(',1000*iterext,')MIN/MAX/AVG jitter(%)       :',100*(tminmax-tmin)/tmin,100*(tmax-tmaxmin)/tmaxmin, &
                                                                         100*(maxval(timeb)-minval(timeb))/minval(timeb)
+
+        print 100,'Diag(',1000*iterext,')END to END / ideal / ratio  :',tend-tstart,niter*tmin,(tend-tstart)/(niter*tmin)
+100     format(A,I4,A,5F12.6)
       endif
 
 !      deallocate(r,a,b)
@@ -155,7 +156,7 @@ integer bind_thread_to_cpu
       do k=1,nks
       do j=1,njs
       do i=1,nis
-         r(i,j,k)=r(i,j,k)+4*i*j*k+(a(i,j,k)-1)*b(i,j,k)
+         r(i,j,k)=min(1000000.D0,r(i,j,k)+4.0*i*j*k+(a(i,j,k)-1)*b(i,j,k))
       end do
       end do
       end do
@@ -180,7 +181,7 @@ integer bind_thread_to_cpu
       do k=1,nks
       do j=1,njs
       do i=1,nis
-         r(i,j,k)=r(i,j,k)+4*i*j*k+(r(i,j,k)-1)
+         r(i,j,k)=min(1000000.D0,r(i,j,k)+4.0*i*j*k+(r(i,j,k)-1)*r(i,j,k))
       end do
       end do
       end do
