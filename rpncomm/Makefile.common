@@ -29,7 +29,7 @@ tests:	$(TESTS)
 	make $(TESTS)
 
 clean:
-	rm -f *.o $(TESTS) $(CLEAN)
+	rm -f *.o *.mod $(TESTS) $(CLEAN)
 
 veryclean:
 	rm -f *.o *.mod *.FLAG f77name.h $(TESTS) *~ $(VERYCLEAN) $(CLEAN)

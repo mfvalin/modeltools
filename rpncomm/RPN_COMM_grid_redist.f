@@ -49,7 +49,7 @@
       outpe_y(1) = 0
       gni = pe_nx*lni
       gnj = pe_ny*lnj
-      nk = nox*noy
+      nk = nox*noy*2
       call RPN_COMM_limit(pe_mex,pe_nx,1,gni,lminx,lmaxx,countx,offsetx)
       call RPN_COMM_limit(pe_mey,pe_ny,1,gnj,lminy,lmaxy,county,offsety)
       allocate(localarray(lminx-1:lmaxx+2,lminy-2:lmaxy+1,nk))
@@ -77,10 +77,10 @@
       endif
       call mpi_barrier(MPI_COMM_WORLD,ierr)
       nullify(globalarray)
-      ix0 = lni+(lni+1)/2-1
-      ixn = gni-2*lni+(lni+1)/2+1
-      jy0 = (lnj+1)/2 + lnj-1
-      jyn = gnj-2*lnj+(lnj+1)/2+1
+      ix0 = 1 ! lni+(lni+1)/2-1
+      ixn = gni ! gni-2*lni+(lni+1)/2+1
+      jy0 = 1 ! (lnj+1)/2 + lnj-1
+      jyn = gnj ! gnj-2*lnj+(lnj+1)/2+1
       i0=1
       if(ix0>lminx) i0 = i0 + (ix0-lminx)
       in=lni
@@ -101,12 +101,13 @@
       globalarray = 0
       do i=1,pe_nx*pe_ny
       call mpi_barrier(MPI_COMM_WORLD,ierr)
-      if(pe_me==i-1)
-     %  write(rpn_u,*)'global array dims',
+      if(.false. .and. pe_me==i-1)
+     %  write(rpn_u,101)'global array dims',
      %                pe_mex,pe_mey,shape(globalarray)
+101     format(A,10I5)
       enddo
       zlist = -1
-      nz = 1
+      nz = 2
       ltok = 1
       if(.true.)then
       status = RPN_COMM_grid_redist(
@@ -114,34 +115,46 @@
      % globalarray,ix0,ixn,jy0,jyn,nz,zlist,
      % gni,gnj,outpe_x,nox,outpe_y,noy,
      % ltok)
+!      goto 777
       RPN_COMM_grid_redist_test = status
+      call mpi_barrier(MPI_COMM_WORLD,ierr)
       if(pe_me==0)write(rpn_u,*)'status=',status
       endif
       if(status==-1)goto 777
-      call mpi_barrier(MPI_COMM_WORLD,ierr)
-      write(rpn_u,*)'pe=',pe_mex,pe_mey,'zlist=',zlist
-      call mpi_barrier(MPI_COMM_WORLD,ierr)
+      do i=1,pe_nx*pe_ny
+        call mpi_barrier(MPI_COMM_WORLD,ierr)
+        if(pe_me==i-1) then
+          write(rpn_u,*)'pe=',pe_mex,pe_mey,' zlist=',zlist
+        endif
+        call mpi_barrier(MPI_COMM_WORLD,ierr)
+      enddo
       do k0 = 1 , 2
+        call mpi_barrier(MPI_COMM_WORLD,ierr)
         if(zlist(k0)>0) then
           k=mod(globalarray(ix0,jy0,k0),10)
+          k=zlist(k0)
           ierr=vfy_array(globalarray,ix0,ixn,jy0,jyn,2,k0,k)
-          write(rpn_u,*)'pe=',pe_mex,pe_mey,'level=',k,' errors=',ierr
+          write(rpn_u,102)'pe=',pe_mex,pe_mey,
+     %         ',  level=',k,',  errors=',ierr
+102       format(A,2I3,A,I3,a,I3)
         endif
       enddo
 !      if(pe_me==outpe_x(nox)+pe_nx*outpe_x(noy)) then
-      do i = 1,nox
-      do j = 1,noy
-        call mpi_barrier(MPI_COMM_WORLD,ierr)
-        if(outpe_x(i)==pe_mex .and. outpe_y(j)==pe_mey)then
-          write(rpn_u,101)'global array =',
+      do k = 1,nk
+       do i = 0,pe_nx*pe_ny-1
+        do k0=1,2   ! size(zlist)
+         call mpi_barrier(MPI_COMM_WORLD,ierr)
+         if(i/=pe_me)cycle
+         if(zlist(k0)==k)then
+            write(rpn_u,103)'global array =',
      %          pe_mex,pe_mey,ix0,ixn,jy0,jyn
-101       format(A,20I6.5)
-          do jj = jyn,jy0,-1
-!            write(rpn_u,*)jj,i0,in,5
-            write(rpn_u,101)' ',globalarray(ix0:ixn,jj,1)
-          enddo
-        endif
-      enddo
+103         format(A,20(1X,I5.5))
+            do jj = jyn,jy0,-1
+              write(rpn_u,103)' ',globalarray(ix0:ixn,jj,k0)
+            enddo
+         endif
+        enddo
+       enddo
       enddo
 !      endif
 777   if(associated(globalarray)) deallocate(globalarray)
@@ -163,7 +176,7 @@
       do i=mini,maxi
         if(zin(i,j,k)/=ref+10*j+1000*i)then
           nerr=nerr+1
-          print *,'error',i,j,k,ref,zin(i,j,k),ref+10*j+1000*i
+!          print *,'error',i,j,k,ref,zin(i,j,k),ref+10*j+1000*i
         endif
       enddo
       enddo
@@ -204,6 +217,7 @@
       integer, dimension(pe_nx) :: gdispl_x, gcounts_x, gsize_x
       integer, dimension(pe_ny) :: gdispl_y, gcounts_y
       integer, dimension(noutpe_x) :: level_x
+      integer, dimension(nz*noutpe_y) :: level_table
       integer :: istart, iend, jstart, jend
       integer, pointer, dimension(:)     :: dest, dest2, ptr1d
       integer, pointer, dimension(:,:)   :: source2
@@ -215,7 +229,7 @@
 !
       RPN_COMM_grid_redist = -1  ! return -1 if an error occurred
       if(ltok .ne. 1 ) return   ! for now, ltok MUST be = 1 (feature not implemented yet)
-      if(nk > noutpe_x*noutpe_y) return !  OUCH !! , or maybe only do the first noutpe_x*noutpe_y
+!      if(nk > noutpe_x*noutpe_y) return !  OUCH !! , or maybe only do the first noutpe_x*noutpe_y
       nullify(dest,dest2,source,source2,ptr1d)
       if(pe_me==0 .and. .false.)then
         write(rpn_u,*)mini,maxi,i0,in,minj,maxj,j0,jn,nk
@@ -231,12 +245,28 @@
       call RPN_COMM_limit(pe_mey,pe_ny,1,gnj,lminy,lmaxy,county,offsety)
 !
       level_x = 0
+      level_table = 0
       temp = 0
       do k = 1 , narrays  ! distribute narrays 2D fields over noutpe_x columns
         temp = temp + 1
         if(temp > noutpe_x) temp = 1
         level_x(temp) = level_x(temp) + 1
       enddo
+      temp=0
+      do i = 1,noutpe_x
+!        call mpi_barrier(MPI_COMM_WORLD,ierr)
+        if(pe_mex==outpe_x(i)) then   ! my column, 
+          do j=1,level_x(i)
+            level_table(j) = temp+j   ! list of levels processed by the PE column
+          enddo
+!          if(pe_mey==0)
+!     %      write(rpn_u,10)'pe/ltab=',pe_mex,pe_mey,level_table
+10        format(A,10I4)
+        endif
+        temp=temp+level_x(i)
+      enddo
+!      call mpi_barrier(MPI_COMM_WORLD,ierr)
+
 !
       do j = 1 , pe_ny   ! start and end of valid data on PE(any,j) along y in global space
         jstart_g(j) = max(jy0,1+offsety(j))
@@ -248,16 +278,6 @@
         istart_g(i) = max(ix0,1+offsetx(i))
         iend_g(i)   = min(ixn,offsetx(i) + countx(i))
       enddo
-      istart = istart_g(pe_mex+1)  ! same as above but for my column
-      iend   = iend_g(pe_mex+1)
-      if((in-i0).ne.(iend-istart) .or. (jn-j0).ne.(jend-jstart)) then  ! size consistency problem ?
-        if(istart<=iend) size_error = .true.  ! add error message 
-        if(istart<=iend)then
-          write(rpn_u,100)'error on pe',pe_mex,pe_mey,' =',
-     %          i0,in,istart,iend,j0,jn,jstart,jend
-100       format(A,2I2,A,10I8)
-        endif
-      endif
       if(pe_me==0 .and. .false.)then
         write(rpn_u,001)'countx=',countx
         write(rpn_u,001)'offsetx=',offsetx
@@ -269,20 +289,31 @@
         write(rpn_u,001)'IE limits=',iend_g
 001     format(A,20I3)
       endif
+      istart = istart_g(pe_mex+1)  ! same as above but for my column
+      iend   = iend_g(pe_mex+1)
+      if((in-i0).ne.(iend-istart) .or. (jn-j0).ne.(jend-jstart)) then  ! size consistency problem ?
+        if(istart<=iend) then
+          size_error = .true.  ! add error message 
+          write(rpn_u,100)'error on pe',pe_mex,pe_mey,' =',
+     %          i0,in,istart,iend,j0,jn,jstart,jend
+100       format(A,2I2,A,10I8)
+        endif
+      endif
 !     check if a size error occurred somewhere in pe_grid, if so return -1
       call MPI_allreduce(MPI_IN_PLACE,size_error,1,MPI_LOGICAL,MPI_LOR,
      %                   pe_grid,ierr)
       if(size_error) return
 !
       if(.false.)then
-      write(rpn_u,001)'start of pass 1, pe=',
+        write(rpn_u,001)'start of pass 1, pe=',
      %      pe_me,pe_mex,pe_mey,istart,iend,jstart,jend,
      %      istart_g,iend_g,jstart_g,jend_g,
      %      ix0,ixn,jy0,jyn
-!      return
+!       return
       endif
       n2d = -1
       if(jstart <= jend) then  ! there is something to do during pass 1 for this PE row
+!        write(rpn_u,*)'DBG2:', pe_me,istart,iend,jstart,jend
         do i = 1 , pe_nx                                  ! horizontal size of 2D fragments
           gsize_x(i)  = max(0,iend_g(i)-istart_g(i)+1) *  ! gsize_x may be zero for some PEs
      %                  max(0,jend-jstart+1)
@@ -290,6 +321,7 @@
 !
         kbot = 1
         do l = 1 , noutpe_x
+!          write(rpn_u,*)'DBG3:',level_x(l)
           if(level_x(l)==0) cycle  ! no output to do on this column
           ktop = kbot + level_x(l) - 1
 !         calculate counts and displacements for gatherv along x
@@ -300,7 +332,6 @@
           enddo
 !
           if(istart<=iend) then ! there is valid data on this PE
-            call flush(rpn_u)
             allocate(source(istart:iend,jstart:jend,kbot:ktop))     ! source buffer
             source(istart:iend,jstart:jend,kbot:ktop) = 
      %         zin(i0:in,j0:jn,kbot:ktop)   ! extract subarray from input array
@@ -313,10 +344,15 @@
             needed_for_pass2 = .true.
             allocate( dest( gdispl_x(pe_nx)+gcounts_x(pe_nx)+2 ) )   ! destination buffer 
             allocate( source2(ix0:ixn,jstart:jend) )
+!            write(rpn_u,*)'DBG4:',gcounts_x,pe_mex+1,gdispl_x,outpe_x(l)
+!     %                  ,' S',shape(source),' D',shape(dest)
+          else
+            allocate(dest(1))
           endif
           call MPI_Gatherv(source,gcounts_x(pe_mex+1),MPI_INTEGER,
      %                     dest,gcounts_x,gdispl_x,MPI_INTEGER,
      %                     outpe_x(l),pe_myrow,ierr)
+          call flush(rpn_u)
           deallocate(source)
           kbot = kbot + level_x(l)
         enddo
@@ -333,6 +369,7 @@
 !      data gathering along X is done, we have the whole X axis in processor now
 !
 !      write(rpn_u,*)'end pass 1 :',pe_mex,pe_mey,needed_for_pass2,n2d
+!      goto 7777
       if(needed_for_pass2 .and. n2d>0) then  ! nothing to do if n2d=0
         nullify(dest2)
         lev0 = 0
@@ -370,7 +407,7 @@
           enddo
           kout = 1 + (k-1)/noutpe_y
           l = 1 + mod(k-1,noutpe_y)
-          if(pe_mey == outpe_y(l)) zlist(kout) = kout
+          if(pe_mey == outpe_y(l)) zlist(kout) = level_table(k)
 !          write(rpn_u,002)'mid pass 2, pe=',pe_mex,pe_mey,
 !     %      k,n2d,temp,jstart,jend,ix0,ixn,jy0,jyn,gdispl_y,kout
           if(no_holes) then  ! all PEs contribute, can gather directly into zout

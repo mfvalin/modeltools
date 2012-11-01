@@ -22,6 +22,7 @@
           ierr=RPN_COMM_dist_test(Petotal)
         endif
         if(IAND(test_to_perform,2)==2)then
+!          print *,'start grid_redist test'
           ierr=RPN_COMM_grid_redist_test()
         endif
         call RPN_COMM_finalize(ierr)
