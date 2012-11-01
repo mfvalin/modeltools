@@ -38,7 +38,7 @@
       integer, dimension(nox) :: outpe_x
       integer, dimension(noy) :: outpe_y
       integer, dimension(2) :: zlist
-      integer :: nk, nz
+      integer :: nk, nz, k0
       
       if(pe_me==0) write(rpn_u,*)'grid redistribution test',
      %    pe_tot_grid,pe_nx,pe_ny
@@ -49,7 +49,6 @@
       outpe_y(1) = 0
       gni = pe_nx*lni
       gnj = pe_ny*lnj
-      nk = 4
       nk = nox*noy
       call RPN_COMM_limit(pe_mex,pe_nx,1,gni,lminx,lmaxx,countx,offsetx)
       call RPN_COMM_limit(pe_mey,pe_ny,1,gnj,lminy,lmaxy,county,offsety)
@@ -120,6 +119,15 @@
       endif
       if(status==-1)goto 777
       call mpi_barrier(MPI_COMM_WORLD,ierr)
+      write(rpn_u,*)'pe=',pe_mex,pe_mey,'zlist=',zlist
+      call mpi_barrier(MPI_COMM_WORLD,ierr)
+      do k0 = 1 , 2
+        if(zlist(k0)>0) then
+          k=mod(globalarray(ix0,jy0,k0),10)
+          ierr=vfy_array(globalarray,ix0,ixn,jy0,jyn,2,k0,k)
+          write(rpn_u,*)'pe=',pe_mex,pe_mey,'level=',k,' errors=',ierr
+        endif
+      enddo
 !      if(pe_me==outpe_x(nox)+pe_nx*outpe_x(noy)) then
       do i = 1,nox
       do j = 1,noy
@@ -139,6 +147,31 @@
 777   if(associated(globalarray)) deallocate(globalarray)
       deallocate(localarray)
       return
+!
+      contains
+!
+      integer function vfy_array(zin,mini,maxi,minj,maxj,nk,k,ref)
+      implicit none
+      integer, intent(IN) :: mini,maxi,minj,maxj,nk,k,ref
+      integer, dimension(mini:maxi,minj:maxj,nk),
+     %         intent(IN) :: zin
+!
+      integer :: i,j,nerr
+!
+      nerr = 0
+      do j=minj,maxj
+      do i=mini,maxi
+        if(zin(i,j,k)/=ref+10*j+1000*i)then
+          nerr=nerr+1
+          print *,'error',i,j,k,ref,zin(i,j,k),ref+10*j+1000*i
+        endif
+      enddo
+      enddo
+      vfy_array = nerr
+!
+      return
+      end function vfy_array
+      
       end function RPN_COMM_grid_redist_test
 *****************************************
 *                                       *
@@ -337,7 +370,7 @@
           enddo
           kout = 1 + (k-1)/noutpe_y
           l = 1 + mod(k-1,noutpe_y)
-          zlist(kout) = k
+          if(pe_mey == outpe_y(l)) zlist(kout) = kout
 !          write(rpn_u,002)'mid pass 2, pe=',pe_mex,pe_mey,
 !     %      k,n2d,temp,jstart,jend,ix0,ixn,jy0,jyn,gdispl_y,kout
           if(no_holes) then  ! all PEs contribute, can gather directly into zout
