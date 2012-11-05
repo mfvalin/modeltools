@@ -22,13 +22,17 @@
       implicit none
       integer :: RPN_COMM_grid_redist
       external :: RPN_COMM_grid_redist
+      integer :: RPN_COMM_grid_redist_n
+      external :: RPN_COMM_grid_redist_n
       integer, pointer, dimension(:,:,:) :: localarray
       integer, pointer, dimension(:,:,:) :: globalarray
+      integer*8, pointer, dimension(:,:,:) :: localarray2
+      integer*8, pointer, dimension(:,:,:) :: globalarray2
       integer :: gni, gnj
       integer :: lminx,lmaxx,lminy,lmaxy
       integer, dimension(pe_nx) :: countx,offsetx
       integer, dimension(pe_ny) :: county,offsety
-      integer :: i, ii, j, jj, k, ierr, ltok, status
+      integer :: i, ii, j, jj, k, ierr, ltok, status, status2
       integer :: ix0, ixn, jy0, jyn
       integer :: i0, in, j0, jn
       integer, parameter :: lni=3
@@ -37,9 +41,9 @@
       integer, parameter :: noy=2
       integer, dimension(nox) :: outpe_x
       integer, dimension(noy) :: outpe_y
-      integer, dimension(2) :: zlist
+      integer, dimension(2) :: zlist, zlist2
       integer :: nk, nz, k0
-      
+!
       if(pe_me==0) write(rpn_u,*)'grid redistribution test',
      %    pe_tot_grid,pe_nx,pe_ny
 
@@ -49,15 +53,17 @@
       outpe_y(1) = 0
       gni = pe_nx*lni
       gnj = pe_ny*lnj
-      nk = nox*noy*2
+      nk = nox*noy*2-2
       call RPN_COMM_limit(pe_mex,pe_nx,1,gni,lminx,lmaxx,countx,offsetx)
       call RPN_COMM_limit(pe_mey,pe_ny,1,gnj,lminy,lmaxy,county,offsety)
       allocate(localarray(lminx-1:lmaxx+2,lminy-2:lmaxy+1,nk))
+      allocate(localarray2(lminx-1:lmaxx+2,lminy-2:lmaxy+1,nk))
       localarray = 0
       do k = 1,nk
       do j = lminy,lmaxy
       do i = lminx,lmaxx
         localarray(i,j,k) = k + 10*j + 1000*i
+        localarray2(i,j,k) = k + 10*j + 1000*i
       enddo
       enddo
       enddo
@@ -71,16 +77,16 @@
         write(rpn_u,100)'local array allocated',pe_mex,pe_mey,
      %                lminx,lmaxx,lminy,lmaxy,nk
         do j = lmaxy,lminy,-1
-          write(rpn_u,100)' ',localarray(lminx:lmaxx,j,max(1,nk-1))
+!          write(rpn_u,100)' ',localarray(lminx:lmaxx,j,max(1,nk-1))
         enddo
 100     format(A,10I6)
       endif
       call mpi_barrier(MPI_COMM_WORLD,ierr)
       nullify(globalarray)
-      ix0 = 1 ! lni+(lni+1)/2-1
-      ixn = gni ! gni-2*lni+(lni+1)/2+1
-      jy0 = 1 ! (lnj+1)/2 + lnj-1
-      jyn = gnj ! gnj-2*lnj+(lnj+1)/2+1
+      ix0 = lni ! lni+(lni+1)/2-1
+      ixn = gni - lni + 1 ! gni-2*lni+(lni+1)/2+1
+      jy0 = lnj ! (lnj+1)/2 + lnj-1
+      jyn = gnj - lnj + 1 ! gnj-2*lnj+(lnj+1)/2+1
       i0=1
       if(ix0>lminx) i0 = i0 + (ix0-lminx)
       in=lni
@@ -94,69 +100,95 @@
         if(outpe_x(i)==pe_mex .and. outpe_y(j)==pe_mey)then
 !          write(rpn_u,*)'global array allocated',ix0, ixn, jy0, jyn
           allocate(globalarray(ix0:ixn,jy0:jyn,2))
+          allocate(globalarray2(ix0:ixn,jy0:jyn,2))
         endif
       enddo
       enddo
-      if(.not. associated(globalarray))allocate(globalarray(1,1,2))
+      if(.not. associated(globalarray)) allocate(globalarray(1,1,2))
+      if(.not. associated(globalarray2))allocate(globalarray2(1,1,2))
       globalarray = 0
       do i=1,pe_nx*pe_ny
-      call mpi_barrier(MPI_COMM_WORLD,ierr)
-      if(.false. .and. pe_me==i-1)
+        call mpi_barrier(MPI_COMM_WORLD,ierr)
+        if(.false. .and. pe_me==i-1)
      %  write(rpn_u,101)'global array dims',
      %                pe_mex,pe_mey,shape(globalarray)
 101     format(A,10I5)
       enddo
-      zlist = -1
+      call mpi_barrier(MPI_COMM_WORLD,ierr)
+      zlist = -999999
+      zlist2 = -999999
       nz = 2
       ltok = 1
-      if(.true.)then
-      status = RPN_COMM_grid_redist(
+
+      status = RPN_COMM_grid_redist_n(
      % localarray,1-1,lni+2,i0,in,1-2,lnj+1,j0,jn,nk,
      % globalarray,ix0,ixn,jy0,jyn,nz,zlist,
-     % gni,gnj,outpe_x,nox,outpe_y,noy,
-     % ltok)
-!      goto 777
+     % gni,gnj,outpe_x,nox,outpe_y,noy,1)
       RPN_COMM_grid_redist_test = status
-      call mpi_barrier(MPI_COMM_WORLD,ierr)
       if(pe_me==0)write(rpn_u,*)'status=',status
-      endif
       if(status==-1)goto 777
+
+!      status2 = RPN_COMM_grid_redist_n(
+!     % localarray2,1-1,lni+2,i0,in,1-2,lnj+1,j0,jn,nk,
+!     % globalarray2,ix0,ixn,jy0,jyn,nz,zlist2,
+!     % gni,gnj,outpe_x,nox,outpe_y,noy,2)
+!      RPN_COMM_grid_redist_test = status2
+!      if(pe_me==0)write(rpn_u,*)'status2=',status2
+!      if(status2==-1)goto 777
+
       do i=1,pe_nx*pe_ny
         call mpi_barrier(MPI_COMM_WORLD,ierr)
         if(pe_me==i-1) then
           write(rpn_u,*)'pe=',pe_mex,pe_mey,' zlist=',zlist
+          write(rpn_u,*)'pe=',pe_mex,pe_mey,' zlist2=',zlist2
+          call flush(rpn_u)
         endif
         call mpi_barrier(MPI_COMM_WORLD,ierr)
       enddo
+
+      call mpi_barrier(MPI_COMM_WORLD,ierr)
       do k0 = 1 , 2
         call mpi_barrier(MPI_COMM_WORLD,ierr)
         if(zlist(k0)>0) then
-          k=mod(globalarray(ix0,jy0,k0),10)
           k=zlist(k0)
           ierr=vfy_array(globalarray,ix0,ixn,jy0,jyn,2,k0,k)
           write(rpn_u,102)'pe=',pe_mex,pe_mey,
      %         ',  level=',k,',  errors=',ierr
 102       format(A,2I3,A,I3,a,I3)
         endif
+        call mpi_barrier(MPI_COMM_WORLD,ierr)
       enddo
-!      if(pe_me==outpe_x(nox)+pe_nx*outpe_x(noy)) then
+
+      call mpi_barrier(MPI_COMM_WORLD,ierr)
+      do k0 = 1 , 2
+        call mpi_barrier(MPI_COMM_WORLD,ierr)
+        if(zlist2(k0)>0) then
+          k=zlist2(k0)
+          ierr=vfy_array2(globalarray2,ix0,ixn,jy0,jyn,2,k0,k)
+          write(rpn_u,102)'pe2=',pe_mex,pe_mey,
+     %         ',  level=',k,',  errors=',ierr
+        endif
+        call mpi_barrier(MPI_COMM_WORLD,ierr)
+      enddo
+
+      call mpi_barrier(MPI_COMM_WORLD,ierr)
       do k = 1,nk
-       do i = 0,pe_nx*pe_ny-1
-        do k0=1,2   ! size(zlist)
-         call mpi_barrier(MPI_COMM_WORLD,ierr)
-         if(i/=pe_me)cycle
-         if(zlist(k0)==k)then
-            write(rpn_u,103)'global array =',
+        call mpi_barrier(MPI_COMM_WORLD,ierr)
+        if(any(k==zlist)) then
+          write(rpn_u,103)'global array =',
      %          pe_mex,pe_mey,ix0,ixn,jy0,jyn
-103         format(A,20(1X,I5.5))
-            do jj = jyn,jy0,-1
-              write(rpn_u,103)' ',globalarray(ix0:ixn,jj,k0)
-            enddo
-         endif
-        enddo
-       enddo
+103       format(A,20(1X,I5.5))
+          do k0=1,2   ! size(zlist)
+            if(zlist(k0)==k)then
+              do jj = jyn,jy0,-1
+                write(rpn_u,103)' ',globalarray(ix0:ixn,jj,k0)
+!                write(rpn_u,103)'+',globalarray2(ix0:ixn,jj,k0)
+              enddo
+            endif
+          enddo
+          call flush(rpn_u)
+        endif
       enddo
-!      endif
 777   if(associated(globalarray)) deallocate(globalarray)
       deallocate(localarray)
       return
@@ -184,23 +216,39 @@
 !
       return
       end function vfy_array
-      
+ !
+      integer function vfy_array2(zin,mini,maxi,minj,maxj,nk,k,ref)
+      implicit none
+      integer, intent(IN) :: mini,maxi,minj,maxj,nk,k,ref
+      integer*8, dimension(mini:maxi,minj:maxj,nk),
+     %         intent(IN) :: zin
+!
+      integer :: i,j,nerr
+!
+      nerr = 0
+      do j=minj,maxj
+      do i=mini,maxi
+        if(zin(i,j,k)/=ref+10*j+1000*i)then
+          nerr=nerr+1
+!          print *,'error',i,j,k,ref,zin(i,j,k),ref+10*j+1000*i
+        endif
+      enddo
+      enddo
+      vfy_array2 = nerr
+!
+      return
+      end function vfy_array2
+     
       end function RPN_COMM_grid_redist_test
-*****************************************
-*                                       *
-*             W A R N I N G             *
-*            C O D E    I S             *
-*                B E T A                *
-*                                       *
-*****************************************
+!=======================================================================
+!=======================================================================
       integer function RPN_COMM_grid_redist(
      %           zin,mini,maxi,i0,in,minj,maxj,j0,jn,nk,
      %           zout,ix0,ixn,jy0,jyn,nz,zlist,
-     %           gni,gnj,outpe_x,noutpe_x,outpe_y,noutpe_y,
-     %           ltok)
+     %           gni,gnj,outpe_x,noutpe_x,outpe_y,noutpe_y)
       use rpn_comm
       implicit none
-      integer, intent(IN) :: mini,maxi,i0,in,minj,maxj,j0,jn,nk,ltok
+      integer, intent(IN) :: mini,maxi,i0,in,minj,maxj,j0,jn,nk
       integer, intent(IN) :: ix0,ixn,jy0,jyn,nz
       integer, intent(IN) :: noutpe_x,noutpe_y,gni,gnj
 !      integer, dimension(ltok,mini:maxi,minj:maxj,nk), 
@@ -209,8 +257,8 @@
 !      integer, dimension(ltok,ix0:ixn,jy0:jyn,nz), intent(OUT) :: zout
       integer, dimension(ix0:ixn,jy0:jyn,nz), intent(OUT) :: zout
       integer, dimension(nz), intent(OUT) :: zlist  ! list of 2D fields returned to this processor
-      integer, dimension(noutpe_x) :: outpe_x    ! list of columns where there are PEs doing IO
-      integer, dimension(noutpe_y) :: outpe_y    ! list of rows where there are PEs doing IO
+      integer, dimension(noutpe_x), intent(IN) :: outpe_x    ! list of columns where there are PEs doing IO
+      integer, dimension(noutpe_y), intent(IN) :: outpe_y    ! list of rows where there are PEs doing IO
 !
       integer, dimension(pe_nx) :: istart_g, iend_g, countx, offsetx
       integer, dimension(pe_ny) :: jstart_g, jend_g, county, offsety
@@ -228,45 +276,44 @@
       logical :: needed_for_pass2, size_error, no_holes
 !
       RPN_COMM_grid_redist = -1  ! return -1 if an error occurred
-      if(ltok .ne. 1 ) return   ! for now, ltok MUST be = 1 (feature not implemented yet)
-!      if(nk > noutpe_x*noutpe_y) return !  OUCH !! , or maybe only do the first noutpe_x*noutpe_y
-      nullify(dest,dest2,source,source2,ptr1d)
-      if(pe_me==0 .and. .false.)then
-        write(rpn_u,*)mini,maxi,i0,in,minj,maxj,j0,jn,nk
-        write(rpn_u,*)ix0,ixn,jy0,jyn,nz
-        write(rpn_u,*)zlist
-        write(rpn_u,*)gni,gnj,outpe_x,noutpe_x,outpe_y,noutpe_y,ltok
-      endif
+      zlist = -1                 ! empty list
+      if(nk>nz*noutpe_x*noutpe_y)return
+
+      nullify(ptr1d)        ! nullify pointers to prevent mishaps
+      allocate(dest(1))           ! possibly temporary allocation, to be increased later on
+      allocate(source(1,1,1))     ! if necessary (data to collect on PE)
+      allocate(dest2(1))
+      allocate( source2(1,1))     ! array for gatherv pass along y
+      dest = 0 ; source = 0 ; dest2 = 0 ; source2 = 0
+!
       narrays = nk
       needed_for_pass2 = .false.
       size_error = .false.
 !
-      call RPN_COMM_limit(pe_mex,pe_nx,1,gni,lminx,lmaxx,countx,offsetx)
-      call RPN_COMM_limit(pe_mey,pe_ny,1,gnj,lminy,lmaxy,county,offsety)
+      call RPN_COMM_limit(pe_mex,pe_nx,1,gni,lminx,lmaxx,countx,offsetx)  ! X decomposition
+      call RPN_COMM_limit(pe_mey,pe_ny,1,gnj,lminy,lmaxy,county,offsety)  ! Y decomposition
 !
       level_x = 0
-      level_table = 0
+      level_table = -1
       temp = 0
       do k = 1 , narrays  ! distribute narrays 2D fields over noutpe_x columns
         temp = temp + 1
         if(temp > noutpe_x) temp = 1
         level_x(temp) = level_x(temp) + 1
       enddo
+      n2d=-1
       temp=0
       do i = 1,noutpe_x
 !        call mpi_barrier(MPI_COMM_WORLD,ierr)
         if(pe_mex==outpe_x(i)) then   ! my column, 
+          n2d = level_x(i)      ! number of 2D fields for this PE column
+          needed_for_pass2 = .true.
           do j=1,level_x(i)
             level_table(j) = temp+j   ! list of levels processed by the PE column
           enddo
-!          if(pe_mey==0)
-!     %      write(rpn_u,10)'pe/ltab=',pe_mex,pe_mey,level_table
-10        format(A,10I4)
         endif
         temp=temp+level_x(i)
       enddo
-!      call mpi_barrier(MPI_COMM_WORLD,ierr)
-
 !
       do j = 1 , pe_ny   ! start and end of valid data on PE(any,j) along y in global space
         jstart_g(j) = max(jy0,1+offsety(j))
@@ -278,17 +325,6 @@
         istart_g(i) = max(ix0,1+offsetx(i))
         iend_g(i)   = min(ixn,offsetx(i) + countx(i))
       enddo
-      if(pe_me==0 .and. .false.)then
-        write(rpn_u,001)'countx=',countx
-        write(rpn_u,001)'offsetx=',offsetx
-        write(rpn_u,001)'county=',county
-        write(rpn_u,001)'offsety=',offsety
-        write(rpn_u,001)'JS limits=',jstart_g
-        write(rpn_u,001)'JE limits=',jend_g
-        write(rpn_u,001)'IS limits=',istart_g
-        write(rpn_u,001)'IE limits=',iend_g
-001     format(A,20I3)
-      endif
       istart = istart_g(pe_mex+1)  ! same as above but for my column
       iend   = iend_g(pe_mex+1)
       if((in-i0).ne.(iend-istart) .or. (jn-j0).ne.(jend-jstart)) then  ! size consistency problem ?
@@ -302,18 +338,9 @@
 !     check if a size error occurred somewhere in pe_grid, if so return -1
       call MPI_allreduce(MPI_IN_PLACE,size_error,1,MPI_LOGICAL,MPI_LOR,
      %                   pe_grid,ierr)
-      if(size_error) return
+      if(size_error) goto 7777
 !
-      if(.false.)then
-        write(rpn_u,001)'start of pass 1, pe=',
-     %      pe_me,pe_mex,pe_mey,istart,iend,jstart,jend,
-     %      istart_g,iend_g,jstart_g,jend_g,
-     %      ix0,ixn,jy0,jyn
-!       return
-      endif
-      n2d = -1
       if(jstart <= jend) then  ! there is something to do during pass 1 for this PE row
-!        write(rpn_u,*)'DBG2:', pe_me,istart,iend,jstart,jend
         do i = 1 , pe_nx                                  ! horizontal size of 2D fragments
           gsize_x(i)  = max(0,iend_g(i)-istart_g(i)+1) *  ! gsize_x may be zero for some PEs
      %                  max(0,jend-jstart+1)
@@ -321,7 +348,6 @@
 !
         kbot = 1
         do l = 1 , noutpe_x
-!          write(rpn_u,*)'DBG3:',level_x(l)
           if(level_x(l)==0) cycle  ! no output to do on this column
           ktop = kbot + level_x(l) - 1
 !         calculate counts and displacements for gatherv along x
@@ -332,46 +358,31 @@
           enddo
 !
           if(istart<=iend) then ! there is valid data on this PE
+            if(associated(source)) deallocate(source)
             allocate(source(istart:iend,jstart:jend,kbot:ktop))     ! source buffer
             source(istart:iend,jstart:jend,kbot:ktop) = 
      %         zin(i0:in,j0:jn,kbot:ktop)   ! extract subarray from input array
-          else                  ! no valid data on this PE
-            allocate(source(1,1,1))
-            source = 0
           endif
           if(pe_mex == outpe_x(l)) then  ! PEs doing gathering on this column
-            n2d = level_x(l)       ! number of 2D fields for this PE column
-            needed_for_pass2 = .true.
+            if(associated(dest))deallocate(dest)
             allocate( dest( gdispl_x(pe_nx)+gcounts_x(pe_nx)+2 ) )   ! destination buffer 
-            allocate( source2(ix0:ixn,jstart:jend) )
-!            write(rpn_u,*)'DBG4:',gcounts_x,pe_mex+1,gdispl_x,outpe_x(l)
-!     %                  ,' S',shape(source),' D',shape(dest)
-          else
-            allocate(dest(1))
+            if(associated(source2))deallocate(source2)
+            allocate( source2(ix0:ixn,jstart:jend) )  ! reallocate with proper dimensions
           endif
           call MPI_Gatherv(source,gcounts_x(pe_mex+1),MPI_INTEGER,
      %                     dest,gcounts_x,gdispl_x,MPI_INTEGER,
      %                     outpe_x(l),pe_myrow,ierr)
-          call flush(rpn_u)
-          deallocate(source)
           kbot = kbot + level_x(l)
         enddo
-      else  ! no action on this row, allocate dummy source2 used in y direction gatherv
-        do l = 1 , noutpe_x
-          if(pe_mex == outpe_x(l)) then
-            n2d = level_x(l)
-            needed_for_pass2 = .true.
-            allocate( source2(1,1))  ! dummy array for gatherv pass along y
-          endif
-        enddo
+        deallocate(source)
+        nullify(source)
       endif   ! (jstart <= jend)
+      if(associated(source)) deallocate(source) ! source no longer needed at this point
 !
 !      data gathering along X is done, we have the whole X axis in processor now
 !
 !      write(rpn_u,*)'end pass 1 :',pe_mex,pe_mey,needed_for_pass2,n2d
-!      goto 7777
       if(needed_for_pass2 .and. n2d>0) then  ! nothing to do if n2d=0
-        nullify(dest2)
         lev0 = 0
         no_holes=.true.  ! will be true if one or more PE rows contribute no data
                          ! this rigamarole is needed because some MPI implementations
@@ -389,9 +400,11 @@
         enddo
         do l = 1 , noutpe_y
           if(pe_mey==outpe_y(l)) then  ! this PE is a data gatherer
-            zlist = 0
-            if(.not. no_holes)         ! will need an extra copy
-     %        allocate( dest2( gdispl_y(pe_ny)+gcounts_y(pe_ny)+1 ) )
+            zlist = -1
+            if(.not. no_holes) then        ! will need an extra copy
+              if(associated(dest2)) deallocate(dest2)
+              allocate( dest2( gdispl_y(pe_ny)+gcounts_y(pe_ny)+1 ) )
+            endif
           endif
         enddo
         do k = 1 , n2d  ! loop over number of 2D fields to distribute along y
@@ -408,10 +421,7 @@
           kout = 1 + (k-1)/noutpe_y
           l = 1 + mod(k-1,noutpe_y)
           if(pe_mey == outpe_y(l)) zlist(kout) = level_table(k)
-!          write(rpn_u,002)'mid pass 2, pe=',pe_mex,pe_mey,
-!     %      k,n2d,temp,jstart,jend,ix0,ixn,jy0,jyn,gdispl_y,kout
           if(no_holes) then  ! all PEs contribute, can gather directly into zout
-002   format(A,20I5)
             call MPI_Gatherv(
      %         source2,gcounts_y(pe_mey+1),MPI_INTEGER,
      %         zout(ix0,jy0,kout),gcounts_y,gdispl_y,MPI_INTEGER,
@@ -422,24 +432,21 @@
      %         dest2,gcounts_y,gdispl_y,MPI_INTEGER,
      %         outpe_y(l),pe_mycol,ierr)
             if(pe_mey == outpe_y(l)) then  ! we are on root PE of gather
-!              write(rpn_u,002)'mid pass 2B, pe=',pe_mex,pe_mey,
-!     %           k,n2d,temp,jstart,jend,ix0,ixn,jy0,jyn,gdispl_y,kout
               temp = 1 + gdispl_y(lev0) ! point to start of useful data
-              do j = jy0 , jyn
+              do j = jy0 , jyn          ! copy reassembled data into zout
               do i = ix0 , ixn
                 zout(i,j,kout) = dest2(temp)
                 temp = temp + 1
               enddo  ! j
               enddo  ! i
-            endif
-          endif
+            endif  ! pe_mey == outpe_y(l)
+          endif  ! no_holes
         enddo  ! k = 1 , n2d
-      endif
+      endif  ! needed_for_pass2 .and. n2d>0
 7777  continue
-      if(associated(dest2)) deallocate(dest2)
-      if(associated(dest)) deallocate(dest)
+      if(associated(dest2))   deallocate(dest2)
+      if(associated(dest))    deallocate(dest)
       if(associated(source2)) deallocate(source2)
-!      call mpi_barrier(pe_mycol,ierr)
 !
 !      write(rpn_u,*)'end of pass 1+2, pe=',pe_me
       RPN_COMM_grid_redist = 1  ! number of 2D reassembled fields returned
@@ -455,210 +462,43 @@
       end subroutine place
 !
       end function RPN_COMM_grid_redist
-!
-      subroutine RPN_COMM_grid_redist_2(zin,lni,lnj,nk,zout,gni,gnj,
-     %           outpe_x,noutpe_x,outpe_y,noutpe_y)
-!     zout only needs to be defined on PEs doing I/O (pe_mex in outpe_x AND pe_mey in outpe_y)
-!
-! NOTE:
-!     lni should probably really be nilmax
-!     lnj should probably really be njlmax
-!
-!     this MUST be fixed or disaster will strike
-!     we may want to use RPN_COMM_topo2 here to compute things properly
-!
+!=======================================================================
+!=======================================================================
+      integer function RPN_COMM_grid_redist_n(
+     %           zin,mini,maxi,i0,in,minj,maxj,j0,jn,nk,
+     %           zout,ix0,ixn,jy0,jyn,nz,zlist,
+     %           gni,gnj,outpe_x,noutpe_x,outpe_y,noutpe_y,
+     %           ltok)
       use rpn_comm
       implicit none
-      integer, intent(IN) :: lni,lnj,nk,gni,gnj,noutpe_x,noutpe_y
-      integer, dimension(lni,lnj,nk), intent(IN) :: zin
-      integer, dimension(gni,gnj), intent(OUT) :: zout
-      integer, dimension(noutpe_x) :: outpe_x    ! list of columns where there are PEs doing IO
-      integer, dimension(noutpe_y) :: outpe_y    ! list of rows where there are PEs doing IO
+      integer, intent(IN) :: mini,maxi,i0,in,minj,maxj,j0,jn,nk,ltok
+      integer, intent(IN) :: ix0,ixn,jy0,jyn,nz
+      integer, intent(IN) :: noutpe_x,noutpe_y,gni,gnj
+      integer, dimension(ltok,mini:maxi,minj:maxj,nk), 
+     %         intent(IN) :: zin  ! zin(:,io:in,j0:jn,:) is useful
+      integer, dimension(ltok,ix0:ixn,jy0:jyn,nz), intent(OUT) :: zout
+      integer, dimension(nz), intent(OUT) :: zlist  ! list of 2D fields returned to this processor
+      integer, dimension(noutpe_x), intent(IN) :: outpe_x    ! list of columns where there are PEs doing IO
+      integer, dimension(noutpe_y), intent(IN) :: outpe_y    ! list of rows where there are PEs doing IO
 !
-!      include 'mpif.h'
+      external :: RPN_COMM_grid_redist
+      integer :: RPN_COMM_grid_redist
 !
-      integer, allocatable, dimension(:)   :: sendcounts, sdispls
-      integer, allocatable, dimension(:)   :: recvcounts, rdispls
-      integer, allocatable, dimension(:)   :: recvbuf
-      integer, allocatable, dimension(:,:) :: reorder
-      integer :: i, j, k, l, i0, ilast, offset, ierr, the_target
-      integer :: lminx, lmaxx, mxi
-      integer, allocatable, dimension(:)   :: countx, offsetx
-      integer :: lminy, lmaxy, mxj, slot
-      integer, allocatable, dimension(:)   :: county, offsety
-      integer, dimension(noutpe_x) :: level_x
+      RPN_COMM_grid_redist_n = -1  ! return -1 if an error occurred
+      zlist = -1                 ! empty list
+!      if(ltok .ne. 1 ) then
+!        if(pe_me==0) write(rpn_u,*)'ERROR: ltok >1 not supported yet'
+!        return    ! for now, ltok MUST be = 1 (feature not implemented yet)
+!      endif
+      if(nk>nz*noutpe_x*noutpe_y)return
 !
-      if(nk > noutpe_x*noutpe_y) call abort !  OUCH !! , or maybe only do the first noutpe_x*noutpe_y
-!
-      allocate(recvcounts(max(pe_nx,pe_ny)))
-      allocate(rdispls(max(pe_nx,pe_ny)))
-      allocate(sendcounts(max(pe_nx,pe_ny)))
-      allocate(sdispls(max(pe_nx,pe_ny)))
-!
-      allocate(countx(pe_nx),offsetx(pe_nx))
-      allocate(county(pe_ny),offsety(pe_ny))
-!
-      call RPN_COMM_limit(pe_mex,pe_nx,1,gni,lminx,lmaxx,countx,offsetx)
-      mxi = countx(1)   ! max tile size along x
-      call RPN_COMM_limit(pe_mey,pe_ny,1,gnj,lminy,lmaxy,county,offsety)
-      mxj = county(1)   ! max tile size along y
-!
-      level_x = 0
-      do i = 1 , nk
-        slot = 1 + mod(i-1,noutpe_x)
-        level_x(slot) = level_x(slot) + 1
-      enddo
-      k = 1
-      do l = 1 , noutpe_x
-        if(pe_mex == outpe_x(l)) 
-     %    allocate(recvbuf(mxi*lnj*level_x(l)*pe_nx))
-        recvcounts(1) = countx(1)*lnj*level_x(l)
-        rdispls(1) = 1
-        do i = 2 , pe_nx
-          recvcounts(i) = countx(i)*lnj*level_x(l)
-          rdispls(i) = rdispls(i-1) + recvcounts(i-1)
-        enddo
-        call MPI_Gatherv(zin(1,1,k),lni*lnj*level_x(l),MPI_INTEGER,
-     %                   recvbuf,recvcounts,rdispls,MPI_INTEGER,
-     %                   outpe_x(l),pe_myrow,ierr)
-        k = k + level_x(l)
-      enddo
-      if(pe_mex /= outpe_x(l)) goto 111   ! if I am not in an active column, nothing more to do
-      allocate(reorder(gni,lnj))  ! reorder buffer
-      do l = 1 , noutpe_y
-!       fill reorder(gni,lnj) from recvbuf("lni",lnj,"lnk",pe_nx) level l
-        recvcounts(1) = gni*county(1)
-        rdispls(1) = 1
-        do j = 2 , pe_ny
-          recvcounts(j) = gni*county(j)
-          rdispls(j) = rdispls(j-1) + recvcounts(j-1)
-        enddo
-        call MPI_Gatherv(reorder,gni*lnj,MPI_INTEGER,
-     %                   zout,recvcounts,rdispls,MPI_INTEGER,
-     %                   outpe_y(l),pe_mycol,ierr)
-      enddo
-111   deallocate(recvbuf)
-      deallocate(reorder)
+      RPN_COMM_grid_redist_n=RPN_COMM_grid_redist(zin,
+     %           mini*ltok,maxi*ltok+ltok-1,
+     %           i0*ltok,in*ltok+ltok-1,
+     %           minj,maxj,j0,jn,nk,
+     %           zout,ix0*ltok,ixn*ltok+ltok-1,jy0,jyn,nz,zlist,
+     %           gni*ltok,gnj,
+     %           outpe_x,noutpe_x,outpe_y,noutpe_y)
 !
       return
-!
-!     ============================== OLD CODE kept for history ==============================
-!
-!     zin data shape  (lni,lnj,nk) on PE( 0:pe_nx-1  ,0:pe_ny-1 )
-!
-      if(nk <= pe_nx) then    ! alltoallv along x, then reorder, then gather along y
-        sendcounts = 1        ! because zero length can hang some implementations of allgatherv
-        sendcounts(1:nk) = lni*lnj   ! sending nk pieces of size lni by lnj, rest with size 1
-        if(pe_mex < nk) then                ! real data will only be sent to first nk PEs along X
-          recvcounts(1:pe_nx) = countx(1:pe_nx)*lnj  ! received data pieces countx(i) by lnj
-          allocate(recvbuf(mxi*lnj*pe_nx))  ! receive buffer for pe_nx (max size along x) data pieces
-          allocate(reorder(gni,lnj))        ! reorder buffer, input to gatherv
-        else
-          recvcounts = 1                     ! dummy collect with no need to reorder
-          allocate(recvbuf(pe_nx))           ! will receive pe_nx words
-          allocate(reorder(1,1))             ! no reorder buffer
-        endif
-        do k = 1 , pe_nx
-          sdispls(k) = 1 + (min(k,nk)-1)*lni*lnj  ! offset of level k, no greater than nk
-          if(pe_mex < nk) then         ! this pe will collect pe_nx pieces of data
-            rdispls(k) = 1 + (k-1)*mxi*lnj
-          else                         ! this pe only gets one word (because zero length might hang)
-            rdispls(k) = k
-          endif
-        enddo
-        call MPI_alltoallv(zin,    sendcounts,sdispls,MPI_INTEGER,
-     %                     recvbuf,recvcounts,rdispls,MPI_INTEGER,
-     %                     pe_myrow,ierr)
-!
-!       recvbuf data shape (lni,lnj,pe_nx) on PE( 0:nk-1 , 0:pe_ny-1 )
-!
-        if(pe_mex < nk) then   ! reorder and collect along Y into zout (first nk PEs only)
-          do k = 1 , pe_nx     ! time to get full x axis together
-            offset = (k-1) * mxi*lnj  ! offset in recv buffer for i piece no k, row 1
-            i0 = offsetx(k) + 1
-            ilast = i0 + countx(k) -1
-            do j = 1 , lnj      ! copy and insert one slice
-              reorder(i0:ilast,j) = recvbuf(offset:offset+ilast-i0)  ! i piece no k, row j
-              offset = offset + lnj                                  ! next row
-            enddo
-          enddo
-!
-!       reorder data shape (gni,lnj) on PE( 0:nk , 0:pe_ny-1 )
-!
-          recvcounts(1:pe_ny) = gni*county(1:pe_ny)
-          rdispls(1:pe_ny)    = gni*offsety(1:pe_ny) + 1
-          the_target = mod(pe_mex,pe_ny)
-          call MPI_gatherv(reorder,gni*lnj,            MPI_INTEGER,
-     %                     zout,   recvcounts,rdispls, MPI_INTEGER,
-     %                     the_target,pe_mycol,ierr)      ! root PEs on diagonal
-!
-!       zout data shape (gni,gnj) on PE(l,m) (l=0:nk-1 , m=  l mod pe_ny)
-!
-        endif
-        goto 1111        ! clean exit
-      endif
-!
-!     zin data shape  (lni,lnj,nk) on PE( 0:pe_nx-1  ,0:pe_ny-1 )
-!
-      if(nk <= pe_ny) then    ! alltoallv along y, then gather along x, then reorder
-        sendcounts = 1        ! should be 0 but zero length can hang allgatherv
-        sendcounts(1:nk) = lni*lnj
-        if(pe_mey < nk) then  ! will be collecting and reordering lni by gnj
-          recvcounts(1:pe_ny) = county(1:pe_ny)*lni
-          allocate(recvbuf(lni*gnj))
-          allocate(reorder(mxi*gnj,pe_nx))
-        else                  ! dummy collect and no reorder
-          recvcounts = 1
-          allocate(recvbuf(pe_ny))
-          allocate(reorder(1,1))
-        endif
-        do k = 1 , pe_ny
-          sdispls(k) = 1 + (min(k,nk)-1)*lni*lnj  ! offset of level k, no greater than nk
-          if(pe_mey < nk) then         ! this pe will collect pe_nx pieces of data
-            rdispls(k) = lni*offsety(k)
-          else                         ! this pe only gets one word (because zero length might hang)
-            rdispls(k) = k
-          endif
-        enddo
-        call MPI_alltoallv(zin,    sendcounts,sdispls,MPI_INTEGER,
-     %                     recvbuf,recvcounts,rdispls,MPI_INTEGER,
-     %                     pe_mycol,ierr)
-!
-!       recvbuf data shape (lni,lnj,pe_ny) on PE( 0:nk-1 ,0:pe_ny-1 )
-!
-        if(pe_mey < nk) then                ! gather and reorder
-          recvcounts(1:pe_nx) = countx(1:pe_nx)*gnj              ! lni by gnj slices
-          do i = 1 , pe_nx
-            rdispls(i) = (i-1)*mxi*gnj + 1
-          enddo
-          the_target = mod(pe_mey,pe_nx)
-          call MPI_gatherv(recvbuf, lni*gnj,            MPI_INTEGER,
-     %                     reorder, recvcounts,rdispls, MPI_INTEGER,
-     %                     the_target,pe_myrow,ierr)      ! root PEs on diagonal
-!
-!       reorder data shape (mxi*gnj,pe_nx) on PE(m,l) (l=0:nk-1 , m=  l mod pe_nx)
-!
-          if(pe_mex == the_target) then
-            do i = 1 , pe_nx      ! time to reorder, pe_nx slices along i
-              i0 = offsetx(i) + 1
-              ilast = i0 + countx(i) - 1
-              do j = 1 , gnj
-                offset = (j-1) * mxi
-                zout(i0:ilast,j) = reorder(offset:offset+ilast-i0,i)
-              enddo
-            enddo
-          endif
-        endif
-!
-!       zout data shape (gni,lnj) on PE(l,m) (l=0:nk-1 , m=  l mod pe_ny)
-!
-
-        goto 1111        ! clean exit
-      endif
-!
-!     if we get here OUCH !! (split nk ib slices of max(pe_nx,pe_ny) ?
-!
-1111  deallocate(sendcounts,recvcounts,sdispls,rdispls)
-      deallocate(recvbuf,reorder)
-      return
-      end
+      end function RPN_COMM_grid_redist_n
