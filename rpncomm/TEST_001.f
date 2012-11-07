@@ -2,6 +2,8 @@
 	implicit none
 	external :: RPN_COMM_grid_redist_test
 	integer :: RPN_COMM_grid_redist_test
+	external :: RPN_COMM_xch_halo_test
+	integer :: RPN_COMM_xch_halo_test
 	external RPN_COMM_init, TestUserInit, get_a_free_unit
         integer :: get_a_free_unit
 	integer :: RPN_COMM_dist_test
@@ -24,6 +26,10 @@
         if(IAND(test_to_perform,2)==2)then
 !          print *,'start grid_redist test'
           ierr=RPN_COMM_grid_redist_test()
+        endif
+        if(IAND(test_to_perform,4)==4)then
+          print *,'start halo exchange test'
+          ierr=RPN_COMM_xch_halo_test()
         endif
         call RPN_COMM_finalize(ierr)
 	stop
