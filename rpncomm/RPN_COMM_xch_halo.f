@@ -25,39 +25,41 @@
 !
       integer, pointer, dimension(:,:,:) :: localarray
       integer*8, pointer, dimension(:,:,:) :: localarray2
-      integer, parameter :: lni=3
-      integer, parameter :: lnj=5
-      integer, parameter :: nk=7
+      integer, parameter :: lni=7
+      integer, parameter :: lnj=9
+      integer, parameter :: nk=1
       integer :: gni, gnj
       integer :: i, j, k, ierr
       integer :: lminx, lmaxx, lminy, lmaxy
       integer :: minx, maxx, miny, maxy
+      integer :: minx1, maxx1, miny1, maxy1
       integer, dimension(pe_nx) :: countx, offsetx
       integer, dimension(pe_ny) :: county, offsety
-      integer :: halox, haloy, npol_row
+      integer :: halox, haloy, npol_row, errors, value, ii, jj
       logical :: periodx, periody
 
 !
       RPN_COMM_xch_halo_test=-1
       gni = pe_nx*lni
       gnj = pe_ny*lnj
-      halox=1
+      halox=3
       haloy=2
       call RPN_COMM_limit(pe_mex,pe_nx,1,gni,lminx,lmaxx,countx,offsetx)
       call RPN_COMM_limit(pe_mey,pe_ny,1,gnj,lminy,lmaxy,county,offsety)
-      minx = lminx-halox
-      maxx = lmaxx+halox
-      miny = lminy-haloy
-      maxy = lmaxy+haloy
-      if(pe_me==8) write(rpn_u,100)'grid halo exchange test',
+      minx = lminx-halox ; minx1 = minx - lminx + 1
+      maxx = lmaxx+halox ; maxx1 = maxx - lminx + 1
+      miny = lminy-haloy ; miny1 = miny - lminy + 1
+      maxy = lmaxy+haloy ; maxy1 = maxy - lminy + 1
+      if(pe_me==pe_nx*pe_ny-1) write(rpn_u,100)
+     %    'grid halo exchange test',
      %    pe_tot_grid,pe_nx,pe_ny,lminx,lmaxx,lminy,lmaxy,countx,county,
-     %    minx,maxx,miny,maxy
+     %    minx1,maxx1,miny1,maxy1
 100   format(A,25I5)
       allocate(localarray(minx:maxx,miny:maxy,nk))
       allocate(localarray2(minx:maxx,miny:maxy,nk))
 !
-      localarray = -1
-      localarray2 = -1
+      localarray = 99999
+      localarray2 = 99999
       do k = 1,nk
       do j = lminy,lmaxy
       do i = lminx,lmaxx
@@ -72,9 +74,40 @@
       periody = .false.
       npol_row = 0
 !      return
-      call RPN_COMM_xch_halo(localarray,minx,maxx,miny,maxy,
+      call RPN_COMM_xch_halo(localarray,minx1,maxx1,miny1,maxy1,
      %             lni,lnj,nk,halox,haloy,periodx,periody,
      %             gni,npol_row)
+
+      call mpi_barrier(MPI_COMM_WORLD,ierr)
+      if(pe_mex==0 .and. pe_mey==0)then
+        do j=lmaxy+haloy,lminy-haloy,-1
+          write(rpn_u,90)j,localarray(:,j,1)
+        enddo
+90      format(20(X,I5.5))
+      endif
+      errors=0
+      do k=1,nk
+      do j=lminy-haloy,lmaxy+haloy
+!      do j=lminy,lmaxy+1
+      do i=lminx-halox,lmaxx+halox
+!      do i=lminx,lmaxx
+        ii = i
+        if(i>gni .and. .not. periodx) cycle
+        if(i<1   .and. .not. periodx) cycle
+        if(i>gni) ii=i-gni
+        if(i<1)   ii=i+gni
+        jj = j
+        if(jj>gnj .and. .not. periody) cycle
+        if(jj<1   .and. .not. periody) cycle
+        if(jj>gnj) jj=j-gnj
+        if(jj<1)   jj=j+gnj
+        value = k+10*jj+1000*ii
+        if(localarray(i,j,k) /= value)errors=errors+1
+      enddo
+      enddo
+      enddo
+      call mpi_barrier(MPI_COMM_WORLD,ierr)
+      write(rpn_u,100)'errors=',errors,pe_mex,pe_mey
 !
       RPN_COMM_xch_halo_test=0
       return
@@ -363,7 +396,7 @@
 !
         bl = 1                       ; br = bl ; ibl = bl ; ibr = br
         cl = 1 + nk*halox*haloy      ; cr = cl ; icl = cl ; icr = cr
-        tl = 1 + nk*halox*(ni-haloy) ; tr = tl ; itl = tl ; itr = tr
+        tl = 1 + nk*halox*(nj-haloy) ; tr = tl ; itl = tl ; itr = tr
         m = bl
         do k=1,nk   ! BL/BL part
         do j=1,haloy
@@ -392,7 +425,7 @@
         enddo
         enddo
         enddo
-        if(m /= 1+halox*nj*nk) print *,'OUCH'
+        if(m /= 1+halox*nj*nk) print *,'OUCH EW send'
 !      write(rpn_u,100),'DBG:',ni,nj,nk,halox,haloy,size(BL_CL_TL),
 !     %      size(BR_CR_TR),m-1,halox*nj*nk
 100   format(A,30I5)
@@ -418,31 +451,32 @@
         do j=1,haloy
         do i=1,ni
            iBL_BLCR_iBR(m)=g(i,j,k)
-           iTL_TLCR_iTR(m)=g(ni-halox+i,j,k)
+           iTL_TLCR_iTR(m)=g(i,nj-haloy+j,k)
            m=m+1
         enddo
         enddo
         enddo
+        if(m /= iblcr+haloy*ni*nk) print *,'OUCH NS part buf'
 !
 !       step 5 get East/West inbound data, then finish filling the North/South send buffers
 !
         if(.not. east) then
           call MPI_wait(from_east,status,ierr)  ! wait for inbound East -> West message to complete
           do i = 0,halox*haloy*nk-1
-             iBL_BLCR_iBR(ibr+i) = iBR_iCR_iTR(br+i)
-             iTL_TLCR_iTR(itr+i) = iBR_iCR_iTR(tr+i)
+             iBL_BLCR_iBR(cbr+i) = iBR_iCR_iTR(br+i)
+             iTL_TLCR_iTR(ctr+i) = iBR_iCR_iTR(tr+i)
           enddo
         endif
         if(.not. west) then
           call MPI_wait(from_west,status,ierr)  ! wait for inbound EAST <- West message to complete
           do i = 0,halox*haloy*nk-1             ! put iBL/iTL into N/S buffers
-             iBL_BLCR_iBR(ibl+i) = iBL_iCL_iTL(bl+i)
-             iTL_TLCR_iTR(itl+i) = iBL_iCL_iTL(tl+i)
+             iBL_BLCR_iBR(cbl+i) = iBL_iCL_iTL(bl+i)
+             iTL_TLCR_iTR(ctl+i) = iBL_iCL_iTL(tl+i)
           enddo
         endif
-      write(rpn_u,100)'DBG',nwds_ns,
-     %                size(cTL_iTLCR_cTR),size(cBL_iBLCR_cBR),
-     %                size(iBL_BLCR_iBR),size(iTL_TLCR_iTR)
+!      write(rpn_u,100)'DBG',nwds_ns,minx,maxx,miny,maxy,
+!     %                size(cTL_iTLCR_cTR),size(cBL_iBLCR_cBR),
+!     %                size(iBL_BLCR_iBR),size(iTL_TLCR_iTR)
 !
 !       step 6 post North/South non blocking receives, post North/South non blocking sends
 !
@@ -464,25 +498,23 @@
         endif
 !
 !       step 7  put East/West outer halos into array
+!               (east/west boundary and periodx false, do not fill east/west outer halo)
 !
         m = bl
         do k=1,nk   ! BL/BL part
         do j=1,haloy
         do i=1,halox
-           g(ni+i,j,k)   =iBR_iCR_iTR(m)      ! iBR part
-           g(i-halox,j,k)=iBL_iCL_iTL(m)      ! iBL part
+           if(.not.east)g(ni+i,j,k)   =iBR_iCR_iTR(m)      ! iBR part
+           if(.not.west)g(i-halox,j,k)=iBL_iCL_iTL(m)      ! iBL part
            m=m+1
         enddo
         enddo
         enddo
-      if(.not. north)call MPI_wait(from_north,status,ierr)
-      if(.not. south)call MPI_wait(from_south,status,ierr)
-      return
         do k=1,nk  ! CL/CR part
         do j=1+haloy,nj-haloy
         do i=1,halox
-           g(ni+i,j,k)   =iBR_iCR_iTR(m)      ! iCR part
-           g(i-halox,j,k)=iBL_iCL_iTL(m)      ! iCL part
+           if(.not.east)g(ni+i,j,k)   =iBR_iCR_iTR(m)      ! iCR part
+           if(.not.west)g(i-halox,j,k)=iBL_iCL_iTL(m)      ! iCL part
            m=m+1
         enddo
         enddo
@@ -490,84 +522,102 @@
         do k=1,nk  ! TL/TR part
         do j=nj-haloy+1,nj
         do i=1,halox
-           g(ni+i,j,k)   =iBR_iCR_iTR(m)      ! iTR part
-           g(i-halox,j,k)=iBL_iCL_iTL(m)      ! iTL part
+           if(.not.east)g(ni+i,j,k)   =iBR_iCR_iTR(m)      ! iTR part
+           if(.not.west)g(i-halox,j,k)=iBL_iCL_iTL(m)      ! iTL part
            m=m+1
         enddo
         enddo
         enddo
-        if(m /= 1+halox*nj*nk) print *,'OUCH'
+        if(m /= 1+halox*nj*nk) print *,'OUCH EW recv'
 !
 !       step 8 wait for inbound North -> South messages to complete 
 !              and put into North outer halo
 !
-        if(.not. north) call MPI_wait(from_north,status,ierr)
-        m=ctl
-        do k=1,nk  ! cTL part
-        do j=nj-haloy+1,nj
-        do i=1,halox
-           g(halox-i,j,k) = cTL_iTLCR_cTR(m)
-           m=m+1
-        enddo
-        enddo
-        enddo      
-        do k=1,nk  ! iTLCR part
-        do j=nj-haloy+1,nj
-        do i=1,ni
-           g(i,j,k) = cTL_iTLCR_cTR(m)
-           m=m+1
-        enddo
-        enddo
-        enddo      
-        do k=1,nk  ! cTR part
-        do j=nj-haloy+1,nj
-        do i=1,halox
-           g(ni+i,j,k) = cTL_iTLCR_cTR(m)
-           m=m+1
-        enddo
-        enddo
-        enddo      
-        if(m /= 1+haloy*(ni+2*halox)*nk) print *,'OUCH'
+        if(.not. north) then   ! north boundary and periody is false, nothing to do
+          call MPI_wait(from_north,status,ierr)
+          m=ctl
+          if(west) then        ! west boundary and periodx false, do not fill west outer halo
+            m=m+nk*halox*haloy
+          else
+            do k=1,nk  ! cTL part
+            do j=nj+1,nj+haloy
+            do i=1,halox
+               g(i-halox,j,k) = cTL_iTLCR_cTR(m)
+               m=m+1
+            enddo
+            enddo
+            enddo     
+          endif
+          do k=1,nk  ! iTLCR part
+          do j=nj+1,nj+haloy
+          do i=1,ni
+             g(i,j,k) = cTL_iTLCR_cTR(m)
+             m=m+1
+          enddo
+          enddo
+          enddo
+          if(.not.east) then    ! east boundary and periodx false, do not fill east outer halo
+            do k=1,nk  ! cTR part
+            do j=nj+1,nj+haloy
+            do i=1,halox
+               g(ni+i,j,k) = cTL_iTLCR_cTR(m)
+               m=m+1
+            enddo
+            enddo
+            enddo
+          endif
+          if(m /= 1+haloy*(ni+2*halox)*nk) print *,'OUCH N recv'
+        endif
 !
 !       step 9 wait for inbound North <- South messages to complete 
 !              and put into South outer halo
 !
 
-        if(.not. south) call MPI_wait(from_south,status,ierr)
-        m=cbl
-        do k=1,nk  ! cBL part
-        do j=nj-haloy+1,nj
-        do i=1,halox
-           g(halox-i,j,k) = cBL_iBLCR_cBR(m)
-           m=m+1
-        enddo
-        enddo
-        enddo      
-        do k=1,nk  ! iBLCR part
-        do j=nj-haloy+1,nj
-        do i=1,ni
-           g(i,j,k) = cBL_iBLCR_cBR(m)
-           m=m+1
-        enddo
-        enddo
-        enddo      
-        do k=1,nk  ! cBR part
-        do j=nj-haloy+1,nj
-        do i=1,halox
-           g(ni+i,j,k) = cBL_iBLCR_cBR(m)
-           m=m+1
-        enddo
-        enddo
-        enddo      
-        if(m /= 1+haloy*(ni+2*halox)*nk) print *,'OUCH'
+        if(.not. south) then   ! south boundary and periody is false, nothing to do
+          call MPI_wait(from_south,status,ierr)
+          m=cbl
+          if(west) then        ! west boundary and periodx is false, do not fill west outer halo
+            m=m+nk*halox*haloy
+          else
+            do k=1,nk  ! cBL part
+            do j=1-haloy,0
+            do i=1,halox
+               g(i-halox,j,k) = cBL_iBLCR_cBR(m)
+               m=m+1
+            enddo
+            enddo
+            enddo
+          endif
+          do k=1,nk  ! iBLCR part
+          do j=1-haloy,0
+          do i=1,ni
+             g(i,j,k) = cBL_iBLCR_cBR(m)
+             m=m+1
+          enddo
+          enddo
+          enddo
+          if(.not.east) then    ! east boundary and periodx false, do not fill east outer halo
+            do k=1,nk  ! cBR part
+            do j=1-haloy,0
+            do i=1,halox
+               g(ni+i,j,k) = cBL_iBLCR_cBR(m)
+               m=m+1
+            enddo
+            enddo
+            enddo
+          endif  
+          if(m /= 1+haloy*(ni+2*halox)*nk) print *,'OUCH S recv'
+        endif
 !
 !       step 10 wait for all outbound messages to complete
 !
-        call MPI_wait(to_east,status,ierr)
-        call MPI_wait(to_west,status,ierr)
-        call MPI_wait(to_south,status,ierr)
-        call MPI_wait(to_north,status,ierr)
-
+        if(.not.east)call MPI_wait(to_east,status,ierr)
+        if(.not.west)call MPI_wait(to_west,status,ierr)
+        if(.not.south)call MPI_wait(to_south,status,ierr)
+        if(.not.north)call MPI_wait(to_north,status,ierr)
+!
+        return
+!
         entry xch_halo(g,minx,maxx,miny,maxy,
      %             ni,nj,nk,halox,haloy,periodx,periody)
         globalni=ni
