@@ -83,10 +83,10 @@
       endif
       call mpi_barrier(MPI_COMM_WORLD,ierr)
       nullify(globalarray)
-      ix0 = lni ! lni+(lni+1)/2-1
-      ixn = gni - lni + 1 ! gni-2*lni+(lni+1)/2+1
-      jy0 = lnj ! (lnj+1)/2 + lnj-1
-      jyn = gnj - lnj + 1 ! gnj-2*lnj+(lnj+1)/2+1
+      ix0 = lni+(lni+1)/2-1
+      ixn = gni-2*lni+(lni+1)/2+1
+      jy0 = (lnj+1)/2 + lnj-1
+      jyn = gnj-2*lnj+(lnj+1)/2+1
       i0=1
       if(ix0>lminx) i0 = i0 + (ix0-lminx)
       in=lni
@@ -128,13 +128,13 @@
       if(pe_me==0)write(rpn_u,*)'status=',status
       if(status==-1)goto 777
 
-!      status2 = RPN_COMM_grid_redist_n(
-!     % localarray2,1-1,lni+2,i0,in,1-2,lnj+1,j0,jn,nk,
-!     % globalarray2,ix0,ixn,jy0,jyn,nz,zlist2,
-!     % gni,gnj,outpe_x,nox,outpe_y,noy,2)
-!      RPN_COMM_grid_redist_test = status2
-!      if(pe_me==0)write(rpn_u,*)'status2=',status2
-!      if(status2==-1)goto 777
+      status2 = RPN_COMM_grid_redist_n(
+     % localarray2,1-1,lni+2,i0,in,1-2,lnj+1,j0,jn,nk,
+     % globalarray2,ix0,ixn,jy0,jyn,nz,zlist2,
+     % gni,gnj,outpe_x,nox,outpe_y,noy,2)
+      RPN_COMM_grid_redist_test = status2
+      if(pe_me==0)write(rpn_u,*)'status2=',status2
+      if(status2==-1)goto 777
 
       do i=1,pe_nx*pe_ny
         call mpi_barrier(MPI_COMM_WORLD,ierr)
@@ -245,17 +245,15 @@
       integer function RPN_COMM_grid_redist(
      %           zin,mini,maxi,i0,in,minj,maxj,j0,jn,nk,
      %           zout,ix0,ixn,jy0,jyn,nz,zlist,
-     %           gni,gnj,outpe_x,noutpe_x,outpe_y,noutpe_y)
+     %           gni,gnj,outpe_x,noutpe_x,outpe_y,noutpe_y,ltok)
       use rpn_comm
       implicit none
-      integer, intent(IN) :: mini,maxi,i0,in,minj,maxj,j0,jn,nk
+      integer, intent(IN) :: mini,maxi,i0,in,minj,maxj,j0,jn,nk,ltok
       integer, intent(IN) :: ix0,ixn,jy0,jyn,nz
       integer, intent(IN) :: noutpe_x,noutpe_y,gni,gnj
-!      integer, dimension(ltok,mini:maxi,minj:maxj,nk), 
-      integer, dimension(mini:maxi,minj:maxj,nk), 
+      integer, dimension(mini:maxi,minj:maxj,nk),   ! (ltok,mini:maxi,minj:maxj,nk)
      %         intent(IN) :: zin  ! zin(:,io:in,j0:jn,:) is useful
-!      integer, dimension(ltok,ix0:ixn,jy0:jyn,nz), intent(OUT) :: zout
-      integer, dimension(ix0:ixn,jy0:jyn,nz), intent(OUT) :: zout
+      integer, dimension(ix0:ixn,jy0:jyn,nz), intent(OUT) :: zout  ! (ltok,ix0:ixn,jy0:jyn,nz)
       integer, dimension(nz), intent(OUT) :: zlist  ! list of 2D fields returned to this processor
       integer, dimension(noutpe_x), intent(IN) :: outpe_x    ! list of columns where there are PEs doing IO
       integer, dimension(noutpe_y), intent(IN) :: outpe_y    ! list of rows where there are PEs doing IO
@@ -289,6 +287,16 @@
       narrays = nk
       needed_for_pass2 = .false.
       size_error = .false.
+      if(mod(gni,ltok)/=0) return  ! gni must be a multiple of tlok
+      if(mod(gni,pe_nx)/=0) return ! not safe yet if tiles not same size along X
+!
+!     may have to add some adjustments to account for ltok factor
+!     ltok > 1 may be unsafe if all tile sizes along X are not equal
+!     i.e. when mod(gni,pe_nx) is not zero
+!     ltok is hidden inside mini,maxi,i0,in,ix0,ixn,gni
+!     user must call RPN_COMM_grid_redist_n if ltok>1
+!     as it will "fudge" mini,maxi,i0,in,ix0,ixn,gni appropriately
+!     mod(gni,ltok) must be zero
 !
       call RPN_COMM_limit(pe_mex,pe_nx,1,gni,lminx,lmaxx,countx,offsetx)  ! X decomposition
       call RPN_COMM_limit(pe_mey,pe_ny,1,gnj,lminy,lmaxy,county,offsety)  ! Y decomposition
@@ -338,7 +346,7 @@
 !     check if a size error occurred somewhere in pe_grid, if so return -1
       call MPI_allreduce(MPI_IN_PLACE,size_error,1,MPI_LOGICAL,MPI_LOR,
      %                   pe_grid,ierr)
-      if(size_error) goto 7777
+      if(size_error) goto 8888
 !
       if(jstart <= jend) then  ! there is something to do during pass 1 for this PE row
         do i = 1 , pe_nx                                  ! horizontal size of 2D fragments
@@ -444,12 +452,12 @@
         enddo  ! k = 1 , n2d
       endif  ! needed_for_pass2 .and. n2d>0
 7777  continue
-      if(associated(dest2))   deallocate(dest2)
+      RPN_COMM_grid_redist = 1  ! number of 2D reassembled fields returned
+8888  if(associated(dest2))   deallocate(dest2)
       if(associated(dest))    deallocate(dest)
       if(associated(source2)) deallocate(source2)
 !
 !      write(rpn_u,*)'end of pass 1+2, pe=',pe_me
-      RPN_COMM_grid_redist = 1  ! number of 2D reassembled fields returned
       return
 !
       contains
@@ -492,13 +500,19 @@
 !      endif
       if(nk>nz*noutpe_x*noutpe_y)return
 !
+!     "fudge" mini,maxi,i0,in,ix0,ixn,gni to account for ltok before calling 
+!     RPN_COMM_grid_redist that will perform the actual work
+!     ltok is passed to RPN_COMM_grid_redist tht may need it to compute data
+!     distribution correctly (where all tiles do not have the same size along X)
+!
       RPN_COMM_grid_redist_n=RPN_COMM_grid_redist(zin,
-     %           mini*ltok,maxi*ltok+ltok-1,
-     %           i0*ltok,in*ltok+ltok-1,
+     %           1+(mini-1)*ltok,1+(maxi-1)*ltok+ltok-1,
+     %           1+(i0-1)*ltok,1+(in-1)*ltok+ltok-1,
      %           minj,maxj,j0,jn,nk,
-     %           zout,ix0*ltok,ixn*ltok+ltok-1,jy0,jyn,nz,zlist,
+     %           zout,1+(ix0-1)*ltok,1+(ixn-1)*ltok+ltok-1,
+     %           jy0,jyn,nz,zlist,
      %           gni*ltok,gnj,
-     %           outpe_x,noutpe_x,outpe_y,noutpe_y)
+     %           outpe_x,noutpe_x,outpe_y,noutpe_y,ltok)
 !
       return
       end function RPN_COMM_grid_redist_n

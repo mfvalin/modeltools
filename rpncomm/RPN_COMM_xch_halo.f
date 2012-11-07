@@ -38,6 +38,7 @@
       logical :: periodx, periody
 
 !
+      RPN_COMM_xch_halo_test=-1
       gni = pe_nx*lni
       gnj = pe_ny*lnj
       halox=1
@@ -75,6 +76,7 @@
      %             lni,lnj,nk,halox,haloy,periodx,periody,
      %             gni,npol_row)
 !
+      RPN_COMM_xch_halo_test=0
       return
       end function RPN_COMM_xch_halo_test
 !=======================================================================
