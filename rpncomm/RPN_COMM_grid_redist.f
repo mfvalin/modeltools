@@ -276,7 +276,7 @@
       integer, pointer, dimension(:,:,:) :: source
       integer :: lminx, lmaxx, lminy, lmaxy
       integer :: i, j, k, l, kbot, ktop, n2d, kout
-      integer :: lev0, narrays, ierr, temp
+      integer :: lev0, narrays, ierr, temp, my_out_col
       logical :: needed_for_pass2, size_error, no_holes
 !
       RPN_COMM_grid_redist = -1  ! return -1 if an error occurred
@@ -317,10 +317,12 @@
       enddo
       n2d=-1
       temp=0
+      my_out_col=-1
       do i = 1,noutpe_x
 !        call mpi_barrier(MPI_COMM_WORLD,ierr)
         if(pe_mex==outpe_x(i)) then   ! my column, 
           n2d = level_x(i)      ! number of 2D fields for this PE column
+          my_out_col=i
           needed_for_pass2 = .true.
           do j=1,level_x(i)
             level_table(j) = temp+j   ! list of levels processed by the PE column
@@ -366,7 +368,7 @@
           ktop = kbot + level_x(l) - 1
 !         calculate counts and displacements for gatherv along x
 !          gcounts_x = 1 + gsize_x * level_x(l)  ! 1 + "horizontal size" * "levels to gather"
-          gcounts_x = gsize_x * level_x(l)  ! 1 + "horizontal size" * "levels to gather"
+          gcounts_x = gsize_x * level_x(l)  !  "horizontal size" * "levels to gather"
           gdispl_x(1) = 0
           do i = 2 , pe_nx
             gdispl_x(i) = gdispl_x(i-1) + gcounts_x(i-1)
@@ -401,14 +403,12 @@
 !
 !      write(rpn_u,*)'end pass 1 :',pe_mex,pe_mey,needed_for_pass2,n2d
       if(needed_for_pass2 .and. n2d>0) then  ! nothing to do if n2d=0
-        do l = 1 , noutpe_x  ! get X counts and displacements for THIS column
-          if(level_x(l)==0 .or. pe_mex/=outpe_x(l)) cycle
-!          gcounts_x = 1 + gsize_x * level_x(l)
-          gcounts_x = gsize_x * level_x(l)
-          gdispl_x(1) = 0
-          do i = 2 , pe_nx
-            gdispl_x(i) = gdispl_x(i-1) + gcounts_x(i-1)
-          enddo
+!       get X counts and displacements for THIS column
+!        gcounts_x = 1 + gsize_x * level_x(my_out_col)
+        gcounts_x = gsize_x * level_x(my_out_col)
+        gdispl_x(1) = 0
+        do i = 2 , pe_nx
+          gdispl_x(i) = gdispl_x(i-1) + gcounts_x(i-1)
         enddo
         lev0 = 0
         no_holes=.true.  ! will be true if one or more PE rows contribute no data
