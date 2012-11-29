@@ -366,7 +366,8 @@
 !       use new fullly asynchronous code only if pe_nx and pe_ny both >1
 !       and polarrows = 0
 !
-      if(pe_nx>1 .and. pe_ny>1 .and. polarrows<=0) goto 2
+      if(pe_nx>1 .and. pe_ny>1 .and. polarrows<=0 
+     %          .and. full_async_exch) goto 2
 !
 !       if no halo along x, bypass
 !     call tmg_start(90,'RPN_COMM_haloew')

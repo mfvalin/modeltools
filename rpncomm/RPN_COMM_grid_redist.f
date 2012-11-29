@@ -288,7 +288,7 @@
       needed_for_pass2 = .false.
       size_error = .false.
       if(mod(gni,ltok)/=0) return  ! gni must be a multiple of tlok
-      if(mod(gni,pe_nx)/=0) return ! not safe yet if tiles not same size along X
+!!!      if(mod(gni,pe_nx)/=0) return ! not safe yet if tiles not same size along X
 !
 !     may have to add some adjustments to account for ltok factor
 !     ltok > 1 may be unsafe if all tile sizes along X are not equal

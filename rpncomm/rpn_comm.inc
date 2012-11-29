@@ -21,17 +21,17 @@
 !
 !     integer,parameter :: RPN_COMM_MASTER = 0
 !
-!      character(len=*),parameter :: RPN_COMM_WORLD      = 'world'      ! PLS do not use
-!      character(len=*),parameter :: RPN_COMM_ALLGRIDS   = 'allgrids'   ! use rather than RPN_COMM_WORLD
-!      character(len=*),parameter :: RPN_COMM_MULTIGRID  = 'multigrid'
-!      character(len=*),parameter :: RPN_COMM_GRID       = 'grid'       ! use rather than RPN_COMM_DOMM
-!      character(len=*),parameter :: RPN_COMM_DEFAULT    = 'defo'
-!      character(len=*),parameter :: RPN_COMM_BLOCMASTER = 'blocmaster'
-!      character(len=*),parameter :: RPN_COMM_BLOC_COMM  = 'bloc'
-!      character(len=*),parameter :: RPN_COMM_EW         = 'ew'
-!      character(len=*),parameter :: RPN_COMM_ROW        = 'ew'
-!      character(len=*),parameter :: RPN_COMM_NS         = 'ns'
-!      character(len=*),parameter :: RPN_COMM_COLUMN     = 'ns'
+!      character(len=*),parameter :: RPN_COMM_WORLD      = 'WORLD'      ! PLS do not use
+!      character(len=*),parameter :: RPN_COMM_ALLGRIDS   = 'ALLGRIDS'   ! use rather than RPN_COMM_WORLD
+!      character(len=*),parameter :: RPN_COMM_MULTIGRID  = 'MULTIGRID'
+!      character(len=*),parameter :: RPN_COMM_GRID       = 'GRID'       ! use rather than RPN_COMM_DOMM
+!      character(len=*),parameter :: RPN_COMM_DEFAULT    = 'DEFO'
+!      character(len=*),parameter :: RPN_COMM_BLOCMASTER = 'BLOCMASTER'
+!      character(len=*),parameter :: RPN_COMM_BLOC_COMM  = 'BLOC'
+!      character(len=*),parameter :: RPN_COMM_EW         = 'EW'
+!      character(len=*),parameter :: RPN_COMM_ROW        = 'EW'
+!      character(len=*),parameter :: RPN_COMM_NS         = 'NS'
+!      character(len=*),parameter :: RPN_COMM_COLUMN     = 'NS'
 !
 !      character(len=*),parameter :: RPN_COMM_INTEGER             =       &
 !     &                             'MPI_INTEGER'
