@@ -17,9 +17,12 @@
 * * Free Software Foundation, Inc., 59 Temple Place - Suite 330,
 * * Boston, MA 02111-1307, USA.
 * */
-      integer function RPN_COMM_grid_redist_test()
+      integer function RPN_COMM_grid_redist_test(nparams,params)
       use rpn_comm
       implicit none
+      integer :: nparams
+      integer, dimension(100) :: params
+        
       integer :: RPN_COMM_grid_redist
       external :: RPN_COMM_grid_redist
       integer :: RPN_COMM_grid_redist_n
@@ -39,9 +42,10 @@
       integer, parameter :: lnj=5
       integer, parameter :: nox=2
       integer, parameter :: noy=2
+      integer, parameter :: maxz=3
       integer, dimension(nox) :: outpe_x
       integer, dimension(noy) :: outpe_y
-      integer, dimension(2) :: zlist, zlist2
+      integer, dimension(maxz) :: zlist, zlist2
       integer :: nk, nz, k0
 !
       if(pe_me==0) write(rpn_u,*)'grid redistribution test',
@@ -49,11 +53,13 @@
 
       outpe_x(nox) = pe_nx-1
       outpe_y(noy) = pe_ny-1
+      outpe_x(nox-1) = pe_nx-2
+      outpe_y(noy-1) = pe_ny-2
       outpe_x(1) = 0
       outpe_y(1) = 0
       gni = pe_nx*lni
       gnj = pe_ny*lnj
-      nk = nox*noy*2-2
+      nk = 7 !nox*noy*3-1
       call RPN_COMM_limit(pe_mex,pe_nx,1,gni,lminx,lmaxx,countx,offsetx)
       call RPN_COMM_limit(pe_mey,pe_ny,1,gnj,lminy,lmaxy,county,offsety)
       allocate(localarray(lminx-1:lmaxx+2,lminy-2:lmaxy+1,nk))
@@ -83,10 +89,10 @@
       endif
       call mpi_barrier(MPI_COMM_WORLD,ierr)
       nullify(globalarray)
-      ix0 = lni+(lni+1)/2-1
-      ixn = gni-2*lni+(lni+1)/2+1
-      jy0 = (lnj+1)/2 + lnj-1
-      jyn = gnj-2*lnj+(lnj+1)/2+1
+      ix0 = 4 ! lni+(lni+1)/2-1
+      ixn = 6 ! gni-2*lni+(lni+1)/2+1
+      jy0 = 6 ! (lnj+1)/2 + lnj-1
+      jyn = 10 ! gnj-2*lnj+(lnj+1)/2+1
       i0=1
       if(ix0>lminx) i0 = i0 + (ix0-lminx)
       in=lni
@@ -99,13 +105,13 @@
       do i = 1,nox
         if(outpe_x(i)==pe_mex .and. outpe_y(j)==pe_mey)then
 !          write(rpn_u,*)'global array allocated',ix0, ixn, jy0, jyn
-          allocate(globalarray(ix0:ixn,jy0:jyn,2))
-          allocate(globalarray2(ix0:ixn,jy0:jyn,2))
+          allocate(globalarray(ix0:ixn,jy0:jyn,3))
+          allocate(globalarray2(ix0:ixn,jy0:jyn,3))
         endif
       enddo
       enddo
-      if(.not. associated(globalarray)) allocate(globalarray(1,1,2))
-      if(.not. associated(globalarray2))allocate(globalarray2(1,1,2))
+      if(.not. associated(globalarray)) allocate(globalarray(1,1,maxz))
+      if(.not. associated(globalarray2))allocate(globalarray2(1,1,maxz))
       globalarray = 0
       do i=1,pe_nx*pe_ny
         call mpi_barrier(MPI_COMM_WORLD,ierr)
@@ -117,7 +123,7 @@
       call mpi_barrier(MPI_COMM_WORLD,ierr)
       zlist = -999999
       zlist2 = -999999
-      nz = 2
+      nz = maxz
       ltok = 1
 
       status = RPN_COMM_grid_redist_n(
@@ -127,7 +133,7 @@
       RPN_COMM_grid_redist_test = status
       if(pe_me==0)write(rpn_u,*)'status=',status
       if(status==-1)goto 777
-
+      goto 1111
       status2 = RPN_COMM_grid_redist_n(
      % localarray2,1-1,lni+2,i0,in,1-2,lnj+1,j0,jn,nk,
      % globalarray2,ix0,ixn,jy0,jyn,nz,zlist2,
@@ -135,7 +141,7 @@
       RPN_COMM_grid_redist_test = status2
       if(pe_me==0)write(rpn_u,*)'status2=',status2
       if(status2==-1)goto 777
-
+1111  continue
       do i=1,pe_nx*pe_ny
         call mpi_barrier(MPI_COMM_WORLD,ierr)
         if(pe_me==i-1) then
@@ -147,7 +153,7 @@
       enddo
 
       call mpi_barrier(MPI_COMM_WORLD,ierr)
-      do k0 = 1 , 2
+      do k0 = 1 , maxz
         call mpi_barrier(MPI_COMM_WORLD,ierr)
         if(zlist(k0)>0) then
           k=zlist(k0)
@@ -158,9 +164,9 @@
         endif
         call mpi_barrier(MPI_COMM_WORLD,ierr)
       enddo
-
+      goto 2222
       call mpi_barrier(MPI_COMM_WORLD,ierr)
-      do k0 = 1 , 2
+      do k0 = 1 , maxz
         call mpi_barrier(MPI_COMM_WORLD,ierr)
         if(zlist2(k0)>0) then
           k=zlist2(k0)
@@ -170,7 +176,7 @@
         endif
         call mpi_barrier(MPI_COMM_WORLD,ierr)
       enddo
-
+2222  continue
       call mpi_barrier(MPI_COMM_WORLD,ierr)
       do k = 1,nk
         call mpi_barrier(MPI_COMM_WORLD,ierr)
@@ -270,7 +276,7 @@
       integer, pointer, dimension(:,:,:) :: source
       integer :: lminx, lmaxx, lminy, lmaxy
       integer :: i, j, k, l, kbot, ktop, n2d, kout
-      integer :: lev0, narrays, ierr, temp
+      integer :: lev0, narrays, ierr, temp, my_out_col
       logical :: needed_for_pass2, size_error, no_holes
 !
       RPN_COMM_grid_redist = -1  ! return -1 if an error occurred
@@ -311,10 +317,12 @@
       enddo
       n2d=-1
       temp=0
+      my_out_col=-1
       do i = 1,noutpe_x
 !        call mpi_barrier(MPI_COMM_WORLD,ierr)
         if(pe_mex==outpe_x(i)) then   ! my column, 
           n2d = level_x(i)      ! number of 2D fields for this PE column
+          my_out_col=i
           needed_for_pass2 = .true.
           do j=1,level_x(i)
             level_table(j) = temp+j   ! list of levels processed by the PE column
@@ -359,7 +367,8 @@
           if(level_x(l)==0) cycle  ! no output to do on this column
           ktop = kbot + level_x(l) - 1
 !         calculate counts and displacements for gatherv along x
-          gcounts_x = 1 + gsize_x * level_x(l)  ! 1 + "horizontal size" * "levels to gather"
+!          gcounts_x = 1 + gsize_x * level_x(l)  ! 1 + "horizontal size" * "levels to gather"
+          gcounts_x = gsize_x * level_x(l)  !  "horizontal size" * "levels to gather"
           gdispl_x(1) = 0
           do i = 2 , pe_nx
             gdispl_x(i) = gdispl_x(i-1) + gcounts_x(i-1)
@@ -368,14 +377,17 @@
           if(istart<=iend) then ! there is valid data on this PE
             if(associated(source)) deallocate(source)
             allocate(source(istart:iend,jstart:jend,kbot:ktop))     ! source buffer
+            source=77777
             source(istart:iend,jstart:jend,kbot:ktop) = 
      %         zin(i0:in,j0:jn,kbot:ktop)   ! extract subarray from input array
           endif
           if(pe_mex == outpe_x(l)) then  ! PEs doing gathering on this column
             if(associated(dest))deallocate(dest)
             allocate( dest( gdispl_x(pe_nx)+gcounts_x(pe_nx)+2 ) )   ! destination buffer 
+            dest=99999
             if(associated(source2))deallocate(source2)
             allocate( source2(ix0:ixn,jstart:jend) )  ! reallocate with proper dimensions
+            source2=88888
           endif
           call MPI_Gatherv(source,gcounts_x(pe_mex+1),MPI_INTEGER,
      %                     dest,gcounts_x,gdispl_x,MPI_INTEGER,
@@ -391,6 +403,13 @@
 !
 !      write(rpn_u,*)'end pass 1 :',pe_mex,pe_mey,needed_for_pass2,n2d
       if(needed_for_pass2 .and. n2d>0) then  ! nothing to do if n2d=0
+!       get X counts and displacements for THIS column
+!        gcounts_x = 1 + gsize_x * level_x(my_out_col)
+        gcounts_x = gsize_x * level_x(my_out_col)
+        gdispl_x(1) = 0
+        do i = 2 , pe_nx
+          gdispl_x(i) = gdispl_x(i-1) + gcounts_x(i-1)
+        enddo
         lev0 = 0
         no_holes=.true.  ! will be true if one or more PE rows contribute no data
                          ! this rigamarole is needed because some MPI implementations
@@ -398,9 +417,9 @@
                          ! to create a new communicator for part of the column.
         do j = 1 , pe_ny ! gcounts_y contains the size of a "full x" "partial y" slab
           gcounts_y(j) = (ixn-ix0+1) * max(0,jend_g(j)-jstart_g(j)+1)
-          no_holes = no_holes .and. gcounts_y(j)>0
+!          no_holes = no_holes .and. gcounts_y(j)>0
           if(lev0==0 .and. gcounts_y(j)>0) lev0 = j ! find first non empty slab
-          if(gcounts_y(j)==0) gcounts_y(j)=1  ! minimum count set to 1 or gatherv might fail
+!          if(gcounts_y(j)==0) gcounts_y(j)=1  ! minimum count set to 1 or gatherv might fail
         enddo
         gdispl_y(1) = 0
         do j = 2 , pe_ny
