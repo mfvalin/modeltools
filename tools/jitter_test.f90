@@ -13,7 +13,8 @@
       real *8 tmax, tmin, tmean, tsum, tsum2, tdev, tminmax, tmaxmin
       real *8, dimension(:,:,:), pointer :: r,a,b
       integer, dimension(0:63) :: bindlist
-      logical, parameter :: bind_to_a_cpu=.true.
+      logical, parameter :: bind_to_a_cpu=.false.
+      integer i,j,k
 
 external report_cpu_binding,report_rset_bindings
 integer report_cpu_binding
@@ -50,8 +51,8 @@ integer bind_thread_to_cpu,bind_thread
       allocate(a(nis,njs,nks))
       allocate(b(nis,njs,nks))
 
-      do nthreads = maxthreads,1,-1     ! test for all numbers of threads down to one
-      call omp_set_num_threads(nthreads)
+!      do nthreads = maxthreads,1,-1     ! test for all numbers of threads down to one
+!      call omp_set_num_threads(nthreads)
       bindlist = -1
 !$OMP parallel private(bind_thread) shared(bindlist)
       if(bind_to_a_cpu) then
@@ -63,14 +64,25 @@ integer bind_thread_to_cpu,bind_thread
         print 99, 'BIND list:', bindlist(0:nthreads-1)
 99    format(A,64I3)
       else
-        call report_rset_bindings
+!        call report_rset_bindings
       endif
 
       do iterext=1,7
+
       tag = 10000*iterext + nthreads*1000
-      r = 2.1+iterext
-      a = 0.5+iterext
-      b = 2.3+iterext
+!$omp parallel
+!$omp do
+      do k=1,nks
+      do j=1,njs
+      do i=1,nis
+        r(i,j,k) = 2.1+iterext
+        a(i,j,k) = 0.5+iterext
+        b(i,j,k) = 2.3+iterext
+      enddo
+      enddo
+      enddo
+!$omp enddo
+!$omp end parallel
 
       call computefornothing_a(r,a,b,nis,njs,nks)
 
@@ -134,7 +146,7 @@ integer bind_thread_to_cpu,bind_thread
 
       enddo ! iterext
 
-      enddo  ! nthreads
+!      enddo  ! nthreads
 
       deallocate(r,a,b)
 

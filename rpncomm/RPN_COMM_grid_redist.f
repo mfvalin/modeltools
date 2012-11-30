@@ -47,6 +47,7 @@
       integer, dimension(noy) :: outpe_y
       integer, dimension(maxz) :: zlist, zlist2
       integer :: nk, nz, k0
+      real *8 :: t1,t2,t3,t4,t5
 !
       if(pe_me==0) write(rpn_u,*)'grid redistribution test',
      %    pe_tot_grid,pe_nx,pe_ny
@@ -125,13 +126,14 @@
       zlist2 = -999999
       nz = maxz
       ltok = 1
-
+      t1=mpi_wtime()
       status = RPN_COMM_grid_redist_n(
      % localarray,1-1,lni+2,i0,in,1-2,lnj+1,j0,jn,nk,
      % globalarray,ix0,ixn,jy0,jyn,nz,zlist,
      % gni,gnj,outpe_x,nox,outpe_y,noy,1)
+      t2=mpi_wtime()
       RPN_COMM_grid_redist_test = status
-      if(pe_me==0)write(rpn_u,*)'status=',status
+      if(pe_me==0)write(rpn_u,*)'status=',status,' time=',t2-t1
       if(status==-1)goto 777
       goto 1111
       status2 = RPN_COMM_grid_redist_n(
