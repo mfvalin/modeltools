@@ -40,15 +40,34 @@
       integer :: i0, in, j0, jn
       integer, parameter :: lni=3
       integer, parameter :: lnj=5
-      integer, parameter :: nox=2
-      integer, parameter :: noy=2
-      integer, parameter :: maxz=3
-      integer, dimension(nox) :: outpe_x
-      integer, dimension(noy) :: outpe_y
-      integer, dimension(maxz) :: zlist, zlist2
+      integer :: nox
+      integer :: noy
+      integer :: maxz
+      integer, pointer, dimension(:) :: outpe_x
+      integer, pointer, dimension(:) :: outpe_y
+      integer, pointer, dimension(:) :: zlist, zlist2
       integer :: nk, nz, k0
       real *8 :: t1,t2,t3,t4,t5
 !
+!      gni = params(1)
+      gni = pe_nx*lni
+!      gnj = params(2)
+      gnj = pe_ny*lnj
+!      nk = params(3)
+      nk = 7 !nox*noy*3-1
+!      nox = params(4)
+      nox = 2
+!      noy = params(5)
+      noy = 2
+!
+      ix0 = 4 ! lni+(lni+1)/2-1
+      ixn = 6 ! gni-2*lni+(lni+1)/2+1
+      jy0 = 6 ! (lnj+1)/2 + lnj-1
+      jyn = 10 ! gnj-2*lnj+(lnj+1)/2+1
+!
+      allocate(outpe_x(nox),outpe_y(noy))
+      allocate(zlist(nk),zlist2(nk))
+      maxz = (nk+nox+noy-1)/(nox*noy)
       if(pe_me==0) write(rpn_u,*)'grid redistribution test',
      %    pe_tot_grid,pe_nx,pe_ny
 
@@ -58,9 +77,6 @@
       outpe_y(noy-1) = pe_ny-2
       outpe_x(1) = 0
       outpe_y(1) = 0
-      gni = pe_nx*lni
-      gnj = pe_ny*lnj
-      nk = 7 !nox*noy*3-1
       call RPN_COMM_limit(pe_mex,pe_nx,1,gni,lminx,lmaxx,countx,offsetx)
       call RPN_COMM_limit(pe_mey,pe_ny,1,gnj,lminy,lmaxy,county,offsety)
       allocate(localarray(lminx-1:lmaxx+2,lminy-2:lmaxy+1,nk))
@@ -90,24 +106,20 @@
       endif
       call mpi_barrier(MPI_COMM_WORLD,ierr)
       nullify(globalarray)
-      ix0 = 4 ! lni+(lni+1)/2-1
-      ixn = 6 ! gni-2*lni+(lni+1)/2+1
-      jy0 = 6 ! (lnj+1)/2 + lnj-1
-      jyn = 10 ! gnj-2*lnj+(lnj+1)/2+1
-      i0=1
+      i0=1   ! max(lminx,ix0)
       if(ix0>lminx) i0 = i0 + (ix0-lminx)
-      in=lni
+      in=lni ! min(lmaxx,ixn)
       if(lmaxx>ixn) in = in - (lmaxx-ixn)
-      j0=1
+      j0=1   ! max(lminy,jy0)
       if(jy0>lminy) j0 = j0 + (jy0-lminy)
-      jn=lnj
+      jn=lnj ! min(lmaxy,jyn)
       if(lmaxy>jyn) jn = jn - (lmaxy-jyn)
       do j = 1,noy
       do i = 1,nox
         if(outpe_x(i)==pe_mex .and. outpe_y(j)==pe_mey)then
 !          write(rpn_u,*)'global array allocated',ix0, ixn, jy0, jyn
-          allocate(globalarray(ix0:ixn,jy0:jyn,3))
-          allocate(globalarray2(ix0:ixn,jy0:jyn,3))
+          allocate(globalarray(ix0:ixn,jy0:jyn,maxz))
+          allocate(globalarray2(ix0:ixn,jy0:jyn,maxz))
         endif
       enddo
       enddo
@@ -135,6 +147,7 @@
       RPN_COMM_grid_redist_test = status
       if(pe_me==0)write(rpn_u,*)'status=',status,' time=',t2-t1
       if(status==-1)goto 777
+      
       goto 1111
       status2 = RPN_COMM_grid_redist_n(
      % localarray2,1-1,lni+2,i0,in,1-2,lnj+1,j0,jn,nk,
@@ -143,6 +156,7 @@
       RPN_COMM_grid_redist_test = status2
       if(pe_me==0)write(rpn_u,*)'status2=',status2
       if(status2==-1)goto 777
+      
 1111  continue
       do i=1,pe_nx*pe_ny
         call mpi_barrier(MPI_COMM_WORLD,ierr)
