@@ -126,8 +126,8 @@
 !==============================================================================
 !     open a set of one or more RANDOM STANDARD file(s) and "link" them
 ! IN  name     : 5 cases
-!              1) path to a standard file
-!              2) path to a file containing a list of standard file names
+!              1) path to a standard file (or new file name)
+!              2) path to a text file containing a list of standard file names
 !              3) shell style file pattern ( e.g. /a/b/c/*.fst  ./*.abc  x/y/*.Fst   *.xyz)
 !              4) + separated list of standard file paths (e.g. /a/b/c/aa.fst+f/g/dd.fst+./abc.def+qwe.rty)
 !              5) path to a directory
@@ -140,6 +140,8 @@
 !                                name MUST contain a path with at least one directory element
 !                                e.g. ./mylist.txt , /a/b/c/other.txt ./x/y/bla.ttx 
 !                                ( something like list.txt will NOT work )
+!                +FSTOUV_CREATE  if no file with this name exists, create it (random standard file)
+!                                if file exists and is not a standard file, this is an error
 !                +FSTOUV_LAZY    if a pattern is supplied, just ignore files that are not standard files
 !                                this flag is ignored unless a pattern has been used (case 3 only)
 !
@@ -166,7 +168,7 @@
       character (len=*), parameter :: defext='*.fst'   ! default extension to look for in directory
       character (len=32) :: extension
       type(link_element), pointer :: next_list
-      logical :: lazy, is_a_list
+      logical :: lazy, is_a_list, can_create, can_write
 
       integer fnom, fstouv, name_is_a_file, name_is_a_dir
       integer name_is_txt_file
@@ -181,11 +183,14 @@
       NULC = achar(0)
       extension=''
       iunlist = -1
-      file_mode = 'STD+RND+OLD+R/O'
-      lazy = iand(options,FSTOUV_LAZY) == FSTOUV_LAZY
-      is_a_list = iand(options,FSTOUV_LIST) == FSTOUV_LIST
+      file_mode  = 'STD+RND+OLD+R/O'
+      lazy       = iand(options,FSTOUV_LAZY) == FSTOUV_LAZY
+      can_write  = iand(options,FSTOUV_WRITE) == FSTOUV_WRITE
+      can_create = iand(options,FSTOUV_CREATE) == FSTOUV_CREATE
+      is_a_list  = iand(options,FSTOUV_LIST) == FSTOUV_LIST
+      if(can_create) can_write=.true.
 
-      if(0 == name_is_a_file(trim(name)//NULC)) then       ! name of a list of filenames or single standard file
+      if(0 == name_is_a_file(trim(name)//NULC) .or. can_create) then    ! list of filenames or single standard file
 
         if(is_a_list) then   ! text file, this is the name of a list of file names
           filelist=name
@@ -195,10 +200,9 @@
             dirname(i:i)=' '
             i=i-1
           enddo
-        else  ! not a list of file names, try to open as a standard file
+        else  ! not a list of file names, try to open as a standard file (error if file cannot be opened)
           print *,'FILE: ',trim(name)
-          if(iand(options,FSTOUV_WRITE) == FSTOUV_WRITE) 
-     %                              file_mode = 'STD+RND'              ! single file to open, write mode allowed
+          if(can_write) file_mode = 'STD+RND'        ! single file to open/create, write mode allowed
           lazy = .false.                                               ! but lazy mode is not
           status = try_to_open(name,lazy,file_mode)
           if(status /= 0) goto 333                                     ! ERROR exit
