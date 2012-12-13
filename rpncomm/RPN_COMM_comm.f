@@ -98,3 +98,46 @@ c
       stop
       return
       end
+      integer function RPN_COMM_custom_comm(com,name,mode)
+      use rpn_comm
+      implicit none
+!     lookup or create a communicator with a rpn_comm style name
+      character(len=*), intent(IN) :: name
+      integer, intent(IN) :: com
+      integer, intent(IN) :: mode
+!
+      integer :: i
+      character (len=32) :: name2
+!
+      integer, parameter :: MAX_NAMES=128
+      type(SYMTAB), save, dimension(:), pointer :: names => NULL()
+      integer, save :: entries=0
+!
+      if(.not. associated(names)) allocate(names(MAX_NAMES))
+
+      RPN_COMM_custom_comm=MPI_COMM_NULL
+      name2 = trim(name)
+!
+      if(mode==RPN_COMM_GET) then                 ! look for rpn_comm communicator named "name"
+         do i = 1 , entries
+            if(trim(name2)==trim(names(i).string)) then
+               RPN_COMM_custom_comm = names(i).number
+               return
+            endif
+         enddo
+      else if(mode==RPN_COMM_SET) then             ! add "name" and com to the rpn_comm communicators
+         if(entries<MAX_NAMES) then
+            entries = entries + 1
+            names(entries).string = trim(name2)
+            names(entries).number = com
+            RPN_COMM_custom_comm=com
+         else
+            write(rpn_u,*) 'ERROR: communicator table full'
+         endif
+      else if(mode==RPN_COMM_DEL) then              ! delete "name" and com from rpn_comm communicators
+      else
+         write(rpn_u,*) 'ERROR: RPN_COMM_custom_comm illegal mode'
+      endif
+      return
+      end
+

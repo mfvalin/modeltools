@@ -21,6 +21,8 @@ lib: $(LIBRARY)
 
 stublib: $(STUB_LIBRARY)
 
+RPN_COMM_mod.o:	RPN_COMM_mod.f90 RPN_COMM_constants.inc
+
 rpn_comm_fortran_stubs.f: rpn_comm_stubs.sh
 	$(SHELL) rpn_comm_stubs.sh fortran
 
@@ -31,7 +33,8 @@ $(STUB_LIBRARY): rpn_comm_fortran_stubs.o rpn_comm_c_stubs.o
 	mkdir -p $(LIBDIR)
 	ar rcv $(STUB_LIBRARY) rpn_comm_fortran_stubs.o rpn_comm_c_stubs.o
 
-$(subst .f,.o,$(wildcard RPN_COMM*.f)):	RPN_COMM_mod.o
+#$(subst .f,.o,$(wildcard RPN_COMM*.f)):	RPN_COMM_mod.o
+$(FOBJECTS):	RPN_COMM_mod.o
 
 $(LIBRARY): $(FMODULES) f77name.h $(FOBJECTS) $(COBJECTS)
 	mkdir -p $(LIBDIR)

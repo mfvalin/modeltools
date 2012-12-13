@@ -19,6 +19,9 @@
 ! */
 !
         integer,parameter :: RPN_COMM_MASTER = 0
+        integer, parameter :: RPN_COMM_GET=12345
+        integer, parameter :: RPN_COMM_SET=12346
+        integer, parameter :: RPN_COMM_DEL=12347
 !
         logical,parameter :: RPN_COMM_TOPO_X      = .true.
         logical,parameter :: RPN_COMM_TOPO_Y      = .false.
