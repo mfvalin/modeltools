@@ -120,16 +120,16 @@ c
 !
       if(mode==RPN_COMM_GET) then                 ! look for rpn_comm communicator named "name"
          do i = 1 , entries
-            if(trim(name2)==trim(names(i).string)) then
-               RPN_COMM_custom_comm = names(i).number
+            if(trim(name2)==trim(names(i)%string)) then
+               RPN_COMM_custom_comm = names(i)%number
                return
             endif
          enddo
       else if(mode==RPN_COMM_SET) then             ! add "name" and com to the rpn_comm communicators
          if(entries<MAX_NAMES) then
             entries = entries + 1
-            names(entries).string = trim(name2)
-            names(entries).number = com
+            names(entries)%string = trim(name2)
+            names(entries)%number = com
             RPN_COMM_custom_comm=com
          else
             write(rpn_u,*) 'ERROR: communicator table full'

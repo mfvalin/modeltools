@@ -7,7 +7,7 @@ $(info including Makefile for EC setup)
 # this is for sites using the EC setup
 
 CFLAGS =  -O 2
-FCFLAGS =  -O 2
+FCFLAGS = -O 2
 
 CC=s.cc
 FC=s.f77

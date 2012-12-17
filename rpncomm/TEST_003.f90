@@ -1,4 +1,4 @@
-        program test
+        subroutine test_003
         implicit none
         external :: f_omp_get_max_threads_
         integer ::  f_omp_get_max_threads_

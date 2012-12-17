@@ -1,4 +1,4 @@
-	program test_001
+	subroutine test_001
 	implicit none
 	external :: RPN_COMM_grid_redist_test
 	integer :: RPN_COMM_grid_redist_test

@@ -72,6 +72,7 @@ double rpn_comm_tsc()
 {
   double temp;
 #if defined(linux)
+  char *junk;
   ticks value;
   FILE *cpuInfo;
   char buffer[1024];
@@ -80,7 +81,7 @@ double rpn_comm_tsc()
   if(t0_ == 0) {
     if( (cpuInfo = fopen("/proc/cpuinfo", "r")) != NULL  ) {
       while(1) {
-	fgets(buffer,sizeof(buffer),cpuInfo);
+	junk=fgets(buffer,sizeof(buffer),cpuInfo);
 	if(buffer[4]=='M' && buffer[5]=='H' && buffer[6]=='z') {
 	  while(*pbuf != ':') pbuf++; pbuf++;
 	  sscanf(pbuf,"%f",&freq);

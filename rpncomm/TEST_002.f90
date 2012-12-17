@@ -3,7 +3,7 @@
 !    are giving correct results. Furthermore, it returns a timing
 !    for rpn_comm_xch_halo
 !
-        program test_002
+        subroutine test_002
 	logical :: asynchronous  ! use asynchronous code
 !        print *,'I am version ',VeRsion
         call rpn_comm_test_002

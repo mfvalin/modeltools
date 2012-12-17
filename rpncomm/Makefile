@@ -1,47 +1,81 @@
 SHELL=/bin/bash
-include RPN_COMM_version.inc
-$(info rpn_comm VERSION IS $(RPN_COMM_version_s))
+
+ifneq (,$(realpath ./Makefile))
+
+.SUFFIXES:
+
+ifeq (,$(BASE_ARCH))
+ OBJDIR := custom/unknown
+else
+ OBJDIR := $(EC_ARCH)
+endif
+$(info Phase one, OBJDIR=$(OBJDIR))
+
+MAKETARGET=$(MAKE) --no-print-directory -C $@ -f $(CURDIR)/Makefile \
+	SRCDIR=$(CURDIR) $(MAKECMDGOALS)
+
+.PHONY: $(OBJDIR)
+$(OBJDIR):
+	+@[[ -d $@ ]] || mkdir -p $@
+	+@ echo "MAKETARGET=$(MAKETARGET)"
+	+@$(MAKETARGET)
+	
+Makefile : ;
+%.mk :: ;
+% :: $(OBJDIR) ; :
+
+.PHONY: fullclean
+fullclean:
+	rm -rf $(EC_ARCH)
+
+else
+
+$(info Phase two)
+VPATH=$(SRCDIR)
+
+#$(info TOP IS $(TOP)=$(realpath $(TOP)), VPATH=$(VPATH))
+#ifeq (,$(realpath $(VPATH)/Makefile.common))
+#  $(error Makefile.common not found)
+#endif
+
+include $(VPATH)/RPN_COMM_version.inc
+$(info this is RPN_COMM version $(RPN_COMM_version_s))
+
+include $(VPATH)/Makefile.common
+include $(VPATH)/dependencies.mk
 
 LIB = rpn_comm
 CLEAN = rpn_comm_fortran_stubs.f rpn_comm_c_stubs.c $(STUB_LIBRARY) $(LIBRARY)
-
-include Makefile.common
-
-TESTS = TEST_001 TEST_002
-FOBJECTS = $(subst .f,.o,$(wildcard RPN_COMM*.f))
-COBJECTS = $(subst .c,.o,$(wildcard RPN_COMM*.c))
+TESTS = TEST_000.Abs TEST_001.Abs TEST_002.Abs TEST_003.Abs
 FMODULES = RPN_COMM_mod.o
 LIBRARY = $(LIBDIR)/lib$(LIB)_$(RPN_COMM_version).a
 STUB_LIBRARY = $(LIBDIR)/lib$(LIB)stubs_$(RPN_COMM_version).a
 
+ALL:  lib tests
 
-ALL: lib stublib $(TESTS)
-
-lib: $(LIBRARY)
+tests:	$(TESTS)
 
 stublib: $(STUB_LIBRARY)
 
-RPN_COMM_mod.o:	RPN_COMM_mod.f90 RPN_COMM_constants.inc
+lib: $(LIBRARY)
 
-rpn_comm_fortran_stubs.f: rpn_comm_stubs.sh
-	$(SHELL) rpn_comm_stubs.sh fortran
+rpn_comm_fortran_stubs.f: $(VPATH)/rpn_comm_stubs.sh
+	$(SHELL) $(VPATH)/rpn_comm_stubs.sh fortran
 
-rpn_comm_c_stubs.c: rpn_comm_stubs.sh
-	$(SHELL) rpn_comm_stubs.sh c
+rpn_comm_c_stubs.c: $(VPATH)/rpn_comm_stubs.sh
+	$(SHELL) $(VPATH)/rpn_comm_stubs.sh c
 
 $(STUB_LIBRARY): rpn_comm_fortran_stubs.o rpn_comm_c_stubs.o
 	mkdir -p $(LIBDIR)
 	ar rcv $(STUB_LIBRARY) rpn_comm_fortran_stubs.o rpn_comm_c_stubs.o
 
-#$(subst .f,.o,$(wildcard RPN_COMM*.f)):	RPN_COMM_mod.o
-$(FOBJECTS):	RPN_COMM_mod.o
-
-$(LIBRARY): $(FMODULES) f77name.h $(FOBJECTS) $(COBJECTS)
+$(LIBRARY): $(OBJECTS)
 	mkdir -p $(LIBDIR)
-	ar rcv $(LIBRARY) $(FOBJECTS) $(COBJECTS) $(FMODULES)
+	ar rcv $(LIBRARY) $(OBJECTS)
 
-TEST_001: $(LIBRARY) TEST_001.f
-	$(MPIFC) $(FCFLAGS) TEST_001.f TEST_helpers.f -L$(LIBDIR) -l$(LIB)_$(RPN_COMM_version) -o TEST_001
+TEST_000.Abs: $(LIBRARY)
+TEST_001.Abs: $(LIBRARY)
+TEST_002.Abs: $(LIBRARY)
+TEST_003.Abs: $(LIBRARY)
 
-TEST_002: $(LIBRARY) TEST_002.f90
-	$(MPIF90C) $(FCFLAGS) TEST_002.f90 -L$(LIBDIR) -l$(LIB)_$(RPN_COMM_version) -o TEST_002
+endif

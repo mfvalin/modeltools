@@ -344,6 +344,7 @@ int rpn_comm_softbarrier(ftnword *ftn_comm)   /* perform a soft sync */
   int fdesc_up=-1, fdesc_down=-1;
   int status=-1;
   struct set_of_ports *p=chain;
+  int junk;
   
   while ( (p!=NULL) && (p->comm != comm) ) p = p->next ;
   if ( p == NULL ) return(-1);
@@ -369,12 +370,12 @@ int rpn_comm_softbarrier(ftnword *ftn_comm)   /* perform a soft sync */
 #ifdef DEBUG
     printf("PE=%d,connected_to_port %d@%x, desc=%d\n",p->pe_me,p->list_port[p->pe_me-1],p->list_server[p->pe_me-1],fdesc_up);
 #endif
-    read(fdesc_up,buf,4);
+    junk=read(fdesc_up,buf,4);
     }
-  if(p->pe_me != p->nprocs-1) write(fdesc_down,buf,4);
+  if(p->pe_me != p->nprocs-1) junk=write(fdesc_down,buf,4);
 
-  if(p->pe_me != p->nprocs-1) read(fdesc_down,buf,4);
-  if(p->pe_me != 0) write(fdesc_up,buf,4);
+  if(p->pe_me != p->nprocs-1) junk=read(fdesc_down,buf,4);
+  if(p->pe_me != 0) junk=write(fdesc_up,buf,4);
 
   if(fdesc_up != -1) close(fdesc_up);
   if(fdesc_down != -1) close(fdesc_down);
