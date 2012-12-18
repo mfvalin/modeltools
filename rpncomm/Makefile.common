@@ -16,12 +16,10 @@
 
 ifeq (,$(BASE_ARCH))
   BASE_ARCH:=custom
-#  EC_ARCH:=$(BASE_ARCH)/unknown
-  EC_ARCH:=$(BASE_ARCH)
+  EC_ARCH:=$(BASE_ARCH)/unknown
   include $(VPATH)/Makefile.default
 else
   ifdef EC_ARCH
-#    LIBDIR := $(VPATH)/$(EC_ARCH)
     ifneq (,$(wildcard Makefile.$(BASE_ARCH)))
       include $(VPATH)/$(wildcard Makefile.$(BASE_ARCH))
     endif

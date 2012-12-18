@@ -1,6 +1,6 @@
-SHELL=/bin/bash
-
+#----- Begin Boilerplate
 ifneq (,$(realpath ./Makefile))
+# we are at the top level, in the source directory
 
 .SUFFIXES:
 
@@ -9,7 +9,7 @@ ifeq (,$(BASE_ARCH))
 else
  OBJDIR := $(EC_ARCH)
 endif
-$(info Phase one, OBJDIR=$(OBJDIR))
+#$(info Phase one, OBJDIR=$(OBJDIR))
 
 MAKETARGET=$(MAKE) --no-print-directory -C $@ -f $(CURDIR)/Makefile \
 	SRCDIR=$(CURDIR) $(MAKECMDGOALS)
@@ -17,7 +17,6 @@ MAKETARGET=$(MAKE) --no-print-directory -C $@ -f $(CURDIR)/Makefile \
 .PHONY: $(OBJDIR)
 $(OBJDIR):
 	+@[[ -d $@ ]] || mkdir -p $@
-	+@ echo "MAKETARGET=$(MAKETARGET)"
 	+@$(MAKETARGET)
 	
 Makefile : ;
@@ -29,19 +28,18 @@ fullclean:
 	rm -rf $(EC_ARCH)
 
 else
+#----- End Boilerplate
 
-$(info Phase two)
+# we are being invoked in the build directory by phase 1
+#$(info Phase two)
 VPATH=$(SRCDIR)
-
-#$(info TOP IS $(TOP)=$(realpath $(TOP)), VPATH=$(VPATH))
-#ifeq (,$(realpath $(VPATH)/Makefile.common))
-#  $(error Makefile.common not found)
-#endif
 
 include $(VPATH)/RPN_COMM_version.inc
 $(info this is RPN_COMM version $(RPN_COMM_version_s))
 
+# general building rules
 include $(VPATH)/Makefile.common
+# sources specific (mechanically generated) dependencies
 include $(VPATH)/dependencies.mk
 
 LIB = rpn_comm
@@ -78,4 +76,6 @@ TEST_001.Abs: $(LIBRARY)
 TEST_002.Abs: $(LIBRARY)
 TEST_003.Abs: $(LIBRARY)
 
+#----- Begin Boilerplate
 endif
+#----- End Boilerplate
