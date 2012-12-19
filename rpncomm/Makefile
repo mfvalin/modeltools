@@ -1,3 +1,4 @@
+SHELL=/bin/bash
 #----- Begin Boilerplate
 ifneq (,$(realpath ./Makefile))
 # we are at the top level, in the source directory
