@@ -30,14 +30,14 @@
 
       contains
 !------------------------------------------------------------------------------
-      integer function get_fortran_unit() ! get the number of an unused fortran unit
+      integer function get_unused_fortran_unit() ! get the number of an unused fortran unit
       implicit none
 
       character (len=32) :: access_mode
       integer :: i, ios
       logical :: inuse
 
-      get_fortran_unit = -1  ! precondition to fail
+      get_unused_fortran_unit = -1  ! precondition to fail
       ios = 0
       inuse = .true.
       do i = 99, 1, -1  ! find an available unit number
@@ -45,12 +45,12 @@
 !        if(trim(access_mode) == 'UNDEFINED')then ! found
         inquire(unit=i,opened=inuse,iostat=ios)
         if(.not. inuse .and. ios == 0)then ! found unit not in use, return its number
-          get_fortran_unit = i
+          get_unused_fortran_unit = i
           return
         endif
       enddo
       return
-      end function get_fortran_unit
+      end function get_unused_fortran_unit
 
       end module ouvfrm_by_name
 
@@ -229,7 +229,7 @@
           endif
         endif
         if(filelist /= '') then    ! read file list, call fnom and fstouv for the files
-          iunlist = get_fortran_unit()   ! get a fortran unit to read list of file names
+          iunlist = get_unused_fortran_unit()   ! get a fortran unit to read list of file names
         else
           filelist = trim(dirname)//defext
           dirname = ''
@@ -468,7 +468,7 @@
         listname  = trim(names)//'/'//trim(filelist)           ! name of file list to look for
         if(0 == name_is_a_file(trim(listname)//NULC)) then
           print *,'FOUND '//trim(listname)
-          list = get_fortran_unit()
+          list = get_unused_fortran_unit()
           open(unit=list,file=trim(listname)//NULC,form='FORMATTED')   ! open list of names
 1         read(list,*,end=2)globname2                          ! for each name in .dir file
           globname2=trim(names)//'/'//globname2
