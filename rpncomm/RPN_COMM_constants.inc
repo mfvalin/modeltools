@@ -39,6 +39,7 @@
         character(len=*),parameter :: RPN_COMM_DEFAULT    = 'DEFO'
         character(len=*),parameter :: RPN_COMM_BLOCMASTER = 'BLOCMASTER'
         character(len=*),parameter :: RPN_COMM_BLOCK      = 'BLOC'
+        character(len=*),parameter :: RPN_COMM_BLOC_COMM  =  RPN_COMM_BLOCK 
         character(len=*),parameter :: RPN_COMM_EW         = 'EW'
         character(len=*),parameter :: RPN_COMM_ROW        = 'EW'
         character(len=*),parameter :: RPN_COMM_NS         = 'NS'
