@@ -3,10 +3,10 @@
 !    are giving correct results. Furthermore, it returns a timing
 !    for rpn_comm_xch_halo
 !
-        subroutine test_002
+        subroutine rpn_comm_test_002
 	logical :: asynchronous  ! use asynchronous code
 !        print *,'I am version ',VeRsion
-        call rpn_comm_test_002
+        call rpn_comm_test_002b
         stop
         end
         subroutine get_n_domains(ndomains, offset, err)
@@ -23,7 +23,7 @@
         err = 0
         return
         end
-        subroutine rpn_comm_test_002
+        subroutine rpn_comm_test_002b
         implicit none
 !
 !       dummy test program implemented as a subroutne

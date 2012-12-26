@@ -7,11 +7,11 @@
 .c.o:
 	$(MPICC) -I$(VPATH) -c $(CFLAGS) $<
 .o.Abs:
-	echo program $(basename $<)_ > test.f90 ; \
-	echo call $(basename $<) >> test.f90 ; \
+	echo program P_$(basename $<) > test.f90 ; \
+	echo call $(LIB)_$(basename $<) >> test.f90 ; \
 	echo stop >>test.f90 ; \
 	echo end >>test.f90 ; \
-	$(MPIF90C) $(OPENMP) $(FCFLAGS) -o $@ test.f90 $(LIBRARY) ; \
+	$(MPIF90C) $(OPENMP) $(FCFLAGS) -o $@ test.f90 -L$(LIBDIR) -l$(LIBNAME) ; \
 	cat test.f90 ; rm -f test.f90
 
 ifeq (,$(BASE_ARCH))
@@ -29,12 +29,13 @@ else
     include $(VPATH)/Makefile.ECsetup
   endif
 endif
-LIBDIR := $(VPATH)/$(EC_ARCH)
+LIBDIR := $(VPATH)/../lib/$(EC_ARCH)
 
 all: ALL
 
 clean:
 	rm -f *.o *.mod $(TESTS) $(CLEAN)
+	rm -rf $(CLEANDIRS)
 
 veryclean:
 	rm -f *.o *.mod *.Abs *.FLAG f77name.h $(TESTS) *~ $(VERYCLEAN) $(CLEAN)

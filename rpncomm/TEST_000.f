@@ -1,4 +1,4 @@
-	subroutine test_000
+	subroutine rpn_comm_test_000
 	implicit none
 	integer ierr, myrank,totpes
 	include 'mpif.h'
