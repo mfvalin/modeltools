@@ -17,7 +17,7 @@ LIBRARY  = $(LIBDIR)/lib$(LIBNAME).a
 STUB_LIBRARY = $(LIBDIR)/lib$(LIB)stubs_$(RPN_COMM_version).a
 SOURCES  = $(INCDECKS) $(CDECKS) $(FDECKS) $(HDECKS) $(F90DECKS)
 
-ALL:  lib tests
+ALL:  lib stublib tests
 
 tests:	$(TESTS)
 

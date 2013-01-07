@@ -266,9 +266,9 @@
 
       jmin = 1
       jmax = nj 
-      if(rpn_ew_ext_L) then
-         if(north) jmax = nj+haloy
-         if(south) jmin = 1-haloy
+      if(rpn_ew_ext_L) then            !  add haloy extra rows for EW halo exchange 
+         if(north) jmax = nj+haloy     !  above for North tiles
+         if(south) jmin = 1-haloy      !  below for South tiles
       endif
 !
       if(pe_opcv(1) .ne. ' ') then !  fill halo option present
@@ -366,8 +366,10 @@
 !       use new fullly asynchronous code only if pe_nx and pe_ny both >1
 !       and polarrows = 0
 !
-      if(pe_nx>1 .and. pe_ny>1 .and. polarrows<=0 
-     %          .and. full_async_exch) goto 2
+      if(pe_nx>1 .and. pe_ny>1 
+     %           .and. polarrows<=0 
+     %           .and. full_async_exch
+     %           .and. (.not. rpn_ew_ext_L) ) goto 2
 !
 !       if no halo along x, bypass
 !     call tmg_start(90,'RPN_COMM_haloew')
@@ -398,6 +400,7 @@
       return
 !
 !       version no 2 of this routine, fully asynchronous, overlapped communication /data movement
+!       OOPS , rpn_ew_ext_L option broken, will have to fix it
 !
 !       step 1 post non blocking receives in the East/West direction
 !

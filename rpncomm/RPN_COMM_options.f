@@ -29,11 +29,11 @@
 *
 	RPN_COMM_option_L = 0
 	call RPN_COMM_up2low(name_S,name_min)
-	if(name_min(1:11).eq.'halo_ew_ext') then
+	if(name_min(1:11).eq.'halo_ew_ext') then  ! add haloy rows for EW halo echange on North and South tiles
 	   rpn_ew_ext_L=value_L
 	   return
 	endif
-	if(name_min(1:10).eq.'async_exch') then
+	if(name_min(1:10).eq.'async_exch') then  ! asynchronous halo exchange (level 1)
 	   async_exch=value_L
 	   return
 	endif

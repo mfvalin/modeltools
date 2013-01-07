@@ -22,16 +22,25 @@
      %                   halox,nx0,fill)
 	use rpn_comm
 	implicit none
-	integer nxg,minx,maxx,nxl,nxlmax,halox,nx0
-	logical fill
+	integer, intent(IN) :: nx, mex, nxg, halox
+	integer, intent(OUT) :: minx,maxx,nxl,nxlmax,nx0
+	logical, intent(IN) :: fill
 *
 *arguments
+*  I	nx	number of PEs (1D)
+*  I	mex	PE number of this PE (1D)
 *  I	nxg	Global dimension (1D) of data
-*  O	minx,maxx
-*		dimensions for local array
+*  O	minx	start index for this tile (1D) (halo accounted for)
+*  O	maxx	end index for this tile (1D) (halo accounted for)
+*  O	nxl	length of this tile (1D)
+*  O	nxlmax	length of longest tile (tile no 1)
+*  I	halox	halo length (1D)
+*  O	nx0	start of this tile in glogal space (1D)
+*  I	fill	if .true. make sure dimansion is odd (deprecated)
+*
 **
 *
-	integer nx, mex,count(nx),depl(nx), nxn, ierr
+	integer count(nx),depl(nx), nxn, ierr
 	integer RPN_COMM_limit
 *
 	RPN_COMM_split = -1

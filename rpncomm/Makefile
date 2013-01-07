@@ -8,7 +8,7 @@ ifneq (,$(realpath ./Makefile))
 ifeq (,$(BASE_ARCH))
  OBJDIR := custom/unknown
 else
- OBJDIR := $(EC_ARCH)
+ OBJDIR := ../Build/$(EC_ARCH)
 endif
 
 MAKETARGET=$(MAKE) --no-print-directory -C $@ -f $(CURDIR)/Makefile \

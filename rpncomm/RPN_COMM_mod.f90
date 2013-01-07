@@ -93,8 +93,9 @@ module rpn_comm
   integer, allocatable, dimension(:,:) :: pe_id
   integer, allocatable, dimension(:)   :: pe_xtab,pe_ytab
   integer, allocatable, dimension(:,:) :: pe_location   ! pe_x,pe_x,pe_ingrid,pe_insgrid,pe_indomain
-  logical :: async_exch=.true.
-  logical :: full_async_exch=.false.
+  logical :: async_exch=.true.        ! asynchronous halo exchange (level 1)
+  logical :: full_async_exch=.false.  ! fully asynchronous halo exchange (level 2)
+  logical :: rpn_ew_ext_l = .false.   ! extended halo option (haloy extra rows on North and South tiles)
   character *4 pe_optn(MAX_OPTN)
   integer pe_opiv(MAX_OPTN)
   real *4 pe_oprv(MAX_OPTN)
@@ -149,8 +150,7 @@ module rpn_comm
 !
 ! Output unit information
 !
-  integer :: rpn_u=6
-  logical :: rpn_ew_ext_l=.false.
+  integer :: rpn_u = 6
 !
 ! Domain type
 !
@@ -162,6 +162,35 @@ module rpn_comm
   end type domm
   integer domm_size, domm_num
   type(domm), allocatable, dimension(:) :: pe_domains
+!
+! Decomposition tables
+!
+  type :: DEC         ! decomposisition description
+  integer :: id       ! "magic" pseudo unique identifier
+  integer :: l1, l2   ! number of points per section
+  integer :: lg       ! total number of points
+  integer :: np       ! number of tiles along axis
+  end type DEC
+  
+  type :: DIST_1D     ! 1D type decomposition
+  integer :: id       ! "magic" pseudo unique identifier
+  integer :: a        ! decomposition id
+  integer    :: com   ! communicator (row, column, ...)
+  integer    :: grp   ! group
+  end type DIST_1D
+
+  type :: DIST_2D     ! 2D type decomposition
+  integer :: id       ! "magic" pseudo unique identifier
+  integer :: idx,idy  ! E-W and N-S decomposition id's
+  integer    :: com   ! communicator (grid, subgrid, ...)
+  integer    :: grp   ! group
+  end type DIST_2D
+
+  integer, parameter :: DEC_TAB_SIZE = 256   ! initial size of decomposition table
+  integer, parameter :: DIST_TAB_SIZE = 128   ! initial size of distribution tables
+  type(DEC), pointer, dimension(:)    :: dec_t => NULL()
+  type(DIST_1D), pointer, dimension(:) :: dist_1_t =>  NULL()
+  type(DIST_2D), pointer, dimension(:) :: dist_2_t => NULL()
 !
 !  symbol tables
 !
