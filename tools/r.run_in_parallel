@@ -135,7 +135,7 @@ cat <<EOT >${ParallelScript}
 #!/bin/ksh
 #
 export MP_CHILD=\${MP_CHILD:-\${PMI_RANK:-\${OMPI_COMM_WORLD_RANK}}}
-export MP_SeqNum="\$(printf '%4.4d' \${MP_CHILD})"
+export MP_SeqNum="\$((10000+MP_CHILD))"
 export MEMBER_NUMBER=\${MP_CHILD}
 #
 . ${MpiRunScript}  ${RedirectStdout} ${RedirectStderr}
@@ -160,7 +160,7 @@ export PBS_NODEFILE=$TMPDIR/PBS_NODEFILE
 [[ "${inorder}" == yes ]] && \
   for i in $(seq 0 1 ${npe_total_m1})
   do 
-    SeqNum="$(printf '%4.4d' ${i})"
+    SeqNum="$((10000+i))"
     mkdir ${tmpdir}/${SeqNum}
   done
 #
@@ -186,8 +186,8 @@ fi
 if [[ "${inorder}" == yes ]] ; then #  get captured stdout/stderr files into stdout
   Prefix=""
   for i in $(seq 0 1 ${npe_total_m1}) ; do 
-    SeqNum="$(printf '%4.4d' ${i})"
-    [[ -z ${notag} ]] && Prefix="${SeqNum}: "
+    SeqNum="$((10000+i))"
+    [[ -z ${notag} ]] && Prefix="${SeqNum#1}: "
     [[ -r ${tmpdir}/${SeqNum}/stdout ]] && cat ${tmpdir}/${SeqNum}/stdout | sed -e "s/^/O-${Prefix}/"
     [[ -r ${tmpdir}/${SeqNum}/stderr ]] && cat ${tmpdir}/${SeqNum}/stderr | sed -e "s/^/E-${Prefix}/"
     rm -f ${tmpdir}/${SeqNum}/std*
