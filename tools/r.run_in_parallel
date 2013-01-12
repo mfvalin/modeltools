@@ -1,0 +1,199 @@
+#!/bin/bash
+#
+mpiexec.Linux() {
+mpiexec --machinefile ${PBS_NODEFILE} "$@"
+rm -f ${PBS_NODEFILE}
+}
+#
+mpiexec.AIX() {
+if tty -s ; then
+  export MP_PROCS=${npe_total}
+  export MP_HOSTFILE=${PBS_NODEFILE}
+fi
+poe "$@"
+rm -f ${PBS_NODEFILE}
+}
+#
+local_cleanup() {
+ rm -f ${ParallelScript} ${MP_HOSTFILE} ${MpiRunScript} ${TMPDIR}/PBS_NODEFILE
+ rmdir ${tmpdir}
+}
+#
+echo version avec /bin/ksh
+eval `cclargs_lite $0 \
+    -tmpdir "$(pwd -P)/tmpdir" "" "[temporary directory visible by all processes]" \
+    -pgm "Invalid_Command.EXE" "" "[]" \
+    -args "" "" "[]" \
+    -inorder "no" "yes" "[list out/err of members in order]" \
+    -spliteo "no" "yes" "[split stderr from stdout]" \
+    -notag "" "notag" "[do not prefix output with member number]" \
+    -npex "${BATCH_MPI_CPUS:-1}" "" "[]" \
+    -npey "1" "" "[]" \
+    -nompi "run_with_mpi" "run_in_background" "[]" \
+    -mpiargs "" "" "[]" \
+    ++ $*`
+#
+# NOTE: -pgm @file option not implemented yet
+# up to 5 items per line
+# [directory] executable first_pe increment last_pe|@
+# [directory] executable first_pe increment
+# [directory] executable +number_of_pes
+#
+# -pgm syntax  (@ for last_pe means number of pes - 1)
+# -pgm [directory] executable first_pe increment last_pe|@  (repeated)
+# -pgm [directory] executable +number_of_pes (repeated)
+#
+mkdir -p ${tmpdir}
+export TMPDIR=${tmpdir}
+export MpiRunScript=${tmpdir}/MpiRunScript_$$
+export ParallelScript=${tmpdir}/ParallelScript_$$
+export RedirectStdout="1>${tmpdir}/\${MP_SeqNum}/stdout"
+export RedirectStderr="2>${tmpdir}/\${MP_SeqNum}/stderr"
+[[ "${spliteo}" == no ]] && RedirectStderr="2>&1"
+[[ "${inorder}" == no ]] && RedirectStderr="" && RedirectStdout=""
+#
+touch ${ParallelScript}
+[[ ! -r ${ParallelScript} ]] && echo "ERROR: ${tmpdir} not a writable directory" 1>&2 && exit 1
+#
+(( npe_total=npex*npey ))
+(( npe_total_m1=npe_total-1 ))
+#
+export RPN_COMM_DOM=""
+export RPN_COMM_DIRS="' '"
+set -- $pgm ${MPIRUN_MPMD_PGM}
+#
+if [[ "$2" != "" ]] ; then # complex sequence, possibly MPMD
+  ((ErRoR=0))
+  for i in $(seq 0 1 ${npe_total_m1}) ; do ProGrams[$i]="NoNe" ; Directories[$i]="." ; done
+  ((NDomains=0))
+  ((Next=0))
+  while [[ "$1" != "" ]]
+  do
+    ((NDomains=NDomains+1))
+    if [[ -d "$1" ]] ; then Directory="$1" ; shift ; else Directory="." ; fi
+    Program="$1" ; shift ; echo Program=$Program
+    if [[ !  -x "$Program" ]] ; then echo program $Program does not exist or is not executable ; ((ErRoR=ErRoR+1)) ; fi
+    temp=${1:-0} 
+    if [[ $temp = +* ]]
+    then
+       First=$Next
+       Increment=1
+       let Last=First+${temp#+}-1
+       let Next=Last+1
+       shift
+    else
+      First=$temp
+      Increment=${2:-0}
+      Last=${3:-${npe_total_m1}}
+      if [[ "$Last" = "@" ]] ; then Last=${npe_total_m1} ; fi
+      if [[ "$1" != "" ]] ; then shift ; fi
+      if [[ "$1" != "" ]] ; then shift ; fi
+      if [[ "$1" != "" ]] ; then shift ; fi
+    fi
+    export RPN_COMM_DOM="$RPN_COMM_DOM,${First},${Increment},${Last}"
+    export RPN_COMM_DIRS="$RPN_COMM_DIRS,'$Directory'"
+    for i in $(seq ${First} ${Increment} ${Last} )
+    do
+      if [[ "${ProGrams[$i]}" != "NoNe" ]]
+      then
+        echo ERROR: duplicate program assignment "${ProGrams[$i]}" vs "$Program" in slot $i
+        ((ErRoR=ErRoR+1))
+      else
+        ProGrams[$i]="$Program"
+        Directories[$i]=$Directory
+      fi
+    done
+  done
+  export RPN_COMM_DOM="$NDomains$RPN_COMM_DOM"
+  rm -f $R_MpirunScript
+  for i in  $(seq 0 1 ${npe_total_m1})
+  do
+    if [[ !  -x "${ProGrams[$i]}" ]]
+    then
+      if [[ "${ProGrams[$i]}" = NoNe ]]
+      then
+        echo ERROR: no program specified for child $i
+      else
+        echo ${ProGrams[$i]} does not exist or is not executable "(child $i)"
+      fi
+      ((ErRoR=ErRoR+1))
+    else
+      echo "if [[ \"\${MP_CHILD}\" = \"$i\" ]] ; then ${ProGrams[$i]} ${args} ; fi" >>${MpiRunScript}
+    fi
+  done
+  if [[ "$ErRoR" != "0" ]] ; then echo "$ErRoR ERROR(S) detected" ; local_cleanup ; exit 1 ; fi
+else # simple case with only one executable
+  if [[ ! -x $pgm ]] ; then
+    echo $pgm does not exist or is not executable
+    exit 1
+  fi
+  echo $pgm $args >${MpiRunScript}
+fi
+#
+#######################################################################
+cat <<EOT >${ParallelScript}
+#!/bin/ksh
+#
+export MP_CHILD=\${MP_CHILD:-\${PMI_RANK:-\${OMPI_COMM_WORLD_RANK}}}
+export MP_SeqNum="\$(printf '%4.4d' \${MP_CHILD})"
+export MEMBER_NUMBER=\${MP_CHILD}
+#
+. ${MpiRunScript}  ${RedirectStdout} ${RedirectStderr}
+EOT
+#######################################################################
+chmod 755 ${ParallelScript}
+echo "RPN_COMM_DOM=$RPN_COMM_DOM"
+echo "RPN_COMM_DIRS=$RPN_COMM_DIRS"
+#
+rm -f $TMPDIR/PBS_NODEFILE
+if [[ -n ${PBS_NODEFILE} ]] ; then
+  for i in `sort -u < $PBS_NODEFILE`
+  do
+    echo ${i} >>${TMPDIR}/PBS_NODEFILE
+  done
+else
+  ((npe_temp=npe_total))
+  while (( npe_temp > 0 )) ; do ((npe_temp=npe_temp-1)) ; echo $(hostname) >> ${TMPDIR}/PBS_NODEFILE ; done
+fi
+export PBS_NODEFILE=$TMPDIR/PBS_NODEFILE
+# create stdout/stderr directories
+[[ "${inorder}" == yes ]] && \
+  for i in $(seq 0 1 ${npe_total_m1})
+  do 
+    SeqNum="$(printf '%4.4d' ${i})"
+    mkdir ${tmpdir}/${SeqNum}
+  done
+#
+if [[ ${nompi} == run_with_mpi ]] ; then  # MPI launch
+#
+  echo "${MPI_EXEC:-mpiexec.$(uname -s)} ${mpiargs} -n ${npe_total} ${ParallelScript}"
+  ${MPI_EXEC:-mpiexec.$(uname -s)} ${mpiargs} -n ${npe_total} ${ParallelScript}
+#
+else   # background execution
+#
+  ((MP_CHILD=0))
+  export MP_CHILD
+  while ((MP_CHILD<npe_total))
+  do
+    ${ParallelScript} &
+    ((MP_CHILD=MP_CHILD+1))
+  done
+  echo waiting for ${MP_CHILD} background tasks to terminate
+  wait
+#
+fi
+#
+if [[ "${inorder}" == yes ]] ; then #  get captured stdout/stderr files into stdout
+  Prefix=""
+  for i in $(seq 0 1 ${npe_total_m1}) ; do 
+    SeqNum="$(printf '%4.4d' ${i})"
+    [[ -z ${notag} ]] && Prefix="${SeqNum}: "
+    [[ -r ${tmpdir}/${SeqNum}/stdout ]] && cat ${tmpdir}/${SeqNum}/stdout | sed -e "s/^/O-${Prefix}/"
+    [[ -r ${tmpdir}/${SeqNum}/stderr ]] && cat ${tmpdir}/${SeqNum}/stderr | sed -e "s/^/E-${Prefix}/"
+    rm -f ${tmpdir}/${SeqNum}/std*
+    rmdir ${tmpdir}/${SeqNum}
+  done
+fi
+#
+set +x
+local_cleanup
