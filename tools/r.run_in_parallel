@@ -1,21 +1,21 @@
 #!/bin/bash
 #
 mpiexec.Linux() {
-mpiexec --machinefile ${PBS_NODEFILE} "$@"
-rm -f ${PBS_NODEFILE}
+mpiexec --machinefile ${PBS_NODEFILE} -n ${npe_total} "$@"
 }
 #
 mpiexec.AIX() {
 if tty -s ; then
   export MP_PROCS=${npe_total}
   export MP_HOSTFILE=${PBS_NODEFILE}
+  grep -q $(hostname) ${HOME}/.rhosts 2>/dev/null || echo $(hostname) ${USER} >>${HOME}/.rhosts
+  chmod 700 ${HOME}/.rhosts
 fi
 poe "$@"
-rm -f ${PBS_NODEFILE}
 }
 #
 local_cleanup() {
- rm -f ${ParallelScript} ${MP_HOSTFILE} ${MpiRunScript} ${TMPDIR}/PBS_NODEFILE
+ rm -f ${ParallelScript} ${MP_HOSTFILE} ${MpiRunScript} ${PBS_NODEFILE}
  rmdir ${tmpdir}
 }
 #
@@ -132,7 +132,7 @@ fi
 #
 #######################################################################
 cat <<EOT >${ParallelScript}
-#!/bin/ksh
+#!/bin/ksh93
 #
 export MP_CHILD=\${MP_CHILD:-\${PMI_RANK:-\${OMPI_COMM_WORLD_RANK}}}
 export MP_SeqNum="\$((10000+MP_CHILD))"
@@ -166,8 +166,8 @@ export PBS_NODEFILE=$TMPDIR/PBS_NODEFILE
 #
 if [[ ${nompi} == run_with_mpi ]] ; then  # MPI launch
 #
-  echo "${MPI_EXEC:-mpiexec.$(uname -s)} ${mpiargs} -n ${npe_total} ${ParallelScript}"
-  ${MPI_EXEC:-mpiexec.$(uname -s)} ${mpiargs} -n ${npe_total} ${ParallelScript}
+  echo "${MPI_EXEC:-mpiexec.$(uname -s)} ${mpiargs} ${ParallelScript}"
+  ${MPI_EXEC:-mpiexec.$(uname -s)} ${mpiargs} ${ParallelScript}
 #
 else   # background execution
 #
