@@ -1,17 +1,45 @@
 #!/bin/bash
 #
+# start of temporary code to deal with OLD mpich2 versions
+#
+kill_mpich2_mpd() {
+  echo KILLING OLD INITIATORS IF ANY ARE FOUND
+  for system in $(sort -u <${PBS_NODEFILE} | xargs) 
+  do
+    for target in $(ssh ${system}  ps -ef | grep /bin/mpd | grep python | grep ${USER} | sed -e s'/[ ][ ]*/ /g' | cut '-d ' -f 2) 
+    do
+      echo KILLING process ${target} on node ${system}
+      ssh ${system} kill -9 ${target}
+    done 
+  done
+}
+start_mpich2_mpd() { # start mpd daemon(s)
+  mpdboot -n $( sort -u <${PBS_NODEFILE} | wc -l ) -f ${PBS_NODEFILE}
+  echo "mpd daemon(s) started"
+}
+stop_mpich2_mpd() {  # stop mpd daemon(s)
+  mpdallexit
+  echo "mpd daemon(s) stopped"
+}
+#
+# end of temporary code to deal with OLD mpich2 versions
+#
 mpiexec.Linux() {
-mpiexec --machinefile ${PBS_NODEFILE} -n ${npe_total} "$@"
+  [[ -n $(which mpdboot) ]] && oldmpich=yes && echo WARNING: using OLD version of mpich2 that needs mpdboot
+  [[ "${oldmpich}" == yes ]] && kill_mpich2_mpd     # needed temporarily for old mpich2 versions
+  [[ "${oldmpich}" == yes ]] && start_mpich2_mpd    # needed temporarily for old mpich2 versions
+  mpiexec -machinefile ${PBS_NODEFILE} -n ${npe_total} "$@"
+  [[ "${oldmpich}" == yes ]] && stop_mpich2_mpd     # needed temporarily for old mpich2 versions
 }
 #
 mpiexec.AIX() {
-if tty -s ; then
-  export MP_PROCS=${npe_total}
-  export MP_HOSTFILE=${PBS_NODEFILE}
-  grep -q $(hostname) ${HOME}/.rhosts 2>/dev/null || echo $(hostname) ${USER} >>${HOME}/.rhosts
-  chmod 700 ${HOME}/.rhosts
-fi
-poe "$@"
+  if tty -s ; then
+    export MP_PROCS=${npe_total}
+    export MP_HOSTFILE=${PBS_NODEFILE}
+    grep -q $(hostname) ${HOME}/.rhosts 2>/dev/null || echo $(hostname) ${USER} >>${HOME}/.rhosts
+    chmod 700 ${HOME}/.rhosts
+  fi
+  poe "$@"
 }
 #
 local_cleanup() {
@@ -31,6 +59,7 @@ eval `cclargs_lite $0 \
     -npey "1" "" "[]" \
     -nompi "run_with_mpi" "run_in_background" "[]" \
     -mpiargs "" "" "[]" \
+    -offset "0" "1" "[numbering of members from this value]" \
     ++ $*`
 #
 # NOTE: -pgm @file option not implemented yet
@@ -135,8 +164,8 @@ cat <<EOT >${ParallelScript}
 #!/bin/ksh93
 #
 export MP_CHILD=\${MP_CHILD:-\${PMI_RANK:-\${OMPI_COMM_WORLD_RANK}}}
-export MP_SeqNum="\$((10000+MP_CHILD))"
-export MEMBER_NUMBER=\${MP_CHILD}
+export MP_SeqNum="\$((10000+MP_CHILD+${offset}))"
+export MEMBER_NUMBER=\$((MP_CHILD+${offset}))
 #
 . ${MpiRunScript}  ${RedirectStdout} ${RedirectStderr}
 EOT
@@ -160,7 +189,7 @@ export PBS_NODEFILE=$TMPDIR/PBS_NODEFILE
 [[ "${inorder}" == yes ]] && \
   for i in $(seq 0 1 ${npe_total_m1})
   do 
-    SeqNum="$((10000+i))"
+    SeqNum="$((10000+i+offset))"
     mkdir ${tmpdir}/${SeqNum}
   done
 #
@@ -186,7 +215,7 @@ fi
 if [[ "${inorder}" == yes ]] ; then #  get captured stdout/stderr files into stdout
   Prefix=""
   for i in $(seq 0 1 ${npe_total_m1}) ; do 
-    SeqNum="$((10000+i))"
+    SeqNum="$((10000+i+offset))"
     [[ -z ${notag} ]] && Prefix="${SeqNum#1}: "
     [[ -r ${tmpdir}/${SeqNum}/stdout ]] && cat ${tmpdir}/${SeqNum}/stdout | sed -e "s/^/O-${Prefix}/"
     [[ -r ${tmpdir}/${SeqNum}/stderr ]] && cat ${tmpdir}/${SeqNum}/stderr | sed -e "s/^/E-${Prefix}/"
