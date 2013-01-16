@@ -22,10 +22,12 @@ stop_mpich2_mpd() {  # stop mpd daemon(s)
   echo "mpd daemon(s) stopped"
 }
 #
-# end of temporary code to deal with OLD mpich2 versions
+# end of temporary code to deal with OLD (pre 1.3) mpich2 versions
 #
 mpiexec.Linux() {
-  [[ -n $(which mpdboot) ]] && oldmpich=yes && echo WARNING: using OLD version of mpich2 that needs mpdboot
+#  [[ -n $(which mpdboot) ]] && oldmpich=yes
+  mpirun --version 2>/dev/null 1>/dev/null || oldmpich=yes
+  [[ "${oldmpich}" == yes ]] && echo WARNING: using OLD version of mpich2 that needs mpdboot
   [[ "${oldmpich}" == yes ]] && kill_mpich2_mpd     # needed temporarily for old mpich2 versions
   [[ "${oldmpich}" == yes ]] && start_mpich2_mpd    # needed temporarily for old mpich2 versions
   mpiexec -machinefile ${PBS_NODEFILE} -n ${npe_total} "$@"
@@ -59,6 +61,8 @@ eval `cclargs_lite $0 \
     -npey "1" "" "[]" \
     -nompi "run_with_mpi" "run_in_background" "[]" \
     -mpiargs "" "" "[]" \
+    -geometry "" "" "[]" \
+    -multiworld "no" "yes" "[launch each process in its own MPI world]" \
     -offset "0" "1" "[numbering of members from this value]" \
     ++ $*`
 #
@@ -99,6 +103,7 @@ if [[ "$2" != "" ]] ; then # complex sequence, possibly MPMD
   while [[ "$1" != "" ]]
   do
     ((NDomains=NDomains+1))
+    ((Instances=0))
     if [[ -d "$1" ]] ; then Directory="$1" ; shift ; else Directory="." ; fi
     Program="$1" ; shift ; echo Program=$Program
     if [[ !  -x "$Program" ]] ; then echo program $Program does not exist or is not executable ; ((ErRoR=ErRoR+1)) ; fi
@@ -123,6 +128,7 @@ if [[ "$2" != "" ]] ; then # complex sequence, possibly MPMD
     export RPN_COMM_DIRS="$RPN_COMM_DIRS,'$Directory'"
     for i in $(seq ${First} ${Increment} ${Last} )
     do
+      ((Instances=Instances+1))
       if [[ "${ProGrams[$i]}" != "NoNe" ]]
       then
         echo ERROR: duplicate program assignment "${ProGrams[$i]}" vs "$Program" in slot $i
@@ -132,8 +138,9 @@ if [[ "$2" != "" ]] ; then # complex sequence, possibly MPMD
         Directories[$i]=$Directory
       fi
     done
+    WorldSize[${NDomains}]=${Instances}
   done
-  export RPN_COMM_DOM="$NDomains$RPN_COMM_DOM"
+  export RPN_COMM_DOM="${NDomains}${RPN_COMM_DOM}"
   rm -f $R_MpirunScript
   for i in  $(seq 0 1 ${npe_total_m1})
   do
