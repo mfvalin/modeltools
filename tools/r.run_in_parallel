@@ -1,4 +1,6 @@
-#!/bin/bash
+#!/bin/ksh93
+#
+# CAVEAT: this script uses typeset -Z (does not work for the bash shell)
 #
 # start of temporary code to deal with OLD mpich2 versions
 #
@@ -24,29 +26,62 @@ stop_mpich2_mpd() {  # stop mpd daemon(s)
 #
 # end of temporary code to deal with OLD (pre 1.3) mpich2 versions
 #
-mpiexec.Linux() {
-#  [[ -n $(which mpdboot) ]] && oldmpich=yes
-  mpirun --version 2>/dev/null 1>/dev/null || oldmpich=yes
-  [[ "${oldmpich}" == yes ]] && echo WARNING: using OLD version of mpich2 that needs mpdboot
-  [[ "${oldmpich}" == yes ]] && kill_mpich2_mpd     # needed temporarily for old mpich2 versions
-  [[ "${oldmpich}" == yes ]] && start_mpich2_mpd    # needed temporarily for old mpich2 versions
-  mpiexec -machinefile ${PBS_NODEFILE} -n ${npe_total} "$@"
-  [[ "${oldmpich}" == yes ]] && stop_mpich2_mpd     # needed temporarily for old mpich2 versions
+mpiexec_Linux() {
+  ((MpiCommWorld>0)) && echo "ERROR: MpiCommWorld>0 not supported yet" && return
+  mpirun --version 2>/dev/null 1>/dev/null || UseMpdboot=yes  # old mpich2 or no mpirun at all
+  [[ -n $(which mpdboot 2>/dev/null) ]] || UseMpdboot=no      # mpdboot not found
+  [[ "${UseMpdboot}" == yes ]] && echo "WARNING: using OLD version (pre 1.3) of mpich2 detected"
+  [[ "${UseMpdboot}" == yes ]] && kill_mpich2_mpd     # needed temporarily for old mpich2 versions
+  [[ "${UseMpdboot}" == yes ]] && start_mpich2_mpd    # needed temporarily for old mpich2 versions
+
+  mpiexec -machinefile ${PBS_NODEFILE} -n ${PeInWorld[${MpiCommWorld}]} "$@" ${ParallelScript} ${MpiCommWorld}
+
+  [[ "${UseMpdboot}" == yes ]] && stop_mpich2_mpd     # needed temporarily for old mpich2 versions
 }
 #
-mpiexec.AIX() {
+mpiexec_AIX() {
+  ((MpiCommWorld>0)) && echo "ERROR: MpiCommWorld>0 not supported yet" && return
   if tty -s ; then
-    export MP_PROCS=${npe_total}
+    export MP_PROCS=${PeInWorld[${MpiCommWorld}]}
     export MP_HOSTFILE=${PBS_NODEFILE}
-    grep -q $(hostname) ${HOME}/.rhosts 2>/dev/null || echo $(hostname) ${USER} >>${HOME}/.rhosts
-    chmod 700 ${HOME}/.rhosts
+#    grep -q $(hostname) ${HOME}/.rhosts 2>/dev/null || echo $(hostname) ${USER} >>${HOME}/.rhosts
+#    chmod 700 ${HOME}/.rhosts
   fi
-  poe "$@"
+  poe "$@" ${ParallelScript} ${MpiCommWorld}
 }
 #
 local_cleanup() {
- rm -f ${ParallelScript} ${MP_HOSTFILE} ${MpiRunScript} ${PBS_NODEFILE}
+ rm -f ${ParallelScript}* ${MP_HOSTFILE} ${MpiRunScript}* ${PBS_NODEFILE}
  rmdir ${tmpdir}
+}
+#
+print_separator() {
+  echo "$@"
+}
+#
+cat_output() {  #  cat captured stdout/stderr files into stdout
+#
+  Prefix=""
+  Prefix2="OE"
+  [[ "${spliteo}" == yes ]] && Prefix2="O"
+  for SeqNum in $* ; do 
+    ((MemberNo=SeqNum/npey+offset))
+    ((MemberChild=SeqNum-SeqNum/npey*npey))
+    [[ -z ${notag} ]] && Prefix="${MemberNo}-${MemberChild}: "
+    [[ -r ${SeqNum}/stdout ]] && print_separator && cat ${SeqNum}/stdout | sed -e "s/^/${Prefix2}-${Prefix}/"
+    [[ -r ${SeqNum}/stderr ]] && print_separator && cat ${SeqNum}/stderr | sed -e "s/^/E-${Prefix}/"
+  done
+  print_separator
+#
+}
+#
+clean_output() {   #  get rid of captured stdout/stderr files into stdout
+#
+  for SeqNum in $* ; do 
+    rm -f ${SeqNum}/std*
+    rmdir ${SeqNum}
+  done
+#
 }
 #
 echo version avec /bin/ksh
@@ -54,17 +89,20 @@ eval `cclargs_lite $0 \
     -tmpdir "$(pwd -P)/tmpdir" "" "[temporary directory visible by all processes]" \
     -pgm "Invalid_Command.EXE" "" "[]" \
     -args "" "" "[]" \
-    -inorder "no" "yes" "[list out/err of members in order]" \
+    -inorder "" "yes" "[list out/err of members in process order]" \
+    -processorder "" "yes" "[list out/err of members in order]" \
     -spliteo "no" "yes" "[split stderr from stdout]" \
     -notag "" "notag" "[do not prefix output with member number]" \
-    -npex "${BATCH_MPI_CPUS:-1}" "" "[]" \
-    -npey "1" "" "[]" \
+    -npex "${BATCH_MPI_CPUS:-1}" "" "[member size, total number of cpus if 1 member]" \
+    -npey "1" "" "[number of members]" \
     -nompi "run_with_mpi" "run_in_background" "[]" \
     -mpiargs "" "" "[]" \
     -geometry "" "" "[]" \
+    -packoutput "cat_output" "echo" "[]" \
     -multiworld "no" "yes" "[launch each process in its own MPI world]" \
     -offset "0" "1" "[numbering of members from this value]" \
     ++ $*`
+[[ -n ${inorder} ]] && processorder="yes"
 #
 # NOTE: -pgm @file option not implemented yet
 # up to 5 items per line
@@ -83,7 +121,7 @@ export ParallelScript=${tmpdir}/ParallelScript_$$
 export RedirectStdout="1>${tmpdir}/\${MP_SeqNum}/stdout"
 export RedirectStderr="2>${tmpdir}/\${MP_SeqNum}/stderr"
 [[ "${spliteo}" == no ]] && RedirectStderr="2>&1"
-[[ "${inorder}" == no ]] && RedirectStderr="" && RedirectStdout=""
+[[ -z ${processorder} ]] && RedirectStderr="" && RedirectStdout=""
 #
 touch ${ParallelScript}
 [[ ! -r ${ParallelScript} ]] && echo "ERROR: ${tmpdir} not a writable directory" 1>&2 && exit 1
@@ -94,6 +132,9 @@ touch ${ParallelScript}
 export RPN_COMM_DOM=""
 export RPN_COMM_DIRS="' '"
 set -- $pgm ${MPIRUN_MPMD_PGM}
+#
+export MpiCommWorld=0
+PeInWorld[${MpiCommWorld}]=${npe_total}
 #
 if [[ "$2" != "" ]] ; then # complex sequence, possibly MPMD
   ((ErRoR=0))
@@ -141,7 +182,7 @@ if [[ "$2" != "" ]] ; then # complex sequence, possibly MPMD
     WorldSize[${NDomains}]=${Instances}
   done
   export RPN_COMM_DOM="${NDomains}${RPN_COMM_DOM}"
-  rm -f $R_MpirunScript
+  rm -f ${MpirunScript}.${MpiCommWorld}
   for i in  $(seq 0 1 ${npe_total_m1})
   do
     if [[ !  -x "${ProGrams[$i]}" ]]
@@ -154,7 +195,7 @@ if [[ "$2" != "" ]] ; then # complex sequence, possibly MPMD
       fi
       ((ErRoR=ErRoR+1))
     else
-      echo "if [[ \"\${MP_CHILD}\" = \"$i\" ]] ; then ${ProGrams[$i]} ${args} ; fi" >>${MpiRunScript}
+      echo "if [[ \"\${MP_CHILD}\" = \"$i\" ]] ; then ${ProGrams[$i]} ${args} ; fi" >>${MpiRunScript}.${MpiCommWorld}
     fi
   done
   if [[ "$ErRoR" != "0" ]] ; then echo "$ErRoR ERROR(S) detected" ; local_cleanup ; exit 1 ; fi
@@ -163,18 +204,20 @@ else # simple case with only one executable
     echo $pgm does not exist or is not executable
     exit 1
   fi
-  echo $pgm $args >${MpiRunScript}
+  echo $pgm $args >${MpiRunScript}.${MpiCommWorld}
 fi
 #
 #######################################################################
 cat <<EOT >${ParallelScript}
 #!/bin/ksh93
 #
-export MP_CHILD=\${MP_CHILD:-\${PMI_RANK:-\${OMPI_COMM_WORLD_RANK}}}
-export MP_SeqNum="\$((10000+MP_CHILD+${offset}))"
-export MEMBER_NUMBER=\$((MP_CHILD+${offset}))
+typeset -Z4 MP_SeqNum    # NOT VALID FOR bash, ksh family only
+export MP_CHILD=\${MP_CHILD:-\${PMI_RANK:-\${OMPI_COMM_WORLD_RANK}}}  # poe/mpich2/openmpi
+export MP_SeqNum="\$((MP_CHILD))"
+export MemberNumber=\$((MP_CHILD/${npey}+${offset}))
+export MemberChild=\$((MP_CHILD-MP_CHILD/${npey}*${npey}))
 #
-. ${MpiRunScript}  ${RedirectStdout} ${RedirectStderr}
+. ${MpiRunScript}.\${1:-0}  ${RedirectStdout} ${RedirectStderr}
 EOT
 #######################################################################
 chmod 755 ${ParallelScript}
@@ -192,18 +235,22 @@ else
   while (( npe_temp > 0 )) ; do ((npe_temp=npe_temp-1)) ; echo $(hostname) >> ${TMPDIR}/PBS_NODEFILE ; done
 fi
 export PBS_NODEFILE=$TMPDIR/PBS_NODEFILE
-# create stdout/stderr directories
-[[ "${inorder}" == yes ]] && \
-  for i in $(seq 0 1 ${npe_total_m1})
+typeset -Z4 SeqNum
+# create stdout/stderr directories if necessary
+if [[ -n ${processorder} ]] ; then
+  for SeqNum in $(seq 0 1 ${npe_total_m1})
   do 
-    SeqNum="$((10000+i+offset))"
     mkdir ${tmpdir}/${SeqNum}
   done
+  echo "=============================================="
+  echo "temporary listings for all members in $(pwd)"
+  echo "=============================================="
+fi
 #
 if [[ ${nompi} == run_with_mpi ]] ; then  # MPI launch
 #
-  echo "${MPI_EXEC:-mpiexec.$(uname -s)} ${mpiargs} ${ParallelScript}"
-  ${MPI_EXEC:-mpiexec.$(uname -s)} ${mpiargs} ${ParallelScript}
+  echo "${MPI_EXEC:-mpiexec.$(uname -s)} ${mpiargs}"
+  ${MPI_EXEC:-mpiexec_$(uname -s)} ${mpiargs}
 #
 else   # background execution
 #
@@ -219,16 +266,9 @@ else   # background execution
 #
 fi
 #
-if [[ "${inorder}" == yes ]] ; then #  get captured stdout/stderr files into stdout
-  Prefix=""
-  for i in $(seq 0 1 ${npe_total_m1}) ; do 
-    SeqNum="$((10000+i+offset))"
-    [[ -z ${notag} ]] && Prefix="${SeqNum#1}: "
-    [[ -r ${tmpdir}/${SeqNum}/stdout ]] && cat ${tmpdir}/${SeqNum}/stdout | sed -e "s/^/O-${Prefix}/"
-    [[ -r ${tmpdir}/${SeqNum}/stderr ]] && cat ${tmpdir}/${SeqNum}/stderr | sed -e "s/^/E-${Prefix}/"
-    rm -f ${tmpdir}/${SeqNum}/std*
-    rmdir ${tmpdir}/${SeqNum}
-  done
+typeset -Z4 MemberNo MemberChild
+if [[ -n ${packoutput} && -n ${processorder} ]] ; then
+  ( cd ${tmpdir} ; ${packoutput} [0-9]*[0-9] ; clean_output [0-9]*[0-9] )
 fi
 #
 set +x
