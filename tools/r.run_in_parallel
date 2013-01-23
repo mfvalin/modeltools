@@ -1,6 +1,7 @@
 #!/bin/ksh93
 #
 # CAVEAT: this script uses typeset -Z (does not work for the bash shell)
+typeset -Z4 SeqNum SeqNum2 MemberNo MemberChild
 #
 # start of temporary code to deal with OLD mpich2 versions
 #
@@ -65,9 +66,11 @@ cat_output() {  #  cat captured stdout/stderr files into stdout
   Prefix2="OE"
   [[ "${spliteo}" == yes ]] && Prefix2="O"
   for SeqNum in $* ; do 
+    ((SeqNum2=SeqNum+offset))
     ((MemberNo=SeqNum/npey+offset))
     ((MemberChild=SeqNum-SeqNum/npey*npey))
-    [[ -z ${notag} ]] && Prefix="${MemberNo}-${MemberChild}: "
+    [[ "${notag}" != notag ]] && Prefix="${MemberNo}-${MemberChild}: "
+    [[ "${notag}" == member ]] && Prefix="${SeqNum2}: "
     [[ -r ${SeqNum}/stdout ]] && print_separator && cat ${SeqNum}/stdout | sed -e "s/^/${Prefix2}-${Prefix}/"
     [[ -r ${SeqNum}/stderr ]] && print_separator && cat ${SeqNum}/stderr | sed -e "s/^/E-${Prefix}/"
   done
@@ -92,12 +95,13 @@ eval `cclargs_lite $0 \
     -inorder "" "yes" "[list out/err of members in process order]" \
     -processorder "" "yes" "[list out/err of members in order]" \
     -spliteo "no" "yes" "[split stderr from stdout]" \
-    -notag "" "notag" "[do not prefix output with member number]" \
+    -notag "" "notag" "[notag=no output prefix, member=prefix with child id only]" \
     -npex "${BATCH_MPI_CPUS:-1}" "" "[member size, total number of cpus if 1 member]" \
     -npey "1" "" "[number of members]" \
     -nompi "run_with_mpi" "run_in_background" "[]" \
     -mpiargs "" "" "[]" \
     -geometry "" "" "[]" \
+    -preexec "" "" "[prefix program execution with this (time/gdb/...)]" \
     -packoutput "cat_output" "echo" "[]" \
     -multiworld "no" "yes" "[launch each process in its own MPI world]" \
     -offset "0" "1" "[numbering of members from this value]" \
@@ -118,8 +122,8 @@ mkdir -p ${tmpdir}
 export TMPDIR=${tmpdir}
 export MpiRunScript=${tmpdir}/MpiRunScript_$$
 export ParallelScript=${tmpdir}/ParallelScript_$$
-export RedirectStdout="1>${tmpdir}/\${MP_SeqNum}/stdout"
-export RedirectStderr="2>${tmpdir}/\${MP_SeqNum}/stderr"
+export RedirectStdout="1>${tmpdir}/\${MP_SeqNum}/stdout"   # will be expanded at run time in ParallelScript
+export RedirectStderr="2>${tmpdir}/\${MP_SeqNum}/stderr"   # will be expanded at run time in ParallelScript
 [[ "${spliteo}" == no ]] && RedirectStderr="2>&1"
 [[ -z ${processorder} ]] && RedirectStderr="" && RedirectStdout=""
 #
@@ -195,7 +199,7 @@ if [[ "$2" != "" ]] ; then # complex sequence, possibly MPMD
       fi
       ((ErRoR=ErRoR+1))
     else
-      echo "if [[ \"\${MP_CHILD}\" = \"$i\" ]] ; then ${ProGrams[$i]} ${args} ; fi" >>${MpiRunScript}.${MpiCommWorld}
+      echo "if [[ \"\${MP_CHILD}\" = \"$i\" ]] ; then ${preexec} ${ProGrams[$i]} ${args} ; fi" >>${MpiRunScript}.${MpiCommWorld}
     fi
   done
   if [[ "$ErRoR" != "0" ]] ; then echo "$ErRoR ERROR(S) detected" ; local_cleanup ; exit 1 ; fi
@@ -204,7 +208,7 @@ else # simple case with only one executable
     echo $pgm does not exist or is not executable
     exit 1
   fi
-  echo $pgm $args >${MpiRunScript}.${MpiCommWorld}
+  echo ${preexec} $pgm $args >${MpiRunScript}.${MpiCommWorld}
 fi
 #
 #######################################################################
@@ -235,7 +239,6 @@ else
   while (( npe_temp > 0 )) ; do ((npe_temp=npe_temp-1)) ; echo $(hostname) >> ${TMPDIR}/PBS_NODEFILE ; done
 fi
 export PBS_NODEFILE=$TMPDIR/PBS_NODEFILE
-typeset -Z4 SeqNum
 # create stdout/stderr directories if necessary
 if [[ -n ${processorder} ]] ; then
   for SeqNum in $(seq 0 1 ${npe_total_m1})
@@ -266,7 +269,6 @@ else   # background execution
 #
 fi
 #
-typeset -Z4 MemberNo MemberChild
 if [[ -n ${packoutput} && -n ${processorder} ]] ; then
   ( cd ${tmpdir} ; ${packoutput} [0-9]*[0-9] ; clean_output [0-9]*[0-9] )
 fi
