@@ -34,10 +34,7 @@ mpiexec_Linux() {
   [[ "${UseMpdboot}" == yes ]] && echo "WARNING: using OLD version (pre 1.3) of mpich2 detected"
   [[ "${UseMpdboot}" == yes ]] && kill_mpich2_mpd     # needed temporarily for old mpich2 versions
   [[ "${UseMpdboot}" == yes ]] && start_mpich2_mpd    # needed temporarily for old mpich2 versions
-#cat ${PBS_NODEFILE}
-set -x
   mpiexec -machinefile ${PBS_NODEFILE} -n ${PeInWorld[${MpiCommWorld}]} "$@" ${ParallelScript} ${MpiCommWorld}
-set +x
   [[ "${UseMpdboot}" == yes ]] && stop_mpich2_mpd     # needed temporarily for old mpich2 versions
 }
 #
@@ -49,6 +46,8 @@ mpiexec_AIX() {
 #    grep -q $(hostname) ${HOME}/.rhosts 2>/dev/null || echo $(hostname) ${USER} >>${HOME}/.rhosts
 #    chmod 700 ${HOME}/.rhosts
   fi
+  export MP_NEWJOB=parallel
+  export MP_WORLD_SIZES=${PeInWorld[${MpiCommWorld}]}
   poe "$@" ${ParallelScript} ${MpiCommWorld}
 }
 #
@@ -134,7 +133,7 @@ selftest="${tmpdir}/${selftest}"
 if [[ -n ${selftest} ]] ; then
   pgm="${selftest}"
   cat <<EOT >${selftest}
-#!/bin/bash
+#!/bin/ksh93
 echo running on \$(hostname)
 echo "arguments:'\$@'"
 set -x
