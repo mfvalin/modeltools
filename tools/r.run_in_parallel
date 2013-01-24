@@ -1,7 +1,7 @@
 #!/bin/ksh93
 #
 # CAVEAT: this script uses typeset -Z (does not work for the bash shell)
-typeset -Z4 SeqNum SeqNum2 MemberNo MemberChild
+typeset -Z4 SeqNum MemberNo MemberChild
 #
 # start of temporary code to deal with OLD mpich2 versions
 #
@@ -64,21 +64,19 @@ print_separator() {
   echo ===================      "$@"      ===================
 }
 #
-cat_output() {  #  cat captured stdout/stderr files into stdout
+cat_output() {  #  cat captured stdout/stderr files into stdout with appropriate tagging
 #
-  [[ "${notag}" == notag ]] && errp="stderr" && outp=""
-  Prefix2="${outp}${errp}" 
-  Prefix3=""
-  [[ "${spliteo}" == yes ]] && Prefix3="${errp}"      && Prefix2="${outp}"
-  [[ "${notag}" == notag ]] && Prefix3="${Prefix3}: " && Prefix2=""
-  [[ "${notag}" != notag ]] && Prefix3="${Prefix3}-"  && Prefix2="${Prefix2}-"
-  Prefix=""
+  Prefix3="${errp}-"
+  Prefix2="${outp}${errp}-"   # prepare for stderr not split from stdout
+  [[ "${spliteo}" == yes ]] && Prefix2="${outp}-"
+  [[ "${tag}" == none    ]] && Prefix="" && Prefix2="" && Prefix3=""
+  [[ "${tag}" == stderr  ]] && Prefix="" && Prefix2="" && Prefix3="stderr: "
   for SeqNum in $* ; do 
-    ((SeqNum2=SeqNum+offset))
     ((MemberNo=SeqNum/npey+offset))
     ((MemberChild=SeqNum-SeqNum/npey*npey))
-    [[ "${notag}" != notag  ]] && Prefix="${MemberNo}-${MemberChild}: "
-    [[ "${notag}" == member ]] && Prefix="${SeqNum2}: "
+    [[ "${tag}" == full   ]] && Prefix="${MemberNo}-${MemberChild}: "
+    [[ "${tag}" == member ]] && Prefix="${MemberNo}: "
+    [[ "${tag}" == child  ]] && Prefix="${SeqNum}: "
     [[ -r ${SeqNum}/stdout ]] && print_separator start stdout ${MemberNo}:${MemberChild} && cat ${SeqNum}/stdout | sed -e "s/^/${Prefix2}${Prefix}/"
     [[ -r ${SeqNum}/stderr ]] && print_separator start stderr ${MemberNo}:${MemberChild} && cat ${SeqNum}/stderr | sed -e "s/^/${Prefix3}${Prefix}/"
   done
@@ -104,12 +102,12 @@ eval `cclargs_lite $0 \
     -inorder "" "yes" "[list out/err of members in process order]" \
     -processorder "" "yes" "[list out/err of members in order]" \
     -spliteo "no" "yes" "[split stderr from stdout]" \
-    -notag "" "notag" "[notag=no output prefix, member=prefix with child id only]" \
     -npex "${BATCH_MPI_CPUS:-1}" "" "[member size, total number of cpus if 1 member]" \
     -npey "1" "" "[number of members]" \
     -nompi "run_with_mpi" "run_in_background" "[]" \
     -mpiargs "" "" "[]" \
     -geometry "" "" "[]" \
+    -tag "child" "full" "[full/child/member/stderr/none]" \
     -outp "o" "O" "[stdout prefix in listings]" \
     -errp "e" "E" "[stderr prefix in listings]" \
     -nosep "" "yes" "[deactivate separator between members]" \
@@ -139,10 +137,10 @@ if [[ -n ${selftest} ]] ; then
   pgm="${selftest}"
   cat <<EOT >${selftest}
 #!/bin/bash
-set -x
-echo I am child \${RP_Child}, member \${RP_Member}, member child \${RP_MemberChild}, MP_SeqNum=\${MP_SeqNum}
 echo running on \$(hostname)
 echo "arguments:'\$@'"
+set -x
+echo I am child \${RP_Child}, member \${RP_Member}, member child \${RP_MemberChild}, MP_SeqNum=\${MP_SeqNum}
 EOT
  chmod 755 ${selftest}
 fi
