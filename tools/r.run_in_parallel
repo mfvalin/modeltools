@@ -34,11 +34,9 @@ mpiexec_Linux() {
   [[ "${UseMpdboot}" == yes ]] && echo "WARNING: using OLD version (pre 1.3) of mpich2 detected"
   [[ "${UseMpdboot}" == yes ]] && kill_mpich2_mpd     # needed temporarily for old mpich2 versions
   [[ "${UseMpdboot}" == yes ]] && start_mpich2_mpd    # needed temporarily for old mpich2 versions
-echo ===---===---===
-cat ${PBS_NODEFILE}
+#cat ${PBS_NODEFILE}
 set -x
   mpiexec -machinefile ${PBS_NODEFILE} -n ${PeInWorld[${MpiCommWorld}]} "$@" ${ParallelScript} ${MpiCommWorld}
-#  mpiexec -n ${PeInWorld[${MpiCommWorld}]} "$@" ${ParallelScript} ${MpiCommWorld}
 set +x
   [[ "${UseMpdboot}" == yes ]] && stop_mpich2_mpd     # needed temporarily for old mpich2 versions
 }
@@ -255,9 +253,12 @@ echo "RPN_COMM_DIRS=$RPN_COMM_DIRS"
 #
 rm -f $TMPDIR/PBS_NODEFILE
 if [[ -n ${PBS_NODEFILE} ]] ; then
-  for i in `sort  < $PBS_NODEFILE`
+  nhosts=$(sort -u ${PBS_NODEFILE} | wc -l | sed 's/ .*//')
+  echo 
+  ((loops=(npe_total+nhosts-1)/nhosts))
+  for i in `sort -u < $PBS_NODEFILE`
   do
-    echo ${i} >>${TMPDIR}/PBS_NODEFILE
+    for j in $(seq $loops) ; do  ; echo ${i} >>${TMPDIR}/PBS_NODEFILE ; done
   done
 else
   ((npe_temp=npe_total))
