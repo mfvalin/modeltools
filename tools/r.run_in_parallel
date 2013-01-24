@@ -117,12 +117,14 @@ eval `cclargs_lite $0 \
     -selftest "" "${TMPDIR}/selftest.$$" "[quick selftest]" \
     ++ $*`
 [[ -n ${inorder} ]] && processorder="yes"
+[[ "${args}" == @* ]] && args2=${args#@} && [[ -f ${args2} ]] && args="$(xargs <${args2})"
 if [[ -n ${selftest} ]] ; then
   pgm="${selftest}"
   cat <<EOT >${selftest}
 #!/bin/bash
 set -x
-echo I am child \${MP_CHILD}, member \${MemberNumber}, member child \${MemberChild}, MP_SeqNum=\${MP_SeqNum}
+echo I am child \${RP_Child}, member \${RP_Member}, member child \${RP_MemberChild}, MP_SeqNum=\${MP_SeqNum}
+echo "arguments:'\$@'"
 EOT
  chmod 755 ${selftest}
 fi
@@ -237,8 +239,9 @@ cat <<EOT >${ParallelScript}
 typeset -Z4 MP_SeqNum    # NOT VALID FOR bash, ksh family only
 export MP_CHILD=\${MP_CHILD:-\${PMI_RANK:-\${OMPI_COMM_WORLD_RANK}}}  # poe/mpich2/openmpi
 export MP_SeqNum="\$((MP_CHILD))"
-export MemberNumber=\$((MP_CHILD/${npey}+${offset}))
-export MemberChild=\$((MP_CHILD-MP_CHILD/${npey}*${npey}))
+export RP_Child="\$((MP_CHILD))"
+export RP_Member=\$((MP_CHILD/${npey}+${offset}))
+export RP_MemberChild=\$((MP_CHILD-MP_CHILD/${npey}*${npey}))
 #
 . ${MpiRunScript}.\${1:-0}  ${RedirectStdout} ${RedirectStderr}
 EOT
@@ -265,7 +268,7 @@ if [[ -n ${processorder} ]] ; then
     mkdir ${tmpdir}/${SeqNum}
   done
   echo "=============================================="
-  echo "temporary listings for all members in $(pwd)"
+  echo "temporary listings for all members in ${tmpdir}"
   echo "=============================================="
 fi
 #
