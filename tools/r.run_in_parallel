@@ -34,9 +34,12 @@ mpiexec_Linux() {
   [[ "${UseMpdboot}" == yes ]] && echo "WARNING: using OLD version (pre 1.3) of mpich2 detected"
   [[ "${UseMpdboot}" == yes ]] && kill_mpich2_mpd     # needed temporarily for old mpich2 versions
   [[ "${UseMpdboot}" == yes ]] && start_mpich2_mpd    # needed temporarily for old mpich2 versions
-
+echo ===---===---===
+cat ${PBS_NODEFILE}
+set -x
   mpiexec -machinefile ${PBS_NODEFILE} -n ${PeInWorld[${MpiCommWorld}]} "$@" ${ParallelScript} ${MpiCommWorld}
-
+#  mpiexec -n ${PeInWorld[${MpiCommWorld}]} "$@" ${ParallelScript} ${MpiCommWorld}
+set +x
   [[ "${UseMpdboot}" == yes ]] && stop_mpich2_mpd     # needed temporarily for old mpich2 versions
 }
 #
@@ -114,20 +117,10 @@ eval `cclargs_lite $0 \
     -packoutput "cat_output" "echo" "[]" \
     -multiworld "no" "yes" "[launch each process in its own MPI world]" \
     -offset "0" "1" "[numbering of members from this value]" \
-    -selftest "" "${TMPDIR}/selftest.$$" "[quick selftest]" \
+    -selftest "" "selftest.$$" "[quick selftest]" \
     ++ $*`
 [[ -n ${inorder} ]] && processorder="yes"
 [[ "${args}" == @* ]] && args2=${args#@} && [[ -f ${args2} ]] && args="$(xargs <${args2})"
-if [[ -n ${selftest} ]] ; then
-  pgm="${selftest}"
-  cat <<EOT >${selftest}
-#!/bin/bash
-set -x
-echo I am child \${RP_Child}, member \${RP_Member}, member child \${RP_MemberChild}, MP_SeqNum=\${MP_SeqNum}
-echo "arguments:'\$@'"
-EOT
- chmod 755 ${selftest}
-fi
 #
 # NOTE: -pgm @file option not implemented yet
 # up to 5 items per line
@@ -141,6 +134,18 @@ fi
 #
 mkdir -p ${tmpdir}
 export TMPDIR=${tmpdir}
+selftest="${tmpdir}/${selftest}"
+if [[ -n ${selftest} ]] ; then
+  pgm="${selftest}"
+  cat <<EOT >${selftest}
+#!/bin/bash
+set -x
+echo I am child \${RP_Child}, member \${RP_Member}, member child \${RP_MemberChild}, MP_SeqNum=\${MP_SeqNum}
+echo running on \$(hostname)
+echo "arguments:'\$@'"
+EOT
+ chmod 755 ${selftest}
+fi
 export MpiRunScript=${tmpdir}/MpiRunScript_$$
 export ParallelScript=${tmpdir}/ParallelScript_$$
 export RedirectStdout="1>${tmpdir}/\${MP_SeqNum}/stdout"   # will be expanded at run time in ParallelScript
@@ -252,7 +257,7 @@ echo "RPN_COMM_DIRS=$RPN_COMM_DIRS"
 #
 rm -f $TMPDIR/PBS_NODEFILE
 if [[ -n ${PBS_NODEFILE} ]] ; then
-  for i in `sort -u < $PBS_NODEFILE`
+  for i in `sort  < $PBS_NODEFILE`
   do
     echo ${i} >>${TMPDIR}/PBS_NODEFILE
   done
