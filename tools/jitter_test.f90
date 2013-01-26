@@ -2,9 +2,12 @@
       implicit none
       include 'mpif.h'
       integer, parameter :: niter=50
-      integer, parameter :: nis=1000
-      integer, parameter :: njs=400
-      integer, parameter :: nks=120
+      integer, parameter :: nis=40
+      integer, parameter :: njs=40
+      integer, parameter :: nks=40
+!      integer, parameter :: nis=1000
+!      integer, parameter :: njs=400
+!      integer, parameter :: nks=120
       integer iter,ierr,irank,iterext,isize,nthreads,tag,maxthreads
       real *8 rr(nks)
       real *8, dimension(niter) :: timea, timeb, timec, time1, time2, time3
@@ -51,6 +54,7 @@ integer bind_thread_to_cpu,bind_thread
       allocate(a(nis,njs,nks))
       allocate(b(nis,njs,nks))
 
+       nthreads=1
 !      do nthreads = maxthreads,1,-1     ! test for all numbers of threads down to one
 !      call omp_set_num_threads(nthreads)
       bindlist = -1
@@ -141,7 +145,7 @@ integer bind_thread_to_cpu,bind_thread
                                                                         100*(maxval(timeb)-minval(timeb))/minval(timeb)
 
         print 100,'Diag(',tag,')END to END / ideal / ratio  :',tend-tstart,niter*tmin,(tend-tstart)/(niter*tmin)
-100     format(A,I5,A,5F12.6)
+100     format(A,I8,A,5F12.6)
       endif
 
       enddo ! iterext
