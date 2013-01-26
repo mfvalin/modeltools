@@ -52,6 +52,7 @@ mpiexec_AIX() {
 }
 #
 local_cleanup() {
+ [[ -n ${nocleanup} ]] && return
  rm -f ${ParallelScript}* ${MP_HOSTFILE} ${MpiRunScript}* ${PBS_NODEFILE} ${selftest}
  rmdir ${tmpdir}
 }
@@ -84,6 +85,7 @@ cat_output() {  #  cat captured stdout/stderr files into stdout with appropriate
 #
 clean_output() {   #  get rid of captured stdout/stderr files into stdout
 #
+  [[ -n ${nocleanup} ]] && return
   for SeqNum in $* ; do 
     rm -f ${SeqNum}/std*
     rmdir ${SeqNum}
@@ -104,6 +106,8 @@ eval `cclargs_lite $0 \
     -nompi "run_with_mpi" "run_in_background" "[]" \
     -mpiargs "" "" "[]" \
     -geometry "" "" "[]" \
+    -debug "" "part" "[]" \
+    -nocleanup "" "nocleanup" "[]" \
     -tag "child" "full" "[full/child/member/stderr/none]" \
     -outp "o" "O" "[stdout prefix in listings]" \
     -errp "e" "E" "[stderr prefix in listings]" \
@@ -127,6 +131,7 @@ eval `cclargs_lite $0 \
 # -pgm [directory] executable first_pe increment last_pe|@  (repeated)
 # -pgm [directory] executable +number_of_pes (repeated)
 #
+[[ "${debug}" == full ]] && set -x
 mkdir -p ${tmpdir}
 export TMPDIR=${tmpdir}
 selftest="${tmpdir}/${selftest}"
@@ -235,6 +240,7 @@ fi
 #######################################################################
 cat <<EOT >${ParallelScript}
 #!/bin/ksh93
+[[ -n "${debug}" ]] && set -x
 #
 typeset -Z4 MP_SeqNum    # NOT VALID FOR bash, ksh family only
 export MP_CHILD=\${MP_CHILD:-\${PMI_RANK:-\${OMPI_COMM_WORLD_RANK}}}  # poe/mpich2/openmpi
