@@ -77,7 +77,7 @@ cat_output() {  #  cat captured stdout/stderr files into stdout with appropriate
     [[ -r ${SeqNum}/stdout ]] && print_separator start stdout ${MemberNo}:${MemberChild} && cat ${SeqNum}/stdout | sed -e "s/^/${Prefix2}${Prefix}/"
     [[ -r ${SeqNum}/stderr ]] && print_separator start stderr ${MemberNo}:${MemberChild} && cat ${SeqNum}/stderr | sed -e "s/^/${Prefix3}${Prefix}/"
   done
-  print_separator  end of stdout / stderr
+  print_separator "end of stdout / stderr"
   print_separator " parallel run listing "
 #
 }
@@ -257,7 +257,10 @@ if [[ -n ${PBS_NODEFILE} ]] ; then
   ((loops=(npe_total+nhosts-1)/nhosts))
   for i in `sort -u < $PBS_NODEFILE`
   do
-    for j in $(seq $loops) ; do  ; echo ${i} >>${TMPDIR}/PBS_NODEFILE ; done
+    for j in $(seq $loops)
+    do
+      echo ${i} >>${TMPDIR}/PBS_NODEFILE
+    done
   done
 else
   ((npe_temp=npe_total))
