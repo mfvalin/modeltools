@@ -134,8 +134,8 @@ eval `cclargs_lite $0 \
 [[ "${debug}" == full ]] && set -x
 mkdir -p ${tmpdir}
 export TMPDIR=${tmpdir}
-selftest="${tmpdir}/${selftest}"
 if [[ -n ${selftest} ]] ; then
+  selftest="${tmpdir}/${selftest}"
   pgm="${selftest}"
   cat <<EOT >${selftest}
 #!/bin/ksh93
