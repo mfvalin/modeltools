@@ -78,8 +78,8 @@ cat_output() {  #  cat captured stdout/stderr files into stdout with appropriate
     [[ -r ${SeqNum}/stdout ]] && print_separator start stdout ${MemberNo}:${MemberChild} && cat ${SeqNum}/stdout | sed -e "s/^/${Prefix2}${Prefix}/"
     [[ -r ${SeqNum}/stderr ]] && print_separator start stderr ${MemberNo}:${MemberChild} && cat ${SeqNum}/stderr | sed -e "s/^/${Prefix3}${Prefix}/"
   done
-  print_separator "end of stdout / stderr"
-  print_separator " parallel run listing "
+  print_separator "   stdout / stderr   "
+  print_separator " end of parallel run "
 #
 }
 #
