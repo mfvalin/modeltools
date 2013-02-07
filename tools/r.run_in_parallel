@@ -28,33 +28,64 @@ stop_mpich2_mpd() {  # stop mpd daemon(s)
 # end of temporary code to deal with OLD (pre 1.3) mpich2 versions
 #
 mpiexec_Linux() {
-  ((MpiCommWorld>0)) && echo "ERROR: MpiCommWorld>0 not supported yet" && return
+#  ((MpiCommWorlds>1)) && echo "ERROR: MpiCommWorlds>1 not supported yet" && return
+#
+# we are assuming that mpirun/mpiexec can be backgrounded.
+# if this assumption is false the top line should be uncommented
+#
   mpirun --version 2>/dev/null 1>/dev/null || UseMpdboot=yes  # old mpich2 or no mpirun at all
   [[ -n $(which mpdboot 2>/dev/null) ]] || UseMpdboot=no      # mpdboot not found
   [[ "${UseMpdboot}" == yes ]] && echo "WARNING: using OLD version (pre 1.3) of mpich2 detected"
   [[ "${UseMpdboot}" == yes ]] && kill_mpich2_mpd     # needed temporarily for old mpich2 versions
   [[ "${UseMpdboot}" == yes ]] && start_mpich2_mpd    # needed temporarily for old mpich2 versions
-  mpiexec -machinefile ${PBS_NODEFILE} -n ${PeInWorld[${MpiCommWorld}]} "$@" ${ParallelScript} ${MpiCommWorld}
+#
+  export MpiCommWorld
+  ((MpiCommWorld=0))
+  export ChildOffset=0
+  while(( MpiCommWorld<MpiCommWorlds)) ; do
+    if ((MpiCommWorlds>1)) ; then
+      echo "POE_cmdfile=${ParallelScript}.$((MpiCommWorld+1))@${MpiCommWorld}%${PeInWorld[${MpiCommWorld}]}%*"
+      echo ==== Backgrounding MPI world ${MpiCommWorld} with ${PeInWorld[${MpiCommWorld}]} MPI tasks ====
+      mpiexec -machinefile ${PBS_NODEFILE} -n ${PeInWorld[${MpiCommWorld}]} "$@" ${ParallelScript}.${MpiCommWorld} &
+    else
+      echo ==== Launching MPI world ${MpiCommWorld} with ${PeInWorld[${MpiCommWorld}]} MPI tasks ====
+      mpiexec -machinefile ${PBS_NODEFILE} -n ${PeInWorld[${MpiCommWorld}]} "$@" ${ParallelScript}.${MpiCommWorld}
+    fi
+    PeAdded=${PeInWorld[${MpiCommWorld}]}
+    ((ChildOffset=ChildOffset+PeAdded))
+    ((MpiCommWorld=MpiCommWorld+1))
+  done
+  ((MpiCommWorlds>1)) && \
+  echo ==== Waiting for ${MpiCommWorlds} MPI worlds to terminate ==== && \
+  wait
+#
   [[ "${UseMpdboot}" == yes ]] && stop_mpich2_mpd     # needed temporarily for old mpich2 versions
 }
 #
 mpiexec_AIX() {
-  ((MpiCommWorld>0)) && echo "ERROR: MpiCommWorld>0 not supported yet" && return
-  if tty -s ; then
+  ((MpiCommWorlds>1)) && echo "ERROR: MpiCommWorlds>1 not supported yet" && return
+  if tty -s ; then  # node list only necessary in interactive case
     export MP_PROCS=${PeInWorld[${MpiCommWorld}]}
     export MP_HOSTFILE=${PBS_NODEFILE}
 #    grep -q $(hostname) ${HOME}/.rhosts 2>/dev/null || echo $(hostname) ${USER} >>${HOME}/.rhosts
 #    chmod 700 ${HOME}/.rhosts
   fi
   export MP_NEWJOB=parallel
+  ((MpiCommWorld=0))
+  export ChildOffset=0   # poe takes care of adjusting MP_CHILD
   export MP_WORLD_SIZES=${PeInWorld[${MpiCommWorld}]}
-  poe "$@" ${ParallelScript} ${MpiCommWorld}
+  poe "$@" ${ParallelScript}.${MpiCommWorld}
 }
 #
 local_cleanup() {
  [[ -n ${nocleanup} ]] && return
  rm -f ${ParallelScript}* ${MP_HOSTFILE} ${MpiRunScript}* ${PBS_NODEFILE} ${selftest}
  rmdir ${tmpdir}
+ [[ -d "${tmpdir}" ]] && \
+ echo WARNING: leftovers in ${tmpdir} && \
+ ls -al ${tmpdir} && \
+ rm -rf ${tmpdir}  && \
+ echo removing all in ${tmpdir}
 }
 #
 print_separator() {
@@ -93,6 +124,28 @@ clean_output() {   #  get rid of captured stdout/stderr files into stdout
 #
 }
 #
+make_node_file() {
+  rm -f $TMPDIR/PBS_NODEFILE
+  if [[ -n ${PBS_NODEFILE} ]] ; then  # node list found
+    nhosts=$(sort -u ${PBS_NODEFILE} | wc -l | sed 's/ .*//')   # number of hosts
+    echo 
+    ((loops=(npe_total+nhosts-1)/nhosts))   # number of tasks per host
+    for i in `sort -u < $PBS_NODEFILE`
+    do
+      for j in $(seq $loops)
+      do
+	echo ${i} >>${TMPDIR}/PBS_NODEFILE   # one entry per task
+      done
+    done
+  else
+    if tty -s ; then   # no node list and interactive, create one
+      ((npe_temp=npe_total))
+      while (( npe_temp > 0 )) ; do ((npe_temp=npe_temp-1)) ; echo $(hostname) >> ${TMPDIR}/PBS_NODEFILE ; done
+    fi
+  fi
+  export PBS_NODEFILE=$TMPDIR/PBS_NODEFILE
+}
+#
 echo version avec /bin/ksh
 eval `cclargs_lite $0 \
     -tmpdir "$(pwd -P)/tmpdir" "" "[temporary directory visible by all processes]" \
@@ -114,7 +167,7 @@ eval `cclargs_lite $0 \
     -nosep "" "yes" "[deactivate separator between members]" \
     -preexec "" "" "[prefix program execution with this (time/gdb/...)]" \
     -packoutput "cat_output" "echo" "[]" \
-    -multiworld "no" "yes" "[launch each process in its own MPI world]" \
+    -worlds "0" "0" "[size of MPI worlds, 0=all processors available]" \
     -offset "0" "1" "[numbering of members from this value]" \
     -selftest "" "selftest.$$" "[quick selftest]" \
     ++ $*`
@@ -134,6 +187,7 @@ eval `cclargs_lite $0 \
 [[ "${debug}" == full ]] && set -x
 mkdir -p ${tmpdir}
 export TMPDIR=${tmpdir}
+#
 if [[ -n ${selftest} ]] ; then
   selftest="${tmpdir}/${selftest}"
   pgm="${selftest}"
@@ -142,35 +196,44 @@ if [[ -n ${selftest} ]] ; then
 echo running on \$(hostname)
 echo "arguments:'\$@'"
 set -x
-echo I am child \${RP_Child}, member \${RP_Member}, member child \${RP_MemberChild}, MP_SeqNum=\${MP_SeqNum}
+echo RP_Child=\${RP_Child}, RP_Member=\${RP_Member}, RP_MemberChild=\${RP_MemberChild}, MP_SeqNum=\${MP_SeqNum}, RP_CommWorld=\${RP_CommWorld}
+sleep 5
 EOT
  chmod 755 ${selftest}
 fi
+#
 export MpiRunScript=${tmpdir}/MpiRunScript_$$
 export ParallelScript=${tmpdir}/ParallelScript_$$
+touch ${ParallelScript}.0
+[[ ! -r ${ParallelScript}.0 ]] && echo "ERROR: ${tmpdir} not a writable directory" 1>&2 && exit 1
+#
 export RedirectStdout="1>${tmpdir}/\${MP_SeqNum}/stdout"   # will be expanded at run time in ParallelScript
 export RedirectStderr="2>${tmpdir}/\${MP_SeqNum}/stderr"   # will be expanded at run time in ParallelScript
 [[ "${spliteo}" == no ]] && RedirectStderr="2>&1"
 [[ -z ${processorder} ]] && RedirectStderr="" && RedirectStdout=""
 #
-touch ${ParallelScript}
-[[ ! -r ${ParallelScript} ]] && echo "ERROR: ${tmpdir} not a writable directory" 1>&2 && exit 1
-#
 (( npe_total=npex*npey ))
 (( npe_total_m1=npe_total-1 ))
+[[ "${worlds}" == 0 ]] && ((worlds=npe_total))
+((MpiCommWorlds=0))
+for i in ${worlds}
+do
+  PeInWorld[${MpiCommWorlds}]=${i}
+  ((MpiCommWorlds=MpiCommWorlds+1))  # number of MPI comm worlds
+done
 #
 export RPN_COMM_DOM=""
 export RPN_COMM_DIRS="' '"
 set -- $pgm ${MPIRUN_MPMD_PGM}
 #
-export MpiCommWorld=0
-PeInWorld[${MpiCommWorld}]=${npe_total}
+#export MpiCommWorld
 #
-if [[ "$2" != "" ]] ; then # complex sequence, possibly MPMD
+if [[ "$2" != "" ]] ; then # complex sequence, possibly MPMD, possibly multiple MPI worlds
   ((ErRoR=0))
   for i in $(seq 0 1 ${npe_total_m1}) ; do ProGrams[$i]="NoNe" ; Directories[$i]="." ; done
   ((NDomains=0))
   ((Next=0))
+  ((MpiCommWorld=0))
   while [[ "$1" != "" ]]
   do
     ((NDomains=NDomains+1))
@@ -229,30 +292,44 @@ if [[ "$2" != "" ]] ; then # complex sequence, possibly MPMD
     fi
   done
   if [[ "$ErRoR" != "0" ]] ; then echo "$ErRoR ERROR(S) detected" ; local_cleanup ; exit 1 ; fi
-else # simple case with only one executable
+else # simple case with only one executable, one world (may allow one executable and multiple worlds later)
   if [[ ! -x $pgm ]] ; then
     echo $pgm does not exist or is not executable
     exit 1
   fi
-  echo ${preexec} $pgm $args >${MpiRunScript}.${MpiCommWorld}
+  MpiCommWorld=0
+  while ((MpiCommWorld<MpiCommWorlds))
+  do
+    echo ${preexec} $pgm $args >${MpiRunScript}.${MpiCommWorld}   # MpiCommWorld is 0 in this case
+    ((MpiCommWorld=MpiCommWorld+1))
+  done
 fi
 #
 #######################################################################
-cat <<EOT >${ParallelScript}
+MpiCommWorld=0
+while ((MpiCommWorld<MpiCommWorlds))
+do
+#
+  cat <<EOT >${ParallelScript}.${MpiCommWorld}
 #!/bin/ksh93
 [[ -n "${debug}" ]] && set -x
 #
 typeset -Z4 MP_SeqNum    # NOT VALID FOR bash, ksh family only
 export MP_CHILD=\${MP_CHILD:-\${PMI_RANK:-\${OMPI_COMM_WORLD_RANK}}}  # poe/mpich2/openmpi
+((MP_CHILD=MP_CHILD+ChildOffset))   # need to add ChildOffset for this MPI world to MP_CHILD (0 for poe)
+export RP_CommWorld=${MpiCommWorld}
 export MP_SeqNum="\$((MP_CHILD))"
 export RP_Child="\$((MP_CHILD))"
 export RP_Member=\$((MP_CHILD/${npey}+${offset}))
 export RP_MemberChild=\$((MP_CHILD-MP_CHILD/${npey}*${npey}))
 #
-. ${MpiRunScript}.\${1:-0}  ${RedirectStdout} ${RedirectStderr}
+. ${MpiRunScript}.${MpiCommWorld}  ${RedirectStdout} ${RedirectStderr}
 EOT
+#
+  chmod 755 ${ParallelScript}.${MpiCommWorld}
+  ((MpiCommWorld=MpiCommWorld+1))
+done
 #######################################################################
-chmod 755 ${ParallelScript}
 echo "RPN_COMM_DOM=$RPN_COMM_DOM"
 echo "RPN_COMM_DIRS=$RPN_COMM_DIRS"
 #
