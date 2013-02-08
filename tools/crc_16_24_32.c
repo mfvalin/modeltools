@@ -68,7 +68,7 @@ uint32_t f_update_crc_ne(uint32_t *old_crc, int *crclen, void *data, int *datasi
 int main(int argc, char** argv)
 {
   unsigned int i,mask ;
-  unsigned long lmask ;
+  unsigned long long lmask ;
   unsigned int iarray[32];
   unsigned long long larray [64];
   crc16_t crc16=0;
@@ -86,12 +86,14 @@ int main(int argc, char** argv)
   crc24=update_crc_ne(crc24, 24, iarray, 4, 32, 0);
   crc32=update_crc_ne(crc32, 32, iarray, 4, 32, 0);
   p16=crc16 ; p24=crc24 ; p32=crc32 ;
+  printf("iarray , %8.8x, %8.8x\n",iarray[0],iarray[31]);
   printf("crc16=0000f39a, crc24=006b7cac, crc32=e3b736e4 is the correct answer\n") ;
   printf("crc16=%8.8x, crc24=%8.8x, crc32=%8.8x\n",p16,p24,p32) ;
   crc16=update_crc_ne(crc16, 16, larray, 8, 64, 2);
   crc24=update_crc_ne(crc24, 24, larray, 8, 64, 2);
   crc32=update_crc_ne(crc32, 32, larray, 8, 64, 2);
   p16=crc16 ; p24=crc24 ; p32=crc32 ;
+  printf("larray , %16.16Lx, %16.16Lx\n",larray[0],larray[63]);
   printf("crc16=00000fc6, crc24=0061f67c, crc32=5560ac91 is the correct answer\n") ;
   printf("crc16=%8.8x, crc24=%8.8x, crc32=%8.8x\n",p16,p24,p32) ;
   return(0);
