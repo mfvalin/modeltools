@@ -53,7 +53,7 @@ crc16_t crc16_reflect(crc16_t data, size_t data_len);
  *
  * \return     The initial crc value.
  *****************************************************************************/
-static inline crc16_t crc16_init(void)
+static crc16_t crc16_init(void)
 {
     return 0x0000;
 }
@@ -76,7 +76,7 @@ crc16_t crc16_update_le(crc16_t crc, const unsigned char *data, size_t data_len,
  * \param crc  The current crc value.
  * \return     The final crc value.
  *****************************************************************************/
-static inline crc16_t crc16_finalize(crc16_t crc)
+static crc16_t crc16_finalize(crc16_t crc)
 {
     return crc ^ 0x0000;
 }

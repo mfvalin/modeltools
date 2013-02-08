@@ -82,14 +82,14 @@ int main(int argc, char** argv)
   for (i=0;i<64;i++) {larray[i] = lmask ; lmask <<= 1 ; }
   p16=crc16 ; p24=crc24 ; p32=crc32 ;
   printf("crc16=%8.8x, crc24=%8.8x, crc32=%8.8x\n",p16,p24,p32) ;
-  crc16=update_crc_ne(crc16, 16, iarray, 32, 4, 0);
-  crc24=update_crc_ne(crc24, 24, iarray, 32, 4, 0);
-  crc32=update_crc_ne(crc32, 32, iarray, 32, 4, 0);
+  crc16=update_crc_ne(crc16, 16, iarray, 4, 32, 0);
+  crc24=update_crc_ne(crc24, 24, iarray, 4, 32, 0);
+  crc32=update_crc_ne(crc32, 32, iarray, 4, 32, 0);
   p16=crc16 ; p24=crc24 ; p32=crc32 ;
   printf("crc16=%8.8x, crc24=%8.8x, crc32=%8.8x\n",p16,p24,p32) ;
-  crc16=update_crc_ne(crc16, 16, larray, 64, 8, 2);
-  crc24=update_crc_ne(crc24, 24, larray, 64, 8, 2);
-  crc32=update_crc_ne(crc32, 32, larray, 64, 8, 2);
+  crc16=update_crc_ne(crc16, 16, larray, 8, 64, 2);
+  crc24=update_crc_ne(crc24, 24, larray, 8, 64, 2);
+  crc32=update_crc_ne(crc32, 32, larray, 8, 64, 2);
   p16=crc16 ; p24=crc24 ; p32=crc32 ;
   printf("crc16=%8.8x, crc24=%8.8x, crc32=%8.8x\n",p16,p24,p32) ;
   return(0);

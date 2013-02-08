@@ -43,7 +43,7 @@ typedef uint32_t crc24_t;
  *
  * \return     The initial crc value.
  *****************************************************************************/
-static inline crc24_t crc24_init(void)
+static crc24_t crc24_init(void)
 {
     return 0xb704ce;
 }
@@ -66,7 +66,7 @@ crc24_t crc24_update_le(crc24_t crc, const unsigned char *data, size_t data_len,
  * \param crc  The current crc value.
  * \return     The final crc value.
  *****************************************************************************/
-static inline crc24_t crc24_finalize(crc24_t crc)
+static crc24_t crc24_finalize(crc24_t crc)
 {
     return crc ^ 0x000000;
 }
