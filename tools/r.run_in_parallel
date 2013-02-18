@@ -64,6 +64,7 @@ mpiexec_Linux() {
 #
 mpiexec_AIX() {
   ((MpiCommWorlds>1)) && echo "ERROR: MpiCommWorlds>1 not supported yet" && return
+  ((MpiCommWorld=0))
   if tty -s ; then  # node list only necessary in interactive case
     export MP_PROCS=${PeInWorld[${MpiCommWorld}]}
     export MP_HOSTFILE=${PBS_NODEFILE}
@@ -71,7 +72,6 @@ mpiexec_AIX() {
 #    chmod 700 ${HOME}/.rhosts
   fi
   export MP_NEWJOB=parallel
-  ((MpiCommWorld=0))
   export ChildOffset=0   # poe takes care of adjusting MP_CHILD
   export MP_WORLD_SIZES=${PeInWorld[${MpiCommWorld}]}
   poe "$@" ${ParallelScript}.${MpiCommWorld}
