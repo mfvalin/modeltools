@@ -27,6 +27,8 @@
 
 #pragma weak f_rpn_comm_chdir__=f_rpn_comm_chdir
 #pragma weak f_rpn_comm_chdir_=f_rpn_comm_chdir
+int f_rpn_comm_chdir__(char *);
+int f_rpn_comm_chdir_(char *);
 int f_rpn_comm_chdir(char *in_reper)
 {
   int ierr;

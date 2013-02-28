@@ -40,6 +40,9 @@ static double time0 = 0.0;
 
 #pragma weak rpn_comm_wtime__=rpn_comm_wtime
 #pragma weak rpn_comm_wtime_=rpn_comm_wtime
+double rpn_comm_wtime__();
+double rpn_comm_wtime_();
+
 double rpn_comm_wtime()
 {
   return (*fn)() - time0;
@@ -68,6 +71,9 @@ static timebasestruct_t t0;
 
 #pragma weak rpn_comm_tsc__=rpn_comm_tsc
 #pragma weak rpn_comm_tsc_=rpn_comm_tsc
+double rpn_comm_tsc__();
+double rpn_comm_tsc_();
+
 double rpn_comm_tsc()
 {
   double temp;
@@ -131,6 +137,8 @@ return temp;
 
 #pragma weak rpn_comm_timeofday__=rpn_comm_timeofday
 #pragma weak rpn_comm_timeofday__=rpn_comm_timeofday
+double rpn_comm_timeofday__();
+double rpn_comm_timeofday_();
 double rpn_comm_timeofday()
 {
   double temp;
@@ -153,6 +161,8 @@ double rpn_comm_timeofday()
 
 #pragma weak rpn_comm_wtime_set__=rpn_comm_wtime_set
 #pragma weak rpn_comm_wtime_set_=rpn_comm_wtime_set
+void rpn_comm_wtime_set__(double (*)());
+void rpn_comm_wtime_set_(double (*)());
 void rpn_comm_wtime_set(double (*function)())
 {
   fn = function;

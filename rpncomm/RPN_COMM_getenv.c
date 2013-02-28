@@ -39,6 +39,8 @@ strncpy_(char *dest, const char *src, size_t n){
 
 #pragma weak rpn_comm_getenv__=rpn_comm_getenv
 #pragma weak rpn_comm_getenv_=rpn_comm_getenv
+int rpn_comm_getenv__(char *,char *, int *);
+int rpn_comm_getenv_(char *,char *, int *);
 int rpn_comm_getenv(char *name,char *value, int *length)
 {
   char *temp=getenv(name);

@@ -45,6 +45,8 @@
 
 /* WARNING: some old versions of gcc may not generate the weak entry points correctly */
 
+void rpn_comm_unbind_process__(void);
+void rpn_comm_unbind_process_(void);
 void rpn_comm_unbind_process(void)
 {
 #if defined(linux)

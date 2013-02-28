@@ -226,6 +226,8 @@ static int omp_max_threads=1;
 
 #pragma weak save_openmp_state__=save_openmp_state
 #pragma weak save_openmp_state_=save_openmp_state
+static void save_openmp_state__();
+static void save_openmp_state_();
 static void save_openmp_state()
 {
   int ONE=1;
@@ -239,6 +241,8 @@ static void save_openmp_state()
 }
 #pragma weak restore_openmp_state__=restore_openmp_state
 #pragma weak restore_openmp_state_=restore_openmp_state
+void restore_openmp_state__();
+void restore_openmp_state_();
 void restore_openmp_state()
 {
   f_omp_set_num_threads(&omp_max_threads);
@@ -279,6 +283,8 @@ static struct set_of_ports *init_set_of_ports()
 
 #pragma weak rpn_comm_softbarrier_init__=rpn_comm_softbarrier_init
 #pragma weak rpn_comm_softbarrier_init_=rpn_comm_softbarrier_init
+ftnword rpn_comm_softbarrier_init__(ftnword *);
+ftnword rpn_comm_softbarrier_init_(ftnword *);
 ftnword rpn_comm_softbarrier_init(ftnword *ftn_comm)  /* bind to port, return pointer to structure */
 {
         struct set_of_ports *p=chain; /* verifier s'il n'existe pas deja un setup pour ce communicateur */
@@ -315,6 +321,8 @@ ftnword rpn_comm_softbarrier_init(ftnword *ftn_comm)  /* bind to port, return po
 }
 #pragma weak rpn_comm_softbarrier_init_all__=rpn_comm_softbarrier_init_all
 #pragma weak rpn_comm_softbarrier_init_all_=rpn_comm_softbarrier_init_all
+ftnword rpn_comm_softbarrier_init_all__();
+ftnword rpn_comm_softbarrier_init_all_();
 ftnword rpn_comm_softbarrier_init_all(){
 	ftnword world=MPI_Comm_c2f(MPI_COMM_WORLD);
 	return(rpn_comm_softbarrier_init(&world));
@@ -337,6 +345,8 @@ ftnword rpn_comm_softbarrier_init_all(){
 
 #pragma weak rpn_comm_softbarrier__=rpn_comm_softbarrier
 #pragma weak rpn_comm_softbarrier_=rpn_comm_softbarrier
+int rpn_comm_softbarrier__(ftnword *);
+int rpn_comm_softbarrier_(ftnword *);
 int rpn_comm_softbarrier(ftnword *ftn_comm)   /* perform a soft sync */
 {
   MPI_Comm comm=MPI_Comm_f2c(*ftn_comm);
