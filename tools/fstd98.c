@@ -250,9 +250,10 @@ return(0);
 }
 
 
-
+/*
 void *fst_encode_missing_value(void *field,void *field2,int nvalues,int datatype,int nbits,int is_byte,int is_short,int is_double);
 void fst_decode_missing_value(void *field,int nvalues,int datatype,int is_byte,int is_short,int is_double);
+*/
 /*splitpoint c_fstecr */
 /***************************************************************************** 
  *                           C _ F S T E C R                                 *
@@ -345,6 +346,7 @@ int c_fstecr(word *field_in, void * work, int npak,
   char typvar[3]={' ',' ','\0'};
   char nomvar[5]={' ',' ',' ',' ','\0'};
   char grtyp[2]={' ','\0'};
+
 
   is_missing = in_datyp_ori & 64 ; /* will be cancelled later if not supported or no missing values detected */
   
@@ -628,6 +630,11 @@ int c_fstecr(word *field_in, void * work, int npak,
     switch (datyp) {
 
     case 0:              /* transparent mode */
+      if(datyp==128) {
+        fprintf(stderr,"compression not available, data type %d reset to %d\n",stdf_entry->datyp,0);
+        datyp = 0;
+        stdf_entry->datyp = 0;
+      }
       lngw = ((ni*nj*nk*nbits) + bitmot-1) / bitmot;
       for (i=0; i < lngw; i++)
         buffer->data[keys_len+i] = field[i];
@@ -723,16 +730,26 @@ int c_fstecr(word *field_in, void * work, int npak,
       break;
       }
     
-    case 3:              /* character */
+    case 3: case 131:              /* character */
       {
         int nc = (ni*nj+3)/4;
+        if(datyp==131) {
+          fprintf(stderr,"compression not available, data type %d reset to %d\n",stdf_entry->datyp,3);
+          datyp = 3;
+          stdf_entry->datyp = 3;
+        }
         ier = compact_integer(field,(void *) NULL,&(buffer->data[keys_len]),nc,
                               32,0,xdf_stride,1);
         stdf_entry->nbits = 8;
         break;
       }
       
-    case 4:              /* signed integer */
+    case 4: case 132:              /* signed integer */
+      if(datyp==132) {
+        fprintf(stderr,"extra compression not supported, data type %d reset to %d\n",stdf_entry->datyp,is_missing | 4);
+      }
+      datyp = 4;
+      stdf_entry->datyp = is_missing | 4;  /* turbo compression not supported for this type, revert to normal mode */
       field3 = field;
       if(xdf_short || xdf_byte){
         field3=(word *)alloca(ni*nj*nk*sizeof(word));
@@ -744,13 +761,18 @@ int c_fstecr(word *field_in, void * work, int npak,
                             nbits,0,xdf_stride,3);
       break;
       
-    case 5: case 8: case 133:             /* IEEE and IEEE complex representation */
+    case 5: case 8: case 133:  case 136:            /* IEEE and IEEE complex representation */
       {
         ftnword f_ni = (ftnword) ni;
         ftnword f_njnk = (ftnword) njnk;
         ftnword f_zero = (ftnword) zero;
         ftnword f_one = (ftnword) one;
         ftnword f_minus_nbits = (ftnword) minus_nbits;
+        if(datyp==138) {
+          fprintf(stderr,"compression not available, data type %d reset to %d\n",stdf_entry->datyp,8);
+          datyp = 8;
+          stdf_entry->datyp = 8;
+        }
         if (datyp == 133) {
           /* use an additionnal compression scheme */    
           compressed_lng = c_armn_compress32(&(buffer->data[keys_len+1]), field, ni,nj,nk,nbits);
@@ -804,7 +826,12 @@ int c_fstecr(word *field_in, void * work, int npak,
         break;
       }
        
-    case 7:              /* character string */
+    case 7: case 135:              /* character string */
+      if(datyp==135) {
+        fprintf(stderr,"compression not available, data type %d reset to %d\n",stdf_entry->datyp,7);
+        datyp = 7;
+        stdf_entry->datyp = 7;
+      }
       ier = compact_char(field,(void *) NULL,&(buffer->data[keys_len]),
                             ni*nj*nk,8,0,xdf_stride,9);
       break;

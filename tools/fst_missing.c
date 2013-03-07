@@ -170,6 +170,8 @@ static unsigned char ubyte_missing_val=0xFF;       /* largest  8 bit unsigned in
 /* format is "real int unsigne_dint double */
 #pragma weak missing_value_used_ = missing_value_used
 #pragma weak missing_value_used__ = missing_value_used
+int missing_value_used_();
+int missing_value_used__();
 int missing_value_used()  /* return 1 if missing value detected, 0 otherwise */
 {
   char *text;
@@ -199,6 +201,10 @@ int missing_value_used()  /* return 1 if missing value detected, 0 otherwise */
 /* return value of function tells whether the values have been initialized (1) or not(0) */
 #pragma weak get_missing_value_flags_  = get_missing_value_flags
 #pragma weak get_missing_value_flags__ = get_missing_value_flags
+int get_missing_value_flags_(float *f, int *i, unsigned int *ui, double *d, short *s, unsigned short *us,
+                                      signed char *b, unsigned char *ub);
+int get_missing_value_flags__(float *f, int *i, unsigned int *ui, double *d, short *s, unsigned short *us,
+                                      signed char *b, unsigned char *ub);
 int get_missing_value_flags(float *f, int *i, unsigned int *ui, double *d, short *s, unsigned short *us,
                                       signed char *b, unsigned char *ub)
 {
@@ -217,6 +223,10 @@ int get_missing_value_flags(float *f, int *i, unsigned int *ui, double *d, short
 /* fortran and C callable versions, set magic values used to flag missing data points */
 #pragma weak set_missing_value_flags_  = set_missing_value_flags
 #pragma weak set_missing_value_flags__ = set_missing_value_flags
+void set_missing_value_flags_(float *f, int *i, unsigned int *ui, double *d, short *s, unsigned short *us,
+                                      signed char *b, unsigned char *ub);
+void set_missing_value_flags__(float *f, int *i, unsigned int *ui, double *d, short *s, unsigned short *us,
+                                      signed char *b, unsigned char *ub);
 void set_missing_value_flags(float *f, int *i, unsigned int *ui, double *d, short *s, unsigned short *us,
                                       signed char *b, unsigned char *ub)
 {
@@ -751,6 +761,8 @@ int EncodeMissingValue(void *field,void *field2,int nvalues,int datatype,int nbi
 }
 #pragma weak encode_missing_value__ = encode_missing_value
 #pragma weak encode_missing_value_  = encode_missing_value
+int encode_missing_value_(void *field,void *field2,int *nvalues,int *datatype,int *nbits,int *is_byte,int *is_short,int *is_double);
+int encode_missing_value__(void *field,void *field2,int *nvalues,int *datatype,int *nbits,int *is_byte,int *is_short,int *is_double);
 int encode_missing_value(void *field,void *field2,int *nvalues,int *datatype,int *nbits,int *is_byte,int *is_short,int *is_double){
   return( EncodeMissingValue(field,field2,*nvalues,*datatype,*nbits,*is_byte,*is_short,*is_double) );
 }
@@ -758,7 +770,7 @@ int encode_missing_value(void *field,void *field2,int *nvalues,int *datatype,int
 void DecodeMissingValue(void *field,int nvalues,int datatype,int is_byte,int is_short,int is_double){
   if(missing_value_used()==0) return ;
   datatype &= 0xF ;
-  if(datatype==0 || datatype==3 || datatype==7 || datatype==8) return ; /* not valid for transparent or character types */
+  if(datatype==0 || datatype==3 || datatype==7 || datatype==8) return ; /* not valid for complex, transparent or character types */
 //  if(is_byte)   return ; /* for now byte types will not be processed */
   /* if(is_short)  return ; */
   /* if(is_double) return ; */
@@ -796,6 +808,8 @@ void DecodeMissingValue(void *field,int nvalues,int datatype,int is_byte,int is_
 }
 #pragma weak decode_missing_value__ = decode_missing_value
 #pragma weak decode_missing_value_  = decode_missing_value
+void decode_missing_value_(void *field,int *nvalues,int *datatype,int *is_byte,int *is_short,int *is_double);
+void decode_missing_value__(void *field,int *nvalues,int *datatype,int *is_byte,int *is_short,int *is_double);
 void decode_missing_value(void *field,int *nvalues,int *datatype,int *is_byte,int *is_short,int *is_double){
   DecodeMissingValue(field,*nvalues,*datatype,*is_byte,*is_short,*is_double) ;
 }
