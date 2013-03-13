@@ -38,18 +38,34 @@ mpiexec_Linux() {
   [[ "${UseMpdboot}" == yes ]] && echo "WARNING: using OLD version (pre 1.3) of mpich2 detected"
   [[ "${UseMpdboot}" == yes ]] && kill_mpich2_mpd     # needed temporarily for old mpich2 versions
   [[ "${UseMpdboot}" == yes ]] && start_mpich2_mpd    # needed temporarily for old mpich2 versions
+  if [[ "${OPAL_PREFIX}" == *openmpi_1.6* ]] ; then
+    OPEN_MPI_PARMS="--prefix ${OPAL_PREFIX} --stdin all --cpus-per-proc ${OMP_NUM_THREADS:-1}"
+    unset PE_HOSTFILE
+    export OMPI_MCA_orte_default_hostfile=${PBS_NODEFILE}
+    export OMPI_MCA_orte_rsh_agent=rurun
+    export OMPI_MCA_plm_rsh_disable_qrsh=1
+    env | grep -v "'" | grep -v '"' | grep  '^[a-zA-Z0-9]' | sed -e 's/^/export /' -e 's/=/="/' -e 's/$/"/' >tmpdir/.mpi_env
+  fi
 #
   export MpiCommWorld
   ((MpiCommWorld=0))
   export ChildOffset=0
+  touch tmpdir/.mpi_env
   while(( MpiCommWorld<MpiCommWorlds)) ; do
+#
+    echo ===== MPI host file =====
+    cat ${PBS_NODEFILE} | head -${PeInWorld[${MpiCommWorld}]}
+    echo ===== MPI host file =====
+#
     if ((MpiCommWorlds>1)) ; then
       echo "POE_cmdfile=${ParallelScript}.$((MpiCommWorld+1))@${MpiCommWorld}%${PeInWorld[${MpiCommWorld}]}%*"
       echo ==== Backgrounding MPI world ${MpiCommWorld} with ${PeInWorld[${MpiCommWorld}]} MPI tasks ====
-      mpiexec -machinefile ${PBS_NODEFILE} -n ${PeInWorld[${MpiCommWorld}]} "$@" ${ParallelScript}.${MpiCommWorld} &
+      cat tmpdir/.mpi_env | mpirun ${OPEN_MPI_PARMS} -machinefile ${PBS_NODEFILE} -n ${PeInWorld[${MpiCommWorld}]} "$@" ${ParallelScript}.${MpiCommWorld} &
     else
       echo ==== Launching MPI world ${MpiCommWorld} with ${PeInWorld[${MpiCommWorld}]} MPI tasks ====
-      mpiexec -machinefile ${PBS_NODEFILE} -n ${PeInWorld[${MpiCommWorld}]} "$@" ${ParallelScript}.${MpiCommWorld}
+set -x
+      cat tmpdir/.mpi_env | mpirun ${OPEN_MPI_PARMS} -machinefile ${PBS_NODEFILE} -n ${PeInWorld[${MpiCommWorld}]} "$@" ${ParallelScript}.${MpiCommWorld}
+set +x
     fi
     PeAdded=${PeInWorld[${MpiCommWorld}]}
     ((ChildOffset=ChildOffset+PeAdded))
@@ -79,10 +95,10 @@ mpiexec_AIX() {
 #
 local_cleanup() {
  [[ -n ${nocleanup} ]] && return
- rm -f ${ParallelScript}* ${MP_HOSTFILE} ${MpiRunScript}* ${PBS_NODEFILE} ${selftest}
- rmdir ${tmpdir}
+ rm -f ${ParallelScript}* ${MP_HOSTFILE} ${MpiRunScript}* ${PBS_NODEFILE} ${selftest} ${tmpdir}/.mpi_env*
+ rmdir ${tmpdir} || true
  [[ -d "${tmpdir}" ]] && \
- echo WARNING: leftovers in ${tmpdir} && \
+ echo INFO: some leftovers in ${tmpdir} && \
  ls -al ${tmpdir} && \
  rm -rf ${tmpdir}  && \
  echo removing all in ${tmpdir}
@@ -195,6 +211,7 @@ if [[ -n ${selftest} ]] ; then
 #!/bin/ksh93
 echo running on \$(hostname)
 echo "arguments:'\$@'"
+echo "NODE FILE='\${PBS_NODEFILE}'"
 set -x
 echo RP_Child=\${RP_Child}, RP_Member=\${RP_Member}, RP_MemberChild=\${RP_MemberChild}, MP_SeqNum=\${MP_SeqNum}, RP_CommWorld=\${RP_CommWorld}
 sleep 5
@@ -314,8 +331,10 @@ do
 #!/bin/ksh93
 [[ -n "${debug}" ]] && set -x
 #
-typeset -Z4 MP_SeqNum    # NOT VALID FOR bash, ksh family only
 export MP_CHILD=\${MP_CHILD:-\${PMI_RANK:-\${OMPI_COMM_WORLD_RANK}}}  # poe/mpich2/openmpi
+cat >${tmpdir}/.mpi_env_\${MP_CHILD}
+. ${tmpdir}/.mpi_env_\${MP_CHILD}
+typeset -Z4 MP_SeqNum    # NOT VALID FOR bash, ksh family only
 ((MP_CHILD=MP_CHILD+ChildOffset))   # need to add ChildOffset for this MPI world to MP_CHILD (0 for poe)
 export RP_CommWorld=${MpiCommWorld}
 export MP_SeqNum="\$((MP_CHILD))"
@@ -334,6 +353,7 @@ echo "RPN_COMM_DOM=$RPN_COMM_DOM"
 echo "RPN_COMM_DIRS=$RPN_COMM_DIRS"
 #
 rm -f $TMPDIR/PBS_NODEFILE
+[[ -f "${GECOSHEP_HOSTS_FILE}" ]] && PBS_NODEFILE=${GECOSHEP_HOSTS_FILE}
 if [[ -n ${PBS_NODEFILE} ]] ; then
   nhosts=$(sort -u ${PBS_NODEFILE} | wc -l | sed 's/ .*//')
   echo 
@@ -385,4 +405,4 @@ if [[ -n ${packoutput} && -n ${processorder} ]] ; then
 fi
 #
 set +x
-local_cleanup
+local_cleanup || true
