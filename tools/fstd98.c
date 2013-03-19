@@ -263,6 +263,7 @@ void fst_decode_missing_value(void *field,int nvalues,int datatype,int is_byte,i
  *                                                                           * 
  *Revision                                                                   *
  *   Sept 2011 - Deltat, becomes a long long (deet*npas > 32bit)             *
+ *   Mar  2013 - M.Valin  missing values, turbo compression, byte/short mods *
  *                                                                           *
  *Arguments                                                                  * 
  *                                                                           * 
@@ -537,7 +538,8 @@ int c_fstecr(word *field_in, void * work, int npak,
   stdf_entry->ni = ni;
   stdf_entry->gtyp = grtyp[0];
   stdf_entry->nj = nj;
-  stdf_entry->datyp = datyp | is_missing;  /* propagate missing values flag */
+  stdf_entry->datyp = datyp | is_missing;  /* propagate missing values flag        */ 
+         /* this value may be changed later in the code to eliminate improper flags */
   stdf_entry->nk = nk;
   stdf_entry->ubc = 0;
   stdf_entry->npas = npas;
@@ -622,16 +624,16 @@ int c_fstecr(word *field_in, void * work, int npak,
       field= (word *) alloca(ni*nj*nk*sizefactor); /* allocate self deallocating scratch field */
       if( 0 == EncodeMissingValue(field,field_in,ni*nj*nk,in_datyp,nbits,xdf_byte,xdf_short,xdf_double) ) {
 	field=field_in ;
-	fprintf(stderr,"NO missing value, data type %d reset to %d\n",stdf_entry->datyp,datyp);
+	INFOPRINT fprintf(stderr,"NO missing value, data type %d reset to %d\n",stdf_entry->datyp,datyp);
 	stdf_entry->datyp = datyp;  /* cancel missing data flag in data type */
 	is_missing = 0;
       }
     }
     switch (datyp) {
 
-    case 0:              /* transparent mode */
+    case 0: case 128:              /* transparent mode */
       if(datyp==128) {
-        fprintf(stderr,"compression not available, data type %d reset to %d\n",stdf_entry->datyp,0);
+        WARNPRINT fprintf(stderr,"WARNING: extra compression not available, data type %d reset to %d\n",stdf_entry->datyp,0);
         datyp = 0;
         stdf_entry->datyp = 0;
       }
@@ -734,7 +736,7 @@ int c_fstecr(word *field_in, void * work, int npak,
       {
         int nc = (ni*nj+3)/4;
         if(datyp==131) {
-          fprintf(stderr,"compression not available, data type %d reset to %d\n",stdf_entry->datyp,3);
+          WARNPRINT fprintf(stderr,"WARNING: extra compression not available, data type %d reset to %d\n",stdf_entry->datyp,3);
           datyp = 3;
           stdf_entry->datyp = 3;
         }
@@ -746,9 +748,9 @@ int c_fstecr(word *field_in, void * work, int npak,
       
     case 4: case 132:              /* signed integer */
       if(datyp==132) {
-        fprintf(stderr,"extra compression not supported, data type %d reset to %d\n",stdf_entry->datyp,is_missing | 4);
+        WARNPRINT fprintf(stderr,"WARNING: extra compression not supported, data type %d reset to %d\n",stdf_entry->datyp,is_missing | 4);
+        datyp = 4;
       }
-      datyp = 4;
       stdf_entry->datyp = is_missing | 4;  /* turbo compression not supported for this type, revert to normal mode */
       field3 = field;
       if(xdf_short || xdf_byte){
@@ -768,8 +770,8 @@ int c_fstecr(word *field_in, void * work, int npak,
         ftnword f_zero = (ftnword) zero;
         ftnword f_one = (ftnword) one;
         ftnword f_minus_nbits = (ftnword) minus_nbits;
-        if(datyp==138) {
-          fprintf(stderr,"compression not available, data type %d reset to %d\n",stdf_entry->datyp,8);
+        if(datyp==136) {
+          WARNPRINT fprintf(stderr,"WARNING: extra compression not available, data type %d reset to %d\n",stdf_entry->datyp,8);
           datyp = 8;
           stdf_entry->datyp = 8;
         }
@@ -828,7 +830,7 @@ int c_fstecr(word *field_in, void * work, int npak,
        
     case 7: case 135:              /* character string */
       if(datyp==135) {
-        fprintf(stderr,"compression not available, data type %d reset to %d\n",stdf_entry->datyp,7);
+        WARNPRINT fprintf(stderr,"WARNING: extra compression not available, data type %d reset to %d\n",stdf_entry->datyp,7);
         datyp = 7;
         stdf_entry->datyp = 7;
       }
@@ -1626,6 +1628,8 @@ int c_fstlis(word *field, int iun, int *ni, int *nj, int *nk)
  *                                                                           *
  *Object                                                                     *
  *   Read the record at position given by handle.                            *
+ *Revision                                                                   *
+ *   Mar  2013 - M.Valin  missing values, byte/short mods                    *
  *                                                                           *
  *Arguments                                                                  *
  *                                                                           *

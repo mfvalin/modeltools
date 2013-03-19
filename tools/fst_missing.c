@@ -1,5 +1,5 @@
 /* useful routines for C and FORTRAN programming
- * Copyright (C) 2013  centre ESCER, Universite du Quebec a Montreal
+ * Copyright (C) 2013  centre ESCER, Universite du Quebec A Montreal
  *
  * This is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public
@@ -154,6 +154,7 @@
 
 #include <stdlib.h>
 #include <stdio.h>
+#include "qstdir.h"
 
 static int plugmode=-1;                             /* -1 not initialized, 1 active, 0 not active */
 /* default values for missing values */
@@ -485,7 +486,7 @@ static int fst_int_encode_missing(int *z, int *z2, int n, int nbits) /* signed i
   
   plug = plug2 ;  /* this code assumes packing of z with no bias removal */
   if(plug > zma) plug = zma + 1;
-  else fprintf(stderr,"fst_int_encode_missing: << WARNING >> MAXIMUM VALUE >= ENCODED MISSING VALUE FLAG\n");
+  else WARNPRINT fprintf(stderr,"fst_int_encode_missing: << WARNING >> MAXIMUM VALUE >= ENCODED MISSING VALUE FLAG\n");
   while(n--) { if(*z2==int_missing_val) *z=plug ; else *z=*z2 ; z++ ; z2++ ; }
   return(missing);
   
@@ -516,7 +517,7 @@ static int fst_short_encode_missing(short *z, short *z2, int n, int nbits) /* si
 
   plug = plug2 ;  /* this code assumes packing of z with no bias removal */
   if(plug > zma) plug = zma + 1;
-  else fprintf(stderr,"fst_short_encode_missing: << WARNING >> MAXIMUM VALUE >= ENCODED MISSING VALUE FLAG\n");
+  else WARNPRINT fprintf(stderr,"fst_short_encode_missing: << WARNING >> MAXIMUM VALUE >= ENCODED MISSING VALUE FLAG\n");
   while(n--) { if(*z2==short_missing_val) *z=plug ; else *z=*z2 ; z++ ; z2++ ; }
   return(missing);
 
@@ -547,7 +548,7 @@ static int fst_byte_encode_missing(signed char *z, signed char *z2, int n, int n
 
   plug = plug2 ;  /* this code assumes packing of z with no bias removal */
   if(plug > zma) plug = zma + 1;
-  else fprintf(stderr,"fst_byte_encode_missing: << WARNING >> MAXIMUM VALUE >= ENCODED MISSING VALUE FLAG\n");
+  else WARNPRINT fprintf(stderr,"fst_byte_encode_missing: << WARNING >> MAXIMUM VALUE >= ENCODED MISSING VALUE FLAG\n");
   while(n--) { if(*z2==byte_missing_val) *z=plug ; else *z=*z2 ; z++ ; z2++ ; }
   return(missing);
 }
@@ -566,7 +567,7 @@ static int fst_uint_encode_missing(unsigned int *z, unsigned int *z2, int n, int
   if(nbits<32) plug = plug >> (32-nbits);
 
   if(plug > zma) plug = zma + 1;  /* this code assumes packing of z with no bias removal */
-  else fprintf(stderr,"fst_uint_encode_missing: << WARNING >> MAXIMUM VALUE %u >= ENCODED MISSING VALUE FLAG %u\n",zma,plug);
+  else WARNPRINT fprintf(stderr,"fst_uint_encode_missing: << WARNING >> MAXIMUM VALUE %u >= ENCODED MISSING VALUE FLAG %u\n",zma,plug);
   while(n--) { if(*z2==uint_missing_val) *z=plug ; else *z=*z2 ; z++ ; z2++ ; }
   return(missing);
 
@@ -593,7 +594,7 @@ static int fst_ushort_encode_missing(unsigned short *z, unsigned short *z2, int 
   if(nbits<16) plug = plug >> (16-nbits);
 
   if(plug > zma) plug = zma + 1;  /* this code assumes packing of z with no bias removal */
-  else fprintf(stderr,"fst_ushort_encode_missing: << WARNING >> MAXIMUM VALUE %hu >= ENCODED MISSING VALUE FLAG %hu\n",zma,plug);
+  else WARNPRINT fprintf(stderr,"fst_ushort_encode_missing: << WARNING >> MAXIMUM VALUE %hu >= ENCODED MISSING VALUE FLAG %hu\n",zma,plug);
   while(n--) { if(*z2==ushort_missing_val) *z=plug ; else *z=*z2 ; z++ ; z2++ ; }
   return(missing);
 
@@ -620,7 +621,7 @@ static int fst_ubyte_encode_missing(unsigned char *z, unsigned char *z2, int n, 
   if(nbits<8) plug = plug >> (8-nbits);
 
   if(plug > zma) plug = zma + 1;  /* this code assumes packing of z with no bias removal */
-  else fprintf(stderr,"fst_ubyte_encode_missing: << WARNING >> MAXIMUM VALUE %hu >= ENCODED MISSING VALUE FLAG %hu\n",zma,plug);
+  else WARNPRINT fprintf(stderr,"fst_ubyte_encode_missing: << WARNING >> MAXIMUM VALUE %hu >= ENCODED MISSING VALUE FLAG %hu\n",zma,plug);
   while(n--) { if(*z2==ubyte_missing_val) *z=plug ; else *z=*z2 ; z++ ; z2++ ; }
   return(missing);
 }
