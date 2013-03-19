@@ -30,6 +30,7 @@ stop_mpich2_mpd() {  # stop mpd daemon(s)
 # start of temporary code to deal with OLD mpich2 versions needing mpdboot
 #
 mpiexec_Linux() {
+  export ENVIRONMENT_PASSED=yes
 #  ((MpiCommWorlds>1)) && echo "ERROR: MpiCommWorlds>1 not supported yet" && return
 #
 # we are assuming that mpirun/mpiexec can be backgrounded.
@@ -57,13 +58,15 @@ mpiexec_Linux() {
   export MpiCommWorld=0
   export ChildOffset=0
   HostOffset=0
+  PBS_NODEFILE_ORI=${PBS_NODEFILE}
   while(( MpiCommWorld<MpiCommWorlds)) ; do
 #
     echo ===== MPI host file for MpiCommWorld=$MpiCommWorld =====
     ((FirstHost=HostOffset+1))
     ((HostOffset=HostOffset+${PeInWorld[${MpiCommWorld}]}))
-    sed -n ${FirstHost},${HostOffset}p ${PBS_NODEFILE} >${PBS_NODEFILE}.${MpiCommWorld}
-    cat ${PBS_NODEFILE}.${MpiCommWorld}
+    export PBS_NODEFILE=${PBS_NODEFILE_ORI}.${MpiCommWorld}
+    sed -n ${FirstHost},${HostOffset}p ${PBS_NODEFILE_ORI} >${PBS_NODEFILE}
+    cat ${PBS_NODEFILE}
     echo ===== MPI host file =====
 #
     [[ "${OPAL_PREFIX}" == *openmpi_1.6* ]] && \
@@ -72,11 +75,11 @@ mpiexec_Linux() {
     if ((MpiCommWorlds>1)) ; then
       echo ==== Backgrounding MPI world ${MpiCommWorld} with ${PeInWorld[${MpiCommWorld}]} MPI tasks ====
       cat tmpdir/.mpi_env | \
-      mpirun ${OPEN_MPI_PARMS} -machinefile ${PBS_NODEFILE}.${MpiCommWorld} -n ${PeInWorld[${MpiCommWorld}]} "$@" ${ParallelScript}.${MpiCommWorld} &
+      mpirun ${OPEN_MPI_PARMS} -machinefile ${PBS_NODEFILE} -n ${PeInWorld[${MpiCommWorld}]} "$@" ${ParallelScript}.${MpiCommWorld} &
     else
       echo ==== Launching MPI world ${MpiCommWorld} with ${PeInWorld[${MpiCommWorld}]} MPI tasks ====
       cat tmpdir/.mpi_env | \
-      mpirun ${OPEN_MPI_PARMS} -machinefile ${PBS_NODEFILE}.${MpiCommWorld} -n ${PeInWorld[${MpiCommWorld}]} "$@" ${ParallelScript}.${MpiCommWorld}
+      mpirun ${OPEN_MPI_PARMS} -machinefile ${PBS_NODEFILE} -n ${PeInWorld[${MpiCommWorld}]} "$@" ${ParallelScript}.${MpiCommWorld}
     fi
     PeAdded=${PeInWorld[${MpiCommWorld}]}
     ((ChildOffset=ChildOffset+PeAdded))
@@ -90,25 +93,38 @@ mpiexec_Linux() {
 }
 #
 mpiexec_AIX() {
-  ((MpiCommWorlds>1)) && echo "ERROR: MpiCommWorlds>1 not supported yet" && return
-# echo "POE_cmdfile=${ParallelScript}.$((MpiCommWorld+1))@${MpiCommWorld}%${PeInWorld[${MpiCommWorld}]}%*"
+  export ENVIRONMENT_PASSED=yes
+#  ((MpiCommWorlds>1)) && echo "ERROR: MpiCommWorlds>1 not supported yet" && return
   ((MpiCommWorld=0))
   if tty -s ; then  # node list only necessary in interactive case
     echo "INFO: interactive use of MPI on AIX"
-    export MP_PROCS=${PeInWorld[${MpiCommWorld}]}
+    export MP_PROCS
     export MP_HOSTFILE=${PBS_NODEFILE}
-#    grep -q $(hostname) ${HOME}/.rhosts 2>/dev/null || echo $(hostname) ${USER} >>${HOME}/.rhosts
-#    chmod 700 ${HOME}/.rhosts
+    grep -q $(hostname) ${HOME}/.rhosts 2>/dev/null || echo $(hostname) ${USER} >>${HOME}/.rhosts
+    chmod 700 ${HOME}/.rhosts
   fi
+  rm -f ${ParallelScript}.ALL
+  ((MP_PROCS=0))
+  while(( MpiCommWorld<MpiCommWorlds)) ; do
+    echo "${ParallelScript}.${MpiCommWorld}@$((MpiCommWorld+1))%${PeInWorld[${MpiCommWorld}]}%mpi:*" >>${ParallelScript}.ALL
+    ((MP_PROCS=MP_PROCS+${PeInWorld[${MpiCommWorld}]}))
+    ((MpiCommWorld=MpiCommWorld+1))
+  done
   export MP_NEWJOB=parallel
   export ChildOffset=0   # poe takes care of adjusting MP_CHILD
-  export MP_WORLD_SIZES=${PeInWorld[${MpiCommWorld}]}
-  poe "$@" ${ParallelScript}.${MpiCommWorld} </dev/null
+#  export MP_WORLD_SIZES=${PeInWorld[${MpiCommWorld}]}
+#  poe "$@" ${ParallelScript}.${MpiCommWorld} </dev/null
+  echo MP_PROCS=${MP_PROCS}
+  echo "COMPLETE" >>${ParallelScript}.ALL
+  echo "========== poe command file with ${MP_PROCS} tasks =========="
+  cat ${ParallelScript}.ALL
+  poe -cmdfile ${ParallelScript}.ALL </dev/null
+  echo POE command COMPLETE
 }
 #
 local_cleanup() {
  [[ -n ${nocleanup} ]] && return
- rm -f ${ParallelScript}* ${MP_HOSTFILE} ${MpiRunScript}* ${PBS_NODEFILE}* ${selftest} ${tmpdir}/.mpi_env*
+ rm -f ${ParallelScript}* ${MP_HOSTFILE} ${MpiRunScript}* ${tmpdir}/PBS_NODEFILE* ${selftest} ${tmpdir}/.mpi_env*
  rmdir ${tmpdir} || true
  [[ -d "${tmpdir}" ]] && \
  echo INFO: leftovers found in ${tmpdir} && \
@@ -151,6 +167,33 @@ clean_output() {   #  get rid of captured stdout/stderr files into stdout
     rmdir ${SeqNum}
   done
 #
+}
+#
+make_c_test() {
+echo INFO: creating C test program source mpi_c_test.c
+cat >${tmpdir}/mpi_c_test.c <<EOT
+#include <unistd.h>
+#include <stdlib.h>
+#include <stdio.h>
+#include <mpi.h>
+
+void main(int argc, char **argv)
+{
+ int my_rank=-1;
+ char hostname[1204];
+
+ gethostname(hostname, 1023);
+ MPI_Init(&argc,&argv);
+ MPI_Comm_rank(MPI_COMM_WORLD , &my_rank);
+ printf("host = %s, rank = %d \n",hostname,my_rank);
+ MPI_Finalize();
+}
+EOT
+echo INFO: compiling C test program mpi_c_test.c into mpi_c_test
+which mpicc 2>/dev/null 1>/dev/null && mpicc -o ${tmpdir}/mpi_c_test ${tmpdir}/mpi_c_test.c
+which mpcc 2>/dev/null 1>/dev/null && mpcc -o ${tmpdir}/mpi_c_test ${tmpdir}/mpi_c_test.c
+echo INFO: removing C test program source mpi_c_test.c
+rm ${tmpdir}/mpi_c_test.c
 }
 #
 make_node_file() {
@@ -222,14 +265,15 @@ if [[ -n ${selftest} ]] ; then
   pgm="${selftest}"
   cat <<EOT >${selftest}
 #!/bin/ksh93
-echo running on \$(hostname)
-echo "arguments:'\$@'"
-echo "NODE FILE='\${PBS_NODEFILE}'"
+echo "NODE FILE='\${PBS_NODEFILE}' arguments:'\$@'"
+echo "\$(hostname)(\${MP_CHILD}): RP_Child=\${RP_Child}, RP_Member=\${RP_Member}, RP_MemberChild=\${RP_MemberChild}, MP_SeqNum=\${MP_SeqNum}, RP_CommWorld=\${RP_CommWorld}"
 set -x
-echo RP_Child=\${RP_Child}, RP_Member=\${RP_Member}, RP_MemberChild=\${RP_MemberChild}, MP_SeqNum=\${MP_SeqNum}, RP_CommWorld=\${RP_CommWorld}
-sleep 5
+[[ -x ${tmpdir}/mpi_c_test ]] && ${tmpdir}/mpi_c_test
+rm ${tmpdir}/mpi_c_test
+sleep \${1:-5}
 EOT
  chmod 755 ${selftest}
+ make_c_test
 fi
 #
 export MpiRunScript=${tmpdir}/MpiRunScript_$$
@@ -345,8 +389,10 @@ do
 [[ -n "${debug}" ]] && set -x
 #
 export MP_CHILD=\${MP_CHILD:-\${PMI_RANK:-\${OMPI_COMM_WORLD_RANK}}}  # poe/mpich2/openmpi
-cat >${tmpdir}/.mpi_env_\$\$_\$(hostname)
-. ${tmpdir}/.mpi_env_\$\$_\$(hostname)
+if [[ -z \${ENVIRONMENT_PASSED} ]] ; then
+  cat >${tmpdir}/.mpi_env_\$\$_\$(hostname)
+  . ${tmpdir}/.mpi_env_\$\$_\$(hostname)
+fi
 typeset -Z4 MP_SeqNum    # NOT VALID FOR bash, ksh family only
 ((MP_CHILD=MP_CHILD+ChildOffset))   # need to add ChildOffset for this MPI world to MP_CHILD (always 0 for poe)
 export RP_CommWorld=${MpiCommWorld}
@@ -355,8 +401,6 @@ export RP_Child="\$((MP_CHILD))"
 export RP_Member=\$((MP_CHILD/${npex}+${offset}))
 export RP_MemberChild=\$((MP_CHILD-MP_CHILD/${npex}*${npex}))
 #env | sort >${tmpdir}/.mpi_env_\$\$_\$(hostname)
-#echo ". ${MpiRunScript}.${MpiCommWorld}  ${RedirectStdout} ${RedirectStderr}"
-#echo "standard output redirected to ${RedirectStdout#*>}"
 #
 . ${MpiRunScript}.${MpiCommWorld}  ${RedirectStdout} ${RedirectStderr}
 EOT
