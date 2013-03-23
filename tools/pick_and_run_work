@@ -1,0 +1,49 @@
+#!/bin/bash
+#set -x
+TimeLeft=${1:-0}
+((TimeLeft < 60)) && echo LESS than ${TimeLeft} wall clock seconds left, EXITING && exit 1
+JobFile=""
+for i in $(ls -1rt)       # loop over candidate jobs
+do
+  mv $i $StreamFlagDir    # try to capture a job
+  Job=${StreamFlagDir}/${i}
+  if [[ -r $Job ]]        # capture successfull
+  then
+    ((StreamCpus=OMP_NUM_THREADS*BATCH_MPI_CPUS))
+    eval $(grep '^#SOUMET_RESOURCE_PROFILE_FOR_JOB ' ${Job} | sed 's/.* //')  # get information from insertion by soumet
+    JobWall=${MaxWallTime}
+    JobCpus=${MaxNumberOfCores}
+    echo "INFO: scanning JOB ${Job##*/} JobCpus=$JobCpus, StreamCpus=$StreamCpus, JobWall=$JobWall, TimeLeft=$TimeLeft"
+    ((TimeLeft-JobWall>60)) && \
+      ((JobCpus<=StreamCpus)) && \
+      ((JobCpus>=MinCpusInJob)) && \
+      ((JobCpus<=MaxCpusInJob)) && \
+      JobFile=${Job} && \
+      break # job fits, run it
+    echo "INFO: rejecting JOB ${Job##*/} JobCpus=$JobCpus, StreamCpus=$StreamCpus, MaxCpus=${MaxCpusInJob} MinCpus=${MinCpusInJob}, JobWall=$JobWall, TimeLeft=$TimeLeft "
+    echo "INFO: moving ${Job##*/} back into ${StreamFlagDir%/*}"
+    (cd $StreamFlagDir ; mv $Job ..)   # send rejected job back into the queue
+  fi
+done
+[[ -z ${JobFile} ]] && exit 1     # no acceptable candidate job
+cd ${HOME}
+# safety code below: limit one process to what the "job" requested
+#ulimit -t $((JobWall*MaxNumberOfThreads)) # rough approximation, maxcpu = maxwall *n umber_of_threads
+ulimit -t $((JobWall*MaxNumberOfThreads))  # OMP_NUM_THREADS from job extracted from SOUMET_RESOURCE_PROFILE_FOR_JOB
+((runs=0))
+((rerun=1))
+set -x
+export STREAM_STATUS=$StreamFlagFile.status
+while ((runs<rerun))
+do
+  ((runs=runs+1))
+  ((rerun=1))
+  rm -f $STREAM_STATUS
+  echo "${runs}:${JobFile}" >> $StreamFlagFile
+  export STREAM_RUN=${runs}
+  echo "INFO: running job '${JobFile}'"
+  bash ${JobFile}   # run job, env variables STREAM_RUN and STREAM_STATUS passed to job for reverse communication
+  [[ -r $STREAM_STATUS ]] && grep -q 'rerun=' $STREAM_STATUS && . $STREAM_STATUS  # if job wrote rerun=value in STREAM_STATUS file
+done
+[[ -r $STREAM_STATUS ]] && grep -q 'rerun=' $STREAM_STATUS && exit 1 # bad news, rerun reqquested by job and rerun count exhausted
+rm ${JobFile}
