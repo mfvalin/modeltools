@@ -81,12 +81,12 @@ mpiexec_Linux() {
 #
     if ((MpiCommWorlds>1)) ; then   # more than one MPI world, launch mpirun in background
       echo ==== Backgrounding MPI world ${MpiCommWorld} with ${PeInWorld[${MpiCommWorld}]} MPI tasks ====
-      cat tmpdir/.mpi_env | \
-      mpirun ${OPEN_MPI_PARMS} -machinefile ${MY_NODEFILE} -n ${PeInWorld[${MpiCommWorld}]} "$@" ${ParallelScript}.${MpiCommWorld} &
+#      cat tmpdir/.mpi_env | \
+#      mpirun ${OPEN_MPI_PARMS} -machinefile ${MY_NODEFILE} -n ${PeInWorld[${MpiCommWorld}]} "$@" ${ParallelScript}.${MpiCommWorld} &
     else   # only one MPI world, execute mpirun
       echo ==== Launching MPI world ${MpiCommWorld} with ${PeInWorld[${MpiCommWorld}]} MPI tasks ====
-      cat tmpdir/.mpi_env | \
-      mpirun ${OPEN_MPI_PARMS} -machinefile ${MY_NODEFILE} -n ${PeInWorld[${MpiCommWorld}]} "$@" ${ParallelScript}.${MpiCommWorld}
+#      cat tmpdir/.mpi_env | \
+#      mpirun ${OPEN_MPI_PARMS} -machinefile ${MY_NODEFILE} -n ${PeInWorld[${MpiCommWorld}]} "$@" ${ParallelScript}.${MpiCommWorld}
     fi
     PeAdded=${PeInWorld[${MpiCommWorld}]}
     ((ChildOffset=ChildOffset+PeAdded))
@@ -116,7 +116,7 @@ mpiexec_AIX() {
   fi
   rm -f ${ParallelScript}.ALL
   ((MP_PROCS=0))
-  while(( MpiCommWorld<MpiCommWorlds)) ; do  # build POE command file
+  while(( MpiCommWorld<MpiCommWorlds)) ; do  # build POE command file((MpiCommWorlds=MpiCommWorlds+1))
     echo "${ParallelScript}.${MpiCommWorld}@$((MpiCommWorld+1))%${PeInWorld[${MpiCommWorld}]}%mpi:*" >>${ParallelScript}.ALL
     ((MP_PROCS=MP_PROCS+${PeInWorld[${MpiCommWorld}]}))
     ((MpiCommWorld=MpiCommWorld+1))
@@ -306,7 +306,7 @@ wait_for() {
       ((time_out=time_out-1))      # timeout decremented only if action failed
       sleep 1
     done
-    ((time_out<=0)) && return 1        # timeout expired, failure
+    ((time_out<=0)) && echo "ERROR: timeout waiting for ${action} of ${dir}/${file}" && return 1        # timeout expired, failure
   done
   return 0                          # timeout not expired, success
 }
@@ -335,48 +335,54 @@ eval `cclargs_lite -D "" $0 \
     -nosep "" "yes" "[deactivate separator between members]" \
     -preexec "" "" "[prefix program execution with this (time/gdb/...)]" \
     -packoutput "cat_output" "echo" "[]" \
-    -worlds "0" "0" "[size of MPI worlds, 0=all processors available]" \
     -offset "0" "1" "[numbering of members from this value]" \
     -selftest "" "selftest.$$" "[quick selftest]" \
     ++ $*`
 #
 # number of MPI tasks
 #
-(( npe_total=npex*npey ))
+((npe_total=npex*npey))
+((TotalTasks=npe_total))
 #
 # do we have co-running instances ?
 #
 if [[ -d "${instancedir}" ]] ; then     # we have multiples instances
   slaves=$(echo ${instances} | wc -w)   # if 1 it is a slave, if >1 it is the master
   if ((slaves>1)) ; then  # the master
+    echo "INFO: starting master with ${slaves} slaves '${instances}' "
     wait_for creation ${timeout} ${instancedir} ${instances}   # wait for all slaves to submit their resource needs
 #
 #   build compound launch parameters using ${instancedir}/${instances} files
 #
     for i in ${instances} ; do
+       echo INFO: creating ${instancedir}/${i}.ACK
        touch ${instancedir}/${i}.ACK                           # acknowledge reception of slave task requirements
+       ls -la ${instancedir}/${i}.ACK
     done
+    sleep 2
 #
 #   execute MPI tasks on behalf of slaves
 #
-#   ${0} -tmpdir ${tmpdir} ...........
+    echo ${0} -pgm $(cd ${instancedir} ; cat ${instances} | xargs)
+    ${0} -pgm $(cd ${instancedir} ; cat ${instances} | xargs)
     for i in ${instances} ; do
        rm ${instancedir}/${i}.ACK                           # acknowledge end of all slave tasks
     done
     exit                                                    # job done
   else                    # a slave
-    (( 1 == $(echo ${pgm} | wc -w) )) && pgm="${pgm} 0 1 $((npe_total-1)) "  # transform -pgm name  into -pgm name first increment last
+    (( 1 == $(echo ${pgm} | wc -w) )) && pgm=" ${pgm} 0 1 $((npe_total-1)) @@ "  # transform -pgm name  into -pgm name first increment last
     echo "/./$(pwd -P) ::${npe_total} ${pgm} " >${instancedir}/${instances}.tmp || exit 1
     mv ${instancedir}/${instances}.tmp ${instancedir}/${instances}  || exit 1
-    wait_for creation ${timeout} ${instancedir} ${instances}.ACK   # wait for master to acknowledge resources
-    wait_for deletion 2000000000 ${instancedir} ${instances}.ACK   # wait for master to signal done (infinite timeout)
+    wait_for creation ${timeout} ${instancedir} ${instances}.ACK &&  \
+    wait_for deletion 2000000000 ${instancedir} ${instances}.ACK  # wait for master to acknowledge resources then wait for master to signal done (infinite timeout)
     rm ${instancedir}/${instances}
+    exit
   fi
 fi
 #
 # number of MPI worlds
 #
-((MpiCommWorlds=1))  # number of MPI comm worlds
+((MpiCommWorlds=0))  # number of MPI comm worlds
 PeInWorld[0]=${npe_total}
 #for i in ${worlds}
 #do
@@ -416,7 +422,7 @@ export TMPDIR=${tmpdir}
 #
 if [[ -n ${selftest} ]] ; then
   selftest="${tmpdir}/${selftest}"
-  pgm="$( echo ${pgm} | sed -e 's:pgm:${selftest}:g' )"
+  pgm="$( echo ${pgm} | sed -e s:PGM:${selftest}:g )"
   cat <<EOT >${selftest}
 #!/bin/ksh93
 echo "NODE FILE='\${MY_NODEFILE}' arguments:'\$@'"
@@ -451,7 +457,7 @@ RPN_COMM_DIRS="' '"
 SetCurrentDir=$(pwd -P)
 set -- $pgm @@
 #
-if [[ "$2" != "" ]] ; then # complex sequence, SPMD or MPMD, (automatic multiple MPI worlds not implemented yet)
+if [[ "$3" != "" ]] ; then # complex sequence, SPMD or MPMD, (automatic multiple MPI worlds not implemented yet)
   ((ErRoR=0))
   ((NDomains=0))
   ((Next=0))
@@ -466,26 +472,27 @@ if [[ "$2" != "" ]] ; then # complex sequence, SPMD or MPMD, (automatic multiple
 #
   while [[ -n "${1}" ]]
   do
-    [[ "${1}" == //* ]]  && SetCurrentDir=${1#//} && shift && continue   # used by master from slave
+    [[ "${1}" == "@@" && "${2}" == "@@" ]] && shift && continue  # two @@ back to back
+    [[ "${1}" == /./* ]]  && SetCurrentDir=${1#/./} && shift && continue   # used by master from slave
     [[  "${1}" == ::* ]] && npe_total=${1#::}     && shift && continue   # used by master from slave
-    if [[ "$1" == "@@" ]] ; then  #  wrap up a world
-      WorldSize[${MpiCommWorld}]=${Instances}
+    if [[ "${1}" == "@@" ]] ; then  #  wrap up a world
+      PeInWorld[${MpiCommWorld}]=${Instances}
 #     make sure that MaxPe <= npe_total (no overflow) and Instances == MaxPe (no holes)
       rm -f ${MpirunScript}.${MpiCommWorld}
-      for i in  $(seq 0 1 $((npe_total-1))) ; do
-        echo "export RPN_COMM_DOM='${NDomains}${RPN_COMM_DOM}'" >${MpiRunScript}.${MpiCommWorld}
-        echo "export RPN_COMM_DIRS='${RPN_COMM_DIRS}'" >${MpiRunScript}.${MpiCommWorld}
+      echo "export RPN_COMM_DOM='${NDomains}${RPN_COMM_DOM}'" >${MpiRunScript}.${MpiCommWorld}
+      echo "export RPN_COMM_DIRS=\"${RPN_COMM_DIRS}\"" >>${MpiRunScript}.${MpiCommWorld}
+      for i in  $(seq 0 1 $((Instances-1))) ; do
         echo "if (( \"\${MP_CHILD}\" == $((i+InstanceOffset)) )) ; then cd ${SetCurrentDir} ; ${preexec} ${ProGrams[$i]} ${args} ; fi" >>${MpiRunScript}.${MpiCommWorld}
       done
       ((InstanceOffset=TotalInstances))
-      [[ -n "${2}" ]] && ((MpiCommWorld=MpiCommWorld+1))   # do not bump worlds counter if nothing after @@
+      [[ -n "${2}" ]] && ((MpiCommWorld=MpiCommWorld+1))   # do not bump world counter if nothing or @@ after @@
       ((MpiCommWorlds=MpiCommWorlds+1))
-      ((npe_total=PeInWorld[${MpiCommWorld}]))
-      unset RPN_COMM_DOM RPN_COMM_DIRS                     # reset world related variables nd counters
+      unset RPN_COMM_DOM RPN_COMM_DIRS ProGrams Directories                    # reset world related variables nd counters
       ((NDomains=0))
       ((Next=0))
       ((MaxPe=0))
       ((Instances=0))
+      ((npe_total=0))
       shift
       continue
     fi
@@ -499,30 +506,33 @@ if [[ "$2" != "" ]] ; then # complex sequence, SPMD or MPMD, (automatic multiple
     Program="$1"
     [[  "${1}" == /* ]] || Program="${SetCurrentDir}/${1}"  # relative path, add "current" directory
     shift
-    echo Program=$Program
     if [[ !  -x "$Program" ]] ; then echo program $Program does not exist or is not executable ; ((ErRoR=ErRoR+1)) ; fi
 #
-    temp=${1} 
+    temp=${1}
+    [[ "${temp}" == @@ ]] && temp="+${npe_total}"  # replace @@ with +npe_total
     if [[ $temp = +* ]] ; then
        temp=${temp#+}
        ((First=Next))
        ((Increment=1))
        ((Last=First+temp-1))
        ((Next=Last+1))
-       shift
+       [[ "${1}" != @@ ]] && shift   # do not shift @@
     else
       ((First=${1}))
       ((Increment=${2}))
       Last=${3}
-      if ((Last==0)) ; then ((Last=npe_total_m-1)) ; fi
+      if [[ "${Last}" == @ ]] ; then ((Last=npe_total-1)) ; fi
       shift ; shift ; shift
     fi
     RPN_COMM_DOM="$RPN_COMM_DOM,${First},${Increment},${Last}"
     RPN_COMM_DIRS="$RPN_COMM_DIRS,'${Directory}'"
+    ((LocalInstances=0))
     for i in $(seq ${First} ${Increment} ${Last} )
     do
       ((Instances=Instances+1))
+      ((LocalInstances=LocalInstances+1))
       ((TotalInstances=TotalInstances+1))
+      ((TotalInstances>TotalTasks)) && echo "ERROR: too many tasks requested (${TotalInstances}), only ${TotalTasks} available" && ((ErRoR=ErRoR+1))
       if [[ -n "${ProGrams[$i]}" ]] ; then
         echo ERROR: duplicate program assignment "${ProGrams[$i]}" vs "$Program" in slot $i
         ((ErRoR=ErRoR+1))
@@ -532,6 +542,7 @@ if [[ "$2" != "" ]] ; then # complex sequence, SPMD or MPMD, (automatic multiple
         ((i>MaxPe)) && ((MaxPe=i))
       fi
     done
+    echo "${LocalInstances} instances of '$Program' ( $((InstanceOffset+First)) , $((InstanceOffset+Last)) , ${Increment} )"
   done # while [[ "$1" != "" ]]
 #
 #  export RPN_COMM_DOM="${NDomains}${RPN_COMM_DOM}"
@@ -559,8 +570,9 @@ else # simple SPMD case, one or more MPI worlds
   fi
   MpiCommWorld=0
   MpiCommWorlds=1
-  WorldSize[0]=${npe_total}
+  PeInWorld[0]=${npe_total}
   echo ${preexec} $pgm $args >${MpiRunScript}.0   # MpiCommWorld is 0 in this case
+  echo "${npe_total} instances of '$pgm'"
 #
 fi # complex sequence, possibly MPMD
 #
@@ -597,6 +609,7 @@ done
 #
 # we are now almost ready to launch
 #
+((npe_total=TotalInstances))
 make_node_file
 #########################################################################################################
 #rm -f $TMPDIR/MY_NODEFILE
