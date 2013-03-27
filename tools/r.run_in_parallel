@@ -63,17 +63,17 @@ mpiexec_Linux() {
   touch tmpdir/.mpi_env
   export MpiCommWorld=0
   export ChildOffset=0
+  export WorldOffset=0
   HostOffset=0
   MY_NODEFILE_ORI=${MY_NODEFILE}
   while(( MpiCommWorld<MpiCommWorlds)) ; do   # loop over MPI worlds
 #
-    echo ===== MPI host file for MpiCommWorld=$MpiCommWorld =====
     ((FirstHost=HostOffset+1))
     ((HostOffset=HostOffset+${PeInWorld[${MpiCommWorld}]}))
     export MY_NODEFILE=${MY_NODEFILE_ORI}.${MpiCommWorld}
     sed -n ${FirstHost},${HostOffset}p ${MY_NODEFILE_ORI} >${MY_NODEFILE}
+    echo "===== $(cat ${MY_NODEFILE} | wc -l) host(s) in  Mpi World $MpiCommWorld ====="
     cat ${MY_NODEFILE}
-    echo ===== MPI host file =====
 #
     if [[ "${OPAL_PREFIX}" == *openmpi_1.6* ]] ; then # export environment ourselves, mpirun does not do it
        env | grep -v "'" | grep -v '"' | grep  '^[a-zA-Z0-9]' | sed -e 's/^/export /' -e 's/=/="/' -e 's/$/"/' >tmpdir/.mpi_env
@@ -81,15 +81,16 @@ mpiexec_Linux() {
 #
     if ((MpiCommWorlds>1)) ; then   # more than one MPI world, launch mpirun in background
       echo ==== Backgrounding MPI world ${MpiCommWorld} with ${PeInWorld[${MpiCommWorld}]} MPI tasks ====
-      ((debug<10)) && cat tmpdir/.mpi_env | \
+      [[ -z ${dryrun} ]] && cat tmpdir/.mpi_env | \
       mpirun ${OPEN_MPI_PARMS} -machinefile ${MY_NODEFILE} -n ${PeInWorld[${MpiCommWorld}]} "$@" ${ParallelScript}.${MpiCommWorld} &
     else   # only one MPI world, execute mpirun
       echo ==== Launching MPI world ${MpiCommWorld} with ${PeInWorld[${MpiCommWorld}]} MPI tasks ====
-      ((debug<10)) && cat tmpdir/.mpi_env | \
+      [[ -z ${dryrun} ]] && cat tmpdir/.mpi_env | \
       mpirun ${OPEN_MPI_PARMS} -machinefile ${MY_NODEFILE} -n ${PeInWorld[${MpiCommWorld}]} "$@" ${ParallelScript}.${MpiCommWorld}
     fi
     PeAdded=${PeInWorld[${MpiCommWorld}]}
     ((ChildOffset=ChildOffset+PeAdded))
+    ((WorldOffset=ChildOffset))
     ((MpiCommWorld=MpiCommWorld+1))
   done
   if ((MpiCommWorlds>1)) ; then
@@ -106,7 +107,9 @@ mpiexec_Linux() {
 mpiexec_AIX() {
 #  ((MpiCommWorlds>1)) && echo "ERROR: MpiCommWorlds>1 not supported yet" && return
   export ENVIRONMENT_PASSED=yes
-  ((MpiCommWorld=0))
+  export MpiCommWorld=0
+  export ChildOffset=0
+  export WorldOffset=0
   if tty -s ; then  # node list only necessary in interactive case
     echo "INFO: interactive use of MPI on AIX"
     export MP_PROCS
@@ -128,7 +131,7 @@ mpiexec_AIX() {
   echo "========== poe command file with ${MP_PROCS} tasks in ${MpiCommWorlds} MPI worlds =========="
   cat ${ParallelScript}.ALL
   # multiple poes in parallel, gather, consolidate, run ?
-  ((debug<10)) && poe -cmdfile ${ParallelScript}.ALL </dev/null
+  [[ -z ${dryrun} ]] && poe -cmdfile ${ParallelScript}.ALL </dev/null
 }
 # ===========================================================================
 #
@@ -327,6 +330,7 @@ eval `cclargs_lite -D "" $0 \
     -mpiargs "" "" "[]" \
     -instancedir "" "${PARALLEL_INSTANCES}" "[directory containing instance names]" \
     -geometry "" "" "[]" \
+    -dryrun "" "dryrun" "[]" \
     -timeout "60" "60" "[timeout for multiple instances]" \
     -debug "" "5" "[]" \
     -nocleanup "" "nocleanup" "[]" \
@@ -338,7 +342,7 @@ eval `cclargs_lite -D "" $0 \
     -packoutput "cat_output" "echo" "[]" \
     -offset "0" "1" "[numbering of members from this value]" \
     -selftest "" "selftest.$$" "[quick selftest]" \
-    ++ $*`
+    ++ "$@"`
 #
 [[ -n ${inorder} ]] && processorder="yes"
 #
@@ -365,17 +369,17 @@ if [[ -d "${instancedir}" ]] ; then     # we have co-running instances
 #
 #   execute MPI tasks on behalf of slaves
 #   -instances -instancedir : used, not passed on
-#   -pgm : ignored, appropriate contents from slaves
+#   -pgm : put after pgm(s) from slaves
 #   -args : ignored, cannot be used in this context
-#   -npex -npey -processorder -tmpdir -tag -spliteo -debug -nocleanup : passthrough
-#   -outp -errp -preexec -packoutput -offset -mpiargs : passthrough
+#   -npex -npey -processorder -tmpdir -tag -spliteo -debug -nocleanup -geometry : passthrough
+#   -outp -errp -preexec -packoutput -offset -mpiargs -dryrun : passthrough
 #   all other arguments : ignored
 #
     set -x
-    ${0} -npex ${npex} -npey ${npey} -processorder ${processorder} -tmpdir ${tmpdir} \
-         -tag ${tag} -spliteo ${spliteo} -debug ${debug} -nocleanup ${nocleanup} \
-         -outp ${outp} -errp ${errp} -preexec ${preexec} -packoutput ${packoutput} \
-         -offset ${offset} -mpiargs ${mpiargs} -pgm $(cd ${instancedir} ; cat ${instances} | xargs)
+    ${0} -npex ${npex} -npey ${npey} -processorder "${processorder}" -tmpdir "${tmpdir}" \
+         -tag "${tag}" -spliteo "${spliteo}" -debug "${debug}" -nocleanup "${nocleanup}" -geometry ${geometry} \
+         -outp "${outp}" -errp "${errp}" -preexec "${preexec}" -packoutput "${packoutput}" -dryrun "${dryrun}" \
+         -offset "${offset}" -mpiargs "${mpiargs}" -pgm $(cd ${instancedir} ; cat ${instances} | xargs) /./$(pwd -P) ${pgm}
     set +x
     for i in ${instances} ; do
        rm ${instancedir}/${i}                      # remove slave work requests
@@ -432,7 +436,7 @@ MY_NODEFILE=${PARALLEL_NODEFILE:-${GECOSHEP_HOSTS_FILE:-${PBS_NODEFILE}}}
 [[ "${pgm}" == @* ]] && pgm2=${pgm#@} && [[ -f ${pgm2} ]] && pgm="$(xargs <${pgm2})"
 # pgm variable now contains all taht is needed
 #
-[[ -n "${debug}" ]] && set -x
+[[ -n "${debug}" ]] && echo "INFO: debug flag = '${debug}'" && set -x
 # reset TMPDIR to make sure it is visible to all MPI tasks
 mkdir -p ${tmpdir}
 export TMPDIR=${tmpdir}
@@ -497,16 +501,20 @@ if [[ "$3" != "" ]] ; then # complex sequence, SPMD or MPMD, (automatic multiple
     if [[ "${1}" == "@@" ]] ; then  #  wrap up a world
       PeInWorld[${MpiCommWorld}]=${Instances}
 #     make sure that MaxPe <= npe_total (no overflow) and Instances == MaxPe (no holes)
-      ((Instances != MaxPe)) && echo "ERROR: holes found, Instances=${Instances}, MaxPe=${MaxPe}" && ((ErRoR=ErRoR+1))
+      ((Instances != MaxPe+1)) && echo "ERROR: holes found, Instances=${Instances}, MaxPe=${MaxPe}" && ((ErRoR=ErRoR+1))
       ((MaxPe > npe_total)) && echo "ERROR: task number overflow, MaxPe(${MaxPe}) > npe_total(${npe_total})" && ((ErRoR=ErRoR+1))
       rm -f ${MpirunScript}.${MpiCommWorld}
-      echo "export RPN_COMM_DOM='${NDomains}${RPN_COMM_DOM}'" >${MpiRunScript}.${MpiCommWorld}
-      echo "export RPN_COMM_DIRS=\"${RPN_COMM_DIRS}\"" >>${MpiRunScript}.${MpiCommWorld}
+      cat <<EOT >${MpiRunScript}.${MpiCommWorld}
+          export RPN_COMM_DOM='${NDomains}${RPN_COMM_DOM}'
+          export RPN_COMM_DIRS="${RPN_COMM_DIRS}"
+          export WORLD_CHILD
+          ((WORLD_CHILD=MP_CHILD-${InstanceOffset}))
+EOT
       for i in  $(seq 0 1 $((Instances-1))) ; do
         cat <<EOT >>${MpiRunScript}.${MpiCommWorld}
-          if (( MP_CHILD == i+InstanceOffset )) ))
+          if (( MP_CHILD == $((i+InstanceOffset)) ))
           then 
-            cd ${SetCurrentDir}
+            cd ${Directories[$i]}
             ${preexec} ${ProGrams[$i]} ${args}
           fi
 EOT
@@ -569,7 +577,7 @@ EOT
         ((i>MaxPe)) && ((MaxPe=i))
       fi
     done
-    echo "${LocalInstances} instances of '$Program' ( $((InstanceOffset+First)) , $((InstanceOffset+Last)) , ${Increment} )"
+    echo "${LocalInstances} instances of '$Program' ( $((InstanceOffset+First)) , $((InstanceOffset+Last)) , ${Increment} ) in MPI world ${MpiCommWorld}"
   done # while [[ "$1" != "" ]]
 #
 #  export RPN_COMM_DOM="${NDomains}${RPN_COMM_DOM}"
