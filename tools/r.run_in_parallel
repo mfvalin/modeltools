@@ -52,8 +52,10 @@ mpiexec_Linux() {
 # end of temporary code to deal with OLD mpich2 versions needing mpdboot
 #
   export ENVIRONMENT_PASSED=yes  # used to check whether mpirun transmits environment variables or not
+#  OPEN_MPI_PARMS="--stdin all"
   if [[ "${OPAL_PREFIX}" == *openmpi_1.6* ]] ; then
-    OPEN_MPI_PARMS="--prefix ${OPAL_PREFIX} --stdin all --mca btl tcp,self --cpus-per-proc ${OMP_NUM_THREADS:-1}"
+#    OPEN_MPI_PARMS="--prefix ${OPAL_PREFIX} --stdin all --mca btl tcp,self --cpus-per-proc ${OMP_NUM_THREADS:-1}"
+    OPEN_MPI_PARMS="--prefix ${OPAL_PREFIX} --stdin all --mca btl tcp,self "
     unset PE_HOSTFILE
 #    export OMPI_MCA_orte_default_hostfile=${MY_NODEFILE}
     [[ -f "${GECOSHEP_HOSTS_FILE}" ]] && export OMPI_MCA_orte_rsh_agent=rurun
@@ -75,9 +77,9 @@ mpiexec_Linux() {
     echo "===== $(cat ${MY_NODEFILE} | wc -l) host(s) in  Mpi World $MpiCommWorld ====="
     cat ${MY_NODEFILE}
 #
-    if [[ "${OPAL_PREFIX}" == *openmpi_1.6* ]] ; then # export environment ourselves, mpirun does not do it
+#    if [[ "${OPAL_PREFIX}" == *openmpi_1.6* ]] ; then # export environment ourselves, mpirun does not do it
        env | grep -v "'" | grep -v '"' | grep  '^[a-zA-Z0-9]' | sed -e 's/^/export /' -e 's/=/="/' -e 's/$/"/' >tmpdir/.mpi_env
-    fi
+#    fi
 #
     if ((MpiCommWorlds>1)) ; then   # more than one MPI world, launch mpirun in background
       echo ==== Backgrounding MPI world ${MpiCommWorld} with ${PeInWorld[${MpiCommWorld}]} MPI tasks ====
@@ -328,7 +330,7 @@ eval `cclargs_lite -D "" $0 \
     -nompi "run_with_mpi" "run_in_background" "[]" \
     -instances "" "" "[instance name for member or list of instances for master]" \
     -mpiargs "" "" "[]" \
-    -instancedir "" "${PARALLEL_INSTANCES}" "[directory containing instance names]" \
+    -instancedir "${PARALLEL_INSTANCES_DIR}" "${PARALLEL_INSTANCES_DIR}" "[directory containing instance names]" \
     -geometry "" "" "[]" \
     -dryrun "" "dryrun" "[]" \
     -timeout "60" "60" "[timeout for multiple instances]" \
@@ -353,7 +355,7 @@ eval `cclargs_lite -D "" $0 \
 #
 # do we have co-running instances ?
 #
-if [[ -d "${instancedir}" ]] ; then     # we have co-running instances
+if [[ -d "${instancedir}" && -n "${instances}" ]] ; then     # we have co-running instances
   slaves=$(echo ${instances} | wc -w)   # if 1 it is a slave, if >1 it is the master
   if ((slaves>1)) ; then  # the master instance
     echo "INFO: starting master with ${slaves} slaves '${instances}' "
@@ -375,6 +377,7 @@ if [[ -d "${instancedir}" ]] ; then     # we have co-running instances
 #   -outp -errp -preexec -packoutput -offset -mpiargs -dryrun : passthrough
 #   all other arguments : ignored
 #
+    unset PARALLEL_INSTANCES_DIR
     set -x
     ${0} -npex ${npex} -npey ${npey} -processorder "${processorder}" -tmpdir "${tmpdir}" \
          -tag "${tag}" -spliteo "${spliteo}" -debug "${debug}" -nocleanup "${nocleanup}" -geometry ${geometry} \
@@ -397,11 +400,14 @@ if [[ -d "${instancedir}" ]] ; then     # we have co-running instances
     (( 1 == $(echo ${pgm} | wc -w) )) && pgm=" ${pgm} 0 1 $((npe_total-1)) @@ "  # transform -pgm name  into -pgm name first increment last
     echo "/./$(pwd -P) ::${npe_total} ${pgm} " >${instancedir}/${instances}.tmp || exit 1
     mv ${instancedir}/${instances}.tmp ${instancedir}/${instances}  || exit 1
-    wait_for creation ${timeout} ${instancedir} ${instances}.ACK &&  \
-    wait_for deletion 2000000000 ${instancedir} ${instances}.ACK  # wait for master to acknowledge resources then wait for master to signal done (infinite timeout)
-    wait_for creation ${timeout} ${instancedir} ${instances}.DONE # done is signalled by deleting creating DONE and then deleting ACK
-    rm ${instancedir}/${instances}.DONE
-    exit $?     # slave job done
+    if wait_for creation ${timeout} ${instancedir} ${instances}.ACK ; then
+      wait_for deletion 2000000000 ${instancedir} ${instances}.ACK  # wait for master to acknowledge resources then wait for master to signal done (infinite timeout)
+      wait_for creation ${timeout} ${instancedir} ${instances}.DONE # done is signalled by deleting creating DONE and then deleting ACK
+      rm ${instancedir}/${instances}.DONE
+      exit $?     # slave job done
+    else
+      exit 1
+    fi
   fi
 fi  # [[ -d "${instancedir}" ]] 
 #
@@ -449,7 +455,7 @@ if [[ -n ${selftest} ]] ; then
   cat <<EOT >${selftest}
 #!/bin/ksh93
 echo "NODE FILE='\${MY_NODEFILE}' arguments:'\$@'"
-echo "\$(hostname)(\${MP_CHILD}): RP_Child=\${RP_Child}, RP_Member=\${RP_Member}, RP_MemberChild=\${RP_MemberChild}, MP_SeqNum=\${MP_SeqNum}, RP_CommWorld=\${RP_CommWorld}"
+echo "\$(hostname)(\${MP_CHILD}): WORLD_CHILD=\${WORLD_CHILD}, RP_Child=\${RP_Child}, RP_Member=\${RP_Member}, RP_MemberChild=\${RP_MemberChild}, MP_SeqNum=\${MP_SeqNum}, RP_CommWorld=\${RP_CommWorld}"
 set -x
 [[ -x ${tmpdir}/mpi_c_test ]] && ${tmpdir}/mpi_c_test
 rm -f ${tmpdir}/mpi_c_test
@@ -633,7 +639,8 @@ export MP_SeqNum="\$((MP_CHILD))"
 export RP_Child="\$((MP_CHILD))"
 export RP_Member=\$((MP_CHILD/${npex}+${offset}))
 export RP_MemberChild=\$((MP_CHILD-MP_CHILD/${npex}*${npex}))
-#env | sort >${tmpdir}/.mpi_env_\$\$_\$(hostname)
+#echo "INFO: redirecting to ${RedirectStdout}, MP_SeqNum=\${MP_SeqNum}, MP_CHILD=\${MP_CHILD}"
+[[ -n "${debug}" ]] && env | sort >${tmpdir}/.mpi_env_\$\$_\$(hostname)
 #
 . ${MpiRunScript}.${MpiCommWorld}  ${RedirectStdout} ${RedirectStderr}
 EOT
