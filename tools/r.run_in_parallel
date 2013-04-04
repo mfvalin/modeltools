@@ -665,7 +665,7 @@ done
 ((npe_total=TotalInstances))
 # create stdout/stderr directories if necessary
 if [[ -n ${processorder} ]] ; then
-  for SeqNum in $(seq 0 1 ${TotalInstances} )    #  a arranger pour le cal MPMD ====================================
+  for SeqNum in $(seq 0 1 $((TotalInstances-1)) )    #  a arranger pour le cal MPMD ====================================
   do 
     mkdir ${tmpdir}/${SeqNum}
   done
