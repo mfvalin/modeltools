@@ -462,7 +462,6 @@ MY_NODEFILE=${PARALLEL_NODEFILE:-${GECOSHEP_HOSTS_FILE:-${PBS_NODEFILE}}}
 [[ -n "${debug}" ]] && echo "INFO: debug flag = '${debug}'" && set -x
 # reset TMPDIR to make sure it is visible to all MPI tasks
 mkdir -p ${tmpdir}
-export TMPDIR=${tmpdir}
 #
 # create script anc C executable used in self test if needed
 #
@@ -663,6 +662,7 @@ done
 # we are now almost ready to launch
 #
 ((npe_total=TotalInstances))
+export TMPDIR=${tmpdir}
 # create stdout/stderr directories if necessary
 if [[ -n ${processorder} ]] ; then
   for SeqNum in $(seq 0 1 $((TotalInstances-1)) )    #  a arranger pour le cal MPMD ====================================
