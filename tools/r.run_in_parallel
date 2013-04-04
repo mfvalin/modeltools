@@ -175,7 +175,8 @@ cat_output() {  #  cat captured stdout/stderr files into stdout with appropriate
     [[ "${tag}" == full   ]] && Prefix="${MemberNo}-${MemberChild}: "
     [[ "${tag}" == member ]] && Prefix="${MemberNo}: "
     [[ "${tag}" == child  ]] && Prefix="${SeqNum}: "
-    [[ -r ${SeqNum}/stdout ]] && print_separator start stdout ${MemberNo}:${MemberChild} && cat ${SeqNum}/stdout | sed -e "s/^/${Prefix2}${Prefix}/"
+#    [[ -r ${SeqNum}/stdout ]] && print_separator start stdout ${MemberNo}:${MemberChild} && cat ${SeqNum}/stdout | sed -e "2,\$s/^/${Prefix2}${Prefix}/"
+    (( $(cat ${SeqNum}/stdout | wc -l) >= minstdout )) && cat ${SeqNum}/stdout | sed -e "2,\$s/^/${Prefix2}${Prefix}/"
     [[ -r ${SeqNum}/stderr ]] && print_separator start stderr ${MemberNo}:${MemberChild} && cat ${SeqNum}/stderr | sed -e "s/^/${Prefix3}${Prefix}/"
   done
   print_separator "   stdout / stderr   "
@@ -332,6 +333,7 @@ eval `cclargs_lite -D "" $0 \
     -mpiargs "" "" "[]" \
     -instancedir "${PARALLEL_INSTANCES_DIR}" "${PARALLEL_INSTANCES_DIR}" "[directory containing instance names]" \
     -geometry "" "" "[]" \
+    -minstdout "2" "2" "[]" \
     -dryrun "" "dryrun" "[]" \
     -timeout "60" "60" "[timeout for multiple instances]" \
     -debug "" "5" "[]" \
@@ -358,13 +360,13 @@ eval `cclargs_lite -D "" $0 \
 if [[ -d "${instancedir}" && -n "${instances}" ]] ; then     # we have co-running instances
   slaves=$(echo ${instances} | wc -w)   # if 1 it is a slave, if >1 it is the master
   if ((slaves>1)) ; then  # the master instance
-    echo "INFO: starting master with ${slaves} slaves '${instances}' "
+    echo "INFO: START of master task with ${slaves} slaves '${instances}' "
     wait_for creation ${timeout} ${instancedir} ${instances}   # wait for all slaves to submit their resource needs
 #
 #   build compound launch parameters using ${instancedir}/${instances} files
 #
     for i in ${instances} ; do
-       echo INFO: creating ${instancedir}/${i}.ACK
+       echo "INFO: master task creating ${instancedir}/${i}.ACK"
        touch ${instancedir}/${i}.ACK                           # acknowledge reception of slave task requirements
     done
     sleep 2
@@ -374,12 +376,12 @@ if [[ -d "${instancedir}" && -n "${instances}" ]] ; then     # we have co-runnin
 #   -pgm : put after pgm(s) from slaves
 #   -args : ignored, cannot be used in this context
 #   -npex -npey -processorder -tmpdir -tag -spliteo -debug -nocleanup -geometry : passthrough
-#   -outp -errp -preexec -packoutput -offset -mpiargs -dryrun : passthrough
+#   -outp -errp -preexec -packoutput -offset -mpiargs -dryrun -minstdout : passthrough
 #   all other arguments : ignored
 #
     unset PARALLEL_INSTANCES_DIR
     set -x
-    ${0} -npex ${npex} -npey ${npey} -processorder "${processorder}" -tmpdir "${tmpdir}" \
+    ${0} -npex ${npex} -npey ${npey} -processorder "${processorder}" -tmpdir "${tmpdir}" -minstdout ${minstdout} \
          -tag "${tag}" -spliteo "${spliteo}" -debug "${debug}" -nocleanup "${nocleanup}" -geometry ${geometry} \
          -outp "${outp}" -errp "${errp}" -preexec "${preexec}" -packoutput "${packoutput}" -dryrun "${dryrun}" \
          -offset "${offset}" -mpiargs "${mpiargs}" -pgm $(cd ${instancedir} ; cat ${instances} | xargs) /./$(pwd -P) ${pgm}
@@ -388,7 +390,9 @@ if [[ -d "${instancedir}" && -n "${instances}" ]] ; then     # we have co-runnin
        rm ${instancedir}/${i}                      # remove slave work requests
        touch ${instancedir}/${i}.DONE              # acknowledge completion of all slave tasks
        rm ${instancedir}/${i}.ACK                  # remove acknowledge flag
+       echo "INFO: master task  ${instancedir}/${i}.DONE"
     done
+    echo "INFO: END of master task with ${slaves} slaves '${instances}'"
     exit                                           # master job done
   else                    # a slave instance, there is ONE item  in instances
 #
@@ -400,10 +404,14 @@ if [[ -d "${instancedir}" && -n "${instances}" ]] ; then     # we have co-runnin
     (( 1 == $(echo ${pgm} | wc -w) )) && pgm=" ${pgm} 0 1 $((npe_total-1)) @@ "  # transform -pgm name  into -pgm name first increment last
     echo "/./$(pwd -P) ::${npe_total} ${pgm} " >${instancedir}/${instances}.tmp || exit 1
     mv ${instancedir}/${instances}.tmp ${instancedir}/${instances}  || exit 1
+      echo "INFO: START of slave instance ${instances}"
     if wait_for creation ${timeout} ${instancedir} ${instances}.ACK ; then
       wait_for deletion 2000000000 ${instancedir} ${instances}.ACK  # wait for master to acknowledge resources then wait for master to signal done (infinite timeout)
+#      echo "INFO: (slave) ${instances}.ACK  deleted"
       wait_for creation ${timeout} ${instancedir} ${instances}.DONE # done is signalled by deleting creating DONE and then deleting ACK
       rm ${instancedir}/${instances}.DONE
+      echo "INFO: (slave) ${instances}.DONE received"
+      echo "INFO: END of slave instance ${instances}"
       exit $?     # slave job done
     else
       exit 1
@@ -511,10 +519,12 @@ if [[ "$3" != "" ]] ; then # complex sequence, SPMD or MPMD, (automatic multiple
       ((MaxPe > npe_total)) && echo "ERROR: task number overflow, MaxPe(${MaxPe}) > npe_total(${npe_total})" && ((ErRoR=ErRoR+1))
       rm -f ${MpirunScript}.${MpiCommWorld}
       cat <<EOT >${MpiRunScript}.${MpiCommWorld}
-          export RPN_COMM_DOM='${NDomains}${RPN_COMM_DOM}'
-          export RPN_COMM_DIRS="${RPN_COMM_DIRS}"
-          export WORLD_CHILD
-          ((WORLD_CHILD=MP_CHILD-${InstanceOffset}))
+#!/bin/ksh93
+export RPN_COMM_DOM='${NDomains}${RPN_COMM_DOM}'
+export RPN_COMM_DIRS="${RPN_COMM_DIRS}"
+export WORLD_CHILD
+((WORLD_CHILD=MP_CHILD-${InstanceOffset}))
+/usr/bin/printf "=================== stdout ${MpiCommWorld}:%4.4d (%s) ===================\n" \${WORLD_CHILD} \${MP_SeqNum}
 EOT
       for i in  $(seq 0 1 $((Instances-1))) ; do
         cat <<EOT >>${MpiRunScript}.${MpiCommWorld}
