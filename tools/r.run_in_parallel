@@ -335,6 +335,7 @@ eval `cclargs_lite -D "" $0 \
     -spliteo "no" "yes" "[split stderr from stdout]" \
     -npex "${BATCH_MPI_CPUS:-1}" "" "[member size, total number of cpus if 1 member]" \
     -npey "1" "" "[number of members]" \
+    -members "" "" "[NxM, N members of size M, override npey and npex]" \
     -nompi "run_with_mpi" "run_in_background" "[]" \
     -instances "" "" "[instance name for member or list of instances for master]" \
     -mpiargs "" "" "[]" \
@@ -356,6 +357,13 @@ eval `cclargs_lite -D "" $0 \
     ++ "$@"`
 #
 [[ -n ${inorder} ]] && processorder="yes"
+if [[ -n ${members} ]] ; then
+  if [[ ${members} == *x* ]] ; then
+    npex=${members#*x} ; npey=${members%x*}
+  else
+    npex=1 ; npey=${members}
+  fi
+fi
 #
 # number of MPI tasks
 #
