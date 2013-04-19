@@ -147,7 +147,9 @@ mpiexec_AIX() {
 # cleanup of tmpdir directory used for launch help files and listings
 #
 local_cleanup() {
- [[ -n ${nocleanup} ]] && return   # -nocleanup option used, return
+ ExitStatus=0
+ ls -1 ${tmpdir}/fail.* 2>/dev/null 1>/dev/null && ExitStatus=1
+ [[ -n ${nocleanup} ]] && return $ExitStatus  # -nocleanup option used, return
  rm -f ${ParallelScript}* ${MP_HOSTFILE} ${MpiRunScript}* ${tmpdir}/MY_NODEFILE* ${selftest} ${tmpdir}/.mpi_env*
  rmdir ${tmpdir} || true
  [[ -d "${tmpdir}" ]] && \
@@ -155,7 +157,7 @@ local_cleanup() {
  ls -al ${tmpdir} && \
  rm -rf ${tmpdir}  && \
  echo removing everything in ${tmpdir}
- true
+ return $ExitStatus
 }
 # ===========================================================================
 #
@@ -714,4 +716,4 @@ if [[ -n ${packoutput} && -n ${processorder} ]] ; then
   ( cd ${tmpdir} ; ${packoutput} [0-9]*[0-9] ; clean_output [0-9]*[0-9] )
 fi
 #
-local_cleanup || true
+local_cleanup
