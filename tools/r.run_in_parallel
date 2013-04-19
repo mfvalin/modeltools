@@ -342,6 +342,7 @@ eval `cclargs_lite -D "" $0 \
     -mpiargs "" "" "[]" \
     -instancedir "${PARALLEL_INSTANCES_DIR}" "${PARALLEL_INSTANCES_DIR}" "[directory containing instance names]" \
     -geometry "" "" "[]" \
+    -e "" "e" "[activate -e option down the chain]" \
     -minstdout "2" "2" "[]" \
     -dryrun "" "dryrun" "[]" \
     -timeout "60" "60" "[timeout for multiple instances]" \
@@ -357,6 +358,7 @@ eval `cclargs_lite -D "" $0 \
     -selftest "" "selftest.$$" "[quick selftest]" \
     ++ "$@"`
 #
+if [[ -z ${e} ]] ; then EOption="+e" ; else EOption="-e" ; fi
 [[ -n ${inorder} ]] && processorder="yes"
 if [[ -n ${members} ]] ; then
   if [[ ${members} == *x* ]] ; then
@@ -549,6 +551,7 @@ export OMP_NUM_THREADS=${NLThreads}
 export WORLD_CHILD
 ((WORLD_CHILD=MP_CHILD-${InstanceOffset}))
 /usr/bin/printf "=================== stdout ${MpiCommWorld}:%4.4d (%s) ===================\n" \${WORLD_CHILD} \${MP_SeqNum}
+set ${EOption}   #  +e or -e
 EOT
       for i in  $(seq 0 1 $((Instances-1))) ; do
         cat <<EOT >>${MpiRunScript}.${MpiCommWorld}
@@ -631,7 +634,8 @@ else # simple SPMD case, one MPI world, old style call
   MpiCommWorld=0
   MpiCommWorlds=1
   PeInWorld[0]=${npe_total}
-  echo ${preexec} $pgm $args >${MpiRunScript}.0   # MpiCommWorld is 0 in this case
+  echo "set ${EOption}" >${MpiRunScript}.0
+  echo ${preexec} $pgm $args >>${MpiRunScript}.0   # MpiCommWorld is 0 in this case
   echo "${npe_total} instances of '$pgm'"
 #
 fi # complex sequence, possibly MPMD
@@ -661,7 +665,9 @@ export RP_MemberChild=\$((MP_CHILD-MP_CHILD/${npex}*${npex}))
 #echo "INFO: redirecting to ${RedirectStdout}, MP_SeqNum=\${MP_SeqNum}, MP_CHILD=\${MP_CHILD}"
 [[ -n "${debug}" ]] && env | sort >${tmpdir}/.mpi_env_\$\$_\$(hostname)
 #
+touch ${tmpdir}/fail.\${MP_SeqNum}
 . ${MpiRunScript}.${MpiCommWorld}  ${RedirectStdout} ${RedirectStderr}
+rm ${tmpdir}/fail.\${MP_SeqNum}
 EOT
 #
   chmod 755 ${ParallelScript}.${MpiCommWorld}
