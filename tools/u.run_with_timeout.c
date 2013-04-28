@@ -10,7 +10,7 @@ int main(int argc, char **argv, char **envp) {
   char buffer[32768];
   int bp=0;
   int i;
-  pid_t pid, pid2;
+  pid_t pid=getpid();
   int pidst;
   int maxwall;
 
@@ -18,11 +18,9 @@ int main(int argc, char **argv, char **envp) {
      fprintf(stderr, "Usage: %s <max wall time> <command> [arguments] \n", argv[0]);
      exit(EXIT_FAILURE);
   }
-
   maxwall=atoi(argv[1]);
-  pid=getpid();
 
-  if( fork() ) {
+  if( fork() ) {   /* parent process */
 
      /* the parent process will execve to bash the requested command */
 
@@ -37,12 +35,12 @@ int main(int argc, char **argv, char **envp) {
     perror("execve");   /* execve() only returns on error */
     exit(EXIT_FAILURE);
 
-  }else{
+  }else{   /* chhild process */
 
     /* the child watches the parent */
-    while( (maxwall-->0) && ((pidst=kill(pid,0))== 0)) sleep(1)  ;  /* while there is time and first child is alive */
+    while( (maxwall-->0) && ((pidst=kill(pid,0))== 0)) sleep(1)  ;  /* while there is time and parent is alive */
 
-    if(maxwall<=0) { pidst=kill(pid,9) ; }   /* time was up, kill first child */
+    if(maxwall<=0) { pidst=kill(pid,9) ; }   /* time is up, kill parent */
     if (pidst==0)
       fprintf(stderr,"process %d killed, time left=%d\n",pid,++maxwall);
     else
