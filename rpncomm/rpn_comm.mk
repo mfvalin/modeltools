@@ -50,6 +50,7 @@ $(STUB_LIBRARY): rpn_comm_fortran_stubs.o rpn_comm_c_stubs.o
 $(LIBRARY): $(OBJECTS)
 	mkdir -p $(LIBDIR)
 	ar rcv $(LIBRARY) $(OBJECTS)
+	ar d $(LIBRARY) TEST_stubs.o
 	(cd $(LIBDIR) ; ln -sf lib$(LIB)_$(RPN_COMM_version).a  lib$(LIB).a)
 
 TEST_000.Abs: $(LIBRARY)
