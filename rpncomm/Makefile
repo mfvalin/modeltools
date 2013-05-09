@@ -1,6 +1,6 @@
 SHELL=/bin/bash
 #----- Begin Boilerplate
-ifneq (,$(realpath ./Makefile))
+ifneq (,$(wildcard ./Makefile))
 # we are at the top level, in the source directory, phase 1 instance
 # all build commands will be executed in an architecture specific subdirectory
 .SUFFIXES:
