@@ -26,8 +26,8 @@ stublib: $(STUB_LIBRARY)
 lib: $(LIBRARY)
 
 $(VPATH)/dependencies.mk:
-	which gnu_find 2>/dev/null 1>/dev/null || (cd $(VPATH) ; find . -maxdepth 1 -type f | ../tools/mk.dependencies.pl >dependencies.mk )
-	which gnu_find 2>/dev/null 1>/dev/null && (cd $(VPATH) ; gnu_find . -maxdepth 1 -type f | ../tools/mk.dependencies.pl >dependencies.mk )
+	-which gnu_find 2>/dev/null 1>/dev/null || (cd $(VPATH) ; find . -maxdepth 1 -type f | ../tools/mk.dependencies.pl >dependencies.mk )
+	-which gnu_find 2>/dev/null 1>/dev/null && (cd $(VPATH) ; gnu_find . -maxdepth 1 -type f | ../tools/mk.dependencies.pl >dependencies.mk )
 
 ssm-package:
 	rm -rf $(VPATH)/rpn-comm_${RPN_COMM_version_s}_multi

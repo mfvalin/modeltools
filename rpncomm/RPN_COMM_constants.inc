@@ -18,7 +18,10 @@
 ! * Boston, MA 02111-1307, USA.
 ! */
 !
-        integer,parameter :: RPN_COMM_MASTER = 0
+        integer, parameter :: RPN_COMM_OK    =  0
+        integer, parameter :: RPN_COMM_ERROR = -1
+!
+        integer, parameter :: RPN_COMM_MASTER = 0
         integer, parameter :: RPN_COMM_GET=12345
         integer, parameter :: RPN_COMM_SET=12346
         integer, parameter :: RPN_COMM_DEL=12347
