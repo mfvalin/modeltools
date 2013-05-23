@@ -17,6 +17,46 @@
 * * Free Software Foundation, Inc., 59 Temple Place - Suite 330,
 * * Boston, MA 02111-1307, USA.
 * */
+      subroutine RPN_COMM_test_limit()
+      implicit none
+      integer, parameter :: NPE=7
+      integer, dimension(NPE) :: count, offset
+      integer :: my_id, gmin, gmax, lmini, lmaxi, status
+      integer :: RPN_COMM_limit_2
+      external :: RPN_COMM_limit_2
+
+      gmin = 1
+      gmax = 9
+      do my_id=4,NPE-1
+      status = RPN_COMM_limit_2(my_id, npe, gmin, gmax,
+     &     lmini,lmaxi,count, offset,3)
+      print 101, 'pe_me=',my_id, lmini,lmaxi, status
+      print 101, 'count=',count
+      print 101, 'offst=',offset
+      print *,''
+      enddo
+101   format(A7,10I5)
+      my_id=NPE-1
+      status = RPN_COMM_limit_2(my_id, npe, gmin, gmax,
+     &     lmini,lmaxi,count, offset,1)
+      print 101, 'pe_me=',my_id, lmini,lmaxi, status
+      print 101, 'count=',count
+      print 101, 'offst=',offset
+      print *,''
+      gmax = 6
+      status = RPN_COMM_limit_2(my_id, npe, gmin, gmax,
+     &     lmini,lmaxi,count, offset,1)
+      print 101, 'pe_me=',my_id, lmini,lmaxi, status
+      print 101, 'count=',count
+      print 101, 'offst=',offset
+      print *,''
+      status = RPN_COMM_limit_2(my_id, npe, gmin, gmax,
+     &     lmini,lmaxi,count, offset,3)
+      print 101, 'pe_me=',my_id, lmini,lmaxi, status
+      print 101, 'count=',count
+      print 101, 'offst=',offset
+      print *,''
+      end subroutine RPN_COMM_test_limit
 ***function  RPN_COMM_limit_2 global domain decomposition function (along one dimension)
       integer function RPN_COMM_limit_2(my_id, npe, gmin, gmax, 
      &     lmini,lmaxi,count, offset,relax)
@@ -38,6 +78,7 @@
 *              last tile may be shorter but may not have zero dimansion
 *          1 : some tiles at end 1 shorter than tiles at beginning, zero dimension not allowed
 *          2 : same as relax=1 but zero dimension tiles at end are allowed
+*          3 : tiles with same length followed by a shorter tile followed by zero size tiles
 *
 *notes
 *     this function is totally stand alone and could eventually be moved into the rmnlib library
@@ -49,12 +90,23 @@
       integer gtot
       integer val1, val2, i
 
+      lmini = -1
+      lmaxi = -1
       gtot = gmax - gmin + 1    ! number of points to be distributed
-      if(gtot < npe .and. relax < 2) then ! there would be zero sized tiles and relax is not 2
-          goto 777
-      end if
 
       val1 = (gtot + npe - 1)/npe           ! ceiling(gtot/npe)
+      count = val1
+      val2 = val1
+      offset(1) = 0
+      do i=2,npe
+        count(i) = min(count(i),gtot-val2)
+        offset(i) = offset(i-1) + count(i-1)
+        val2 = val2 + count(i)
+      enddo
+      if(gtot < npe .and. relax < 2) then   ! there would be zero sized tiles and relax is not 2 or 3
+          goto 777
+      end if
+      if(relax == 3) goto 666               ! 
       val2 = gtot - (npe-1)*val1            ! potential size of last "tile" in strict mode
       if (val2 < 0  .and. relax == 0)  then ! in STRICT mode last "tile" would have a negative size
           goto 777
@@ -64,15 +116,14 @@
       if(val2 > 0) then                     ! strict mode will work, use it
          count(npe) = val2
       else                                  ! relaxed mode (1 or 2)
-         do i=1,mod(gtot,npe)               ! add 1 to the size of some tiles at beginning
-            count(i)=count(i)+1
-         end do
+        do i=1,mod(gtot,npe)                ! add 1 to the size of some tiles at beginning
+          count(i)=count(i)+1
+        end do
       end if
-      offset(1)=0   ! use count table to compute offsets from beginning
-      do i= 2, npe
+666   do i= 2, npe   ! use count table to compute offsets from beginning
          offset(i) = offset(i-1) + count(i-1)
       end do 
-      lmini = gmin + offset(my_id+1)               ! start of "tile" in global space
+      lmini = gmin + offset(my_id+1)             ! start of "tile" in global space
       lmaxi = min(gmax,lmini+count(my_id+1)-1)   ! end of "tile" in global space
 
       RPN_COMM_limit_2 = 0  ! SUCCESS
