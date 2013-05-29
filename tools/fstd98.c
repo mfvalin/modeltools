@@ -1916,6 +1916,8 @@ int c_fstluk(word *field, int handle, int *ni, int *nj, int *nk)
   }
   if(has_missing) {
     /* replace "missing" data points with the appropriate values given the type of data (int/float) */
+    /* if nbits = 64 and IEEE , set xdf_double */
+    if((stdf_entry->datyp & 0xF) == 5 && stdf_entry->nbits == 64 ) xdf_double=1;
     DecodeMissingValue( field , (*ni)*(*nj)*(*nk) , xdf_datatyp&0x3F,xdf_byte,xdf_short,xdf_double ); /* */
   }
   free(stdf_entry);

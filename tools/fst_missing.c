@@ -728,6 +728,7 @@ int EncodeMissingValue(void *field,void *field2,int nvalues,int datatype,int nbi
   /* if(is_short)  return(0) ; */ /* for now short type not supported */
   /* if(is_double) return(0) ; */ /* for now double type not supported */
   if(datatype==1 || datatype==5 || datatype==6) { /* float or IEEE */
+    if(datatype==5 && nbits==64) is_double=1;
     if(is_double) {
       missing = fst_double_encode_missing(field,field2,nvalues,nbits); /* real or IEEE */
     }else{
