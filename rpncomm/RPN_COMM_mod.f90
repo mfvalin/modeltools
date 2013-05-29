@@ -163,35 +163,6 @@ module rpn_comm
   integer domm_size, domm_num
   type(domm), allocatable, dimension(:) :: pe_domains
 !
-! Decomposition tables
-!
-  type :: DEC         ! decomposisition description
-  integer :: id       ! "magic" pseudo unique identifier
-  integer :: l1, l2   ! number of points per section
-  integer :: lg       ! total number of points
-  integer :: np       ! number of tiles along axis
-  end type DEC
-  
-  type :: DIST_1D     ! 1D type decomposition
-  integer :: id       ! "magic" pseudo unique identifier
-  integer :: a        ! decomposition id
-  integer    :: com   ! communicator (row, column, ...)
-  integer    :: grp   ! group
-  end type DIST_1D
-
-  type :: DIST_2D     ! 2D type decomposition
-  integer :: id       ! "magic" pseudo unique identifier
-  integer :: idx,idy  ! E-W and N-S decomposition id's
-  integer    :: com   ! communicator (grid, subgrid, ...)
-  integer    :: grp   ! group
-  end type DIST_2D
-
-  integer, parameter :: DEC_TAB_SIZE = 256   ! initial size of decomposition table
-  integer, parameter :: DIST_TAB_SIZE = 128   ! initial size of distribution tables
-  type(DEC), pointer, dimension(:)    :: dec_t => NULL()
-  type(DIST_1D), pointer, dimension(:) :: dist_1_t =>  NULL()
-  type(DIST_2D), pointer, dimension(:) :: dist_2_t => NULL()
-!
 !  symbol tables
 !
   type :: SYMTAB
@@ -267,5 +238,117 @@ module rpn_comm
     end function f_gethostid
   end interface
 
+!
+! Decomposition tables
+!
+  type :: DEC         ! decomposisition description
+  integer :: id       ! "magic" pseudo unique identifier
+  integer :: l1, l2   ! number of points per section
+  integer :: ns       ! start of shorter tiles (1->np) (if ns<np, l2 must be l1-1)
+  integer :: lg       ! total number of points
+  integer :: np       ! number of tiles along axis
+  end type DEC
+  
+  type :: DIST_1D     ! 1D type decomposition
+  integer :: id       ! "magic" pseudo unique identifier
+  integer :: a        ! DEC id
+  integer    :: com   ! communicator (row, column, ...)
+  integer    :: grp   ! group
+  end type DIST_1D
 
+  type :: DIST_2D     ! 2D type decomposition
+  integer :: id       ! "magic" pseudo unique identifier
+  integer :: idx,idy  ! E-W and N-S DIST_1D id's
+  integer    :: com   ! communicator (grid, subgrid, ...)
+  integer    :: grp   ! group
+  end type DIST_2D
+
+  integer, parameter :: DEC_TAB_SIZE = 256   ! initial size of decomposition table
+  integer, parameter :: DIST_TAB_SIZE = 128  ! initial size of distribution tables
+  integer, parameter :: ID_FACTOR = 1024     ! power of 2, larger than DEC_TAB_SIZE and DIST_TAB_SIZE
+  integer, parameter :: ID_AND_MASK = 1023   ! 1 less than ID_FACTOR
+  type(DEC), pointer, private, dimension(:)    :: dec_t => NULL()
+  integer, private :: dec_t_i = 0
+  type(DIST_1D), pointer, private, dimension(:) :: dist_1_t =>  NULL()
+  integer, private :: dist_1_t_i = 0
+  type(DIST_2D), pointer, private, dimension(:) :: dist_2_t => NULL()
+  integer, private :: dist_2_t_i = 0
+
+contains  ! routines to manage decomposition table
+! ==============================================================================================
+  subroutine rpn_comm_init_decomposition()  ! initialize tables
+  if(.not. associated(dec_t)) then
+    allocate(dec_t(DEC_TAB_SIZE))
+    dec_t = DEC(-1,0,0,0,0,0)
+  endif
+  if(.not. associated(dist_1_t)) then
+    allocate(dist_1_t(DIST_TAB_SIZE))
+    dist_1_t=DIST_1D(-1,0,0,0)
+  endif
+  if(.not. associated(dist_2_t)) then
+    allocate(dist_2_t(DIST_TAB_SIZE))
+    dist_2_t=DIST_2D(-1,0,0,0,0)
+  endif
+  end subroutine rpn_comm_init_decomposition
+
+! ==============================================================================================
+  function rpn_comm_same_decomp(d1,d2) result(same)  ! true if the 2 decompositions are the same
+  type(DEC), intent(IN) :: d1,d2
+  logical :: same
+
+  same = d1%l1 == d2%l1 .and. d1%l2 == d2%l2 .and. d1%ns == d2%ns .and. d1%lg == d2%lg .and. d1%np == d2%np
+  end function rpn_comm_same_decomp
+
+! ==============================================================================================
+  function rpn_comm_get_decomp(npe,npoints) result(id)  ! get id of a decomposition, create one if none found
+  integer, intent(IN) :: npe,npoints
+  integer :: id
+
+  type(DEC) :: t
+  integer :: i
+
+  call rpn_comm_init_decomposition
+
+!         id l1                   l2                      ns   lg       np
+  t = DEC(0, (npoints+1-npe)/npe, npoints - (npe-1)*t%l1, npe, npoints, npe)
+  if(t%l2 <= 0) then  ! attempt to decompose with "old" method failed
+    t%l2 = npoints/npe
+    t%ns = 1 + mod(npoints,npe)
+  endif
+  do i=1,dec_t_i  ! scan table to find entry
+    id = dec_t(i)%id
+    if( rpn_comm_same_decomp(t,dec_t(i)) ) return  ! this decomposition exists already
+  enddo
+  id = -1
+  if(dec_t_i>=DEC_TAB_SIZE) return  ! OOPS decomposition table is full
+  
+  dec_t_i = dec_t_i + 1    ! create a new decomposition entry
+  t%id = id + ID_FACTOR*12345   ! pseudo unique tag
+  dec_t(dec_t_i) = t       ! store new entry in table
+  end function rpn_comm_get_decomp
+
+! ==============================================================================================
+  function rpn_comm_tag2indx(tag) result(id)  ! get index part from pseudo unique tag
+  integer, intent(IN) :: tag
+  integer :: id
+  id = iand(ID_AND_MASK,tag)
+  end function rpn_comm_tag2indx
+
+! ==============================================================================================
+  function rpn_comm_expand_decomp(tag,l1,l2,ns,lg,np) result(status)  ! retrieve elements of a decomposition
+  integer, intent(IN) :: tag
+  integer, intent(OUT) :: l1,l2,ns,lg,np
+  integer :: status
+  integer :: indx
+  status = -1
+  indx=rpn_comm_tag2indx(tag)
+  if(indx > dec_t_i) return
+  if(dec_t(indx)%id /= tag) return
+  l1 = dec_t(indx)%l1
+  l2 = dec_t(indx)%l2
+  np = dec_t(indx)%np
+  lg = dec_t(indx)%lg
+  ns = dec_t(indx)%ns
+  status = indx
+  end function rpn_comm_expand_decomp
 end module rpn_comm

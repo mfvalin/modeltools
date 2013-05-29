@@ -226,9 +226,9 @@ static int omp_max_threads=1;
 
 #pragma weak save_openmp_state__=save_openmp_state
 #pragma weak save_openmp_state_=save_openmp_state
-static void save_openmp_state__();
-static void save_openmp_state_();
-static void save_openmp_state()
+void save_openmp_state__();
+void save_openmp_state_();
+void save_openmp_state()
 {
   int ONE=1;
 

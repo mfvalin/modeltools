@@ -10,10 +10,16 @@ CFLAGS =  -O 2
 FCFLAGS = -O 2
 
 CC=s.cc
-FC=s.f77
+# use s.f77 with IBM fortran compiler because of fixed format
+ifeq (/xlf,$(findstring /xlf,$(EC_ARCH)))
+ FC=s.f77
+ MPIFC = s.f77 -mpi
+else
+ FC=s.f90
+ MPIFC = s.f90 -mpi
+endif
 F90C=s.f90
 MPICC = s.cc -mpi
-MPIFC = s.f77 -mpi
 MPIF90C = s.f90 -mpi
 
 # end of EC setup

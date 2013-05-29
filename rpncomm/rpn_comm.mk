@@ -26,7 +26,8 @@ stublib: $(STUB_LIBRARY)
 lib: $(LIBRARY)
 
 $(VPATH)/dependencies.mk:
-	(cd $(VPATH) ; find . -maxdepth 1 -type f | ../tools/mk.dependencies.pl >dependencies.mk )
+	-which gnu_find 2>/dev/null 1>/dev/null || (cd $(VPATH) ; find . -maxdepth 1 -type f | ../tools/mk.dependencies.pl >dependencies.mk )
+	-which gnu_find 2>/dev/null 1>/dev/null && (cd $(VPATH) ; gnu_find . -maxdepth 1 -type f | ../tools/mk.dependencies.pl >dependencies.mk )
 
 ssm-package:
 	rm -rf $(VPATH)/rpn-comm_${RPN_COMM_version_s}_multi
@@ -50,6 +51,7 @@ $(STUB_LIBRARY): rpn_comm_fortran_stubs.o rpn_comm_c_stubs.o
 $(LIBRARY): $(OBJECTS)
 	mkdir -p $(LIBDIR)
 	ar rcv $(LIBRARY) $(OBJECTS)
+	ar d $(LIBRARY) TEST_stubs.o rpn_comm_c_stubs.o rpn_comm_fortran_stubs.o
 	(cd $(LIBDIR) ; ln -sf lib$(LIB)_$(RPN_COMM_version).a  lib$(LIB).a)
 
 TEST_000.Abs: $(LIBRARY)

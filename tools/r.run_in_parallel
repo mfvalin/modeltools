@@ -146,12 +146,16 @@ mpiexec_AIX() {
 #
 # cleanup of tmpdir directory used for launch help files and listings
 #
+ListFailed() {
+  echo "ERROR: some processes have failed during execution"
+  (cd ${tmpdir} ; ls -1 | grep 'fail[.]' | sed 's/fail.//' | xargs -l10 /bin/echo ; rm -f fail.* )
+}
 local_cleanup() {
  ExitStatus=0
- ls -1 ${tmpdir}/fail.* 2>/dev/null 1>/dev/null && ExitStatus=1
+ ls -1 ${tmpdir}/fail.* 2>/dev/null 1>/dev/null && ListFailed && ExitStatus=1
  [[ -n ${nocleanup} ]] && return $ExitStatus  # -nocleanup option used, return
  rm -f ${ParallelScript}* ${MP_HOSTFILE} ${MpiRunScript}* ${tmpdir}/MY_NODEFILE* ${selftest} ${tmpdir}/.mpi_env*
- rmdir ${tmpdir} || true
+ rmdir ${tmpdir} 2>/dev/null 1>/dev/null || true
  [[ -d "${tmpdir}" ]] && \
  echo INFO: leftovers found in ${tmpdir} && \
  ls -al ${tmpdir} && \
@@ -344,7 +348,6 @@ eval `cclargs_lite -D "" $0 \
     -mpiargs "" "" "[]" \
     -instancedir "${PARALLEL_INSTANCES_DIR}" "${PARALLEL_INSTANCES_DIR}" "[directory containing instance names]" \
     -geometry "" "" "[]" \
-    -e "" "e" "[activate -e option down the chain]" \
     -minstdout "2" "2" "[]" \
     -dryrun "" "dryrun" "[]" \
     -timeout "60" "60" "[timeout for multiple instances]" \
@@ -360,7 +363,7 @@ eval `cclargs_lite -D "" $0 \
     -selftest "" "selftest.$$" "[quick selftest]" \
     ++ "$@"`
 #
-if [[ -z ${e} ]] ; then EOption="+e" ; else EOption="-e" ; fi
+
 [[ -n ${inorder} ]] && processorder="yes"
 if [[ -n ${members} ]] ; then
   if [[ ${members} == *x* ]] ; then
@@ -515,7 +518,7 @@ RPN_COMM_DIRS="' '"
 SetCurrentDir=$(pwd -P)
 set -- $pgm @@
 #
-if [[ "$3" != "" ]] ; then # complex sequence, SPMD or MPMD, (automatic multiple MPI worlds not implemented yet)
+if [[ "$2" != "" ]] ; then # complex sequence, SPMD or MPMD, (automatic multiple MPI worlds not implemented yet)
   ((ErRoR=0))
   ((NDomains=0))
   ((Next=0))
@@ -550,17 +553,16 @@ if [[ "$3" != "" ]] ; then # complex sequence, SPMD or MPMD, (automatic multiple
 export RPN_COMM_DOM='${NDomains}${RPN_COMM_DOM}'
 export RPN_COMM_DIRS="${RPN_COMM_DIRS}"
 export OMP_NUM_THREADS=${NLThreads}
-export WORLD_CHILD
 ((WORLD_CHILD=MP_CHILD-${InstanceOffset}))
+export WORLD_CHILD
 /usr/bin/printf "=================== stdout ${MpiCommWorld}:%4.4d (%s) ===================\n" \${WORLD_CHILD} \${MP_SeqNum}
-set ${EOption}   #  +e or -e
 EOT
       for i in  $(seq 0 1 $((Instances-1))) ; do
         cat <<EOT >>${MpiRunScript}.${MpiCommWorld}
           if (( MP_CHILD == $((i+InstanceOffset)) ))
           then 
             cd ${Directories[$i]}
-            ${preexec} ${ProGrams[$i]} ${args}
+            ${preexec} ${ProGrams[$i]} ${args} && rm -f ${tmpdir}/fail.\${MP_SeqNum}
           fi
 EOT
       done
@@ -636,7 +638,6 @@ else # simple SPMD case, one MPI world, old style call
   MpiCommWorld=0
   MpiCommWorlds=1
   PeInWorld[0]=${npe_total}
-  echo "set ${EOption}" >${MpiRunScript}.0
   echo ${preexec} $pgm $args >>${MpiRunScript}.0   # MpiCommWorld is 0 in this case
   echo "${npe_total} instances of '$pgm'"
 #
@@ -668,8 +669,9 @@ export RP_MemberChild=\$((MP_CHILD-MP_CHILD/${npex}*${npex}))
 [[ -n "${debug}" ]] && env | sort >${tmpdir}/.mpi_env_\$\$_\$(hostname)
 #
 touch ${tmpdir}/fail.\${MP_SeqNum}
+ExecutionStatus=1
 . ${MpiRunScript}.${MpiCommWorld}  ${RedirectStdout} ${RedirectStderr}
-rm ${tmpdir}/fail.\${MP_SeqNum}
+#((ExecutionStatus==0)) && rm -f ${tmpdir}/fail.\${MP_SeqNum}
 EOT
 #
   chmod 755 ${ParallelScript}.${MpiCommWorld}

@@ -36,7 +36,7 @@
 *  O    nx0     start of the current "tile" in global space
 *  I    alongx .true. if distributing along X axis, .false. if distributing along Y axis
 *  I    fill   .true. if dimension (usually along X) should be optimized for current machine
-*  I    relax  currently 0(strict) 1 or 2. this value is passed to function RPN_COMM_limit_2 that
+*  I    relax  currently 0(strict) 1, 2, or 3. this value is passed to function RPN_COMM_limit_2 that
 *              contains the actual splitting algorithm. see that function documentation for the
 *              actual meaning of this flag.
 *  I    abort  .true.  : abort run if split is unsuccessful
