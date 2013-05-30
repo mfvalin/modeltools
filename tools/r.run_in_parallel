@@ -147,8 +147,12 @@ mpiexec_AIX() {
 # cleanup of tmpdir directory used for launch help files and listings
 #
 ListFailed() {
-  echo "ERROR: some processes have failed during execution"
-  (cd ${tmpdir} ; ls -1 | grep 'fail[.]' | sed 's/fail.//' | xargs -l10 /bin/echo ; rm -f fail.* )
+  if [[ "${e}" == YES ]] ; then
+    echo "ERROR: some processes have failed during execution"
+    (cd ${tmpdir} ; ls -1 | grep 'fail[.]' | sed 's/fail.//' | xargs -l10 /bin/echo ; rm -f fail.* )
+  else
+    (cd ${tmpdir} ; rm -f fail.* )
+  fi
 }
 local_cleanup() {
  ExitStatus=0
@@ -214,6 +218,7 @@ clean_output() {   #  get rid of captured stdout/stderr files into stdout
 # 
 make_c_test() {
 echo INFO: creating C test program source mpi_c_test.c
+echo INFO: creating Fortran test program source mpi_f_test.f90
 #
 cat >${tmpdir}/mpi_c_test.c <<EOT
 #include <unistd.h>
@@ -233,12 +238,28 @@ void main(int argc, char **argv)
  MPI_Finalize();
 }
 EOT
+cat >${tmpdir}/mpi_f_test.f90 <<EOT
+program demo
+include 'mpif.h'
+call mpi_init(ierr)
+call mpi_comm_rank(MPI_COMM_WORLD,myrank,ierr)
+print *,"I am process no",myrank
+call mpi_finalize(ierr)
+stop
+end
+EOT
 #
 echo INFO: compiling C test program mpi_c_test.c into mpi_c_test
 which mpicc 2>/dev/null 1>/dev/null && mpicc -o ${tmpdir}/mpi_c_test ${tmpdir}/mpi_c_test.c
 which mpcc 2>/dev/null 1>/dev/null && mpcc -o ${tmpdir}/mpi_c_test ${tmpdir}/mpi_c_test.c
 echo INFO: removing C test program source mpi_c_test.c
 rm ${tmpdir}/mpi_c_test.c
+#
+echo INFO: compiling Fortran test program mpi_f_test.f90 into mpi_f_test
+which mpif90 2>/dev/null 1>/dev/null && mpif90 ${tmpdir}/mpi_f_test.f90 -mp -o ${tmpdir}/mpi_f_test
+which mpxlf90_r 2>/dev/null 1>/dev/null && mpxlf90_r ${tmpdir}/mpi_f_test.f90 -o ${tmpdir}/mpi_f_test
+echo INFO: removing Fortran test source program mpi_f_test.f90 
+rm ${tmpdir}/mpi_f_test.f90
 }
 # ===========================================================================
 # remap_nodes , uses node file and geometry file
@@ -348,6 +369,7 @@ eval `cclargs_lite -D "" $0 \
     -mpiargs "" "" "[]" \
     -instancedir "${PARALLEL_INSTANCES_DIR}" "${PARALLEL_INSTANCES_DIR}" "[directory containing instance names]" \
     -geometry "" "" "[]" \
+    -e "NO" "YES" "[list failed tasks]" \
     -minstdout "2" "2" "[]" \
     -dryrun "" "dryrun" "[]" \
     -timeout "60" "60" "[timeout for multiple instances]" \
@@ -490,7 +512,8 @@ echo "NODE FILE='\${MY_NODEFILE}' arguments:'\$@'"
 echo "\$(hostname)(\${MP_CHILD}): WORLD_CHILD=\${WORLD_CHILD}, RP_Child=\${RP_Child}, RP_Member=\${RP_Member}, RP_MemberChild=\${RP_MemberChild}, MP_SeqNum=\${MP_SeqNum}, RP_CommWorld=\${RP_CommWorld}"
 set -x
 [[ -x ${tmpdir}/mpi_c_test ]] && ${tmpdir}/mpi_c_test
-rm -f ${tmpdir}/mpi_c_test
+[[ -x ${tmpdir}/mpi_f_test ]] && ${tmpdir}/mpi_f_test
+rm -f ${tmpdir}/mpi_c_test ${tmpdir}/mpi_f_test
 sleep \${1:-5}
 EOT
  chmod 755 ${selftest}
@@ -518,7 +541,7 @@ RPN_COMM_DIRS="' '"
 SetCurrentDir=$(pwd -P)
 set -- $pgm @@
 #
-if [[ "$2" != "" ]] ; then # complex sequence, SPMD or MPMD, (automatic multiple MPI worlds not implemented yet)
+if [[ "$2" != "" ]] ; then # complex sequence, SPMD or MPMD, (automatic multiple MPI worlds with @@)
   ((ErRoR=0))
   ((NDomains=0))
   ((Next=0))
@@ -539,6 +562,7 @@ if [[ "$2" != "" ]] ; then # complex sequence, SPMD or MPMD, (automatic multiple
     [[  "${1}" == %%* ]]  && NLThreads=${1#%%}      && shift && continue   # from slave to set number of threads per task
     [[  "${1}" == ::* ]]  && npe_total=${1#::}      && shift && continue   # used by master from slave to set number of tasks for this slave
     if [[ "${1}" == "@@" ]] ; then  #  wrap up a world
+      NLThreads=${NLThreads:-${OMP_NUM_THREADS:-1}}
       PeInWorld[${MpiCommWorld}]=${Instances}
       ThreadsInWorld[${MpiCommWorld}]=${NLThreads}
       ((TotalThreads=TotalThreads*NLThreads))
@@ -575,9 +599,10 @@ EOT
       ((MaxPe=0))
       ((Instances=0))
       ((npe_total=0))   # reset ::ntasks for next world
+      unset NLThreads
       shift
       continue
-    fi
+    fi  #  "${1}" == "@@"  wrap up a world
 #
     ((NDomains=NDomains+1))
     Temp="${1}"
@@ -669,9 +694,7 @@ export RP_MemberChild=\$((MP_CHILD-MP_CHILD/${npex}*${npex}))
 [[ -n "${debug}" ]] && env | sort >${tmpdir}/.mpi_env_\$\$_\$(hostname)
 #
 touch ${tmpdir}/fail.\${MP_SeqNum}
-ExecutionStatus=1
 . ${MpiRunScript}.${MpiCommWorld}  ${RedirectStdout} ${RedirectStderr}
-#((ExecutionStatus==0)) && rm -f ${tmpdir}/fail.\${MP_SeqNum}
 EOT
 #
   chmod 755 ${ParallelScript}.${MpiCommWorld}

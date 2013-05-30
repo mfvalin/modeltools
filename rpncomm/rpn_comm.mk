@@ -53,6 +53,8 @@ $(LIBRARY): $(OBJECTS)
 	ar rcv $(LIBRARY) $(OBJECTS)
 	ar d $(LIBRARY) TEST_stubs.o rpn_comm_c_stubs.o rpn_comm_fortran_stubs.o
 	(cd $(LIBDIR) ; ln -sf lib$(LIB)_$(RPN_COMM_version).a  lib$(LIB).a)
+	mkdir -p $(INCDIR)
+	cp *.mod $(INCDIR)
 
 TEST_000.Abs: $(LIBRARY)
 TEST_001.Abs: $(LIBRARY)

@@ -30,6 +30,7 @@ else
   endif
 endif
 LIBDIR := $(VPATH)/../lib/$(EC_ARCH)
+INCDIR := $(VPATH)/../include/$(EC_ARCH)
 
 all: ALL
 
