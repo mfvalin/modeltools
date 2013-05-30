@@ -136,7 +136,7 @@ return temp;
 /* returns time of day as a 64 bit real number */
 
 #pragma weak rpn_comm_timeofday__=rpn_comm_timeofday
-#pragma weak rpn_comm_timeofday__=rpn_comm_timeofday
+#pragma weak rpn_comm_timeofday_=rpn_comm_timeofday
 double rpn_comm_timeofday__();
 double rpn_comm_timeofday_();
 double rpn_comm_timeofday()
