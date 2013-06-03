@@ -173,7 +173,7 @@ local_cleanup() {
 #
 print_separator() {
   [[ -n ${nosep} ]] && return   # -nosep option used, return
-  echo ===================      "$@"      ===================
+  echo ==============      "$@"      ==============
 }
 # ===========================================================================
 #
@@ -188,14 +188,22 @@ cat_output() {  #  cat captured stdout/stderr files into stdout with appropriate
   [[ "${tag}" == none    ]] && Prefix="" && Prefix2="" && Prefix3=""
   [[ "${tag}" == stderr  ]] && Prefix="" && Prefix2="" && Prefix3="stderr: "
   for SeqNum in $* ; do 
-    ((MemberNo=SeqNum/npex+offset))
-    ((MemberChild=SeqNum-SeqNum/npex*npex))
-    [[ "${tag}" == full   ]] && Prefix="${MemberNo}-${MemberChild}: "
-    [[ "${tag}" == member ]] && Prefix="${MemberNo}: "
-    [[ "${tag}" == child  ]] && Prefix="${SeqNum}: "
-#    [[ -r ${SeqNum}/stdout ]] && print_separator start stdout ${MemberNo}:${MemberChild} && cat ${SeqNum}/stdout | sed -e "2,\$s/^/${Prefix2}${Prefix}/"
-    (( $(cat ${SeqNum}/stdout | wc -l) >= minstdout )) && cat ${SeqNum}/stdout | sed -e "2,\$s/^/${Prefix2}${Prefix}/"
-    [[ -r ${SeqNum}/stderr ]] && print_separator start stderr ${MemberNo}:${MemberChild} && cat ${SeqNum}/stderr | sed -e "s/^/${Prefix3}${Prefix}/"
+    FullTag="$(cat ${SeqNum}/stdtag)"
+    WorldTag="${FullTag%%-*}-"
+    FullTag=${FullTag#*-}
+    MemberTag="${FullTag%-*}"
+    ChildTag="${FullTag#*-}"
+    ((MpiCommWorlds<2)) && WorldTag=""  # one MPI world only, no need to tag
+#    ((MemberNo=SeqNum/npex+offset))
+#    ((MemberChild=SeqNum-SeqNum/npex*npex))
+    [[ "${tag}" == full   ]] && Prefix="${WorldTag}${MemberTag}-${ChildTag}: "
+    [[ "${tag}" == member ]] && Prefix="${MemberTag}: "
+    [[ "${tag}" == child  ]] && Prefix="${ChildTag}: "
+    [[ "${tag}" == seq    ]] && Prefix="${SeqNum}: "
+    (( $(cat ${SeqNum}/stdout | wc -l) >= minstdout )) && \
+      print_separator stdout ${WorldTag}${MemberTag}:${ChildTag} && \
+      cat ${SeqNum}/stdout | sed -e "2,\$s/^/${Prefix2}${Prefix}/"
+    [[ -r ${SeqNum}/stderr ]] && print_separator stderr ${WorldTag}${MemberTag}:${ChildTag} && cat ${SeqNum}/stderr | sed -e "s/^/${Prefix3}${Prefix}/"
   done
   print_separator "   stdout / stderr   "
   print_separator " end of parallel run "
@@ -375,7 +383,7 @@ eval `cclargs_lite -D "" $0 \
     -timeout "60" "60" "[timeout for multiple instances]" \
     -debug "" "5" "[]" \
     -nocleanup "" "nocleanup" "[]" \
-    -tag "child" "full" "[full/child/member/stderr/none]" \
+    -tag "child" "full" "[full/child/member/stderr/none/seq]" \
     -outp "o" "O" "[stdout prefix in listings]" \
     -errp "e" "E" "[stderr prefix in listings]" \
     -nosep "" "yes" "[deactivate separator between members]" \
@@ -509,7 +517,7 @@ if [[ -n ${selftest} ]] ; then
   cat <<EOT >${selftest}
 #!/bin/ksh93
 echo "NODE FILE='\${MY_NODEFILE}' arguments:'\$@'"
-echo "\$(hostname)(\${MP_CHILD}): WORLD_CHILD=\${WORLD_CHILD}, RP_Child=\${RP_Child}, RP_Member=\${RP_Member}, RP_MemberChild=\${RP_MemberChild}, MP_SeqNum=\${MP_SeqNum}, RP_CommWorld=\${RP_CommWorld}"
+echo "\$(hostname)(\${MP_CHILD}): WORLD_CHILD=\${WORLD_CHILD}, RP_Child=\${RP_Child}, RP_Member=\${RP_Member}, RP_MemberChild=\${RP_MemberChild}, MP_SeqNum=\${MP_SeqNum}, RP_CommWorld=\${RP_CommWorld}, RP_WorldChild=\${RP_WorldChild}"
 set -x
 [[ -x ${tmpdir}/mpi_c_test ]] && ${tmpdir}/mpi_c_test
 [[ -x ${tmpdir}/mpi_f_test ]] && ${tmpdir}/mpi_f_test
@@ -560,10 +568,25 @@ if [[ "$2" != "" ]] ; then # complex sequence, SPMD or MPMD, (automatic multiple
     [[ "${1}" == "@@" && "${2}" == "@@" ]]          && shift && continue   # two @@ flags back to back, eliminate first one
     [[ "${1}" == /./* ]]  && SetCurrentDir=${1#/./} && shift && continue   # used by master from slave to set slave base work directory
     [[  "${1}" == %%* ]]  && NLThreads=${1#%%}      && shift && continue   # from slave to set number of threads per task
-    [[  "${1}" == ::* ]]  && npe_total=${1#::}      && shift && continue   # used by master from slave to set number of tasks for this slave
+    if [[  "${1}" == ::* ]] ; then  # used by master from slave to set number of tasks for this slave
+      npe_total=${1#::}
+      if [[ ${npe_total} == *x* ]] ; then
+        npey=${npe_total#*x}
+        npex=${npe_total%x*}
+      else
+        npey=1
+        npex=${npe_total}
+      fi
+      ((npe_total=npex*npey))
+      shift
+      continue
+    fi
+#
+#
     if [[ "${1}" == "@@" ]] ; then  #  wrap up a world
       NLThreads=${NLThreads:-${OMP_NUM_THREADS:-1}}
       PeInWorld[${MpiCommWorld}]=${Instances}
+      MembersInWorld[${MpiCommWorld}]=${npey}  # number of members in this world
       ThreadsInWorld[${MpiCommWorld}]=${NLThreads}
       ((TotalThreads=TotalThreads*NLThreads))
       echo "INFO: MPI world ${MpiCommWorld} will be using ${NLThreads} thread(s) per task"
@@ -579,7 +602,7 @@ export RPN_COMM_DIRS="${RPN_COMM_DIRS}"
 export OMP_NUM_THREADS=${NLThreads}
 ((WORLD_CHILD=MP_CHILD-${InstanceOffset}))
 export WORLD_CHILD
-/usr/bin/printf "=================== stdout ${MpiCommWorld}:%4.4d (%s) ===================\n" \${WORLD_CHILD} \${MP_SeqNum}
+/usr/bin/printf "============== stdout W:${MpiCommWorld}:%4.4d M:%4.4d-%4.4d G:%s ==============\n" \${RP_WorldChild} \${RP_Member} \${RP_MemberChild} \${MP_SeqNum}
 EOT
       for i in  $(seq 0 1 $((Instances-1))) ; do
         cat <<EOT >>${MpiRunScript}.${MpiCommWorld}
@@ -653,7 +676,7 @@ EOT
   done # while [[ "$1" != "" ]]
 #
   if [[ "$ErRoR" != "0" ]] ; then echo "$ErRoR ERROR(S) detected" ; local_cleanup ; exit 1 ; fi
-else # simple SPMD case, one MPI world, old style call
+else # simple SPMD case, one MPI world, old style call, no longer used
 #
   ((TotalInstances=npe_total))
   if [[ ! -x $pgm ]] ; then                        # same executable for all worlds
@@ -671,9 +694,16 @@ fi # complex sequence, possibly MPMD
 # prepare primary launch scripts (one per world)
 #
 MpiCommWorld=0
+export WorldOffset=0
+#
+# prepare tagging format and contents
+#
+tag_values='${RP_CommWorld} ${RP_Member} ${RP_MemberChild}'
+tag_format='%1d-%4.4d-%4.4d'
 while ((MpiCommWorld<MpiCommWorlds))
 do
-#
+# ${PeInWorld[${MpiCommWorld}]} ${MembersInWorld[${MpiCommWorld}]} $WorldOffset
+  ((npex=${PeInWorld[${MpiCommWorld}]}/${MembersInWorld[${MpiCommWorld}]}))
   cat <<EOT >${ParallelScript}.${MpiCommWorld}
 #!/bin/ksh93
 [[ -n "${debug}" ]] && set -x
@@ -685,21 +715,24 @@ if [[ -z \${ENVIRONMENT_PASSED} ]] ; then
 fi
 typeset -Z4 MP_SeqNum    # NOT VALID FOR bash, ksh family only
 ((MP_CHILD=MP_CHILD+ChildOffset))   # need to add ChildOffset for this MPI world to MP_CHILD (always 0 for poe)
-export RP_CommWorld=${MpiCommWorld}
-export MP_SeqNum="\$((MP_CHILD))"
-export RP_Child="\$((MP_CHILD))"
-export RP_Member=\$((MP_CHILD/${npex}+${offset}))
-export RP_MemberChild=\$((MP_CHILD-MP_CHILD/${npex}*${npex}))
-#echo "INFO: redirecting to ${RedirectStdout}, MP_SeqNum=\${MP_SeqNum}, MP_CHILD=\${MP_CHILD}"
+export RP_WorldChild
+((RP_WorldChild=MP_CHILD-${WorldOffset}))   # child ordinal in this world
+export RP_CommWorld=${MpiCommWorld}         # this world ordinal
+export MP_SeqNum="\$((MP_CHILD))"           # global sequence number
+export RP_Child="\$((MP_CHILD))"            # global child number, same as MP_CHILD
+export RP_Member=\$((RP_WorldChild/${npex}+${offset}))      # member number in this world (including offset)
+export RP_MemberChild=\$((RP_WorldChild-RP_WorldChild/${npex}*${npex}))   # child ordinal within this member
 [[ -n "${debug}" ]] && env | sort >${tmpdir}/.mpi_env_\$\$_\$(hostname)
 #
 touch ${tmpdir}/fail.\${MP_SeqNum}
+/usr/bin/printf '${tag_format}' ${tag_values} >${tmpdir}/\${MP_SeqNum}/stdtag
 . ${MpiRunScript}.${MpiCommWorld}  ${RedirectStdout} ${RedirectStderr}
 EOT
 #
   chmod 755 ${ParallelScript}.${MpiCommWorld}
+  ((WorldOffset=WorldOffset+${PeInWorld[${MpiCommWorld}]}))
   ((MpiCommWorld=MpiCommWorld+1))
-done
+done    # while ((MpiCommWorld<MpiCommWorlds))
 #
 # we are now almost ready to launch
 #
