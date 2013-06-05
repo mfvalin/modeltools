@@ -691,7 +691,7 @@ else # simple SPMD case, one MPI world, old style call
 #!/bin/ksh93
 export RPN_COMM_DOM='${NDomains}${RPN_COMM_DOM}'
 export RPN_COMM_DIRS="${RPN_COMM_DIRS}"
-export OMP_NUM_THREADS=${NLThreads:-OMP_NUM_THREADS}
+export OMP_NUM_THREADS=${NLThreads:-${OMP_NUM_THREADS}}
 ((WORLD_CHILD=MP_CHILD))
 export WORLD_CHILD
 /usr/bin/printf "============== stdout W:${MpiCommWorld}:%4.4d M:%4.4d-%4.4d G:%s ==============\n" \${RP_WorldChild} \${RP_Member} \${RP_MemberChild} \${MP_SeqNum}
