@@ -676,7 +676,7 @@ EOT
   done # while [[ "$1" != "" ]]
 #
   if [[ "$ErRoR" != "0" ]] ; then echo "$ErRoR ERROR(S) detected" ; local_cleanup ; exit 1 ; fi
-else # simple SPMD case, one MPI world, old style call, no longer used
+else # simple SPMD case, one MPI world, old style call
 #
   ((TotalInstances=npe_total))
   if [[ ! -x $pgm ]] ; then                        # same executable for all worlds
@@ -696,7 +696,7 @@ export OMP_NUM_THREADS=${NLThreads:-OMP_NUM_THREADS}
 export WORLD_CHILD
 /usr/bin/printf "============== stdout W:${MpiCommWorld}:%4.4d M:%4.4d-%4.4d G:%s ==============\n" \${RP_WorldChild} \${RP_Member} \${RP_MemberChild} \${MP_SeqNum}
 EOT
-  echo ${preexec} $pgm $args >>${MpiRunScript}.0   # MpiCommWorld is 0 in this case
+  echo "${preexec} $pgm $args  && rm -f ${tmpdir}/fail.\${MP_SeqNum}" >>${MpiRunScript}.0   # MpiCommWorld is 0 in this case
   echo "${npe_total} instances of '$pgm'"
 #
 fi # complex sequence, possibly MPMD
