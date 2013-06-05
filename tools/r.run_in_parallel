@@ -549,7 +549,7 @@ RPN_COMM_DIRS="' '"
 SetCurrentDir=$(pwd -P)
 set -- $pgm @@
 #
-if [[ "$2" != "" ]] ; then # complex sequence, SPMD or MPMD, (automatic multiple MPI worlds with @@)
+if [[ "$3" != "" ]] ; then # complex sequence, SPMD or MPMD, (automatic multiple MPI worlds with @@)
   ((ErRoR=0))
   ((NDomains=0))
   ((Next=0))
@@ -686,6 +686,16 @@ else # simple SPMD case, one MPI world, old style call, no longer used
   MpiCommWorld=0
   MpiCommWorlds=1
   PeInWorld[0]=${npe_total}
+  MembersInWorld[0]=${npey}
+  cat <<EOT >${MpiRunScript}.${MpiCommWorld}
+#!/bin/ksh93
+export RPN_COMM_DOM='${NDomains}${RPN_COMM_DOM}'
+export RPN_COMM_DIRS="${RPN_COMM_DIRS}"
+export OMP_NUM_THREADS=${NLThreads:-OMP_NUM_THREADS}
+((WORLD_CHILD=MP_CHILD))
+export WORLD_CHILD
+/usr/bin/printf "============== stdout W:${MpiCommWorld}:%4.4d M:%4.4d-%4.4d G:%s ==============\n" \${RP_WorldChild} \${RP_Member} \${RP_MemberChild} \${MP_SeqNum}
+EOT
   echo ${preexec} $pgm $args >>${MpiRunScript}.0   # MpiCommWorld is 0 in this case
   echo "${npe_total} instances of '$pgm'"
 #
