@@ -146,19 +146,20 @@ mpiexec_AIX() {
 #
 # cleanup of tmpdir directory used for launch help files and listings
 #
+ListFailed2(){
+  printf "$(cat ${1}/stdtag)\n"
+}
 ListFailed() {
   if [[ "${e}" == YES ]] ; then
     echo "ERROR: some processes have failed during execution"
-    (cd ${tmpdir} ; ls -1 | grep 'fail[.]' | sed 's/fail.//' | xargs -l10 /bin/echo ; rm -f fail.* )
-  else
-    (cd ${tmpdir} ; rm -f fail.* )
+    (cd ${tmpdir} ; for Target in $(ls -1 | grep 'fail[.]' | sed 's/fail.//') ; do  ListFailed2 ${Target} ; done | xargs -l5 /bin/echo  )
   fi
 }
 local_cleanup() {
  ExitStatus=0
- ls -1 ${tmpdir}/fail.* 2>/dev/null 1>/dev/null && ListFailed && ExitStatus=1
+ rm ${tmpdir}/fail.*  2>/dev/null 1>/dev/null && ExitStatus=1
  [[ -n ${nocleanup} ]] && return $ExitStatus  # -nocleanup option used, return
- rm -f ${ParallelScript}* ${MP_HOSTFILE} ${MpiRunScript}* ${tmpdir}/MY_NODEFILE* ${selftest} ${tmpdir}/.mpi_env*
+ rm -f ${ParallelScript}* ${MP_HOSTFILE} ${MpiRunScript}* ${tmpdir}/MY_NODEFILE* ${selftest} ${tmpdir}/.mpi_env* ${tmpdir}/fail.*
  rmdir ${tmpdir} 2>/dev/null 1>/dev/null || true
  [[ -d "${tmpdir}" ]] && \
  echo INFO: leftovers found in ${tmpdir} && \
@@ -737,6 +738,7 @@ export RP_MemberChild=\$((RP_WorldChild-RP_WorldChild/${npex}*${npex}))   # chil
 touch ${tmpdir}/fail.\${MP_SeqNum}
 /usr/bin/printf '${tag_format}' ${tag_values} >${tmpdir}/\${MP_SeqNum}/stdtag
 . ${MpiRunScript}.${MpiCommWorld}  ${RedirectStdout} ${RedirectStderr}
+true
 EOT
 #
   chmod 755 ${ParallelScript}.${MpiCommWorld}
@@ -780,6 +782,7 @@ fi
 #
 # post process/order listings if required
 #
+ListFailed
 if [[ -n ${packoutput} && -n ${processorder} ]] ; then
   ( cd ${tmpdir} ; ${packoutput} [0-9]*[0-9] ; clean_output [0-9]*[0-9] )
 fi
