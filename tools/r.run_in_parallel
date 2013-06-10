@@ -147,9 +147,20 @@ mpiexec_AIX() {
 # cleanup of tmpdir directory used for launch help files and listings
 #
 ListFailed2(){
-  printf "$(cat ${1}/stdtag)\n"
+  FullTag="$(cat ${1}/stdtag)"
+  WorldTag="${FullTag%%-*}-"
+  FullTag=${FullTag#*-}
+  MemberTag="${FullTag%-*}"
+  ChildTag="${FullTag#*-}"
+  ((MpiCommWorlds<2)) && WorldTag=""  # one MPI world only, no need to tag
+  Prefix="${WorldTag}${MemberTag}-${ChildTag}"
+  [[ "${tag}" == member ]] && Prefix="${MemberTag}"
+  [[ "${tag}" == child  ]] && Prefix="${ChildTag}"
+  [[ "${tag}" == seq    ]] && Prefix="${1}"
+  printf "${Prefix}\n"
 }
 ListFailed() {
+  ls ${tmpdir}/fail.*  2>/dev/null 1>/dev/null || return 0
   if [[ "${e}" == YES ]] ; then
     echo "ERROR: some processes have failed during execution"
     (cd ${tmpdir} ; for Target in $(ls -1 | grep 'fail[.]' | sed 's/fail.//') ; do  ListFailed2 ${Target} ; done | xargs -l5 /bin/echo  )
@@ -159,7 +170,7 @@ local_cleanup() {
  ExitStatus=0
  rm ${tmpdir}/fail.*  2>/dev/null 1>/dev/null && ExitStatus=1
  [[ -n ${nocleanup} ]] && return $ExitStatus  # -nocleanup option used, return
- rm -f ${ParallelScript}* ${MP_HOSTFILE} ${MpiRunScript}* ${tmpdir}/MY_NODEFILE* ${selftest} ${tmpdir}/.mpi_env* ${tmpdir}/fail.*
+ rm -f ${ParallelScript}* ${MP_HOSTFILE} ${MpiRunScript}* ${tmpdir}/MY_NODEFILE* ${selftest} ${tmpdir}/.mpi_env* ${tmpdir}/fail.* ${tmpdir}/mpi_[cf]_test
  rmdir ${tmpdir} 2>/dev/null 1>/dev/null || true
  [[ -d "${tmpdir}" ]] && \
  echo INFO: leftovers found in ${tmpdir} && \
@@ -243,7 +254,7 @@ void main(int argc, char **argv)
  gethostname(hostname, 1023);
  MPI_Init(&argc,&argv);
  MPI_Comm_rank(MPI_COMM_WORLD , &my_rank);
- printf("host = %s, rank = %d \n",hostname,my_rank);
+ printf("host = %s, C process rank = %d \n",hostname,my_rank);
  MPI_Finalize();
 }
 EOT
@@ -252,21 +263,26 @@ program demo
 include 'mpif.h'
 call mpi_init(ierr)
 call mpi_comm_rank(MPI_COMM_WORLD,myrank,ierr)
-print *,"I am process no",myrank
+print *,"FORTRAN process no",myrank
 call mpi_finalize(ierr)
 stop
 end
 EOT
 #
 echo INFO: compiling C test program mpi_c_test.c into mpi_c_test
-which mpicc 2>/dev/null 1>/dev/null && mpicc -o ${tmpdir}/mpi_c_test ${tmpdir}/mpi_c_test.c
-which mpcc 2>/dev/null 1>/dev/null && mpcc -o ${tmpdir}/mpi_c_test ${tmpdir}/mpi_c_test.c
+which mpicc 2>/dev/null 1>/dev/null && \
+  mpicc -o ${tmpdir}/mpi_c_test ${tmpdir}/mpi_c_test.c
+which mpcc 2>/dev/null 1>/dev/null && \
+  mpcc -o ${tmpdir}/mpi_c_test ${tmpdir}/mpi_c_test.c
 echo INFO: removing C test program source mpi_c_test.c
 rm ${tmpdir}/mpi_c_test.c
 #
 echo INFO: compiling Fortran test program mpi_f_test.f90 into mpi_f_test
-which mpif90 2>/dev/null 1>/dev/null && mpif90 ${tmpdir}/mpi_f_test.f90 -mp -o ${tmpdir}/mpi_f_test
-which mpxlf90_r 2>/dev/null 1>/dev/null && mpxlf90_r ${tmpdir}/mpi_f_test.f90 -o ${tmpdir}/mpi_f_test
+which mpif90 2>/dev/null 1>/dev/null && \
+  mpif90 ${tmpdir}/mpi_f_test.f90 -mp -o ${tmpdir}/mpi_f_test 2>/dev/null || \
+  mpif90 ${tmpdir}/mpi_f_test.f90 -o ${tmpdir}/mpi_f_test
+which mpxlf90_r 2>/dev/null 1>/dev/null && \
+  mpxlf90_r ${tmpdir}/mpi_f_test.f90 -o ${tmpdir}/mpi_f_test
 echo INFO: removing Fortran test source program mpi_f_test.f90 
 rm ${tmpdir}/mpi_f_test.f90
 }
