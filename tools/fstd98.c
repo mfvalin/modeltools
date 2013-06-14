@@ -2692,8 +2692,9 @@ int c_fstvoi(int iun,char *options)
    char cdt[6]={'X','R','I','C','S','E'};
    ftnword f_datev;
    double nhours;
-   int deet,npas,i_nhours,run;
+   int deet,npas,run;
    unsigned int datexx;
+   long long deetnpas,i_nhours;
  
    index_fnom = fnom_index(iun);
    if (index_fnom == -1) {
@@ -2809,7 +2810,8 @@ int c_fstvoi(int iun,char *options)
          stdf_entry->date_stamp = seq_entry->date;
          deet = stdf_entry->deet;
          npas = stdf_entry->npas;
-         if (((deet*npas) % 3600) != 0) {
+         deetnpas = npas ; deetnpas = deetnpas * deet ;
+         if ((deetnpas % 3600) != 0) {
            /*
             *  recompute datev to take care of rounding used with 1989 version
             *  de-octalise the date_stamp
@@ -2818,8 +2820,9 @@ int c_fstvoi(int iun,char *options)
            datexx = (stdf_entry->date_stamp >> 3) * 10 + run;
            
            f_datev = (ftnword) datexx;
-           i_nhours = (deet*npas - ((deet*npas+1800)/3600)*3600);
-           nhours = (double) (i_nhours / 3600.0);
+           i_nhours = (deetnpas - ((deetnpas+1800)/3600)*3600);
+           nhours = i_nhours;
+           nhours = (nhours / 3600.0);
            f77name(incdatr)(&f_datev,&f_datev,&nhours);
            datexx = (unsigned int) f_datev;
            /*
