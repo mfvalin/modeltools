@@ -146,19 +146,31 @@ mpiexec_AIX() {
 #
 # cleanup of tmpdir directory used for launch help files and listings
 #
+ListFailed2(){
+  FullTag="$(cat ${1}/stdtag)"
+  WorldTag="${FullTag%%-*}-"
+  FullTag=${FullTag#*-}
+  MemberTag="${FullTag%-*}"
+  ChildTag="${FullTag#*-}"
+  ((MpiCommWorlds<2)) && WorldTag=""  # one MPI world only, no need to tag
+  Prefix="${WorldTag}${MemberTag}-${ChildTag}"
+  [[ "${tag}" == member ]] && Prefix="${MemberTag}"
+  [[ "${tag}" == child  ]] && Prefix="${ChildTag}"
+  [[ "${tag}" == seq    ]] && Prefix="${1}"
+  printf "${Prefix}\n"
+}
 ListFailed() {
+  ls ${tmpdir}/fail.*  2>/dev/null 1>/dev/null || return 0
   if [[ "${e}" == YES ]] ; then
     echo "ERROR: some processes have failed during execution"
-    (cd ${tmpdir} ; ls -1 | grep 'fail[.]' | sed 's/fail.//' | xargs -l10 /bin/echo ; rm -f fail.* )
-  else
-    (cd ${tmpdir} ; rm -f fail.* )
+    (cd ${tmpdir} ; for Target in $(ls -1 | grep 'fail[.]' | sed 's/fail.//') ; do  ListFailed2 ${Target} ; done | xargs -l5 /bin/echo  )
   fi
 }
 local_cleanup() {
  ExitStatus=0
- ls -1 ${tmpdir}/fail.* 2>/dev/null 1>/dev/null && ListFailed && ExitStatus=1
+ rm ${tmpdir}/fail.*  2>/dev/null 1>/dev/null && ExitStatus=1
  [[ -n ${nocleanup} ]] && return $ExitStatus  # -nocleanup option used, return
- rm -f ${ParallelScript}* ${MP_HOSTFILE} ${MpiRunScript}* ${tmpdir}/MY_NODEFILE* ${selftest} ${tmpdir}/.mpi_env*
+ rm -f ${ParallelScript}* ${MP_HOSTFILE} ${MpiRunScript}* ${tmpdir}/MY_NODEFILE* ${selftest} ${tmpdir}/.mpi_env* ${tmpdir}/fail.* ${tmpdir}/mpi_[cf]_test
  rmdir ${tmpdir} 2>/dev/null 1>/dev/null || true
  [[ -d "${tmpdir}" ]] && \
  echo INFO: leftovers found in ${tmpdir} && \
@@ -222,9 +234,9 @@ clean_output() {   #  get rid of captured stdout/stderr files into stdout
 }
 # ===========================================================================
 #
-# create the MPI C executable used in the self test
+# create the MPI C and Fortran executables used in the self test
 # 
-make_c_test() {
+make_cf_test() {
 echo INFO: creating C test program source mpi_c_test.c
 echo INFO: creating Fortran test program source mpi_f_test.f90
 #
@@ -242,7 +254,7 @@ void main(int argc, char **argv)
  gethostname(hostname, 1023);
  MPI_Init(&argc,&argv);
  MPI_Comm_rank(MPI_COMM_WORLD , &my_rank);
- printf("host = %s, rank = %d \n",hostname,my_rank);
+ printf("host = %s, C process rank = %d \n",hostname,my_rank);
  MPI_Finalize();
 }
 EOT
@@ -251,21 +263,28 @@ program demo
 include 'mpif.h'
 call mpi_init(ierr)
 call mpi_comm_rank(MPI_COMM_WORLD,myrank,ierr)
-print *,"I am process no",myrank
+write(6,*)"FORTRAN process no",myrank
 call mpi_finalize(ierr)
 stop
 end
 EOT
 #
 echo INFO: compiling C test program mpi_c_test.c into mpi_c_test
-which mpicc 2>/dev/null 1>/dev/null && mpicc -o ${tmpdir}/mpi_c_test ${tmpdir}/mpi_c_test.c
-which mpcc 2>/dev/null 1>/dev/null && mpcc -o ${tmpdir}/mpi_c_test ${tmpdir}/mpi_c_test.c
+which mpicc 2>/dev/null 1>/dev/null && \
+  mpicc -o ${tmpdir}/mpi_c_test ${tmpdir}/mpi_c_test.c
+which mpcc 2>/dev/null 1>/dev/null && \
+  mpcc -o ${tmpdir}/mpi_c_test ${tmpdir}/mpi_c_test.c
 echo INFO: removing C test program source mpi_c_test.c
 rm ${tmpdir}/mpi_c_test.c
 #
 echo INFO: compiling Fortran test program mpi_f_test.f90 into mpi_f_test
-which mpif90 2>/dev/null 1>/dev/null && mpif90 ${tmpdir}/mpi_f_test.f90 -mp -o ${tmpdir}/mpi_f_test
-which mpxlf90_r 2>/dev/null 1>/dev/null && mpxlf90_r ${tmpdir}/mpi_f_test.f90 -o ${tmpdir}/mpi_f_test
+which mpif90 2>/dev/null 1>/dev/null && \
+  mpif90 ${tmpdir}/mpi_f_test.f90 -mp -o ${tmpdir}/mpi_f_test 2>/dev/null || \
+  mpif90 ${tmpdir}/mpi_f_test.f90 -o ${tmpdir}/mpi_f_test
+which mpxlf90_r 2>/dev/null 1>/dev/null && \
+  mpxlf90_r ${tmpdir}/mpi_f_test.f90 -o ${tmpdir}/mpi_f_test
+[[ -x ${tmpdir}/mpi_f_test ]] && echo INFO: mpi_f_test created
+[[ -x ${tmpdir}/mpi_c_test ]] && echo INFO: mpi_c_test created
 echo INFO: removing Fortran test source program mpi_f_test.f90 
 rm ${tmpdir}/mpi_f_test.f90
 }
@@ -525,13 +544,13 @@ rm -f ${tmpdir}/mpi_c_test ${tmpdir}/mpi_f_test
 sleep \${1:-5}
 EOT
  chmod 755 ${selftest}
- [[ ${nompi} == run_with_mpi ]] && make_c_test  # create C program and compile it only in MPI case
+ [[ ${nompi} == run_with_mpi ]] && make_cf_test  # create programs and compile them only if using MPI
 fi
 #
 # primary and secondary launching scripts
 #
-export MpiRunScript=${tmpdir}/MpiRunScript_$$
-export ParallelScript=${tmpdir}/ParallelScript_$$
+export MpiRunScript=${tmpdir}/MpiRunScript_$$       # secondary script(s), one per "MPI" world
+export ParallelScript=${tmpdir}/ParallelScript_$$   # primary script(s), one per "MPI" world, will source secondary script(s)
 touch ${ParallelScript}.0
 [[ ! -r ${ParallelScript}.0 ]] && echo "ERROR: ${tmpdir} not a writable directory" 1>&2 && exit 1
 #
@@ -545,11 +564,11 @@ export RedirectStderr="2>${tmpdir}/\${MP_SeqNum}/stderr"   # will be expanded at
 # communication variables for RPN_COMM toolkit
 #
 RPN_COMM_DOM=""
-RPN_COMM_DIRS="' '"
+RPN_COMM_DIRS="' '"     # RPN_COMM_DIRS no longer used, cd done in secondary script(s)
 SetCurrentDir=$(pwd -P)
 set -- $pgm @@
 #
-if [[ "$2" != "" ]] ; then # complex sequence, SPMD or MPMD, (automatic multiple MPI worlds with @@)
+if [[ "$3" != "" ]] ; then # complex sequence, SPMD or MPMD, (automatic multiple MPI worlds with @@)
   ((ErRoR=0))
   ((NDomains=0))
   ((Next=0))
@@ -567,7 +586,7 @@ if [[ "$2" != "" ]] ; then # complex sequence, SPMD or MPMD, (automatic multiple
   do
     [[ "${1}" == "@@" && "${2}" == "@@" ]]          && shift && continue   # two @@ flags back to back, eliminate first one
     [[ "${1}" == /./* ]]  && SetCurrentDir=${1#/./} && shift && continue   # used by master from slave to set slave base work directory
-    [[  "${1}" == %%* ]]  && NLThreads=${1#%%}      && shift && continue   # from slave to set number of threads per task
+    [[ "${1}" == %%* ]]   && NLThreads=${1#%%}      && shift && continue   # from slave to set number of threads per task
     if [[  "${1}" == ::* ]] ; then  # used by master from slave to set number of tasks for this slave
       npe_total=${1#::}
       if [[ ${npe_total} == *x* ]] ; then
@@ -582,7 +601,6 @@ if [[ "$2" != "" ]] ; then # complex sequence, SPMD or MPMD, (automatic multiple
       continue
     fi
 #
-#
     if [[ "${1}" == "@@" ]] ; then  #  wrap up a world
       NLThreads=${NLThreads:-${OMP_NUM_THREADS:-1}}
       PeInWorld[${MpiCommWorld}]=${Instances}
@@ -590,7 +608,7 @@ if [[ "$2" != "" ]] ; then # complex sequence, SPMD or MPMD, (automatic multiple
       ThreadsInWorld[${MpiCommWorld}]=${NLThreads}
       ((TotalThreads=TotalThreads*NLThreads))
       echo "INFO: MPI world ${MpiCommWorld} will be using ${NLThreads} thread(s) per task"
-#     make sure that MaxPe <= npe_total (no overflow) and Instances == MaxPe (no holes)
+#     make sure that MaxPe <= npe_total (no overflow) and Instances == MaxPe+1 (no holes)
       ((Instances != MaxPe+1)) && echo "ERROR: holes found, Instances=${Instances}, MaxPe=${MaxPe}" && ((ErRoR=ErRoR+1))
       ((MaxPe > npe_total)) && echo "ERROR: task number overflow, MaxPe(${MaxPe}) > npe_total(${npe_total})" && ((ErRoR=ErRoR+1))
       rm -f ${MpirunScript}.${MpiCommWorld}
@@ -625,7 +643,7 @@ EOT
       unset NLThreads
       shift
       continue
-    fi  #  "${1}" == "@@"  wrap up a world
+    fi  #  if "${1}" == "@@"  wrap up a world
 #
     ((NDomains=NDomains+1))
     Temp="${1}"
@@ -676,7 +694,7 @@ EOT
   done # while [[ "$1" != "" ]]
 #
   if [[ "$ErRoR" != "0" ]] ; then echo "$ErRoR ERROR(S) detected" ; local_cleanup ; exit 1 ; fi
-else # simple SPMD case, one MPI world, old style call, no longer used
+else # simple SPMD case, one MPI world, old style call
 #
   ((TotalInstances=npe_total))
   if [[ ! -x $pgm ]] ; then                        # same executable for all worlds
@@ -686,7 +704,17 @@ else # simple SPMD case, one MPI world, old style call, no longer used
   MpiCommWorld=0
   MpiCommWorlds=1
   PeInWorld[0]=${npe_total}
-  echo ${preexec} $pgm $args >>${MpiRunScript}.0   # MpiCommWorld is 0 in this case
+  MembersInWorld[0]=${npey}
+  cat <<EOT >${MpiRunScript}.${MpiCommWorld}
+#!/bin/ksh93
+export RPN_COMM_DOM='${NDomains}${RPN_COMM_DOM}'
+export RPN_COMM_DIRS="${RPN_COMM_DIRS}"
+export OMP_NUM_THREADS=${NLThreads:-${OMP_NUM_THREADS}}
+((WORLD_CHILD=MP_CHILD))
+export WORLD_CHILD
+/usr/bin/printf "============== stdout W:${MpiCommWorld}:%4.4d M:%4.4d-%4.4d G:%s ==============\n" \${RP_WorldChild} \${RP_Member} \${RP_MemberChild} \${MP_SeqNum}
+EOT
+  echo "${preexec} $pgm $args  && rm -f ${tmpdir}/fail.\${MP_SeqNum}" >>${MpiRunScript}.0   # MpiCommWorld is 0 in this case
   echo "${npe_total} instances of '$pgm'"
 #
 fi # complex sequence, possibly MPMD
@@ -717,7 +745,7 @@ typeset -Z4 MP_SeqNum    # NOT VALID FOR bash, ksh family only
 ((MP_CHILD=MP_CHILD+ChildOffset))   # need to add ChildOffset for this MPI world to MP_CHILD (always 0 for poe)
 export RP_WorldChild
 ((RP_WorldChild=MP_CHILD-${WorldOffset}))   # child ordinal in this world
-export RP_CommWorld=${MpiCommWorld}         # this world ordinal
+export RP_CommWorld=${MpiCommWorld}         # ordinal of this MPI world 
 export MP_SeqNum="\$((MP_CHILD))"           # global sequence number
 export RP_Child="\$((MP_CHILD))"            # global child number, same as MP_CHILD
 export RP_Member=\$((RP_WorldChild/${npex}+${offset}))      # member number in this world (including offset)
@@ -727,6 +755,7 @@ export RP_MemberChild=\$((RP_WorldChild-RP_WorldChild/${npex}*${npex}))   # chil
 touch ${tmpdir}/fail.\${MP_SeqNum}
 /usr/bin/printf '${tag_format}' ${tag_values} >${tmpdir}/\${MP_SeqNum}/stdtag
 . ${MpiRunScript}.${MpiCommWorld}  ${RedirectStdout} ${RedirectStderr}
+true
 EOT
 #
   chmod 755 ${ParallelScript}.${MpiCommWorld}
@@ -770,7 +799,8 @@ fi
 #
 # post process/order listings if required
 #
-if [[ -n ${packoutput} && -n ${processorder} ]] ; then
+[[ "${e}" == YES ]] && ListFailed
+if [[ -n ${packoutput} && -n ${processorder} ]] ; then   # post process stderr/stdout from all processes
   ( cd ${tmpdir} ; ${packoutput} [0-9]*[0-9] ; clean_output [0-9]*[0-9] )
 fi
 #

@@ -35,7 +35,7 @@ int main(int argc, char **argv, char **envp) {
     perror("execve");   /* execve() only returns on error */
     exit(EXIT_FAILURE);
 
-  }else{   /* chhild process */
+  }else{   /* child process */
 
     /* the child watches the parent */
     while( (maxwall-->0) && ((pidst=kill(pid,0))== 0)) sleep(1)  ;  /* while there is time and parent is alive */
