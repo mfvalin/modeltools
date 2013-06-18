@@ -1674,7 +1674,7 @@ ftnword f77name(ip3_val)(ftnfloat *f_level, ftnword *f_kind)
  *                                                                           * 
  *Revision                                                                   * 
  * 002   B. Dugas -   Oct 2012, ip23 buffer overflow correction              * 
- * 003   M. Valin -   FEb 2013, introduction of missing data flag            * 
+ * 003   M. Valin -   Feb 2013, introduction of missing data flag            * 
  *                                                                           * 
  *Arguments                                                                  * 
  *                                                                           * 
