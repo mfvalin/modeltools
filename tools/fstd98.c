@@ -333,6 +333,7 @@ int c_fstecr(word *field_in, void * work, int npak,
   int is_missing ; /*  missing value feature used flag */
   int in_datyp = in_datyp_ori & 0xFFBF ; /* suppress missing value flag (64) */
   int sizefactor ; /* number of bytes per data item */
+  int IEEE_64=0  ; /* flag 64 bit IEEE (type 5) */
   
   file_table_entry *f;
   stdf_dir_keys *stdf_entry;
@@ -413,6 +414,8 @@ int c_fstecr(word *field_in, void * work, int npak,
     nbits = 32;
     minus_nbits = -32;
     }
+
+  if ( ((in_datyp & 0xF) == 5) && (nbits == 64) ) IEEE_64=1;  /* 64 bits IEEE */
     
   /* validate range of arguments */
   VALID(ni,1,NI_MAX,"ni","c_fstecr")
@@ -619,7 +622,7 @@ int c_fstecr(word *field_in, void * work, int npak,
     sizefactor=4 ;
     if(xdf_byte)  sizefactor=1 ;
     if(xdf_short) sizefactor=2 ;
-    if(xdf_double)sizefactor=8 ;
+    if(xdf_double | IEEE_64)sizefactor=8 ;
     if(is_missing){    /* put appropriate values into field after allocating it */
       field= (word *) alloca(ni*nj*nk*sizefactor); /* allocate self deallocating scratch field */
       if( 0 == EncodeMissingValue(field,field_in,ni*nj*nk,in_datyp,nbits,xdf_byte,xdf_short,xdf_double) ) {
@@ -3061,7 +3064,7 @@ int c_ip2_all(float level, int kind)
   
   mode = 2;
   f77name(convip)(&ip_new,&level,&kind,&mode,s,&flag);
-  ips_tab[0][ip_nb[1]] = ip_new;
+  ips_tab[1][ip_nb[1]] = ip_new;
   ip_nb[1]++;
   if (ip_nb[1] >= Max_Ipvals) {
     fprintf(stderr,"ip1 table full (ip_nb=%d)\n",ip_nb[1]);
@@ -3073,7 +3076,7 @@ int c_ip2_all(float level, int kind)
     f77name(convip)(&ip_old,&level,&kind,&mode,s,&flag);
   else
     ip_old = -9999;     /* no valid value for oldtype */
-  ips_tab[0][ip_nb[1]] = ip_old;
+  ips_tab[1][ip_nb[1]] = ip_old;
   ip_nb[1]++;
  
   if (ip_nb[1] > Max_Ipvals) {
@@ -3108,7 +3111,7 @@ int c_ip3_all(float level, int kind)
   
   mode = 2;
   f77name(convip)(&ip_new,&level,&kind,&mode,s,&flag);
-  ips_tab[0][ip_nb[2]] = ip_new;
+  ips_tab[2][ip_nb[2]] = ip_new;
   ip_nb[2]++;
   if (ip_nb[2] >= Max_Ipvals) {
     fprintf(stderr,"ip1 table full (ip_nb=%d)\n",ip_nb[2]);
@@ -3120,7 +3123,7 @@ int c_ip3_all(float level, int kind)
     f77name(convip)(&ip_old,&level,&kind,&mode,s,&flag);
   else
     ip_old = -9999;     /* no valid value for oldtype */
-  ips_tab[0][ip_nb[2]] = ip_old;
+  ips_tab[2][ip_nb[2]] = ip_old;
   ip_nb[2]++;
  
   if (ip_nb[2] > Max_Ipvals) {
@@ -3187,7 +3190,7 @@ int c_ip2_val(float level, int kind)
   
   mode = 2;
   f77name(convip)(&ip_new,&level,&kind,&mode,s,&flag);
-  ips_tab[0][ip_nb[1]] = ip_new;
+  ips_tab[1][ip_nb[1]] = ip_new;
   ip_nb[1]++;
   if (ip_nb[1] >= Max_Ipvals) {
     fprintf(stderr,"ip1 table full (ip_nb=%d)\n",ip_nb[1]);
@@ -3220,7 +3223,7 @@ int c_ip3_val(float level, int kind)
   
   mode = 2;
   f77name(convip)(&ip_new,&level,&kind,&mode,s,&flag);
-  ips_tab[0][ip_nb[2]] = ip_new;
+  ips_tab[2][ip_nb[2]] = ip_new;
   ip_nb[2]++;
   if (ip_nb[2] >= Max_Ipvals) {
     fprintf(stderr,"ip1 table full (ip_nb=%d)\n",ip_nb[2]);

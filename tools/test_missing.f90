@@ -1,4 +1,4 @@
-program test_missing_values
+subroutine test_missing_values
 !
 !  rm -f missing.fst ; MISSING_VALUE_FLAGS="99.0 127 255" ./a.out
 !
@@ -12,8 +12,8 @@ integer *2, dimension(ASIZE) :: sa, sa2
 integer *1, dimension(ASIZE) :: ba, ba2
 integer *2, dimension(ASIZE) :: usa, usa2
 integer *1, dimension(ASIZE) :: uba, uba2
-real *4, dimension(ASIZE) :: fa, fa2
-real *8, dimension(ASIZE) :: da, da2
+real *4, dimension(ASIZE) :: fa, fa2, fa3
+real *8, dimension(ASIZE) :: da, da2, da3
 integer :: im, uim
 integer *2 :: sm, usm
 integer *1 :: bm, ubm
@@ -23,8 +23,7 @@ integer :: ni, nj, nk
 
 status= get_missing_value_flags(fm,im,uim,dm,sm,usm,bm,ubm)
 print 101,status,fm,dm,im,sm,bm,uim,usm,ubm
-100 format(I2,G14.5,I12,I12,G14.5,I12,I12,I8,I8,I8,I8)
-101 format(I2,2G14.5,8I9)
+101 format(I2,2G14.5,I11,5I7,2G14.5)
 call set_missing_value_flags(fm,im,uim,dm,sm,usm,bm,ubm)
 status= get_missing_value_flags(fm,im,uim,dm,sm,usm,bm,ubm)
 print 101,status,fm,dm,im,sm,bm,uim,usm,ubm
@@ -46,7 +45,7 @@ sa(2)=sm   ; sa(ASIZE-1)=sm ; sa(4)=sm   ; sa(ASIZE-3)=sm
 ba(2)=bm   ; ba(ASIZE-1)=bm ; ba(1)=bm
 uia(3)=uim ; uia(ASIZE-2)=uim
 usa(3)=usm ; usa(ASIZE-2)=usm ; usa(ASIZE)=usm
-!uba(3)=usm ; uba(ASIZE-2)=usm
+uba(3)=ubm ; uba(ASIZE-2)=ubm
 ia(ASIZE/2)=125      ! set to 127 to force error message
 sa(ASIZE/2)=124      ! set to 127 to force error message
 ba(ASIZE/2)=123      ! set to 127 to force error message
@@ -124,15 +123,19 @@ call fstecr(ia,work,-8,11,0,0,0,ASIZE,1,1,1,0,0,'XX','YYYY','ETIKET','X',0,0,0,0
 call fstecr(ia,work,-8,11,0,0,0,ASIZE,1,1,2,0,0,'XX','YYYY','ETIKET','X',0,0,0,0,68,.false.)  ! signed integer with missing
 
 call fstecr(fa,work,-16,11,0,0,0,ASIZE,1,1,3,0,0,'XX','YYYY','ETIKET','X',0,0,0,0,1,.false.)  ! float
+call fstecr(fa,work,-32,11,0,0,0,ASIZE,1,1,19,0,0,'XX','YYYY','ETIKET','X',0,0,0,0,5,.false.)  ! IEEE 32
 call fstecr(fa,work,-16,11,0,0,0,ASIZE,1,1,4,0,0,'XX','YYYY','ETIKET','X',0,0,0,0,65,.false.) ! float with missing
+call fstecr(fa,work,-32,11,0,0,0,ASIZE,1,1,20,0,0,'XX','YYYY','ETIKET','X',0,0,0,0,69,.false.)  ! IEEE 32 with missing
 
 call fstecr(uia,work,-8,11,0,0,0,ASIZE,1,1,5,0,0,'XX','YYYY','ETIKET','X',0,0,0,0,2,.false.)  ! unsigned integer
 call fstecr(uia,work,-8,11,0,0,0,ASIZE,1,1,6,0,0,'XX','YYYY','ETIKET','X',0,0,0,0,66,.false.) ! unsigned integer with missing
 
 call fst_data_length(8)
 call fstecr(da,work,-16,11,0,0,0,ASIZE,1,1,7,0,0,'XX','YYYY','ETIKET','X',0,0,0,0,1,.false.)  ! double
+call fstecr(da,work,-64,11,0,0,0,ASIZE,1,1,17,0,0,'XX','YYYY','ETIKET','X',0,0,0,0,5,.false.)  ! double
 call fst_data_length(8)
 call fstecr(da,work,-16,11,0,0,0,ASIZE,1,1,8,0,0,'XX','YYYY','ETIKET','X',0,0,0,0,65,.false.) ! double with missing
+call fstecr(da,work,-64,11,0,0,0,ASIZE,1,1,18,0,0,'XX','YYYY','ETIKET','X',0,0,0,0,69,.false.) ! IEEE64 with missing
 
 call fst_data_length(2)
 call fstecr(usa,work,-8,11,0,0,0,ASIZE,1,1,9,0,0,'XX','YYYY','ETIKET','X',0,0,0,0,2,.false.)  ! unsigned short
@@ -157,7 +160,10 @@ call fstecr(uba,work,-8,11,0,0,0,ASIZE,1,1,16,0,0,'XX','YYYY','ETIKET','X',0,0,0
 call fstfrm(11)
 !  set new flag values before reading so we can see the difference 'type n' vs 'type n+64'
 fm=-999.99; dm=-888.88; im=-999999; sm=-32768 ; bm=-128; uim=999999 ; usm=32767; ubm=127
+print *,'============================== missing values ============================='
+print *,'#     float        double            int  short   byte   uint ushort  ubyte'
 call set_missing_value_flags(fm,im,uim,dm,sm,usm,bm,ubm)
+print 101,status,fm,dm,im,sm,bm,uim,usm,ubm
 print *,'============= reading from standard file with and without missing values ============'
 status=fnom(12,'missing.fst','STD+RND+OLD',0)
 print *,'status fnom=',status
@@ -169,8 +175,10 @@ status=fstlir(ia2,12,ni,nj,nk,-1,' ',1,-1,-1,' ',' ')     ! integer
 status=fstlir(uia2,12,ni,nj,nk,-1,' ',5,-1,-1,' ',' ')    ! unsigned integer
 
 status=fstlir(fa2,12,ni,nj,nk,-1,' ',3,-1,-1,' ',' ')     ! float
+status=fstlir(fa3,12,ni,nj,nk,-1,' ',19,-1,-1,' ',' ')     ! IEEE 32
 call fst_data_length(8)
 status=fstlir(da2,12,ni,nj,nk,-1,' ',7,-1,-1,' ',' ')     ! double
+status=fstlir(da3,12,ni,nj,nk,-1,' ',17,-1,-1,' ',' ')     ! double
 
 call fst_data_length(2)
 status=fstlir(usa2,12,ni,nj,nk,-1,' ',9,-1,-1,' ',' ')    ! unsigned short
@@ -181,16 +189,22 @@ call fst_data_length(1)
 status=fstlir(ba2,12,ni,nj,nk,-1,' ',13,-1,-1,' ',' ')    ! signed byte
 call fst_data_length(1)
 status=fstlir(uba2,12,ni,nj,nk,-1,' ',15,-1,-1,' ',' ')   ! unsigned byte
+
+print *,'---------------------------------------------------------------------------------------------------'
+print *,'#       float  <f16> double          int  short   byte   uint ushort  ubyte   float   <E64> double'
+print *,'---------------------------------------------------------------------------------------------------'
 do i=1,ASIZE
- print 101,i,fa2(i),da2(i),ia2(i),sa2(i),ba2(i),uia2(i),usa2(i),uba2(i)
+ print 101,i,fa2(i),da2(i),ia2(i),sa2(i),ba2(i),uia2(i),usa2(i),uba2(i),fa3(i),da3(i)
 enddo
 print *,'============= WITH possible missing value(s) ======'
 status=fstlir(ia2,12,ni,nj,nk,-1,' ',2,-1,-1,' ',' ')     ! integer with missing
 status=fstlir(uia2,12,ni,nj,nk,-1,' ',6,-1,-1,' ',' ')    ! unsigned integer with missing
 
 status=fstlir(fa2,12,ni,nj,nk,-1,' ',4,-1,-1,' ',' ')     ! float with missing
+status=fstlir(fa3,12,ni,nj,nk,-1,' ',20,-1,-1,' ',' ')     ! IEE 32 with missing
 call fst_data_length(8)
 status=fstlir(da2,12,ni,nj,nk,-1,' ',8,-1,-1,' ',' ')     ! double with missing
+status=fstlir(da3,12,ni,nj,nk,-1,' ',18,-1,-1,' ',' ')     ! double with missing
 
 call fst_data_length(2)
 status=fstlir(sa2,12,ni,nj,nk,-1,' ',12,-1,-1,' ',' ')    ! signed short with missing
@@ -202,8 +216,11 @@ status=fstlir(ba2,12,ni,nj,nk,-1,' ',14,-1,-1,' ',' ')    ! signed byte with mis
 call fst_data_length(1)
 status=fstlir(uba2,12,ni,nj,nk,-1,' ',16,-1,-1,' ',' ')   ! unsigned byte with missing
 
+print *,'---------------------------------------------------------------------------------------------------'
+print *,'#    float  <f16> double             int  short   byte   uint ushort  ubyte    float  <E64> double'
+print *,'---------------------------------------------------------------------------------------------------'
 do i=1,ASIZE
- print 101,i,fa2(i),da2(i),ia2(i),sa2(i),ba2(i),uia2(i),usa2(i),uba2(i)
+ print 101,i,fa2(i),da2(i),ia2(i),sa2(i),ba2(i),uia2(i),usa2(i),uba2(i),fa3(i),da3(i)
 enddo
 
 call fstfrm(12)
