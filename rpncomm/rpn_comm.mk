@@ -50,8 +50,9 @@ $(STUB_LIBRARY): rpn_comm_fortran_stubs.o rpn_comm_c_stubs.o
 
 $(LIBRARY): $(OBJECTS)
 	mkdir -p $(LIBDIR)
-	ar rcv $(LIBRARY) $(OBJECTS)
-	ar d $(LIBRARY) TEST_stubs.o rpn_comm_c_stubs.o rpn_comm_fortran_stubs.o
+	ar rcv $(LIBRARY)_ $(OBJECTS)
+	ar d $(LIBRARY)_ TEST_stubs.o rpn_comm_c_stubs.o rpn_comm_fortran_stubs.o
+	mv $(LIBRARY)_ $(LIBRARY)
 	(cd $(LIBDIR) ; ln -sf lib$(LIB)_$(RPN_COMM_version).a  lib$(LIB).a)
 	mkdir -p $(INCDIR)
 	cp *.mod $(INCDIR)
