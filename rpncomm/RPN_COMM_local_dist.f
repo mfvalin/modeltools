@@ -16,7 +16,7 @@
 * * Free Software Foundation, Inc., 59 Temple Place - Suite 330,
 * * Boston, MA 02111-1307, USA.
 * */
-      module local_distribution
+      module rpn_comm_localdist
       implicit none
       SAVE
 !
@@ -64,7 +64,7 @@
       integer :: dist_table_size=-1
       integer :: dist_table_entries=-1
 
-      end module local_distribution
+      end module rpn_comm_localdist
 !
 ! ========================================================================================
 !
@@ -73,7 +73,7 @@
 !     (one needed per group of exchange patterns)
 !     function returns -1 if failure
 !     function returns nentries upon success
-      use local_distribution
+      use rpn_comm_localdist
       implicit none
       integer, intent(IN) :: nentries
 
@@ -90,7 +90,7 @@
 ! ========================================================================================
 !
       function RPN_COMM_dist_offsets(pattern,offsets,noffsets)
-      use local_distribution
+      use rpn_comm_localdist
       implicit none
       integer RPN_COMM_dist_offsets
       integer, intent(IN) :: pattern, noffsets
@@ -111,7 +111,7 @@
 ! ========================================================================================
 !
       integer function RPN_COMM_dist_pattern(pattern)  ! is pattern valid ?
-      use local_distribution
+      use rpn_comm_localdist
       implicit none
       integer, intent(IN) :: pattern
 
@@ -136,7 +136,7 @@
 !         metadata(4,N) is the PE ordinal of the other end of the exchange
 !     nmeta has been previously obtained from RPN_COMM_add_dist_entry
 !
-      use local_distribution
+      use rpn_comm_localdist
       implicit none
       integer, intent(IN) :: pattern, nmeta
       integer, intent(OUT), dimension(4,nmeta) :: metadata
@@ -190,7 +190,7 @@
 !     get needed sizes for data and metadata buffers when performing
 !     exchange with table index = pattern performed by function RPN_COMM_do_dist
 !
-      use local_distribution
+      use rpn_comm_localdist
       implicit none
       integer, intent(IN) :: pattern
       integer, intent(OUT) :: ndata, nmeta
@@ -240,7 +240,7 @@
 !     this function builds the exchange tables for the current PE from the
 !     global table
 !
-      use local_distribution
+      use rpn_comm_localdist
 
       implicit none
       integer, intent(IN) :: max_clients,nrows
@@ -359,7 +359,7 @@
 !          .true.  : data flows from root PE to client PEs
 !          .false. : data flows from client PEs to root PE
 !
-      use local_distribution
+      use rpn_comm_localdist
       implicit none
       integer :: RPN_COMM_do_dist
       integer, intent(IN) :: pattern, nvalues
@@ -428,7 +428,7 @@
 ! ========================================================================================
 !
       integer function RPN_COMM_dist_test(npetot)
-      use local_distribution
+      use rpn_comm_localdist
       implicit none
       integer, intent(IN) :: npetot
 
