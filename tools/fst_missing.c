@@ -759,6 +759,9 @@ int EncodeMissingValue(void *field,void *field2,int nvalues,int datatype,int nbi
       missing = fst_uint_encode_missing(field,field2,nvalues,nbits);  /* unsigned integers */
     }
   }
+  if (0 >= msg_level) {
+    fprintf(stderr,"DEBUG: %d missing values in %d data values replaced, base datatype=%d\n",missing,nvalues,datatype);
+  }
   return missing;
 }
 #pragma weak encode_missing_value__ = encode_missing_value
