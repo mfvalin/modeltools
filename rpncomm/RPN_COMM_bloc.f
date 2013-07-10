@@ -78,9 +78,10 @@
         if(t%pe_indomm /= pe_indomm) cycle
         if(t%pe_myrow  /= pe_myrow)  cycle
         if(t%pe_mycol  /= pe_mycol)  cycle
-        RPN_COMM_bloc_find = i       ! all ingredients match, exit loop, t points to proper table entry
+        RPN_COMM_bloc_find = i
         if(set) then  ! set value of variables in module rpn_comm from block distribution table entry 
           BLOC_master     = t%BLOC_master
+          BLOC_exist      = t%BLOC_exist
           BLOC_SIZEX      = t%BLOC_SIZEX
           BLOC_SIZEY      = t%BLOC_SIZEY
           BLOC_myblocx    = t%BLOC_myblocx
@@ -101,7 +102,7 @@
           write(rpn_u,*) 'INFO: found valid block distribution for',
      %                 nblocx,' by',nblocy
         endif
-        exit
+        exit       ! all ingredients match, exit loop
       enddo
       return
       end function RPN_COMM_bloc_find
@@ -200,6 +201,7 @@
      %     pe_blocmaster, ierr)  ! communicator created for blockmasters
 
       t%BLOC_master      = BLOC_master  ! store description of block distribution
+      t%BLOC_EXIST       = BLOC_EXIST
       t%BLOC_SIZEX       = BLOC_SIZEX
       t%BLOC_SIZEY       = BLOC_SIZEY
       t%BLOC_myblocx     = BLOC_myblocx
