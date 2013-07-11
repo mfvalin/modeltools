@@ -40,8 +40,8 @@
       integer, external :: RPN_COMM_bloc_create, RPN_COMM_bloc_find
       integer :: index
 !     old code
-      RPN_COMM_bloc = RPN_COMM_bloc_create(nblocx,nblocy)
-      return
+!      RPN_COMM_bloc = RPN_COMM_bloc_create(nblocx,nblocy)
+!      return
 !     new code
       index = RPN_COMM_bloc_find(nblocx,nblocy,.true.) ! does the required block distribution exist ?
       if(index > 0)then
