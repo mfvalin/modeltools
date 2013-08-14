@@ -56,6 +56,11 @@ c
          RPN_COMM_group=world_group
          return
       endif
+      if (comm(1:8) == RPN_COMM_UNIVERSE) then
+         call MPI_COMM_GROUP(WORLD_COMM_MPI,world_group,ierr)
+         RPN_COMM_group=world_group
+         return
+      endif
       if (comm(1:9) == RPN_COMM_ALLGRIDS) then
          RPN_COMM_group=pe_gr_a_domain
          return

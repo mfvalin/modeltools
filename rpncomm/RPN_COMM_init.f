@@ -67,7 +67,8 @@
         use rpn_comm
         implicit none
         integer world_comm
-        world_comm=WORLD_COMM_MPI
+!        world_comm=WORLD_COMM_MPI ! should rather be the other way around
+        WORLD_COMM_MPI=world_comm
         WORLD_COMM_MPI_INIT=.true.
         return
         end
@@ -243,7 +244,7 @@
              call RPN_COMM_finalize(ierr)
              stop
           endif
-          read(SYSTEM_COMMAND,*)directories
+          read(SYSTEM_COMMAND_2,*)directories
           my_directory=directories(my_color)
 
         else  ! (ncolors .gt. 0) ncolors < 0, all subdomains have the same size
