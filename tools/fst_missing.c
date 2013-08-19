@@ -151,7 +151,9 @@
  * NOTE: this set of routines does not implement full defensive coding. SAFE calls from the
  *       standard file package are expected. USE WITH CARE.
 */
-
+#ifdef SELFTEST
+static int msg_level=0;
+#endif
 #include <stdlib.h>
 #include <stdio.h>
 #include "qstdir.h"
@@ -715,8 +717,118 @@ static void fst_ubyte_decode_missing(unsigned char *z, int n) /* unsigned bytes 
   return;
 }
 
+static void fst_null_decode_missing(void *z, int n) /* null decoder */
+{
+  fprintf(stderr,"using null decoder\n");
+  return;
+}
+
+static int (*__fst_float_encode_missing)() = fst_float_encode_missing;
+static int (*__fst_double_encode_missing)() = fst_double_encode_missing;
+static int (*__fst_int_encode_missing)() = fst_int_encode_missing;
+static int (*__fst_short_encode_missing)() = fst_short_encode_missing;
+static int (*__fst_byte_encode_missing)() = fst_byte_encode_missing;
+static int (*__fst_uint_encode_missing)() = fst_uint_encode_missing;
+static int (*__fst_ushort_encode_missing)() = fst_ushort_encode_missing;
+static int (*__fst_ubyte_encode_missing)() = fst_ubyte_encode_missing;
+
+static void (*__fst_float_decode_missing)() = fst_float_decode_missing;
+static void (*__fst_double_decode_missing)() = fst_double_decode_missing;
+static void (*__fst_int_decode_missing)() = fst_int_decode_missing;
+static void (*__fst_short_decode_missing)() = fst_short_decode_missing;
+static void (*__fst_byte_decode_missing)() = fst_byte_decode_missing;
+static void (*__fst_uint_decode_missing)() = fst_uint_decode_missing;
+static void (*__fst_ushort_decode_missing)() = fst_ushort_decode_missing;
+static void (*__fst_ubyte_decode_missing)() = fst_ubyte_decode_missing;
+
+void RestoreMissingValueMapping(void)
+{
+__fst_float_encode_missing = fst_float_encode_missing;
+__fst_double_encode_missing = fst_double_encode_missing;
+__fst_int_encode_missing = fst_int_encode_missing;
+__fst_short_encode_missing = fst_short_encode_missing;
+__fst_byte_encode_missing = fst_byte_encode_missing;
+__fst_uint_encode_missing = fst_uint_encode_missing;
+__fst_ushort_encode_missing = fst_ushort_encode_missing;
+__fst_ubyte_encode_missing = fst_ubyte_encode_missing;
+  
+__fst_float_decode_missing = fst_float_decode_missing;
+__fst_double_decode_missing = fst_double_decode_missing;
+__fst_int_decode_missing = fst_int_decode_missing;
+__fst_short_decode_missing = fst_short_decode_missing;
+__fst_byte_decode_missing = fst_byte_decode_missing;
+__fst_uint_decode_missing = fst_uint_decode_missing;
+__fst_ushort_decode_missing = fst_ushort_decode_missing;
+__fst_ubyte_decode_missing = fst_ubyte_decode_missing;
+}
+void restore_missing_value_mapping(void) { RestoreMissingValueMapping() ; }
+void restore_missing_value_mapping_(void) { RestoreMissingValueMapping() ; }
+void restore_missing_value_mapping__(void) { RestoreMissingValueMapping() ; }
+
+void SetMissingValueMapping(int decode, int datatype, void *processor_, int is_byte, int is_short, int is_double)
+{
+    void *processor = processor_;
+    if(decode) {     /* replace a decoding routine */
+      if(processor == NULL) processor = fst_null_decode_missing;
+      if(datatype==1 || datatype==5 || datatype==6) { /* float or IEEE */
+        if(is_double) {
+          __fst_double_decode_missing = processor ; /* real or IEEE */
+        }else{
+          __fst_float_decode_missing = processor ; /* real or IEEE */
+        }
+      }
+      if(datatype==4) {  /* signed */
+        if(is_short) {
+          __fst_short_decode_missing = processor ;   /* signed shorts */
+        }else if(is_byte){
+          __fst_byte_decode_missing = processor ;   /* signed bytes */
+        }else{
+          __fst_int_decode_missing = processor ;   /* signed integers */
+        }
+      }
+      if(datatype==2) {  /* unsigned */
+        if(is_short) {
+          __fst_ushort_decode_missing = processor ;   /* uns  SetMissingValueMapping(1,4,NULL,0,0,0);
+          igned shorts */
+        }else if(is_byte){
+          __fst_ubyte_decode_missing = processor ;   /* unsigned bytes */
+        }else{
+          __fst_uint_decode_missing = processor ;   /* unsigned integers */
+        }
+      }
+    }else{           /* replace an encoding routine */
+      if(datatype==1 || datatype==5 || datatype==6) { /* float or IEEE */
+         if(is_double) {
+           __fst_double_encode_missing = processor ; /* real or IEEE */
+         }else{
+           __fst_float_encode_missing = processor ; /* real or IEEE */
+         }
+      }
+      if(datatype==4) {  /* signed */
+        if(is_short) {
+          __fst_short_encode_missing = processor ;   /* signed shorts */
+        }else if(is_byte){
+          __fst_byte_encode_missing = processor ;   /* signed bytes */
+        }else{
+          __fst_int_encode_missing = processor ;   /* signed integers */
+        }
+      }
+      if(datatype==2) {  /* unsigned */
+        if(is_short) {
+          __fst_ushort_encode_missing = processor ;   /* unsigned shorts */
+        }else if(is_byte){
+          __fst_ubyte_encode_missing = processor ;   /* unsigned bytes */
+        }else{
+          __fst_uint_encode_missing = processor ;   /* unsigned integers */
+        }
+      }
+    }
+}
+
+/*
 int EncodeMissingValue(void *field,void *field2,int nvalues,int datatype,int nbits,int is_byte,int is_short,int is_double);
 void DecodeMissingValue(void *field,int nvalues,int datatype,int is_byte,int is_short,int is_double);
+*/
 
 int EncodeMissingValue(void *field,void *field2,int nvalues,int datatype,int nbits,int is_byte,int is_short,int is_double){
   int missing = 0;
@@ -724,39 +836,31 @@ int EncodeMissingValue(void *field,void *field2,int nvalues,int datatype,int nbi
   if(missing_value_used()==0) return(0);
   datatype &= 0xF ;
   if(datatype==0 || datatype==3 || datatype==7 || datatype==8) return(0) ; /* not valid for transparent or character types */
-//  if(is_byte)   return(0) ; /* for now byte type not supported */
-  /* if(is_short)  return(0) ; */ /* for now short type not supported */
-  /* if(is_double) return(0) ; */ /* for now double type not supported */
   if(datatype==1 || datatype==5 || datatype==6) { /* float or IEEE */
     if(datatype==5 && nbits==64) is_double=1;
     if(is_double) {
-      missing = fst_double_encode_missing(field,field2,nvalues,nbits); /* real or IEEE */
+      missing = (*__fst_double_encode_missing)(field,field2,nvalues,nbits); /* real or IEEE */
     }else{
       if(nbits>32)  return(0) ; /* datalength > 32 not supported */
-      missing = fst_float_encode_missing(field,field2,nvalues,nbits); /* real or IEEE */
+        missing = (*__fst_float_encode_missing)(field,field2,nvalues,nbits); /* real or IEEE */
     }
   }
   if(datatype==4) {  /* signed */
     if(is_short) {
-//      return(0); /* short signed missing not supported */
-      missing = fst_short_encode_missing(field,field2,nvalues,nbits);   /* signed shorts */
-//fprintf(stderr,"encoding shorts\n");
-//{ int i ; for (i=0 ; i<nvalues ; i++) fprintf(stderr,"%hd ",((short *)field)[i]) ; fprintf(stderr,"\n"); }
+      missing = (*__fst_short_encode_missing)(field,field2,nvalues,nbits);   /* signed shorts */
     }else if(is_byte){
-      missing = fst_byte_encode_missing(field,field2,nvalues,nbits);   /* signed bytes */
+      missing = (*__fst_byte_encode_missing)(field,field2,nvalues,nbits);   /* signed bytes */
     }else{
-      missing = fst_int_encode_missing(field,field2,nvalues,nbits);   /* signed integers */
+      missing = (*__fst_int_encode_missing)(field,field2,nvalues,nbits);   /* signed integers */
     }
   }
   if(datatype==2) {  /* unsigned */
     if(is_short) {
-      missing = fst_ushort_encode_missing(field,field2,nvalues,nbits);  /* unsigned shorts */
-//fprintf(stderr,"encoding unsigned shorts\n");
-//{ int i ; for (i=0 ; i<nvalues ; i++) fprintf(stderr,"%hu ",((unsigned short *)field)[i]) ; fprintf(stderr,"\n"); }
+      missing = (*__fst_ushort_encode_missing)(field,field2,nvalues,nbits);  /* unsigned shorts */
     }else if(is_byte){
-      missing = fst_ubyte_encode_missing(field,field2,nvalues,nbits);  /* unsigned shorts */
+      missing = (*__fst_ubyte_encode_missing)(field,field2,nvalues,nbits);  /* unsigned shorts */
     }else{
-      missing = fst_uint_encode_missing(field,field2,nvalues,nbits);  /* unsigned integers */
+      missing = (*__fst_uint_encode_missing)(field,field2,nvalues,nbits);  /* unsigned integers */
     }
   }
   if (0 >= msg_level) {
@@ -776,38 +880,29 @@ void DecodeMissingValue(void *field,int nvalues,int datatype,int is_byte,int is_
   if(missing_value_used()==0) return ;
   datatype &= 0xF ;
   if(datatype==0 || datatype==3 || datatype==7 || datatype==8) return ; /* not valid for complex, transparent or character types */
-//  if(is_byte)   return ; /* for now byte types will not be processed */
-  /* if(is_short)  return ; */
-  /* if(is_double) return ; */
   if(datatype==1 || datatype==5 || datatype==6) { /* real or IEEE */
     if(is_double) {
-      fst_double_decode_missing(field,nvalues);
+      (*__fst_double_decode_missing)(field,nvalues);
     }else{
-      fst_float_decode_missing(field,nvalues);
+      (*__fst_float_decode_missing)(field,nvalues);
     }
   }
   if(datatype==4) {
     if(is_short) {
-//fprintf(stderr,"decoding shorts\n");
-//{ int i ; for (i=0 ; i<nvalues ; i++) fprintf(stderr,"%hd ",((short *)field)[i]) ; fprintf(stderr,"\n"); }
-      fst_short_decode_missing(field,nvalues);   /* signed shorts */
-//{ int i ; for (i=0 ; i<nvalues ; i++) fprintf(stderr,"%hd ",((short *)field)[i]) ; fprintf(stderr,"\n"); }
+      (*__fst_short_decode_missing)(field,nvalues);   /* signed shorts */
     }else if(is_byte){
-      fst_byte_decode_missing(field,nvalues);   /* signed shorts */
+      (*__fst_byte_decode_missing)(field,nvalues);   /* signed shorts */
     }else{
-      fst_int_decode_missing(field,nvalues);     /* signed integers */
+      (*__fst_int_decode_missing)(field,nvalues);     /* signed integers */
     }
   }
   if(datatype==2) {
     if(is_short) {
-//fprintf(stderr,"decoding unsigned shorts\n");
-//{ int i ; for (i=0 ; i<nvalues ; i++) fprintf(stderr,"%hu ",((unsigned short *)field)[i]) ; fprintf(stderr,"\n"); }
-      fst_ushort_decode_missing(field,nvalues);  /* unsigned shorts */
-//{ int i ; for (i=0 ; i<nvalues ; i++) fprintf(stderr,"%hu ",((unsigned short *)field)[i]) ; fprintf(stderr,"\n"); }
+      (*__fst_ushort_decode_missing)(field,nvalues);  /* unsigned shorts */
     }else if(is_byte){
-      fst_ubyte_decode_missing(field,nvalues);  /* unsigned shorts */
+      (*__fst_ubyte_decode_missing)(field,nvalues);  /* unsigned shorts */
     }else{
-      fst_uint_decode_missing(field,nvalues);    /* unsigned integers */
+      (*__fst_uint_decode_missing)(field,nvalues);    /* unsigned integers */
     }
   }
 }
@@ -844,6 +939,17 @@ int main()
   int sixteen=16;
   int fstat,istat,uistat,dstat,sstat,usstat,bstat,ubstat;
 
+  RestoreMissingValueMapping();
+#ifdef NODECODE
+  SetMissingValueMapping(1,1,NULL,0,0,0);
+  SetMissingValueMapping(1,1,NULL,0,0,1);
+  SetMissingValueMapping(1,2,NULL,0,0,0);
+  SetMissingValueMapping(1,2,NULL,1,0,0);
+  SetMissingValueMapping(1,2,NULL,0,1,0);
+  SetMissingValueMapping(1,4,NULL,0,0,0);
+  SetMissingValueMapping(1,4,NULL,1,0,0);
+  SetMissingValueMapping(1,4,NULL,0,1,0);
+#endif
   for (i=0 ; i<ASIZE ; i++) {
     fa[i]= i*1.0+.5;
     da[i]=fa[i]+1.2345;
