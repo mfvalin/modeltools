@@ -349,7 +349,7 @@ eval `cclargs_lite -D "" $0 \
     -timeout "60" "60" "[timeout for multiple instances]" \
     -debug "" "5" "[]" \
     -nocleanup "" "nocleanup" "[]" \
-    -version "" "1.0.3 2013/08/20" "[version number]" \
+    -version "" "1.0.4 2013/08/20" "[version number]" \
     -tag "child" "full" "[full/child/member/stderr/none/seq]" \
     -outp "o" "O" "[stdout prefix in listings]" \
     -errp "e" "E" "[stderr prefix in listings]" \
@@ -574,7 +574,7 @@ export RPN_COMM_DIRS="${RPN_COMM_DIRS}"
 export OMP_NUM_THREADS=${NLThreads}
 ((WORLD_CHILD=MP_CHILD-${InstanceOffset}))
 export WORLD_CHILD
-[[ -z "${nosep}" ]] && /usr/bin/printf "============== stdout W:${MpiCommWorld}:%4.4d M:%4.4d-%4.4d Seq:%s ==============\n" \${RP_WorldChild} \${RP_Member} \${RP_MemberChild} \${MP_SeqNum}
+[[ -z "${nosep}" ]] && [[ -n "${processorder}" ]] && /usr/bin/printf "============== stdout W:${MpiCommWorld}:%4.4d M:%4.4d-%4.4d Seq:%s ==============\n" \${RP_WorldChild} \${RP_Member} \${RP_MemberChild} \${MP_SeqNum}
 EOT
       for i in  $(seq 0 1 $((Instances-1))) ; do
         cat <<EOT >>${MpiRunScript}.${MpiCommWorld}
@@ -667,7 +667,7 @@ export RPN_COMM_DIRS="${RPN_COMM_DIRS}"
 export OMP_NUM_THREADS=${NLThreads:-${OMP_NUM_THREADS}}
 ((WORLD_CHILD=MP_CHILD))
 export WORLD_CHILD
-[[ -z "${nosep}" ]] && /usr/bin/printf "============== stdout W:${MpiCommWorld}:%4.4d M:%4.4d-%4.4d Seq:%s ==============\n" \${RP_WorldChild} \${RP_Member} \${RP_MemberChild} \${MP_SeqNum}
+[[ -z "${nosep}" ]] && [[ -n "${processorder}" ]] && /usr/bin/printf "============== stdout W:${MpiCommWorld}:%4.4d M:%4.4d-%4.4d Seq:%s ==============\n" \${RP_WorldChild} \${RP_Member} \${RP_MemberChild} \${MP_SeqNum}
 EOT
   echo "${preexec} $pgm $args  && rm -f ${tmpdir}/fail.\${MP_Tag}" >>${MpiRunScript}.0   # MpiCommWorld is 0 in this case
   echo 'echo END of child $WORLD_CHILD : $(date)' >>${MpiRunScript}.0 
@@ -721,6 +721,7 @@ MP_Tag="\$(/usr/bin/printf '${F_world}${F_member}${F_child}${F_seq}' ${V_world} 
 touch ${tmpdir}/fail.\${MP_Tag}
 #[[ -d ${tmpdir}/\${MP_SeqNum} ]] && /usr/bin/printf '${tag_format}' ${tag_values} >${tmpdir}/\${MP_SeqNum}/stdtag
 . ${MpiRunScript}.${MpiCommWorld}  ${RedirectStdout} ${RedirectStderr}
+[[ -n "${processorder}" ]] || exit 0
 lines=0
 #the_file=\$(ls -1 ${tmpdir}/\${MP_SeqNum}/stdout.* 2>/dev/null)
 the_file=${tmpdir}/\${MP_SeqNum}/stdout.\${MP_Tag}
