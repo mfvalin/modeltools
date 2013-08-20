@@ -66,7 +66,7 @@ mpiexec_Linux() {
     export OMPI_MCA_plm_rsh_disable_qrsh=1
   fi
 #
-  touch tmpdir/.mpi_env
+  touch $tmpdir/.mpi_env
   export MpiCommWorld=0
   export ChildOffset=0
   export WorldOffset=0
@@ -82,16 +82,16 @@ mpiexec_Linux() {
     cat ${MY_NODEFILE}
 #
 #    if [[ "${OPAL_PREFIX}" == *openmpi_1.6* ]] ; then # export environment ourselves, mpirun does not do it
-       env | grep -v "'" | grep -v '"' | grep  '^[a-zA-Z0-9]' | sed -e 's/^/export /' -e 's/=/="/' -e 's/$/"/' >tmpdir/.mpi_env
+       env | grep -v "'" | grep -v '"' | grep  '^[a-zA-Z0-9]' | sed -e 's/^/export /' -e 's/=/="/' -e 's/$/"/' >$tmpdir/.mpi_env
 #    fi
 #
     if ((MpiCommWorlds>1)) ; then   # more than one MPI world, launch mpirun in background
       echo ==== Backgrounding MPI world ${MpiCommWorld} with ${PeInWorld[${MpiCommWorld}]} MPI tasks ====
-      [[ -z ${dryrun} ]] && cat tmpdir/.mpi_env | \
+      [[ -z ${dryrun} ]] && cat $tmpdir/.mpi_env | \
       mpirun ${OPEN_MPI_PARMS} -machinefile ${MY_NODEFILE} -n ${PeInWorld[${MpiCommWorld}]} "$@" ${ParallelScript}.${MpiCommWorld} &
     else   # only one MPI world, execute mpirun
       echo ==== Launching MPI world ${MpiCommWorld} with ${PeInWorld[${MpiCommWorld}]} MPI tasks ====
-      [[ -z ${dryrun} ]] && cat tmpdir/.mpi_env | \
+      [[ -z ${dryrun} ]] && cat $tmpdir/.mpi_env | \
       mpirun ${OPEN_MPI_PARMS} -machinefile ${MY_NODEFILE} -n ${PeInWorld[${MpiCommWorld}]} "$@" ${ParallelScript}.${MpiCommWorld}
     fi
     PeAdded=${PeInWorld[${MpiCommWorld}]}
@@ -139,53 +139,35 @@ mpiexec_AIX() {
   echo "COMPLETE" >>${ParallelScript}.ALL # terminate POE command file
   echo "========== poe command file with ${MP_PROCS} tasks in ${MpiCommWorlds} MPI worlds =========="
   cat ${ParallelScript}.ALL
-  # multiple poes in parallel, gather, consolidate, run ?
+  # multiple poe instances in parallel, gather, consolidate, run 
   [[ -z ${dryrun} ]] && poe -cmdfile ${ParallelScript}.ALL </dev/null
 }
 # ===========================================================================
 #
-# cleanup of tmpdir directory used for launch help files and listings
+# print list of failed tasks
+# clean up tmpdir directory used for launch help files and listings
 #
-ListFailed2(){
-  FullTag="$(cat ${1}/stdtag)"
-  WorldTag="${FullTag%%-*}-"
-  FullTag=${FullTag#*-}
-  MemberTag="${FullTag%-*}"
-  ChildTag="${FullTag#*-}"
-  ((MpiCommWorlds<2)) && WorldTag=""  # one MPI world only, no need to tag
-  Prefix="${WorldTag}${MemberTag}-${ChildTag}"
-  [[ "${tag}" == member ]] && Prefix="${MemberTag}"
-  [[ "${tag}" == child  ]] && Prefix="${ChildTag}"
-  [[ "${tag}" == seq    ]] && Prefix="${1}"
-  printf "${Prefix}\n"
-}
 ListFailed() {
   ls ${tmpdir}/fail.*  2>/dev/null 1>/dev/null || return 0
   if [[ "${e}" == YES ]] ; then
     echo "ERROR: some processes have failed during execution"
-    (cd ${tmpdir} ; for Target in $(ls -1 | grep 'fail[.]' | sed 's/fail.//') ; do  ListFailed2 ${Target} ; done | xargs -l5 /bin/echo  )
+    (cd ${tmpdir} ; ls -1 | grep 'fail[.]' | sed 's/fail.//' | xargs -l5 /bin/echo  )
   fi
 }
 local_cleanup() {
  ExitStatus=0
- rm ${tmpdir}/fail.*  2>/dev/null 1>/dev/null && ExitStatus=1
+ rm ${tmpdir}/fail.*  2>/dev/null 1>/dev/null && ExitStatus=1   # some parallel processes failed
  [[ -n ${nocleanup} ]] && return $ExitStatus  # -nocleanup option used, return
- rm -f ${ParallelScript}* ${MP_HOSTFILE} ${MpiRunScript}* ${tmpdir}/MY_NODEFILE* ${selftest} ${tmpdir}/.mpi_env* ${tmpdir}/fail.* ${tmpdir}/mpi_[cf]_test
- rmdir ${tmpdir} 2>/dev/null 1>/dev/null || true
- [[ -d "${tmpdir}" ]] && \
- echo INFO: leftovers found in ${tmpdir} && \
- ls -al ${tmpdir} && \
- rm -rf ${tmpdir}  && \
- echo removing everything in ${tmpdir}
+ rm -rf ${tmpdir} || ExitStatus=2             # cannot clean tmpdir
  return $ExitStatus
 }
 # ===========================================================================
 #
-# print inter task listiong separator
+# print inter task listing separator
 #
 print_separator() {
   [[ -n ${nosep} ]] && return   # -nosep option used, return
-  echo ==============      "$@"      ==============
+  echo "==============      $@      =============="
 }
 # ===========================================================================
 #
@@ -193,43 +175,8 @@ print_separator() {
 # stdout/stderr from each task listed in order
 #
 cat_output() {  #  cat captured stdout/stderr files into stdout with appropriate tagging
-#
-  Prefix3="${errp}-"
-  Prefix2="${outp}${errp}-"   # prepare for stderr not split from stdout
-  [[ "${spliteo}" == yes ]] && Prefix2="${outp}-"
-  [[ "${tag}" == none    ]] && Prefix="" && Prefix2="" && Prefix3=""
-  [[ "${tag}" == stderr  ]] && Prefix="" && Prefix2="" && Prefix3="stderr: "
-  for SeqNum in $* ; do 
-    FullTag="$(cat ${SeqNum}/stdtag)"
-    WorldTag="${FullTag%%-*}-"
-    FullTag=${FullTag#*-}
-    MemberTag="${FullTag%-*}"
-    ChildTag="${FullTag#*-}"
-    ((MpiCommWorlds<2)) && WorldTag=""  # one MPI world only, no need to tag
-#    ((MemberNo=SeqNum/npex+offset))
-#    ((MemberChild=SeqNum-SeqNum/npex*npex))
-    [[ "${tag}" == full   ]] && Prefix="${WorldTag}${MemberTag}-${ChildTag}: "
-    [[ "${tag}" == member ]] && Prefix="${MemberTag}: "
-    [[ "${tag}" == child  ]] && Prefix="${ChildTag}: "
-    [[ "${tag}" == seq    ]] && Prefix="${SeqNum}: "
-    (( $(cat ${SeqNum}/stdout | wc -l) >= minstdout )) && \
-      print_separator stdout ${WorldTag}${MemberTag}:${ChildTag} && \
-      cat ${SeqNum}/stdout | sed -e "2,\$s/^/${Prefix2}${Prefix}/"
-    [[ -r ${SeqNum}/stderr ]] && print_separator stderr ${WorldTag}${MemberTag}:${ChildTag} && cat ${SeqNum}/stderr | sed -e "s/^/${Prefix3}${Prefix}/"
-  done
-  print_separator "   stdout / stderr   "
-  print_separator " end of parallel run "
-}
-# ===========================================================================
-#
-# get rid of the stdout/stderr files produced by the tasks
-#
-clean_output() {   #  get rid of captured stdout/stderr files into stdout
-#
-  [[ -n ${nocleanup} ]] && return  # -nocleanup option used, return
-  for SeqNum in $* ; do 
-    rm -f ${SeqNum}/std*
-    rmdir ${SeqNum}
+  for OUTDIR in $* ; do
+    [[ -r ${OUTDIR}/stdout ]] && cat ${OUTDIR}/stdout 
   done
 }
 # ===========================================================================
@@ -382,7 +329,7 @@ wait_for() {
 # ===========================================================================
 echo version avec /bin/ksh93
 eval `cclargs_lite -D "" $0 \
-    -tmpdir "$(pwd -P)/tmpdir" "" "[temporary directory visible by all processes]" \
+    -tmpdir "" "" "[temporary directory visible by all processes]" \
     -pgm "Invalid_Command.EXE" "" "[]" \
     -args "" "" "[arguments to the command]" \
     -inorder "" "yes" "[list out/err of members in process order]" \
@@ -396,12 +343,13 @@ eval `cclargs_lite -D "" $0 \
     -mpiargs "" "" "[]" \
     -instancedir "${PARALLEL_INSTANCES_DIR}" "${PARALLEL_INSTANCES_DIR}" "[directory containing instance names]" \
     -geometry "" "" "[]" \
-    -e "NO" "YES" "[list failed tasks]" \
+    -e "NO" "YES" "[list failed processes" \
     -minstdout "2" "2" "[]" \
     -dryrun "" "dryrun" "[]" \
     -timeout "60" "60" "[timeout for multiple instances]" \
     -debug "" "5" "[]" \
     -nocleanup "" "nocleanup" "[]" \
+    -version "" "1.0.3 2013/08/20" "[version number]" \
     -tag "child" "full" "[full/child/member/stderr/none/seq]" \
     -outp "o" "O" "[stdout prefix in listings]" \
     -errp "e" "E" "[stderr prefix in listings]" \
@@ -412,7 +360,9 @@ eval `cclargs_lite -D "" $0 \
     -selftest "" "selftest.$$" "[quick selftest]" \
     ++ "$@"`
 #
-
+[[ -n ${version} ]] && echo "${0##*/} version $version" && exit 0
+echo "INFO: START of ${0##*/} : $(date)"
+[[ -z ${tmpdir} ]]  && tmpdir="$(pwd -P)/tmpdir${TRUE_HOST}$$"
 [[ -n ${inorder} ]] && processorder="yes"
 if [[ -n ${members} ]] ; then
   if [[ ${members} == *x* ]] ; then
@@ -540,7 +490,6 @@ echo "\$(hostname)(\${MP_CHILD}): WORLD_CHILD=\${WORLD_CHILD}, RP_Child=\${RP_Ch
 set -x
 [[ -x ${tmpdir}/mpi_c_test ]] && ${tmpdir}/mpi_c_test
 [[ -x ${tmpdir}/mpi_f_test ]] && ${tmpdir}/mpi_f_test
-rm -f ${tmpdir}/mpi_c_test ${tmpdir}/mpi_f_test
 sleep \${1:-5}
 EOT
  chmod 755 ${selftest}
@@ -556,10 +505,15 @@ touch ${ParallelScript}.0
 #
 # stdout and stderr redirection
 #
-export RedirectStdout="1>${tmpdir}/\${MP_SeqNum}/stdout"   # will be expanded at run time in ParallelScript
+export RedirectStdout="1>${tmpdir}/\${MP_SeqNum}/stdout.\${MP_Tag}"   # will be expanded at run time in ParallelScript
 export RedirectStderr="2>${tmpdir}/\${MP_SeqNum}/stderr"   # will be expanded at run time in ParallelScript
 [[ "${spliteo}" == no ]] && RedirectStderr="2>&1"
 [[ -z ${processorder} ]] && RedirectStderr="" && RedirectStdout=""
+export  Prefix3="${errp}-"
+export  Prefix2="${outp}${errp}-"   # prepare for stderr not split from stdout
+[[ "${spliteo}" == yes ]] && Prefix2="${outp}-"
+[[ "${tag}" == none    ]] && Prefix2="" && Prefix3=""
+[[ "${tag}" == stderr  ]] && Prefix2="" && Prefix3="stderr: "
 #
 # communication variables for RPN_COMM toolkit
 #
@@ -620,14 +574,15 @@ export RPN_COMM_DIRS="${RPN_COMM_DIRS}"
 export OMP_NUM_THREADS=${NLThreads}
 ((WORLD_CHILD=MP_CHILD-${InstanceOffset}))
 export WORLD_CHILD
-/usr/bin/printf "============== stdout W:${MpiCommWorld}:%4.4d M:%4.4d-%4.4d G:%s ==============\n" \${RP_WorldChild} \${RP_Member} \${RP_MemberChild} \${MP_SeqNum}
+[[ -z "${nosep}" ]] && /usr/bin/printf "============== stdout W:${MpiCommWorld}:%4.4d M:%4.4d-%4.4d Seq:%s ==============\n" \${RP_WorldChild} \${RP_Member} \${RP_MemberChild} \${MP_SeqNum}
 EOT
       for i in  $(seq 0 1 $((Instances-1))) ; do
         cat <<EOT >>${MpiRunScript}.${MpiCommWorld}
           if (( MP_CHILD == $((i+InstanceOffset)) ))
           then 
             cd ${Directories[$i]}
-            ${preexec} ${ProGrams[$i]} ${args} && rm -f ${tmpdir}/fail.\${MP_SeqNum}
+            ${preexec} ${ProGrams[$i]} ${args} && rm -f ${tmpdir}/fail.\${MP_Tag}
+            echo "END of child \${WORLD_CHILD} : \$(date)"
           fi
 EOT
       done
@@ -712,9 +667,10 @@ export RPN_COMM_DIRS="${RPN_COMM_DIRS}"
 export OMP_NUM_THREADS=${NLThreads:-${OMP_NUM_THREADS}}
 ((WORLD_CHILD=MP_CHILD))
 export WORLD_CHILD
-/usr/bin/printf "============== stdout W:${MpiCommWorld}:%4.4d M:%4.4d-%4.4d G:%s ==============\n" \${RP_WorldChild} \${RP_Member} \${RP_MemberChild} \${MP_SeqNum}
+[[ -z "${nosep}" ]] && /usr/bin/printf "============== stdout W:${MpiCommWorld}:%4.4d M:%4.4d-%4.4d Seq:%s ==============\n" \${RP_WorldChild} \${RP_Member} \${RP_MemberChild} \${MP_SeqNum}
 EOT
-  echo "${preexec} $pgm $args  && rm -f ${tmpdir}/fail.\${MP_SeqNum}" >>${MpiRunScript}.0   # MpiCommWorld is 0 in this case
+  echo "${preexec} $pgm $args  && rm -f ${tmpdir}/fail.\${MP_Tag}" >>${MpiRunScript}.0   # MpiCommWorld is 0 in this case
+  echo 'echo END of child $WORLD_CHILD : $(date)' >>${MpiRunScript}.0 
   echo "${npe_total} instances of '$pgm'"
 #
 fi # complex sequence, possibly MPMD
@@ -726,8 +682,17 @@ export WorldOffset=0
 #
 # prepare tagging format and contents
 #
-tag_values='${RP_CommWorld} ${RP_Member} ${RP_MemberChild}'
-tag_format='%1d-%4.4d-%4.4d'
+#tag_values='${RP_CommWorld} ${RP_Member} ${RP_MemberChild}'
+#tag_format='%1d-%4.4d-%4.4d'
+[[ "${tag}" == full ]] && ((MpiCommWorlds>2)) && F_world='%1d-' && V_world='${RP_CommWorld}'
+[[ "${tag}" == full ]] && F_member='%4.4d-' && V_member='${RP_Member}' && \
+                          F_child='%4.4d' && V_child='${RP_MemberChild}'
+[[ "${tag}" == member ]] && F_member='%4.4d-' && V_member='${RP_Member}'
+[[ "${tag}" == child ]]  && F_child='%4.4d' && V_child='${RP_MemberChild}'
+[[ "${tag}" == seq ]]    && F_seq='%4.4d' && V_seq='${MP_SeqNum}'
+export F_world V_world F_member V_member F_child V_child F_seq V_seq
+
+#
 while ((MpiCommWorld<MpiCommWorlds))
 do
 # ${PeInWorld[${MpiCommWorld}]} ${MembersInWorld[${MpiCommWorld}]} $WorldOffset
@@ -750,11 +715,24 @@ export MP_SeqNum="\$((MP_CHILD))"           # global sequence number
 export RP_Child="\$((MP_CHILD))"            # global child number, same as MP_CHILD
 export RP_Member=\$((RP_WorldChild/${npex}+${offset}))      # member number in this world (including offset)
 export RP_MemberChild=\$((RP_WorldChild-RP_WorldChild/${npex}*${npex}))   # child ordinal within this member
+MP_Tag="\$(/usr/bin/printf '${F_world}${F_member}${F_child}${F_seq}' ${V_world} ${V_member} ${V_child} ${V_seq})"
 [[ -n "${debug}" ]] && env | sort >${tmpdir}/.mpi_env_\$\$_\$(hostname)
 #
-touch ${tmpdir}/fail.\${MP_SeqNum}
-/usr/bin/printf '${tag_format}' ${tag_values} >${tmpdir}/\${MP_SeqNum}/stdtag
+touch ${tmpdir}/fail.\${MP_Tag}
+#[[ -d ${tmpdir}/\${MP_SeqNum} ]] && /usr/bin/printf '${tag_format}' ${tag_values} >${tmpdir}/\${MP_SeqNum}/stdtag
 . ${MpiRunScript}.${MpiCommWorld}  ${RedirectStdout} ${RedirectStderr}
+lines=0
+#the_file=\$(ls -1 ${tmpdir}/\${MP_SeqNum}/stdout.* 2>/dev/null)
+the_file=${tmpdir}/\${MP_SeqNum}/stdout.\${MP_Tag}
+[[ -r \${the_file} ]] && lines="\$(wc -l <\${the_file})" && ((lines<${minstdout})) && rm \${the_file}  # remove stdout files shorter than minimum
+[[ \${MP_SeqNum} != *00 ]] && true && exit
+sleep 1
+for the_file in ${tmpdir}/\${MP_SeqNum%??}[0-9][0-9]/stdout.*
+do
+  MP_Tag=\${the_file##*.}
+  [[ -f \${the_file} ]] && { [[ -z "${nosep}" ]] && echo "" ; cat \${the_file} | sed "s/^/${Prefix2}\${MP_Tag}: /" ;} >>${tmpdir}/\${MP_SeqNum}/stdout
+  [[ -f \${the_file%/*}/stderr ]] && { [[ -z "${nosep}" ]] && echo "" ; [[ -z "${nosep}" ]] && echo "${Prefix3}\${MP_Tag}: ============== stderr \${MP_Tag} ==============" ; cat \${the_file%/*}/stderr | sed "s/^/${Prefix3}\${MP_Tag}: /" ; } >>${tmpdir}/\${MP_SeqNum}/stdout
+done
 true
 EOT
 #
@@ -769,14 +747,15 @@ done    # while ((MpiCommWorld<MpiCommWorlds))
 export TMPDIR=${tmpdir}
 # create stdout/stderr directories if necessary
 if [[ -n ${processorder} ]] ; then
-  for SeqNum in $(seq 0 1 $((TotalInstances-1)) )    #  a arranger pour le cal MPMD ====================================
+  for ISeqNum in $(seq 0 1 $((TotalInstances-1)) )    #  a arranger pour le cas MPMD ====================================
   do 
-    mkdir ${tmpdir}/${SeqNum}
-  done
+    /usr/bin/printf "%s/%4.4d\n" ${tmpdir} ${ISeqNum}
+  done  | xargs -l30 mkdir 
   echo "=============================================="
   echo "temporary listings for all members in ${tmpdir}"
   echo "=============================================="
 fi
+echo "INFO: START of parallel execution : $(date)"
 #
 if [[ ${nompi} == run_with_mpi ]] ; then  # MPI launch (linux or AIX supported)
 #
@@ -796,12 +775,17 @@ else   # background launch (it is assumed that there is only one world)
   wait
 #
 fi
+echo "INFO: END of parallel execution : $(date)"
 #
 # post process/order listings if required
 #
 [[ "${e}" == YES ]] && ListFailed
+#
 if [[ -n ${packoutput} && -n ${processorder} ]] ; then   # post process stderr/stdout from all processes
-  ( cd ${tmpdir} ; ${packoutput} [0-9]*[0-9] ; clean_output [0-9]*[0-9] )
+  ( cd ${tmpdir} ; ${packoutput} [0-9]*[0-9] )
+  print_separator "   stdout / stderr   "
+  print_separator " end of parallel run "
+  echo "INFO: END of listing processing : $(date)"
 fi
 #
 local_cleanup
