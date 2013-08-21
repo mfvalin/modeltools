@@ -145,6 +145,8 @@
       integer pe_my_location(8)
       external RPN_COMM_unbind_process
 *
+*      if(RPM_COMM_IS_INITIALIZED) then ! ignore with warning message or abort ?
+*      endif
       pe_indomm=-1
       pe_indomms=-1
       pe_dommtot=-1
@@ -551,18 +553,23 @@
 *
 *      integer, pointer, dimension(:,:) :: grid_id_table
 *      integer, dimension(3) :: id_table
-*      integer :: my_grid_id, pe_pe0s, 
+*      integer :: pe_pe0s, pe_me_pe0s  ! communicator for PE0 set and rank within
 *
 *      ! end of addition to rpn_comm or another module
 *
 *      my_color = min(1,pe_me_grid)  ! i am a PE 0 or not
 *      call MPI_COMM_SPLIT(pe_all_domains,my_color,
 *     &                    pe_me_all_domains,pe_pe0s,ierr)
-*      call MPI_COMM_rank(pe_pe0s,my_grid_id,ierr) ! this will become a "grid id", communicator nickname RPN_COMM_PE0='PE_00'
+*      call MPI_COMM_rank(pe_pe0s,pe_me_pe0s,ierr) ! communicator nicknamed RPN_COMM_PE0='PE_00'
+*      if(pe_me_grid /= 0) then  ! make sure it is invalid if not a PE0
+*        pe_pe0s = -1
+*        pe_me_pe0 = -1
+*      endif
 *
-*      call MPI_bcast(my_grid_id,1,MPI_INTEGER,0,pe_grid,ierr)  ! and broadcast the "grid id" from grid PE 0 to all members of its grid
 *      allocate(grid_id_table(3,pe_tot_all_domains))
-*      id_table(1) = my_grid_id   ! "grid id"
+*      id_table(1) = my_colors(1)*1024*1024 
+*      id_table(1) = id_table(1) + my_colors(2)*1024
+*      id_table(1) = id_table(1) + my_colors(3)   ! this will become a "grid id"
 *      id_table(2) = pe_me_grid   ! local rank in grid
 *      id_table(3) = pe_me_all_domains  ! global rank in "universe"
 *      call MPI_allgather(id_table,3,MPI_INTEGER,

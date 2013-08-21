@@ -49,7 +49,7 @@
  * There are C and FORTRAN callable routines/functions
  * 
  * =================================================================================
- *   missing_value_used
+ *   missing_value_used, ForceMissingValueUsage
  * =================================================================================
  * 
  *   get the state of the package
@@ -59,6 +59,14 @@
  *   int missing_value_used()
  * FORTRAN interface:
  *   integer, external :: missing_value_used
+ * 
+ *   forcibly set the state of the package
+ * 
+ * C interface:
+ *   oldmode = ForceMissingValueUsage(flag)
+ * 
+ * FORTRAN interface:
+ *   oldmode = Force_Missing_ValueUsage(flag)
  * =================================================================================
  *   get_missing_value_flags
  * =================================================================================
@@ -131,6 +139,23 @@
  * large enough not to create an after packing collision with the value of the actual largest
  * useful value in field2 (nbits is needed for this calculation)
  * =================================================================================
+ * SetMissingValueMapping (set_missing_value_mapping from Fortran)
+ * set the functions used for encoding missing values and/or decoding encoded fields
+ * 
+ * C interface:
+ *   SetMissingValueMapping(int what, int datatype, void *processor, int is_byte, int is_short, int is_double)
+ * 
+ * FORTRAN interface:
+ *   call set_missing_value_mapping(what, datatype, processor, is_byte, is_short, is_double)
+ *   integer, intent(IN) :: what, datatype, is_byte, is_short, is_double
+ * 
+ * processor is the address of the processing function called as 
+ *   decode_function(void *data, int npoints)
+ *   n_missing_points = encode_function(void *dest, void *src, int npoints)
+ * NOTE:
+ *   the npoints argument is passed BY VALUE (Fortran beware, iso_c_binding necessary)
+ * =================================================================================
+ * =================================================================================
  * DecodeMissingValue / decode_missing_value
  * =================================================================================
  * 
@@ -140,6 +165,7 @@
  * 
  * C interface:
  *   void DecodeMissingValue(void *field,int nvalues,int datatype,int is_byte,int is_short,int is_double);
+ * 
  * FORTRAN interface:
  *   subroutine decode_missing_value(field,nvalues,datatype,is_byte,is_short,is_double)
  *   "any_type", intent(INOUT) :: field
@@ -169,8 +195,9 @@ static unsigned int uint_missing_val=0xFFFFFFFF;    /* largest 32 bit unsigned i
 static unsigned short ushort_missing_val=0xFFFF;    /* largest 16 bit unsigned integer */
 static unsigned char ubyte_missing_val=0xFF;       /* largest  8 bit unsigned integer */
 
-/* get magic values used to flag missing data points from environment variable FST_MISSING_VALUE */
-/* format is "real int unsigne_dint double */
+/* Fortran and C callable versions get get "magic values" used flag */
+/* set magic values used to flag missing data points from environment variable FST_MISSING_VALUE if it exists */
+/* returns 1 if mode active, 0 otherwise */
 #pragma weak missing_value_used_ = missing_value_used
 #pragma weak missing_value_used__ = missing_value_used
 int missing_value_used_();
@@ -199,9 +226,26 @@ int missing_value_used()  /* return 1 if missing value detected, 0 otherwise */
   return(plugmode);
 }
 
+/* C entry point */
+/* forcibly set(activate) or reset(deactivate) the missing value mode flag */
+int ForceMissingValueUsage(int flag) {
+  int value = plugmode;
+  plugmode = (flag!=0) ? 1 : 0;
+  return(plugmode);
+}
 
-/* fortran and C callable versions, get magic values used to flag missing data points */
-/* return value of function tells whether the values have been initialized (1) or not(0) */
+/* Fortran entry points below (calling C entry point ForceMissingValueUsage) */
+/* forcibly set(activate) (flag !=0) or reset(deactivate) (flag=0) the "magic value" mode */
+#pragma weak force_missing_value_used_ = force_missing_value_used
+#pragma weak force_missing_value_used__ = force_missing_value_used
+int force_missing_value_used_(int *flag);
+int force_missing_value_used__(int *flag);
+int force_missing_value_used(int *flag) { return(ForceMissingValueUsage(*flag)) ; }
+
+/* Fortran and C callable versions */
+/* get magic values used to flag missing data points from environment variable FST_MISSING_VALUE */
+/* format is "real int unsigne_dint double */
+/* return value of function tells whether the the "magic value" mode is active (1) or not(0) */
 #pragma weak get_missing_value_flags_  = get_missing_value_flags
 #pragma weak get_missing_value_flags__ = get_missing_value_flags
 int get_missing_value_flags_(float *f, int *i, unsigned int *ui, double *d, short *s, unsigned short *us,
@@ -223,7 +267,7 @@ int get_missing_value_flags(float *f, int *i, unsigned int *ui, double *d, short
   return(status);
 }
 
-/* fortran and C callable versions, set magic values used to flag missing data points */
+/* Fortran and C callable versions, set magic values used to flag missing data points */
 #pragma weak set_missing_value_flags_  = set_missing_value_flags
 #pragma weak set_missing_value_flags__ = set_missing_value_flags
 void set_missing_value_flags_(float *f, int *i, unsigned int *ui, double *d, short *s, unsigned short *us,
@@ -741,6 +785,7 @@ static void (*__fst_uint_decode_missing)() = fst_uint_decode_missing;
 static void (*__fst_ushort_decode_missing)() = fst_ushort_decode_missing;
 static void (*__fst_ubyte_decode_missing)() = fst_ubyte_decode_missing;
 
+/* C entry point , restore mapping functions to their default value */
 void RestoreMissingValueMapping(void)
 {
 __fst_float_encode_missing = fst_float_encode_missing;
@@ -761,68 +806,88 @@ __fst_uint_decode_missing = fst_uint_decode_missing;
 __fst_ushort_decode_missing = fst_ushort_decode_missing;
 __fst_ubyte_decode_missing = fst_ubyte_decode_missing;
 }
+
+/* Fortran entry points (calling C entry point RestoreMissingValueMapping) */
 void restore_missing_value_mapping(void) { RestoreMissingValueMapping() ; }
 void restore_missing_value_mapping_(void) { RestoreMissingValueMapping() ; }
 void restore_missing_value_mapping__(void) { RestoreMissingValueMapping() ; }
 
-void SetMissingValueMapping(int decode, int datatype, void *processor_, int is_byte, int is_short, int is_double)
+/* C entry point */
+/* change the missing value mapping function */
+/* mode >0, set function to processor */
+/* abs(mode)==1 decoding functions */
+/* abs(mode)==2 encoding functions */
+/* datatype, is_byte, is_short, is_double , same as elsewhere in this code */
+void SetMissingValueMapping(int what, int datatype, void *processor_, int is_byte, int is_short, int is_double)
 {
     void *processor = processor_;
-    if(decode) {     /* replace a decoding routine */
+	int mode;
+	mode = (what>0) ? what : -what;
+    if(mode==1){  /* replace a decoding routine */
       if(processor == NULL) processor = fst_null_decode_missing;
       if(datatype==1 || datatype==5 || datatype==6) { /* float or IEEE */
         if(is_double) {
-          __fst_double_decode_missing = processor ; /* real or IEEE */
+          __fst_double_decode_missing = (what>0) ? processor : fst_double_decode_missing ; /* real or IEEE */
         }else{
-          __fst_float_decode_missing = processor ; /* real or IEEE */
+          __fst_float_decode_missing = (what>0) ? processor : fst_float_decode_missing ; /* real or IEEE */
         }
       }
       if(datatype==4) {  /* signed */
         if(is_short) {
-          __fst_short_decode_missing = processor ;   /* signed shorts */
+          __fst_short_decode_missing = (what>0) ? processor : fst_short_decode_missing ;   /* signed shorts */
         }else if(is_byte){
-          __fst_byte_decode_missing = processor ;   /* signed bytes */
+          __fst_byte_decode_missing = (what>0) ? processor : fst_byte_decode_missing ;   /* signed bytes */
         }else{
-          __fst_int_decode_missing = processor ;   /* signed integers */
+          __fst_int_decode_missing = (what>0) ? processor : fst_int_decode_missing ;   /* signed integers */
         }
       }
       if(datatype==2) {  /* unsigned */
         if(is_short) {
-          __fst_ushort_decode_missing = processor ;   /* uns  SetMissingValueMapping(1,4,NULL,0,0,0);
+          __fst_ushort_decode_missing = (what>0) ? processor : fst_ushort_decode_missing ;   /* uns  SetMissingValueMapping(1,4,NULL,0,0,0);
           igned shorts */
         }else if(is_byte){
-          __fst_ubyte_decode_missing = processor ;   /* unsigned bytes */
+          __fst_ubyte_decode_missing = (what>0) ? processor : fst_ubyte_decode_missing ;   /* unsigned bytes */
         }else{
-          __fst_uint_decode_missing = processor ;   /* unsigned integers */
+          __fst_uint_decode_missing = (what>0) ? processor : fst_uint_decode_missing ;   /* unsigned integers */
         }
       }
-    }else{           /* replace an encoding routine */
+    }
+    if(mode==2){           /* replace an encoding routine */
       if(datatype==1 || datatype==5 || datatype==6) { /* float or IEEE */
          if(is_double) {
-           __fst_double_encode_missing = processor ; /* real or IEEE */
+           __fst_double_encode_missing = (what>0) ? processor : fst_double_encode_missing ; /* real or IEEE */
          }else{
-           __fst_float_encode_missing = processor ; /* real or IEEE */
+           __fst_float_encode_missing = (what>0) ? processor : fst_float_encode_missing ; /* real or IEEE */
          }
       }
       if(datatype==4) {  /* signed */
         if(is_short) {
-          __fst_short_encode_missing = processor ;   /* signed shorts */
+          __fst_short_encode_missing = (what>0) ? processor : fst_short_encode_missing ;   /* signed shorts */
         }else if(is_byte){
-          __fst_byte_encode_missing = processor ;   /* signed bytes */
+          __fst_byte_encode_missing = (what>0) ? processor : fst_byte_encode_missing ;   /* signed bytes */
         }else{
-          __fst_int_encode_missing = processor ;   /* signed integers */
+          __fst_int_encode_missing = (what>0) ? processor : fst_int_encode_missing ;   /* signed integers */
         }
       }
       if(datatype==2) {  /* unsigned */
         if(is_short) {
-          __fst_ushort_encode_missing = processor ;   /* unsigned shorts */
+          __fst_ushort_encode_missing = (what>0) ? processor : fst_ushort_encode_missing ;   /* unsigned shorts */
         }else if(is_byte){
-          __fst_ubyte_encode_missing = processor ;   /* unsigned bytes */
+          __fst_ubyte_encode_missing = (what>0) ? processor : fst_ubyte_encode_missing ;   /* unsigned bytes */
         }else{
-          __fst_uint_encode_missing = processor ;   /* unsigned integers */
+          __fst_uint_encode_missing = (what>0) ? processor : fst_uint_encode_missing ;   /* unsigned integers */
         }
       }
     }
+}
+
+/* Fortran entry points (calling C entry point SetMissingValueMapping) */
+#pragma weak set_missing_value_mapping_ = set_missing_value_mapping
+#pragma weak set_missing_value_mapping__ = set_missing_value_mapping
+void set_missing_value_mapping_(int *what, int *datatype, void *processor_, int *is_byte, int *is_short, int *is_double);
+void set_missing_value_mapping__(int *what, int *datatype, void *processor_, int *is_byte, int *is_short, int *is_double);
+void set_missing_value_mapping(int *what, int *datatype, void *processor_, int *is_byte, int *is_short, int *is_double) {
+  SetMissingValueMapping(*what, *datatype, processor_, *is_byte, *is_short, *is_double);
 }
 
 /*
@@ -830,10 +895,11 @@ int EncodeMissingValue(void *field,void *field2,int nvalues,int datatype,int nbi
 void DecodeMissingValue(void *field,int nvalues,int datatype,int is_byte,int is_short,int is_double);
 */
 
+/* C entry point */
 int EncodeMissingValue(void *field,void *field2,int nvalues,int datatype,int nbits,int is_byte,int is_short,int is_double){
   int missing = 0;
 
-  if(missing_value_used()==0) return(0);
+  if(missing_value_used()==0) return(0);  /* "magic value" mode off, return zero missing value found */
   datatype &= 0xF ;
   if(datatype==0 || datatype==3 || datatype==7 || datatype==8) return(0) ; /* not valid for transparent or character types */
   if(datatype==1 || datatype==5 || datatype==6) { /* float or IEEE */
@@ -866,8 +932,10 @@ int EncodeMissingValue(void *field,void *field2,int nvalues,int datatype,int nbi
   if (0 >= msg_level) {
     fprintf(stderr,"DEBUG: %d missing values in %d data values replaced, base datatype=%d\n",missing,nvalues,datatype);
   }
-  return missing;
+  return missing; /* number of missing values found */
 }
+
+/* Fortran entry points (calling C entry point EncodeMissingValue) */
 #pragma weak encode_missing_value__ = encode_missing_value
 #pragma weak encode_missing_value_  = encode_missing_value
 int encode_missing_value_(void *field,void *field2,int *nvalues,int *datatype,int *nbits,int *is_byte,int *is_short,int *is_double);
@@ -876,8 +944,9 @@ int encode_missing_value(void *field,void *field2,int *nvalues,int *datatype,int
   return( EncodeMissingValue(field,field2,*nvalues,*datatype,*nbits,*is_byte,*is_short,*is_double) );
 }
 
+/* C entry point */
 void DecodeMissingValue(void *field,int nvalues,int datatype,int is_byte,int is_short,int is_double){
-  if(missing_value_used()==0) return ;
+  if(missing_value_used()==0) return ;  /* "magic value" mode off, do nothing  */
   datatype &= 0xF ;
   if(datatype==0 || datatype==3 || datatype==7 || datatype==8) return ; /* not valid for complex, transparent or character types */
   if(datatype==1 || datatype==5 || datatype==6) { /* real or IEEE */
@@ -906,6 +975,8 @@ void DecodeMissingValue(void *field,int nvalues,int datatype,int is_byte,int is_
     }
   }
 }
+
+/* Fortran entry points (calling C entry point DecodeMissingValue) */
 #pragma weak decode_missing_value__ = decode_missing_value
 #pragma weak decode_missing_value_  = decode_missing_value
 void decode_missing_value_(void *field,int *nvalues,int *datatype,int *is_byte,int *is_short,int *is_double);
@@ -946,6 +1017,9 @@ int main()
   SetMissingValueMapping(1,2,NULL,0,0,0);
   SetMissingValueMapping(1,2,NULL,1,0,0);
   SetMissingValueMapping(1,2,NULL,0,1,0);
+  SetMissingValueMapping(-1,2,NULL,0,0,0);  /* restore decoder */
+  SetMissingValueMapping(-1,2,NULL,1,0,0);  /* restore decoder */
+  SetMissingValueMapping(-1,2,NULL,0,1,0);  /* restore decoder */
   SetMissingValueMapping(1,4,NULL,0,0,0);
   SetMissingValueMapping(1,4,NULL,1,0,0);
   SetMissingValueMapping(1,4,NULL,0,1,0);

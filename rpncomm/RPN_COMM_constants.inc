@@ -53,7 +53,7 @@
         character(len=*),parameter :: RPN_COMM_NS         = 'NS'
         character(len=*),parameter :: RPN_COMM_COLUMN     = 'NS'
         character(len=*),parameter :: RPN_COMM_UNIVERSE   = 'UNIVERSE'
-        character(len=*),parameter :: RPN_COMM_PE0        = 'PE_00'
+!        character(len=*),parameter :: RPN_COMM_PE0        = 'PE_00'
 !
         character (len=32), parameter :: RPN_COMM_ANY_SOURCE =           &                                   
      &                                  'MPI_ANY_SOURCE'
