@@ -177,11 +177,17 @@
  * NOTE: this set of routines does not implement full defensive coding. SAFE calls from the
  *       standard file package are expected. USE WITH CARE.
 */
-#ifdef SELFTEST
-static int msg_level=0;
-#endif
 #include <stdlib.h>
 #include <stdio.h>
+
+#ifdef WITH_PLUGINS
+#include <dlfcn.h>
+#endif
+
+#ifdef SELFTEST
+int msg_level=0;
+#endif
+
 #include "qstdir.h"
 
 static int plugmode=-1;                             /* -1 not initialized, 1 active, 0 not active */
@@ -195,6 +201,10 @@ static unsigned int uint_missing_val=0xFFFFFFFF;    /* largest 32 bit unsigned i
 static unsigned short ushort_missing_val=0xFFFF;    /* largest 16 bit unsigned integer */
 static unsigned char ubyte_missing_val=0xFF;       /* largest  8 bit unsigned integer */
 
+void SetMissingValueMapping(int what, int datatype, void *processor_, int is_byte, int is_short, int is_double);
+
+static void (*set_plugin_missing_value_flags)() = NULL ;
+
 /* Fortran and C callable versions get get "magic values" used flag */
 /* set magic values used to flag missing data points from environment variable FST_MISSING_VALUE if it exists */
 /* returns 1 if mode active, 0 otherwise */
@@ -205,6 +215,8 @@ int missing_value_used__();
 int missing_value_used()  /* return 1 if missing value detected, 0 otherwise */
 {
   char *text;
+  void *fptr;
+  void *handle;
   if(plugmode==-1){
     text=getenv("MISSING_VALUE_FLAGS");
     if(text==NULL){
@@ -222,6 +234,71 @@ int missing_value_used()  /* return 1 if missing value detected, 0 otherwise */
 	     &ubyte_missing_val
 	    );
     }
+    /* process dynamic plugins here to get encoding/decoding functions from dynamic library */
+	/* environment variable MISSING_VALUE_PLUGINS gives the name of the library */
+	/* 
+	   functions must have the following names in the shared library :
+	   
+       float_encode
+       double_encode
+       int_encode
+       short_encode
+       byte_encode
+       uint_encode
+       ushort_encode
+       ubyte_encode
+  
+       float_decode
+       double_decode
+       int_decode
+       short_decode
+       byte_decode
+       uint_decode
+       ushort_decode
+       ubyte_decode
+       
+       set_plugin_missing_value_flags
+	 */
+	text=getenv("MISSING_VALUE_PLUGINS");
+	if(text != NULL ){
+	  fprintf(stderr,"INFO: opening plugin library '%s'\n",text);
+#ifdef WITH_PLUGINS
+	  handle = dlopen(text,RTLD_NOW);
+	  if(handle != NULL){
+		SetMissingValueMapping(1,1,dlsym(handle,"float_decode"),0,0,0);
+		SetMissingValueMapping(1,1,dlsym(handle,"double_decode"),0,0,1);
+		SetMissingValueMapping(1,2,dlsym(handle,"uint_decode"),0,0,0);
+		SetMissingValueMapping(1,2,dlsym(handle,"ubyte_decode"),1,0,0);
+		SetMissingValueMapping(1,2,dlsym(handle,"ushort_decode"),0,1,0);
+		SetMissingValueMapping(1,4,dlsym(handle,"int_decode"),0,0,0);
+		SetMissingValueMapping(1,4,dlsym(handle,"byte_decode"),1,0,0);
+		SetMissingValueMapping(1,4,dlsym(handle,"short_decode"),0,1,0);
+
+		SetMissingValueMapping(2,1,dlsym(handle,"float_encode"),0,0,0);
+		SetMissingValueMapping(2,1,dlsym(handle,"double_encode"),0,0,1);
+		SetMissingValueMapping(2,2,dlsym(handle,"uint_encode"),0,0,0);
+		SetMissingValueMapping(2,2,dlsym(handle,"ubyte_encode"),1,0,0);
+		SetMissingValueMapping(2,2,dlsym(handle,"ushort_encode"),0,1,0);
+		SetMissingValueMapping(2,4,dlsym(handle,"int_encode"),0,0,0);
+		SetMissingValueMapping(2,4,dlsym(handle,"byte_encode"),1,0,0);
+		SetMissingValueMapping(2,4,dlsym(handle,"short_encode"),0,1,0);
+		set_plugin_missing_value_flags = dlsym(handle,"set_plugin_missing_value_flags");
+	  }
+	  else {
+		fprintf(stderr,"WARNING: plugin library '%s' not found\n",text);
+	  }
+#endif
+	}
+    if(set_plugin_missing_value_flags != NULL ) (*set_plugin_missing_value_flags)(
+	     &float_missing_val,
+	     &int_missing_val,
+	     &uint_missing_val,
+	     &double_missing_val,
+	     &short_missing_val,
+	     &ushort_missing_val,
+	     &byte_missing_val,
+	     &ubyte_missing_val
+												  );
   }
   return(plugmode);
 }
@@ -286,6 +363,7 @@ void set_missing_value_flags(float *f, int *i, unsigned int *ui, double *d, shor
   byte_missing_val   = *b ;
   ubyte_missing_val  = *ub ;
   plugmode = 1 ;  /* values have been set, activate plug mode */
+  if(set_plugin_missing_value_flags != NULL ) (*set_plugin_missing_value_flags)(f, i, ui, d, s, us,b, ub);
 }
 
 /* 
@@ -822,9 +900,9 @@ void SetMissingValueMapping(int what, int datatype, void *processor_, int is_byt
 {
     void *processor = processor_;
 	int mode;
+	if(what > 0 && processor == NULL) return ; /* null pointer to function, return */
 	mode = (what>0) ? what : -what;
     if(mode==1){  /* replace a decoding routine */
-      if(processor == NULL) processor = fst_null_decode_missing;
       if(datatype==1 || datatype==5 || datatype==6) { /* float or IEEE */
         if(is_double) {
           __fst_double_decode_missing = (what>0) ? processor : fst_double_decode_missing ; /* real or IEEE */
@@ -1012,18 +1090,18 @@ int main()
 
   RestoreMissingValueMapping();
 #ifdef NODECODE
-  SetMissingValueMapping(1,1,NULL,0,0,0);
-  SetMissingValueMapping(1,1,NULL,0,0,1);
-  SetMissingValueMapping(1,2,NULL,0,0,0);
-  SetMissingValueMapping(1,2,NULL,1,0,0);
-  SetMissingValueMapping(1,2,NULL,0,1,0);
+  SetMissingValueMapping(1,1,fst_null_decode_missing,0,0,0);
+  SetMissingValueMapping(1,1,fst_null_decode_missing,0,0,1);
+  SetMissingValueMapping(1,2,fst_null_decode_missing,0,0,0);
+  SetMissingValueMapping(1,2,fst_null_decode_missing,1,0,0);
+  SetMissingValueMapping(1,2,fst_null_decode_missing,0,1,0);
+  SetMissingValueMapping(1,4,fst_null_decode_missing,0,0,0);
+  SetMissingValueMapping(1,4,fst_null_decode_missing,1,0,0);
+  SetMissingValueMapping(1,4,fst_null_decode_missing,0,1,0);
+#endif
   SetMissingValueMapping(-1,2,NULL,0,0,0);  /* restore decoder */
   SetMissingValueMapping(-1,2,NULL,1,0,0);  /* restore decoder */
   SetMissingValueMapping(-1,2,NULL,0,1,0);  /* restore decoder */
-  SetMissingValueMapping(1,4,NULL,0,0,0);
-  SetMissingValueMapping(1,4,NULL,1,0,0);
-  SetMissingValueMapping(1,4,NULL,0,1,0);
-#endif
   for (i=0 ; i<ASIZE ; i++) {
     fa[i]= i*1.0+.5;
     da[i]=fa[i]+1.2345;
@@ -1037,6 +1115,7 @@ int main()
     ubp[i]=i+22;
   }
   junk=get_missing_value_flags(&f,&i,&ui,&d,&s,&us,&b,&ub);
+  f = -1.0E+37; d = -1.0E+37;
   set_missing_value_flags(&f,&i,&ui,&d,&s,&us,&b,&ub);
   fprintf(stderr,"%d float=%g, int=%d, uint=%u, double=%lg, short=%hd, ushort=%hu, byte=%hhd, ubyte=%hhu\n",junk, f,i,ui,d,s,us,b,ub);
   junk = missing_value_used();
