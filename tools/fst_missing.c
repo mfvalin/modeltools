@@ -841,7 +841,7 @@ static void fst_ubyte_decode_missing(unsigned char *z, int n) /* unsigned bytes 
 
 static void fst_null_decode_missing(void *z, int n) /* null decoder */
 {
-  fprintf(stderr,"using null decoder\n");
+/*  fprintf(stderr,"using null decoder\n"); */
   return;
 }
 
@@ -893,15 +893,21 @@ void restore_missing_value_mapping__(void) { RestoreMissingValueMapping() ; }
 /* C entry point */
 /* change the missing value mapping function */
 /* mode >0, set function to processor */
+/* mode <0, set function to original value, ignore processor */
+/* abs(mode)==11 selectively deactivate the selected decoding function (uses fst_null_decode_missing), ignore processor */
 /* abs(mode)==1 decoding functions */
 /* abs(mode)==2 encoding functions */
 /* datatype, is_byte, is_short, is_double , same as elsewhere in this code */
 void SetMissingValueMapping(int what, int datatype, void *processor_, int is_byte, int is_short, int is_double)
 {
     void *processor = processor_;
-	int mode;
-	if(what > 0 && processor == NULL) return ; /* null pointer to function, return */
-	mode = (what>0) ? what : -what;
+    int mode;
+    if(what > 0 && processor == NULL) return ; /* null pointer to function, return */
+    mode = (what>0) ? what : -what;
+    if(mode == 11) {  /* mode 11 : deactivate decoder for specified type */
+      mode = 1 ;  /* reduce mode to 1  */
+      processor = fst_null_decode_missing ;
+    }
     if(mode==1){  /* replace a decoding routine */
       if(datatype==1 || datatype==5 || datatype==6) { /* float or IEEE */
         if(is_double) {
