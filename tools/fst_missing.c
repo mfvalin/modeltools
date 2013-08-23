@@ -281,7 +281,7 @@ int missing_value_used()  /* return 1 if missing value detected, 0 otherwise */
 		SetMissingValueMapping(2,4,DlSym(handle,"int_encode"),0,0,0);
 		SetMissingValueMapping(2,4,DlSym(handle,"byte_encode"),1,0,0);
 		SetMissingValueMapping(2,4,DlSym(handle,"short_encode"),0,1,0);
-		set_plugin_missing_value_flags = DlSym(handle,"set_plugin_missing_value_flags");
+                set_plugin_missing_value_flags = (void(*)()) DlSym(handle,"set_plugin_missing_value_flags");
 	  }
 	  else {
 		fprintf(stderr,"WARNING: plugin library '%s' not found\n",text);
@@ -904,60 +904,60 @@ void SetMissingValueMapping(int what, int datatype, void *processor_, int is_byt
     mode = (what>0) ? what : -what;
     if(mode == 11) {  /* mode 11 : deactivate decoder for specified type */
       mode = 1 ;  /* reduce mode to 1  */
-      processor = fst_null_decode_missing ;
+      processor = (void *)fst_null_decode_missing ;
     }
     if(mode==1){  /* replace a decoding routine */
       if(datatype==1 || datatype==5 || datatype==6) { /* float or IEEE */
         if(is_double) {
-          __fst_double_decode_missing = (what>0) ? processor : fst_double_decode_missing ; /* real or IEEE */
+          __fst_double_decode_missing = (what>0) ? (void(*)()) processor : (void(*)()) fst_double_decode_missing ; /* real or IEEE */
         }else{
-          __fst_float_decode_missing = (what>0) ? processor : fst_float_decode_missing ; /* real or IEEE */
+          __fst_float_decode_missing = (what>0) ? (void(*)()) processor : (void(*)()) fst_float_decode_missing ; /* real or IEEE */
         }
       }
       if(datatype==4) {  /* signed */
         if(is_short) {
-          __fst_short_decode_missing = (what>0) ? processor : fst_short_decode_missing ;   /* signed shorts */
+          __fst_short_decode_missing = (what>0) ? (void(*)()) processor : (void(*)()) fst_short_decode_missing ;   /* signed shorts */
         }else if(is_byte){
-          __fst_byte_decode_missing = (what>0) ? processor : fst_byte_decode_missing ;   /* signed bytes */
+          __fst_byte_decode_missing = (what>0) ? (void(*)()) processor : (void(*)()) fst_byte_decode_missing ;   /* signed bytes */
         }else{
-          __fst_int_decode_missing = (what>0) ? processor : fst_int_decode_missing ;   /* signed integers */
+          __fst_int_decode_missing = (what>0) ? (void(*)()) processor : (void(*)()) fst_int_decode_missing ;   /* signed integers */
         }
       }
       if(datatype==2) {  /* unsigned */
         if(is_short) {
-          __fst_ushort_decode_missing = (what>0) ? processor : fst_ushort_decode_missing ;   /* uns  SetMissingValueMapping(1,4,NULL,0,0,0);
+          __fst_ushort_decode_missing = (what>0) ? (void(*)()) processor : (void(*)()) fst_ushort_decode_missing ;   /* uns  SetMissingValueMapping(1,4,NULL,0,0,0);
           igned shorts */
         }else if(is_byte){
-          __fst_ubyte_decode_missing = (what>0) ? processor : fst_ubyte_decode_missing ;   /* unsigned bytes */
+          __fst_ubyte_decode_missing = (what>0) ? (void(*)()) processor : (void(*)()) fst_ubyte_decode_missing ;   /* unsigned bytes */
         }else{
-          __fst_uint_decode_missing = (what>0) ? processor : fst_uint_decode_missing ;   /* unsigned integers */
+          __fst_uint_decode_missing = (what>0) ? (void(*)()) processor : (void(*)()) fst_uint_decode_missing ;   /* unsigned integers */
         }
       }
     }
     if(mode==2){           /* replace an encoding routine */
       if(datatype==1 || datatype==5 || datatype==6) { /* float or IEEE */
          if(is_double) {
-           __fst_double_encode_missing = (what>0) ? processor : fst_double_encode_missing ; /* real or IEEE */
+           __fst_double_encode_missing = (what>0) ? (int(*)()) processor : (int(*)()) fst_double_encode_missing ; /* real or IEEE */
          }else{
-           __fst_float_encode_missing = (what>0) ? processor : fst_float_encode_missing ; /* real or IEEE */
+           __fst_float_encode_missing = (what>0) ? (int(*)()) processor : (int(*)()) fst_float_encode_missing ; /* real or IEEE */
          }
       }
       if(datatype==4) {  /* signed */
         if(is_short) {
-          __fst_short_encode_missing = (what>0) ? processor : fst_short_encode_missing ;   /* signed shorts */
+          __fst_short_encode_missing = (what>0) ? (int(*)()) processor : (int(*)()) fst_short_encode_missing ;   /* signed shorts */
         }else if(is_byte){
-          __fst_byte_encode_missing = (what>0) ? processor : fst_byte_encode_missing ;   /* signed bytes */
+          __fst_byte_encode_missing = (what>0) ? (int(*)()) processor : (int(*)()) fst_byte_encode_missing ;   /* signed bytes */
         }else{
-          __fst_int_encode_missing = (what>0) ? processor : fst_int_encode_missing ;   /* signed integers */
+          __fst_int_encode_missing = (what>0) ? (int(*)()) processor : (int(*)()) fst_int_encode_missing ;   /* signed integers */
         }
       }
       if(datatype==2) {  /* unsigned */
         if(is_short) {
-          __fst_ushort_encode_missing = (what>0) ? processor : fst_ushort_encode_missing ;   /* unsigned shorts */
+          __fst_ushort_encode_missing = (what>0) ? (int(*)()) processor : (int(*)()) fst_ushort_encode_missing ;   /* unsigned shorts */
         }else if(is_byte){
-          __fst_ubyte_encode_missing = (what>0) ? processor : fst_ubyte_encode_missing ;   /* unsigned bytes */
+          __fst_ubyte_encode_missing = (what>0) ? (int(*)()) processor : (int(*)()) fst_ubyte_encode_missing ;   /* unsigned bytes */
         }else{
-          __fst_uint_encode_missing = (what>0) ? processor : fst_uint_encode_missing ;   /* unsigned integers */
+          __fst_uint_encode_missing = (what>0) ? (int(*)()) processor : (int(*)()) fst_uint_encode_missing ;   /* unsigned integers */
         }
       }
     }
