@@ -9,7 +9,7 @@
   if this module is compiled with -DFULL
   it becomes a direct interface do dlopen/dlsym/dlerror/dlclose
 */
-static char *ERR_NOT_ACTIVE="ERROR: this is the dummy dynamic loader\n";
+#define ERR_NOT_ACTIVE "ERROR: this is the dummy dynamic loader\n"
 
 void *DlOpen(const char *filename, int flag)
 {

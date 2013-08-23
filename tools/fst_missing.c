@@ -215,7 +215,6 @@ int missing_value_used__();
 int missing_value_used()  /* return 1 if missing value detected, 0 otherwise */
 {
   char *text;
-  void *fptr;
   void *handle;
   if(plugmode==-1){
     text=getenv("MISSING_VALUE_FLAGS");
@@ -304,7 +303,6 @@ int missing_value_used()  /* return 1 if missing value detected, 0 otherwise */
 /* C entry point */
 /* forcibly set(activate) or reset(deactivate) the missing value mode flag */
 int ForceMissingValueUsage(int flag) {
-  int value = plugmode;
   plugmode = (flag!=0) ? 1 : 0;
   return(plugmode);
 }
