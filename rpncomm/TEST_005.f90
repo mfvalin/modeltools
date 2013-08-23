@@ -24,9 +24,12 @@ do irep2=1,3
   
   do increment=1,worldsize-1,2
     if(increment > 1 .and. mod(worldsize,increment)==0) goto 111 ! i not prime with respect to worldsize
-    pe_table(0) = 0 ! redo pe_table
+    pe_table = 0 ! redo pe_table
     do i=1,worldsize-1
       pe_table(i)=mod(pe_table(i-1)+increment,worldsize)
+    enddo
+    do i=1,worldsize-1
+      if(pe_table(i)==0) goto 111 ! permutation is incomplete, uninitialized entries in table
     enddo
     if(worldrank==0) print *,'increment=',increment
     me=-1
