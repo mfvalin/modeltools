@@ -180,9 +180,9 @@
 #include <stdlib.h>
 #include <stdio.h>
 
-#ifdef WITH_PLUGINS
 #include <dlfcn.h>
-#endif
+void *DlOpen(const char *filename, int flag);
+void *DlSym(void *handle, const char *symbol);
 
 #ifdef SELFTEST
 int msg_level=0;
@@ -262,32 +262,30 @@ int missing_value_used()  /* return 1 if missing value detected, 0 otherwise */
 	text=getenv("MISSING_VALUE_PLUGINS");
 	if(text != NULL ){
 	  fprintf(stderr,"INFO: opening plugin library '%s'\n",text);
-#ifdef WITH_PLUGINS
-	  handle = dlopen(text,RTLD_NOW);
+	  handle = DlOpen(text,RTLD_NOW);
 	  if(handle != NULL){
-		SetMissingValueMapping(1,1,dlsym(handle,"float_decode"),0,0,0);
-		SetMissingValueMapping(1,1,dlsym(handle,"double_decode"),0,0,1);
-		SetMissingValueMapping(1,2,dlsym(handle,"uint_decode"),0,0,0);
-		SetMissingValueMapping(1,2,dlsym(handle,"ubyte_decode"),1,0,0);
-		SetMissingValueMapping(1,2,dlsym(handle,"ushort_decode"),0,1,0);
-		SetMissingValueMapping(1,4,dlsym(handle,"int_decode"),0,0,0);
-		SetMissingValueMapping(1,4,dlsym(handle,"byte_decode"),1,0,0);
-		SetMissingValueMapping(1,4,dlsym(handle,"short_decode"),0,1,0);
+		SetMissingValueMapping(1,1,DlSym(handle,"float_decode"),0,0,0);
+		SetMissingValueMapping(1,1,DlSym(handle,"double_decode"),0,0,1);
+		SetMissingValueMapping(1,2,DlSym(handle,"uint_decode"),0,0,0);
+		SetMissingValueMapping(1,2,DlSym(handle,"ubyte_decode"),1,0,0);
+		SetMissingValueMapping(1,2,DlSym(handle,"ushort_decode"),0,1,0);
+		SetMissingValueMapping(1,4,DlSym(handle,"int_decode"),0,0,0);
+		SetMissingValueMapping(1,4,DlSym(handle,"byte_decode"),1,0,0);
+		SetMissingValueMapping(1,4,DlSym(handle,"short_decode"),0,1,0);
 
-		SetMissingValueMapping(2,1,dlsym(handle,"float_encode"),0,0,0);
-		SetMissingValueMapping(2,1,dlsym(handle,"double_encode"),0,0,1);
-		SetMissingValueMapping(2,2,dlsym(handle,"uint_encode"),0,0,0);
-		SetMissingValueMapping(2,2,dlsym(handle,"ubyte_encode"),1,0,0);
-		SetMissingValueMapping(2,2,dlsym(handle,"ushort_encode"),0,1,0);
-		SetMissingValueMapping(2,4,dlsym(handle,"int_encode"),0,0,0);
-		SetMissingValueMapping(2,4,dlsym(handle,"byte_encode"),1,0,0);
-		SetMissingValueMapping(2,4,dlsym(handle,"short_encode"),0,1,0);
-		set_plugin_missing_value_flags = dlsym(handle,"set_plugin_missing_value_flags");
+		SetMissingValueMapping(2,1,DlSym(handle,"float_encode"),0,0,0);
+		SetMissingValueMapping(2,1,DlSym(handle,"double_encode"),0,0,1);
+		SetMissingValueMapping(2,2,DlSym(handle,"uint_encode"),0,0,0);
+		SetMissingValueMapping(2,2,DlSym(handle,"ubyte_encode"),1,0,0);
+		SetMissingValueMapping(2,2,DlSym(handle,"ushort_encode"),0,1,0);
+		SetMissingValueMapping(2,4,DlSym(handle,"int_encode"),0,0,0);
+		SetMissingValueMapping(2,4,DlSym(handle,"byte_encode"),1,0,0);
+		SetMissingValueMapping(2,4,DlSym(handle,"short_encode"),0,1,0);
+		set_plugin_missing_value_flags = DlSym(handle,"set_plugin_missing_value_flags");
 	  }
 	  else {
 		fprintf(stderr,"WARNING: plugin library '%s' not found\n",text);
 	  }
-#endif
 	}
     if(set_plugin_missing_value_flags != NULL ) (*set_plugin_missing_value_flags)(
 	     &float_missing_val,
@@ -1105,9 +1103,9 @@ int main()
   SetMissingValueMapping(1,4,fst_null_decode_missing,1,0,0);
   SetMissingValueMapping(1,4,fst_null_decode_missing,0,1,0);
 #endif
-  SetMissingValueMapping(-1,2,NULL,0,0,0);  /* restore decoder */
-  SetMissingValueMapping(-1,2,NULL,1,0,0);  /* restore decoder */
-  SetMissingValueMapping(-1,2,NULL,0,1,0);  /* restore decoder */
+  SetMissingValueMapping(-1,2,NULL,0,0,0);  /* restore uint decoder */
+  SetMissingValueMapping(-1,2,NULL,1,0,0);  /* restore ubyte decoder */
+  SetMissingValueMapping(-1,2,NULL,0,1,0);  /* restore ushort decoder */
   for (i=0 ; i<ASIZE ; i++) {
     fa[i]= i*1.0+.5;
     da[i]=fa[i]+1.2345;
@@ -1148,7 +1146,7 @@ int main()
   uba[4]=ub ; uba[ASIZE-5]=ub;
   ubstat=EncodeMissingValue(ubp,uba,ASIZE,2,8,1,0,0);
   fprintf(stderr,"status values: %d %d %d %d %d %d %d %d\n",fstat,dstat,istat,sstat,bstat,uistat,usstat,ubstat);
-  for (ii=0 ; ii<ASIZE ; ii++) {
+  for (ii=-1 ; ++ii<ASIZE ; ) {
     fprintf(stderr,"%2d float=%12g, int=%12d, short=%8hd, byte=%8hhd, uint=%12u, ushort=%8hu, ubyte=%8hhu,  double=%12lg\n",ii,fp[ii],ip[ii],sp[ii],bp[ii],uip[ii],usp[ii],ubp[ii],dp[ii]);
   }
   fprintf(stderr,"================================================================\n");
