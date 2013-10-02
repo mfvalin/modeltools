@@ -351,6 +351,12 @@ int c_fstecr(word *field_in, void * work, int npak,
 
 
   is_missing = in_datyp_ori & 64 ; /* will be cancelled later if not supported or no missing values detected */
+  if ( (in_datyp&0xF) == 8) {
+    WARNPRINT fprintf(stderr,"WARNING: compression and/or missing values not supported, data type %d reset to %d (complex)\n",in_datyp_ori,8);
+    is_missing = 0;   /* missing values not supported for complex type */
+    in_datyp_ori = 8; /* extra compression not supported for complex type */
+    in_datyp = 8;
+  }
   
   l1 = strlen(in_typvar);
   l2 = strlen(in_nomvar);
@@ -415,8 +421,8 @@ int c_fstecr(word *field_in, void * work, int npak,
     minus_nbits = -32;
     }
 
-    if ( ((in_datyp & 0xF) == 5) && (nbits == 64) ) IEEE_64=1;  /* 64 bits IEEE */
-    if ( ((in_datyp & 0xF) == 8) && (nbits == 64) ) IEEE_64=1;  /* 64 bits IEEE */
+    if ( ((in_datyp & 0xF) == 5) && (nbits == 64) ) IEEE_64=1;  /* 64 bits real IEEE */
+    if ( ((in_datyp & 0xF) == 8) && (nbits == 64) ) IEEE_64=1;  /* 64 bits complex IEEE */
         
   /* validate range of arguments */
   VALID(ni,1,NI_MAX,"ni","c_fstecr")

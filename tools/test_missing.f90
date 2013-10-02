@@ -5,7 +5,7 @@ subroutine test_missing_values
 implicit none
 integer, external :: fnom, fstluk, fstinf, fstouv, get_missing_value_flags, encode_missing_value, fstlir
 integer :: junk, status, i
-integer, parameter :: ASIZE=16
+integer, parameter :: ASIZE=16             ! ASIZE should be kept even because of complex tests
 integer, dimension(ASIZE) :: ia, ia2, work
 integer, dimension(ASIZE) :: uia, uia2
 integer *2, dimension(ASIZE) :: sa, sa2
@@ -13,7 +13,9 @@ integer *1, dimension(ASIZE) :: ba, ba2
 integer *2, dimension(ASIZE) :: usa, usa2
 integer *1, dimension(ASIZE) :: uba, uba2
 real *4, dimension(ASIZE) :: fa, fa2, fa3
+real *4, dimension(ASIZE) :: ca, ca2, ca3   ! used for 32 bit complex data
 real *8, dimension(ASIZE) :: da, da2, da3
+real *8, dimension(ASIZE) :: za, za2, za3   ! used for 64 bit complex data
 integer :: im, uim
 integer *2 :: sm, usm
 integer *1 :: bm, ubm
@@ -23,23 +25,28 @@ integer :: ni, nj, nk
 
 status= get_missing_value_flags(fm,im,uim,dm,sm,usm,bm,ubm)
 print 101,status,fm,dm,im,sm,bm,uim,usm,ubm
-101 format(I2,2G14.5,I11,5I7,2G14.5)
+! 101 format(I2,2G14.5,I11,5I7,2G14.5)
+101 format(I2,2G14.5,I11,5I7,4G14.5)
 call set_missing_value_flags(fm,im,uim,dm,sm,usm,bm,ubm)
 status= get_missing_value_flags(fm,im,uim,dm,sm,usm,bm,ubm)
 print 101,status,fm,dm,im,sm,bm,uim,usm,ubm
 
 do i=1,ASIZE
   fa(i)  = i*1.0+.5
+  ca(i)  = i*1.0+.6
   ia(i)  = i-13
   uia(i) = i+22
   da(i)  = fa(i)+1.2345
+  za(i)  = fa(i)+1.3456
   sa(i)  = i-13
   ba(i)  = i-13
   usa(i) = i+22
   uba(i) = i+22
 enddo
 fa(1)=fm   ; fa(ASIZE)=fm ; fa(2)=fm
+ ca(1)=fm   ; ca(ASIZE)=fm ; ca(2)=fm
 da(1)=dm   ; da(ASIZE)=dm ; da(ASIZE-1)=dm
+ za(1)=dm   ; za(ASIZE)=dm ; za(ASIZE-1)=dm
 ia(2)=im   ; ia(ASIZE-1)=im ; ia(3)=im   ; ia(ASIZE-2)=im
 sa(2)=sm   ; sa(ASIZE-1)=sm ; sa(4)=sm   ; sa(ASIZE-3)=sm
 ba(2)=bm   ; ba(ASIZE-1)=bm ; ba(1)=bm
@@ -55,7 +62,7 @@ uba(ASIZE/2)=111     ! set to 255 to force error message
 
 print *,'======================================'
 do i=1,ASIZE
- print 101,i,fa(i),da(i),ia(i),sa(i),ba(i),uia(i),usa(i),uba(i)
+ print 101,i,fa(i),da(i),ia(i),sa(i),ba(i),uia(i),usa(i),uba(i),ca(i),za(i)
 enddo
 print *,'======================================'
 status=-1
@@ -83,7 +90,7 @@ status=-1
 status=encode_missing_value(uba2,uba,ASIZE,2,8,1,0,0)  ! unsigned byte
 print *,'encoding status=',status
 do i=1,ASIZE
- print 101,i,fa2(i),da2(i),ia2(i),sa2(i),ba2(i),uia2(i),usa2(i),uba2(i)
+ print 101,i,fa2(i),da2(i),ia2(i),sa2(i),ba2(i),uia2(i),usa2(i),uba2(i),ca(i),za(i)
 enddo
 print *,'======================================'
 call decode_missing_value(fa2,ASIZE,6,0,0,0)   ! float
@@ -111,7 +118,7 @@ call decode_missing_value(uba2,ASIZE,2,1,0,0)  ! unsigned byte
 if(all(uba==uba2)) print *,'unsigned byte encoding/decoding test      passed'
 
 do i=1,ASIZE
- print 101,i,fa2(i),da2(i),ia2(i),sa2(i),ba2(i),uia2(i),usa2(i),uba2(i)
+ print 101,i,fa2(i),da2(i),ia2(i),sa2(i),ba2(i),uia2(i),usa2(i),uba2(i),ca(i),za(i)
 enddo
 print *,'============= writing into standard file with and without missing values ============'
 status=fnom(11,'missing.fst','STD+RND',0)
@@ -124,6 +131,7 @@ call fstecr(ia,work,-8,11,0,0,0,ASIZE,1,1,2,0,0,'XX','YYYY','ETIKET','X',0,0,0,0
 
 call fstecr(fa,work,-16,11,0,0,0,ASIZE,1,1,3,0,0,'XX','YYYY','ETIKET','X',0,0,0,0,1,.false.)  ! float
 call fstecr(fa,work,-32,11,0,0,0,ASIZE,1,1,19,0,0,'XX','YYYY','ETIKET','X',0,0,0,0,5,.false.)  ! IEEE 32
+call fstecr(ca,work,-32,11,0,0,0,ASIZE/2,1,1,119,0,0,'XX','YYYY','ETIKET','X',0,0,0,0,8+64+128,.false.)  ! complex IEEE 32 with missing and compression
 call fstecr(fa,work,-16,11,0,0,0,ASIZE,1,1,4,0,0,'XX','YYYY','ETIKET','X',0,0,0,0,65,.false.) ! float with missing
 call fstecr(fa,work,-32,11,0,0,0,ASIZE,1,1,20,0,0,'XX','YYYY','ETIKET','X',0,0,0,0,69,.false.)  ! IEEE 32 with missing
 
@@ -132,7 +140,8 @@ call fstecr(uia,work,-8,11,0,0,0,ASIZE,1,1,6,0,0,'XX','YYYY','ETIKET','X',0,0,0,
 
 call fst_data_length(8)
 call fstecr(da,work,-16,11,0,0,0,ASIZE,1,1,7,0,0,'XX','YYYY','ETIKET','X',0,0,0,0,1,.false.)  ! double
-call fstecr(da,work,-64,11,0,0,0,ASIZE,1,1,17,0,0,'XX','YYYY','ETIKET','X',0,0,0,0,5,.false.)  ! double
+call fstecr(da,work,-64,11,0,0,0,ASIZE,1,1,17,0,0,'XX','YYYY','ETIKET','X',0,0,0,0,5,.false.)  ! IEEE64
+call fstecr(za,work,-64,11,0,0,0,ASIZE/2,1,1,117,0,0,'XX','YYYY','ETIKET','X',0,0,0,0,8+64+128,.false.)  ! complex IEEE64 with missing and compression
 call fst_data_length(8)
 call fstecr(da,work,-16,11,0,0,0,ASIZE,1,1,8,0,0,'XX','YYYY','ETIKET','X',0,0,0,0,65,.false.) ! double with missing
 call fstecr(da,work,-64,11,0,0,0,ASIZE,1,1,18,0,0,'XX','YYYY','ETIKET','X',0,0,0,0,69,.false.) ! IEEE64 with missing
@@ -176,9 +185,13 @@ status=fstlir(uia2,12,ni,nj,nk,-1,' ',5,-1,-1,' ',' ')    ! unsigned integer
 
 status=fstlir(fa2,12,ni,nj,nk,-1,' ',3,-1,-1,' ',' ')     ! float
 status=fstlir(fa3,12,ni,nj,nk,-1,' ',19,-1,-1,' ',' ')     ! IEEE 32
+ ca3=-1.0 ; status=fstlir(ca3,12,ni,nj,nk,-1,' ',119,-1,-1,' ',' ')     ! complex IEEE 32
+if(ni /= ASIZE/2) print *,'ERROR: complex32 expected ni=',ASIZE/2,' got:',ni
 call fst_data_length(8)
 status=fstlir(da2,12,ni,nj,nk,-1,' ',7,-1,-1,' ',' ')     ! double
-status=fstlir(da3,12,ni,nj,nk,-1,' ',17,-1,-1,' ',' ')     ! double
+status=fstlir(da3,12,ni,nj,nk,-1,' ',17,-1,-1,' ',' ')     ! IEEE 64
+ za3=-1.0 ; status=fstlir(za3,12,ni,nj,nk,-1,' ',117,-1,-1,' ',' ')     ! complex IEEE 64
+if(ni /= ASIZE/2) print *,'ERROR: complex64 expected ni=',ASIZE/2,' got:',ni
 
 call fst_data_length(2)
 status=fstlir(usa2,12,ni,nj,nk,-1,' ',9,-1,-1,' ',' ')    ! unsigned short
@@ -191,10 +204,10 @@ call fst_data_length(1)
 status=fstlir(uba2,12,ni,nj,nk,-1,' ',15,-1,-1,' ',' ')   ! unsigned byte
 
 print *,'---------------------------------------------------------------------------------------------------'
-print *,'#       float  <f16> double          int  short   byte   uint ushort  ubyte   float   <E64> double'
+print *,'#       float  <16> double          int  short   byte   uint ushort  ubyte    float  <IEEE> double     complex 32    complex 64'
 print *,'---------------------------------------------------------------------------------------------------'
 do i=1,ASIZE
- print 101,i,fa2(i),da2(i),ia2(i),sa2(i),ba2(i),uia2(i),usa2(i),uba2(i),fa3(i),da3(i)
+ print 101,i,fa2(i),da2(i),ia2(i),sa2(i),ba2(i),uia2(i),usa2(i),uba2(i),fa3(i),da3(i),ca3(i),za3(i)
 enddo
 print *,'============= WITH possible missing value(s) ======'
 status=fstlir(ia2,12,ni,nj,nk,-1,' ',2,-1,-1,' ',' ')     ! integer with missing
@@ -217,10 +230,10 @@ call fst_data_length(1)
 status=fstlir(uba2,12,ni,nj,nk,-1,' ',16,-1,-1,' ',' ')   ! unsigned byte with missing
 
 print *,'---------------------------------------------------------------------------------------------------'
-print *,'#    float  <f16> double             int  short   byte   uint ushort  ubyte    float  <E64> double'
+print *,'#    float  <f16> double             int  short   byte   uint ushort  ubyte     float  <IEEE> double     complex 32    complex 64'
 print *,'---------------------------------------------------------------------------------------------------'
 do i=1,ASIZE
- print 101,i,fa2(i),da2(i),ia2(i),sa2(i),ba2(i),uia2(i),usa2(i),uba2(i),fa3(i),da3(i)
+ print 101,i,fa2(i),da2(i),ia2(i),sa2(i),ba2(i),uia2(i),usa2(i),uba2(i),fa3(i),da3(i),ca(i),za(i)
 enddo
 
 call fstfrm(12)
