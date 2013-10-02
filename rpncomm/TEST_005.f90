@@ -44,7 +44,7 @@ do irep2=1,3
     t1=MPI_wtime()
     call mpi_barrier(MPI_COMM_WORLD,ierr)
     do irep=1,10
-      call mpi_sendrecv(sbuf,BUFSIZE,MPI_INTEGER,other,1,rbuf,BUFSIZE,MPI_INTEGER,other,1,MPI_COMM_WORLD,status,ierr)
+      if(worldrank<worldsize) call mpi_sendrecv(sbuf,BUFSIZE,MPI_INTEGER,other,1,rbuf,BUFSIZE,MPI_INTEGER,other,1,MPI_COMM_WORLD,status,ierr)
     enddo
     call mpi_barrier(MPI_COMM_WORLD,ierr)
     t2=MPI_wtime()
