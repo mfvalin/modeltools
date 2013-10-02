@@ -415,8 +415,9 @@ int c_fstecr(word *field_in, void * work, int npak,
     minus_nbits = -32;
     }
 
-  if ( ((in_datyp & 0xF) == 5) && (nbits == 64) ) IEEE_64=1;  /* 64 bits IEEE */
-    
+    if ( ((in_datyp & 0xF) == 5) && (nbits == 64) ) IEEE_64=1;  /* 64 bits IEEE */
+    if ( ((in_datyp & 0xF) == 8) && (nbits == 64) ) IEEE_64=1;  /* 64 bits IEEE */
+        
   /* validate range of arguments */
   VALID(ni,1,NI_MAX,"ni","c_fstecr")
   VALID(nj,1,NJ_MAX,"nj","c_fstecr")
