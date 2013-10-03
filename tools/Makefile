@@ -2,6 +2,8 @@ include Makefile.common
 
 TESTS = test001 test002
 
+test: test_missing
+
 ALL: $(TESTS)
 	echo making all
 
@@ -39,3 +41,10 @@ runtestfst: testfst
 	./testfst
 	rm -rf mydir mydir2
 	rm -f file1.tfs file2.tfs file3.tfs testfst
+
+test_missing:
+	s.cc -c fstd98.c fst_missing.c DlInterface.c
+	rm -f missing.fst a.out
+	s.f90 -o a.out bidon_001.f90 test_missing.f90 fstd98.o fst_missing.o DlInterface.o  -lrmnbeta_014
+	./a.out
+	rm -f missing.fst a.out test_missing.o fstd98.o DlInterface.o bidon_001.o fst_missing.o

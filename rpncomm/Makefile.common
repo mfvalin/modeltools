@@ -14,6 +14,9 @@
 	$(MPIF90C) $(OPENMP) $(FCFLAGS) -o $@ test.f90 -L$(LIBDIR) -l$(LIBNAME) ; \
 	cat test.f90 ; rm -f test.f90
 
+ifeq (,$(VPATH))
+  VPATH:=.
+endif
 ifeq (,$(BASE_ARCH))
   BASE_ARCH:=custom
   EC_ARCH:=$(BASE_ARCH)/unknown

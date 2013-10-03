@@ -333,7 +333,7 @@ int c_fstecr(word *field_in, void * work, int npak,
   int is_missing ; /*  missing value feature used flag */
   int in_datyp = in_datyp_ori & 0xFFBF ; /* suppress missing value flag (64) */
   int sizefactor ; /* number of bytes per data item */
-  int IEEE_64=0  ; /* flag 64 bit IEEE (type 5) */
+  int IEEE_64=0  ; /* flag 64 bit IEEE (type 5 or 8) */
   
   file_table_entry *f;
   stdf_dir_keys *stdf_entry;
@@ -352,7 +352,9 @@ int c_fstecr(word *field_in, void * work, int npak,
 
   is_missing = in_datyp_ori & 64 ; /* will be cancelled later if not supported or no missing values detected */
   if ( (in_datyp&0xF) == 8) {
-    WARNPRINT fprintf(stderr,"WARNING: compression and/or missing values not supported, data type %d reset to %d (complex)\n",in_datyp_ori,8);
+    if(in_datyp_ori!=8) {
+      WARNPRINT fprintf(stderr,"WARNING: compression and/or missing values not supported, data type %d reset to %d (complex)\n",in_datyp_ori,8);
+    }
     is_missing = 0;   /* missing values not supported for complex type */
     in_datyp_ori = 8; /* extra compression not supported for complex type */
     in_datyp = 8;
@@ -633,10 +635,10 @@ int c_fstecr(word *field_in, void * work, int npak,
     if(is_missing){    /* put appropriate values into field after allocating it */
       field= (word *) alloca(ni*nj*nk*sizefactor); /* allocate self deallocating scratch field */
       if( 0 == EncodeMissingValue(field,field_in,ni*nj*nk,in_datyp,nbits,xdf_byte,xdf_short,xdf_double) ) {
-	field=field_in ;
-	INFOPRINT fprintf(stderr,"NO missing value, data type %d reset to %d\n",stdf_entry->datyp,datyp);
-	stdf_entry->datyp = datyp;  /* cancel missing data flag in data type */
-	is_missing = 0;
+        field=field_in ;
+        INFOPRINT fprintf(stderr,"NO missing value, data type %d reset to %d\n",stdf_entry->datyp,datyp);
+        stdf_entry->datyp = datyp;  /* cancel missing data flag in data type */
+        is_missing = 0;
       }
     }
     switch (datyp) {

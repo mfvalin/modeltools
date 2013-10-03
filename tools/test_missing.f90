@@ -233,7 +233,7 @@ print *,'-----------------------------------------------------------------------
 print *,'#    float  <f16> double             int  short   byte   uint ushort  ubyte     float  <IEEE> double     complex 32    complex 64'
 print *,'---------------------------------------------------------------------------------------------------'
 do i=1,ASIZE
- print 101,i,fa2(i),da2(i),ia2(i),sa2(i),ba2(i),uia2(i),usa2(i),uba2(i),fa3(i),da3(i),ca(i),za(i)
+ print 101,i,fa2(i),da2(i),ia2(i),sa2(i),ba2(i),uia2(i),usa2(i),uba2(i),fa3(i),da3(i),ca3(i),za3(i)
 enddo
 
 call fstfrm(12)
