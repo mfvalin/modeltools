@@ -19,22 +19,23 @@
 * */
       subroutine RPN_COMM_test_limit()
       implicit none
-      integer, parameter :: NPE=7
+      integer, parameter :: NPE=6
       integer, dimension(NPE) :: count, offset
       integer :: my_id, gmin, gmax, lmini, lmaxi, status
       integer :: RPN_COMM_limit_2
       external :: RPN_COMM_limit_2
 
       gmin = 1
-      gmax = 9
-      do my_id=4,NPE-1
+      gmax = 13
+      do my_id=0,NPE-1
       status = RPN_COMM_limit_2(my_id, npe, gmin, gmax,
      &     lmini,lmaxi,count, offset,3)
-      print 101, 'pe_me=',my_id, lmini,lmaxi, status
+      print 101, 'pe_me=',my_id, lmini,lmaxi, gmin, gmax, status
       print 101, 'count=',count
       print 101, 'offst=',offset
       print *,''
       enddo
+      print *, '---------------------------'
 101   format(A7,10I5)
       my_id=NPE-1
       status = RPN_COMM_limit_2(my_id, npe, gmin, gmax,
