@@ -22,6 +22,7 @@ integer *1 :: bm, ubm
 real *4 :: fm
 real *8 :: dm
 integer :: ni, nj, nk
+logical :: file_exists
 
 status= get_missing_value_flags(fm,im,uim,dm,sm,usm,bm,ubm)
 print 101,status,fm,dm,im,sm,bm,uim,usm,ubm
@@ -120,6 +121,12 @@ if(all(uba==uba2)) print *,'unsigned byte encoding/decoding test      passed'
 do i=1,ASIZE
  print 101,i,fa2(i),da2(i),ia2(i),sa2(i),ba2(i),uia2(i),usa2(i),uba2(i),ca(i),za(i)
 enddo
+1111 continue ! write data into standard file
+inquire(file='missing.fst',EXIST=file_exists)
+if(file_exists) then
+  print *,"============= missing.fst exists, write test will be skipped ============"
+  goto 2222 ! skip write test if file exists
+endif
 print *,'============= writing into standard file with and without missing values ============'
 status=fnom(11,'missing.fst','STD+RND',0)
 print *,'status fnom=',status
@@ -167,6 +174,7 @@ call fst_data_length(1)
 call fstecr(uba,work,-8,11,0,0,0,ASIZE,1,1,16,0,0,'XX','YYYY','ETIKET','X',0,0,0,0,66,.false.) ! unsigned byte with missing
 
 call fstfrm(11)
+2222 continue ! read data from standard file
 !  set new flag values before reading so we can see the difference 'type n' vs 'type n+64'
 fm=-999.99; dm=-888.88; im=-999999; sm=-32768 ; bm=-128; uim=999999 ; usm=32767; ubm=127
 print *,'============================== missing values ============================='
