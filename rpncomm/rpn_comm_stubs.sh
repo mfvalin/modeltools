@@ -333,7 +333,7 @@ c	if(pe_tot .ne. -1) call ABORT
 	end
 *
 EOT
-[[ "$1" == c || "$1" == all ]] && echo "CREATING: rpn_comm_c_stubs.f" && cat <<EOT >rpn_comm_c_stubs.c
+[[ "$1" == c || "$1" == all ]] && echo "CREATING: rpn_comm_c_stubs.c" && cat <<EOT >rpn_comm_c_stubs.c
 #include <stdio.h>
 #include <stdlib.h>
 #include <mpi.h>

@@ -132,11 +132,11 @@ module RPN_COMM_transpose_utils
     do i=1,npe  ! transpose sub block before exchange
       call transpose_with_halo_a4_b4(za(min1,1,1+sdispls(i)),min1,max1,ta(1,n1p*sdispls(i)),n1p,n2*scnts(i),128,.true.)
     enddo
-    call MPI_allttoallv(ta,scnts*n12,sdispls*n12,MPI_INTEGER,zb,rcnts*n12,rdispls*n12,MPI_INTEGER,pecomm,ierr)
+    call MPI_alltoallv(ta,scnts*n12,sdispls*n12,MPI_INTEGER,zb,rcnts*n12,rdispls*n12,MPI_INTEGER,pecomm,ierr)
     min3o = sdispls(mype) + 1   ! return this PE's range in n3g
     max3o = sdispls(mype) + scnts(mype)
   else          ! backward data transpose, ZB(n2,n3p(pe),n1G) to TA to ZA(ni,n2,n3g)
-    call MPI_allttoallv(zb,scnts*n12,sdispls*n12,MPI_INTEGER,ta,rcnts*n12,rdispls*n12,MPI_INTEGER,pecomm,ierr)
+    call MPI_alltoallv(zb,scnts*n12,sdispls*n12,MPI_INTEGER,ta,rcnts*n12,rdispls*n12,MPI_INTEGER,pecomm,ierr)
     do i=1,npe  ! transpose sub block after exchange
       call transpose_with_halo_a4_b4(za(min1,1,1+sdispls(i)),min1,max1,ta(1,n1p*sdispls(i)),n1p,n2*scnts(i),128,.false.)
     enddo
