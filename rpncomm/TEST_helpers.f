@@ -1,4 +1,4 @@
-	subroutine TestUserInit(NX,NY) ! try to get NX,NY from file TEST.cfg if it exists
+        subroutine TestUserInit(NX,NY) ! try to get NX,NY from file TEST.cfg if it exists
         external :: get_a_free_unit
         integer :: get_a_free_unit
         integer :: iun,ier
@@ -9,8 +9,8 @@
         if(ier<0) return
         read(UNIT=iun,IOSTAT=ier,FMT=*)NX,NY
         close(UNIT=iun)
-	return
-	end
+        return
+        end
         integer function get_a_free_unit()
         implicit none
         integer :: i
