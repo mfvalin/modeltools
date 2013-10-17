@@ -1,4 +1,5 @@
 SHELL=/bin/bash
+RELBASEDIR=..
 #----- Begin Boilerplate
 ifneq (,$(wildcard ./Makefile))
 # we are at the top level, in the source directory, phase 1 instance

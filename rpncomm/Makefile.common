@@ -32,8 +32,8 @@ else
     include $(VPATH)/Makefile.ECsetup
   endif
 endif
-LIBDIR := $(VPATH)/../lib/$(EC_ARCH)
-INCDIR := $(VPATH)/../include/$(EC_ARCH)
+LIBDIR := $(VPATH)/$(RELBASEDIR)/lib/$(EC_ARCH)
+INCDIR := $(VPATH)/$(RELBASEDIR)/include/$(EC_ARCH)
 
 all: ALL
 
