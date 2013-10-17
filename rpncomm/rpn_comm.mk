@@ -17,13 +17,13 @@ LIBRARY  = $(LIBDIR)/lib$(LIBNAME).a
 STUB_LIBRARY = $(LIBDIR)/lib$(LIB)stubs_$(RPN_COMM_version).a
 SOURCES  = $(INCDECKS) $(CDECKS) $(FDECKS) $(HDECKS) $(F90DECKS)
 
-ALL:  lib stublib tests
+ALL:  lib stublib tests includes
 
 tests:	$(TESTS)
 
 stublib: $(STUB_LIBRARY)
 
-lib: $(LIBRARY)
+lib: $(LIBRARY) includes
 
 $(VPATH)/dependencies.mk:
 	-which gnu_find 2>/dev/null 1>/dev/null || (cd $(VPATH) ; find . -maxdepth 1 -type f | ../tools/mk.dependencies.pl >dependencies.mk )
@@ -56,6 +56,10 @@ $(LIBRARY): $(OBJECTS)
 	(cd $(LIBDIR) ; ln -sf lib$(LIB)_$(RPN_COMM_version).a  lib$(LIB).a)
 	mkdir -p $(INCDIR)
 	cp *.mod $(INCDIR)
+
+.PHONY:	includes
+includes:
+	cp $(VPATH)/*.inc $(INCDIR)
 
 TEST_000.Abs: $(LIBRARY)
 TEST_001.Abs: $(LIBRARY)

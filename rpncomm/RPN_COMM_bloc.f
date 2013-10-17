@@ -98,9 +98,9 @@
           pe_gr_blocmaster = t%pe_gr_blocmaster
           write(rpn_u,*) 'INFO: using valid block distribution for',
      %                 nblocx,' by',nblocy
-        else
-          write(rpn_u,*) 'INFO: found valid block distribution for',
-     %                 nblocx,' by',nblocy
+!        else
+!          write(rpn_u,*) 'INFO: found valid block distribution for',
+!     %                 nblocx,' by',nblocy
         endif
         exit       ! all ingredients match, exit loop
       enddo
