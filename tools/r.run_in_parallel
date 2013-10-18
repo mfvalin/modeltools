@@ -61,7 +61,8 @@ mpiexec_Linux() {
   if [[ "${OPAL_PREFIX}" == *openmpi_1.6* ]] ; then
 #    OPEN_MPI_PARMS="--prefix ${OPAL_PREFIX} --stdin all --mca btl tcp,self --cpus-per-proc ${OMP_NUM_THREADS:-1}"
     [[ -n "$bind" ]] && bind="-bind-to-core"
-    OPEN_MPI_PARMS="--prefix ${OPAL_PREFIX} --stdin all --mca btl tcp,self ${bind}  -cpus-per-proc ${OMP_NUM_THREADS:-1}"
+    OPEN_MPI_PARMS="--stdin all --mca btl tcp,self ${bind}  -cpus-per-proc ${OMP_NUM_THREADS:-1}"
+    [[ "$mpirun" == mpirun ]] && OPEN_MPI_PARMS="--prefix ${OPAL_PREFIX} ${OPEN_MPI_PARMS}"
     unset PE_HOSTFILE
 #    export OMPI_MCA_orte_default_hostfile=${MY_NODEFILE}
     [[ -f "${GECOSHEP_HOSTS_FILE}" ]] && export OMPI_MCA_orte_rsh_agent=rurun
