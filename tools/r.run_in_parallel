@@ -2,6 +2,7 @@
 # this script is the successor to the r.mpirun... series of scripts with expanded functionality
 # (stdout/stderr post processing and "launch in background" capability)
 #
+[[ "$1" == --version ]] && set -- -version
 # CAVEAT: this script uses typeset -Z (does not work for the bash shell)
 typeset -Z4 SeqNum MemberNo MemberChild
 # ===========================================================================
@@ -45,7 +46,7 @@ mpiexec_Linux() {
 #
 # start of temporary code to deal with OLD mpich2 versions needing mpdboot
 #
-  mpirun --version 2>/dev/null 1>/dev/null || UseMpdboot=yes  # old mpich2 or no mpirun at all
+  ${mpirun} --version 2>/dev/null 1>/dev/null || UseMpdboot=yes  # old mpich2 or no mpirun at all
   which mpdboot 2>/dev/null                || UseMpdboot=no   # mpdboot not found
   if [[ "${UseMpdboot}" == yes ]] ; then    # needed temporarily for old mpich2 versions
     echo "WARNING: using OLD version (pre 1.3) of mpich2 detected"
@@ -89,11 +90,11 @@ mpiexec_Linux() {
     if ((MpiCommWorlds>1)) ; then   # more than one MPI world, launch mpirun in background
       echo ==== Backgrounding MPI world ${MpiCommWorld} with ${PeInWorld[${MpiCommWorld}]} MPI tasks ====
       [[ -z ${dryrun} ]] && cat $tmpdir/.mpi_env | \
-      mpirun ${OPEN_MPI_PARMS} -machinefile ${MY_NODEFILE} -n ${PeInWorld[${MpiCommWorld}]} "$@" ${ParallelScript}.${MpiCommWorld} &
+      ${mpirun} ${OPEN_MPI_PARMS} -machinefile ${MY_NODEFILE} -n ${PeInWorld[${MpiCommWorld}]} "$@" ${ParallelScript}.${MpiCommWorld} &
     else   # only one MPI world, execute mpirun
       echo ==== Launching MPI world ${MpiCommWorld} with ${PeInWorld[${MpiCommWorld}]} MPI tasks ====
       [[ -z ${dryrun} ]] && cat $tmpdir/.mpi_env | \
-      mpirun ${OPEN_MPI_PARMS} -machinefile ${MY_NODEFILE} -n ${PeInWorld[${MpiCommWorld}]} "$@" ${ParallelScript}.${MpiCommWorld}
+      ${mpirun} ${OPEN_MPI_PARMS} -machinefile ${MY_NODEFILE} -n ${PeInWorld[${MpiCommWorld}]} "$@" ${ParallelScript}.${MpiCommWorld}
     fi
     PeAdded=${PeInWorld[${MpiCommWorld}]}
     ((ChildOffset=ChildOffset+PeAdded))
@@ -342,6 +343,7 @@ eval `cclargs_lite -D "" $0 \
     -nompi "run_with_mpi" "run_in_background" "[]" \
     -instances "" "" "[instance name for member or list of instances for master]" \
     -bind "" "bind" "[]" \
+    -mpirun "$(which rumpirun.openmpi)" "mpirun" "[]" \
     -mpiargs "" "" "[]" \
     -instancedir "${PARALLEL_INSTANCES_DIR}" "${PARALLEL_INSTANCES_DIR}" "[directory containing instance names]" \
     -geometry "" "" "[]" \
@@ -351,7 +353,7 @@ eval `cclargs_lite -D "" $0 \
     -timeout "60" "60" "[timeout for multiple instances]" \
     -debug "" "5" "[]" \
     -nocleanup "" "nocleanup" "[]" \
-    -version "" "1.0.5 2013/10/18" "[version number]" \
+    -version "" "1.0.6 2013/10/18" "[version number]" \
     -tag "child" "full" "[full/child/member/stderr/none/seq]" \
     -outp "o" "O" "[stdout prefix in listings]" \
     -errp "e" "E" "[stderr prefix in listings]" \
@@ -362,6 +364,7 @@ eval `cclargs_lite -D "" $0 \
     -selftest "" "selftest.$$" "[quick selftest]" \
     ++ "$@"`
 #
+mpirun=${mpirun:-mpirun}   # in case rumpirun.openmpi not found
 [[ -n ${version} ]] && echo "${0##*/} version $version" && exit 0
 echo "INFO: START of ${0##*/} : $(date)"
 [[ -z ${tmpdir} ]]  && tmpdir="$(pwd -P)/tmpdir${TRUE_HOST}$$"
