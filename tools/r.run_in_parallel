@@ -46,9 +46,10 @@ mpiexec_Linux() {
 #
 # start of temporary code to deal with OLD mpich2 versions needing mpdboot
 #
-  ${mpirun} --version 2>/dev/null 1>/dev/null || UseMpdboot=yes  # old mpich2 or no mpirun at all
+  mpirun --version 2>/dev/null 1>/dev/null || UseMpdboot=yes  # old mpich2 or no mpirun at all
   which mpdboot 2>/dev/null                || UseMpdboot=no   # mpdboot not found
   if [[ "${UseMpdboot}" == yes ]] ; then    # needed temporarily for old mpich2 versions
+    mpirun=mpirun   # using old version of mpich
     echo "WARNING: using OLD version (pre 1.3) of mpich2 detected"
     kill_mpich2_mpd 
     start_mpich2_mpd
@@ -57,11 +58,13 @@ mpiexec_Linux() {
 # end of temporary code to deal with OLD mpich2 versions needing mpdboot
 #
   export ENVIRONMENT_PASSED=yes  # used to check whether mpirun transmits environment variables or not
-#  OPEN_MPI_PARMS="--stdin all"
   if [[ "${OPAL_PREFIX}" == *openmpi_1.6* ]] ; then
-#    OPEN_MPI_PARMS="--prefix ${OPAL_PREFIX} --stdin all --mca btl tcp,self --cpus-per-proc ${OMP_NUM_THREADS:-1}"
     [[ -n "$bind" ]] && bind="-bind-to-core"
-    OPEN_MPI_PARMS="--stdin all --mca btl tcp,self ${bind}  -cpus-per-proc ${OMP_NUM_THREADS:-1}"
+    [[ "$TRUE_HOST" == eole* || -n "$ib" ]] && USE_OPENIB="openib,"
+#    OPEN_MPI_PARMS="--stdin all --mca btl ${USE_OPENIB}tcp,self ${bind}  -cpus-per-proc ${OMP_NUM_THREADS:-1}"
+    OPEN_MPI_PARMS="--mca btl ${USE_OPENIB}tcp,self ${bind}  -cpus-per-proc ${OMP_NUM_THREADS:-1}"
+#    [[ "$TRUE_HOST" == eole* ]] && OPEN_MPI_PARMS="--stdin all --mca btl openib,tcp,self ${bind}  -cpus-per-proc ${OMP_NUM_THREADS:-1}"
+    [[ "$TRUE_HOST" == eole* ]] && OPEN_MPI_PARMS="--mca btl openib,tcp,self ${bind}  -cpus-per-proc ${OMP_NUM_THREADS:-1}"
     [[ "$mpirun" == mpirun ]] && OPEN_MPI_PARMS="--prefix ${OPAL_PREFIX} ${OPEN_MPI_PARMS}"
     unset PE_HOSTFILE
 #    export OMPI_MCA_orte_default_hostfile=${MY_NODEFILE}
@@ -69,7 +72,7 @@ mpiexec_Linux() {
     export OMPI_MCA_plm_rsh_disable_qrsh=1
   fi
 #
-  touch $tmpdir/.mpi_env
+#  touch $tmpdir/.mpi_env
   export MpiCommWorld=0
   export ChildOffset=0
   export WorldOffset=0
@@ -85,16 +88,17 @@ mpiexec_Linux() {
     cat ${MY_NODEFILE}
 #
 #    if [[ "${OPAL_PREFIX}" == *openmpi_1.6* ]] ; then # export environment ourselves, mpirun does not do it
-       env | grep -v "'" | grep -v '"' | grep  '^[a-zA-Z0-9]' | sed -e 's/^/export /' -e 's/=/="/' -e 's/$/"/' >$tmpdir/.mpi_env
+###       env | grep -v "'" | grep -v '"' | grep  '^[a-zA-Z0-9]' | sed -e 's/^/export /' -e 's/=/="/' -e 's/$/"/' >$tmpdir/.mpi_env
 #    fi
 #
+    [[ "${OPAL_PREFIX}" == *openmpi_1.6* ]] && OPEN_MPI_PARMS="${OPEN_MPI_PARMS} $(s.prefix '-x ' $(env | grep -v "'" | grep -v '"'  | grep  '^[a-zA-Z0-9]' | sed 's/=.*//' | sort ))"
     if ((MpiCommWorlds>1)) ; then   # more than one MPI world, launch mpirun in background
       echo ==== Backgrounding MPI world ${MpiCommWorld} with ${PeInWorld[${MpiCommWorld}]} MPI tasks ====
-      [[ -z ${dryrun} ]] && cat $tmpdir/.mpi_env | \
+#      [[ -z ${dryrun} ]] && cat $tmpdir/.mpi_env | \
       ${mpirun} ${OPEN_MPI_PARMS} -machinefile ${MY_NODEFILE} -n ${PeInWorld[${MpiCommWorld}]} "$@" ${ParallelScript}.${MpiCommWorld} &
     else   # only one MPI world, execute mpirun
       echo ==== Launching MPI world ${MpiCommWorld} with ${PeInWorld[${MpiCommWorld}]} MPI tasks ====
-      [[ -z ${dryrun} ]] && cat $tmpdir/.mpi_env | \
+#      [[ -z ${dryrun} ]] && cat $tmpdir/.mpi_env | \
       ${mpirun} ${OPEN_MPI_PARMS} -machinefile ${MY_NODEFILE} -n ${PeInWorld[${MpiCommWorld}]} "$@" ${ParallelScript}.${MpiCommWorld}
     fi
     PeAdded=${PeInWorld[${MpiCommWorld}]}
@@ -335,6 +339,7 @@ eval `cclargs_lite -D "" $0 \
     -tmpdir "" "" "[temporary directory visible by all processes]" \
     -pgm "Invalid_Command.EXE" "" "[]" \
     -args "" "" "[arguments to the command]" \
+    -ib "" "ib" "[use Infiniband ]" \
     -inorder "" "yes" "[list out/err of members in process order]" \
     -processorder "" "yes" "[list out/err of members in order]" \
     -spliteo "no" "yes" "[split stderr from stdout]" \
@@ -354,7 +359,7 @@ eval `cclargs_lite -D "" $0 \
     -timeout "60" "60" "[timeout for multiple instances]" \
     -debug "" "5" "[]" \
     -nocleanup "" "nocleanup" "[]" \
-    -version "" "1.0.6 2013/10/18" "[version number]" \
+    -version "" "1.0.7 2013/10/24" "[version number]" \
     -tag "child" "full" "[full/child/member/stderr/none/seq]" \
     -outp "o" "O" "[stdout prefix in listings]" \
     -errp "e" "E" "[stderr prefix in listings]" \
@@ -708,10 +713,10 @@ do
 [[ -n "${debug}" ]] && set -x
 #
 export MP_CHILD=\${MP_CHILD:-\${PMI_RANK:-\${OMPI_COMM_WORLD_RANK}}}  # poe/mpich2/openmpi
-if [[ -z \${ENVIRONMENT_PASSED} ]] ; then
-  cat >${tmpdir}/.mpi_env_\$\$_\$(hostname)
-  . ${tmpdir}/.mpi_env_\$\$_\$(hostname)
-fi
+#if [[ -z \${ENVIRONMENT_PASSED} ]] ; then
+#  cat >${tmpdir}/.mpi_env_\$\$_\$(hostname)
+#  . ${tmpdir}/.mpi_env_\$\$_\$(hostname)
+#fi
 typeset -Z4 MP_SeqNum    # NOT VALID FOR bash, ksh family only
 ((MP_CHILD=MP_CHILD+ChildOffset))   # need to add ChildOffset for this MPI world to MP_CHILD (always 0 for poe)
 export RP_WorldChild
@@ -722,7 +727,7 @@ export RP_Child="\$((MP_CHILD))"            # global child number, same as MP_CH
 export RP_Member=\$((RP_WorldChild/${npex}+${offset}))      # member number in this world (including offset)
 export RP_MemberChild=\$((RP_WorldChild-RP_WorldChild/${npex}*${npex}))   # child ordinal within this member
 MP_Tag="\$(/usr/bin/printf '${F_world}${F_member}${F_child}${F_seq}' ${V_world} ${V_member} ${V_child} ${V_seq})"
-[[ -n "${debug}" ]] && env | sort >${tmpdir}/.mpi_env_\$\$_\$(hostname)
+###[[ -n "${debug}" ]] && env | sort >${tmpdir}/.mpi_env_\$\$_\$(hostname)
 #
 touch ${tmpdir}/fail.\${MP_Tag}
 #[[ -d ${tmpdir}/\${MP_SeqNum} ]] && /usr/bin/printf '${tag_format}' ${tag_values} >${tmpdir}/\${MP_SeqNum}/stdtag
