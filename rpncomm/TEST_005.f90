@@ -1,4 +1,4 @@
-program bisection
+subroutine rpn_comm_test_005
 implicit none
 include 'mpif.h'
 integer, parameter :: BUFSIZE=4096*1024
