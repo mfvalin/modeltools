@@ -210,7 +210,7 @@ integer function RPN_COMM_file_bcst(name,com)
   if(rank == 0) then
     fd = rpn_comm_open(name,0)  ! open for read on PE 0
     if(rpn_comm_io_debug) print *,"rank=",rank," read fd=",fd," file=",trim(name)," color=",my_color
-  else
+  else if(rank_on_host ==0) then
     fd = rpn_comm_open(name,1)  ! open for write elsewhere
     if(rpn_comm_io_debug) print *,"rank=",rank," write fd=",fd," file=",trim(name)," color=",my_color
   endif
