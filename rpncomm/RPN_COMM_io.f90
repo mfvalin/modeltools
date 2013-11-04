@@ -5,6 +5,11 @@ module RPN_COMM_io
   public :: rpn_comm_open
 
   interface
+    integer(C_INT) function c_rpn_comm_unlink(name) BIND(C,name='f_RPN_COMM_unlink')  ! interface to libc open function
+      use iso_c_binding
+      type(C_PTR), value :: name
+    end function c_rpn_comm_unlink
+
     integer(C_INT) function c_rpn_comm_open(name, mode) BIND(C,name='f_RPN_COMM_open')  ! interface to libc open function
       use iso_c_binding
       integer(C_INT), intent(IN), value :: mode
@@ -43,6 +48,18 @@ module RPN_COMM_io
 
   contains
 
+  integer function rpn_comm_unlink(name) ! interface to interface, handle Fortran char string to C char string conversion
+!
+! delete a file
+!
+  implicit none
+  character (len=*), intent(IN) ::name
+  character (len=1), dimension(len_trim(name)+1), target :: temp
+  
+  temp = transfer( trim(name)//achar(0) , temp )
+  rpn_comm_unlink=c_rpn_comm_unlink(c_loc(temp))
+  end function rpn_comm_unlink
+
   integer function rpn_comm_open(name, mode) ! interface to interface, handle Fortran char string to C char string conversion
 !
 ! open a file for reading or writing
@@ -69,6 +86,7 @@ integer function RPN_COMM_file_copy_test()
   RPN_COMM_file_copy_test = -1
   status = rpn_comm_copy(-1,-1,1)  ! set verbose debug mode
 
+  print *,"START OF COPY TEST"
   fd1 = rpn_comm_open("existing_input_file",0) ! open for read
   if(fd1 < 0) then
     print *,"ERROR: cannot open existing_input_file for read or open error"
@@ -84,19 +102,32 @@ integer function RPN_COMM_file_copy_test()
     print *,"ERROR: failed to open new_output_file for write"
     return
   endif
+!
   status = rpn_comm_copy(fd1,fd2,0)  ! synchronous copy test
-  if(status /= 0) then
-    print *,"ERROR: asynchronous copy failed"
-    return
-  endif
-  id = rpn_comm_file_copy_start("existing_input_file","new_output_file_2")  ! asynchronous copy test
-  print *,"INFO: asynchronous copy id =",id
-  status = rpn_comm_wait(id)
   if(status /= 0) then
     print *,"ERROR: synchronous copy failed"
     return
   endif
-  print *,"END OF TEST"
+!
+  id = rpn_comm_file_copy_start("existing_input_file","new_output_file_2")  ! asynchronous copy test
+  print *,"INFO: asynchronous copy id =",id
+  status = rpn_comm_wait(id)
+  if(status /= 0) then
+    print *,"ERROR: asynchronous copy failed"
+    return
+  endif
+  print *,"INFO: cmp new_output_file new_output_file_2"
+  call system("cmp new_output_file new_output_file_2 && echo ' INFO: files compare OK'")
+!
+  status = rpn_comm_unlink("new_output_file")
+  if(status /= 0) then
+    print *,"ERROR: failed to delete new_output_file"
+  endif
+  status = rpn_comm_unlink("new_output_file_2")
+  if(status /= 0) then
+    print *,"ERROR: failed to delete new_output_file_2"
+  endif
+  print *,"END OF COPY TEST"
   return
 end function RPN_COMM_file_copy_test
 

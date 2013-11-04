@@ -5,6 +5,11 @@
 #include <fcntl.h>
 #include <pthread.h>
 
+int f_RPN_COMM_unlink(const char *pathname)  /* libc unlink interface for Fortran */
+{
+  return ( unlink(pathname) ) ;
+}
+
 int f_RPN_COMM_open(const char *pathname, int rwflag)  /* libc open interface for Fortran */
 {
   int flags = O_RDONLY ;
