@@ -2,6 +2,8 @@ module RPN_COMM_io
   use iso_c_binding
   implicit none
 
+  logical, save :: rpn_comm_io_debug=.false.
+
   public :: rpn_comm_open
 
   interface
@@ -80,11 +82,18 @@ end module RPN_COMM_io
 integer function RPN_COMM_file_copy_test()
   use rpn_comm_io
   implicit none
-  integer :: fd1, fd2, status, id
-  integer, external :: RPN_COMM_file_copy_start
+  include 'mpif.h'
+  integer :: fd1, fd2, status, id, ierr, rank
+  integer, external :: RPN_COMM_file_copy_start, RPN_COMM_file_bcst
+
+  call mpi_init(ierr)
+  call mpi_comm_rank(MPI_COMM_WORLD,rank,ierr)                         ! my rank in communicator
+  rpn_comm_io_debug=.true.
 
   RPN_COMM_file_copy_test = -1
   status = rpn_comm_copy(-1,-1,1)  ! set verbose debug mode
+
+  if(rank /= 0) goto 222
 
   print *,"START OF COPY TEST"
   fd1 = rpn_comm_open("existing_input_file",0) ! open for read
@@ -94,8 +103,8 @@ integer function RPN_COMM_file_copy_test()
   endif
   fd2 = rpn_comm_open("new_output_file",0) ! open for read
   if(fd2 >0 ) then
-    print *,"ERROR: new_output_file exists"
-    return
+    print *,"WARNING: new_output_file exists"
+!    return
   endif
   fd2 = rpn_comm_open("new_output_file",1) ! open for write
   if(fd2 <0 ) then
@@ -128,6 +137,14 @@ integer function RPN_COMM_file_copy_test()
     print *,"ERROR: failed to delete new_output_file_2"
   endif
   print *,"END OF COPY TEST"
+
+222 call mpi_barrier(MPI_COMM_WORLD,ierr)
+
+  print *,"START OF REPLICATION TEST"
+  status = RPN_COMM_file_bcst("/dev/shm/existing_input_file",MPI_COMM_WORLD)
+  print *,"INFO: replication status =",status
+  print *,"END OF REPLICATION TEST"
+  call mpi_finalize(ierr)
   return
 end function RPN_COMM_file_copy_test
 
@@ -192,8 +209,10 @@ integer function RPN_COMM_file_bcst(name,com)
   errors = 0
   if(rank == 0) then
     fd = rpn_comm_open(name,0)  ! open for read on PE 0
+    if(rpn_comm_io_debug) print *,"rank=",rank," read fd=",fd," file=",trim(name)," color=",my_color
   else
     fd = rpn_comm_open(name,1)  ! open for write elsewhere
+    if(rpn_comm_io_debug) print *,"rank=",rank," write fd=",fd," file=",trim(name)," color=",my_color
   endif
   if(fd < 0) errors = errors + 1
   call mpi_reduce(errors,sum_errors,1,MPI_INTEGER,MPI_SUM,0,com,ierr)
@@ -204,6 +223,8 @@ integer function RPN_COMM_file_bcst(name,com)
     if(rank == 0) buf(0) = rpn_comm_read(fd,c_loc(buf(1)),NW8*4)   ! PE ranked at 0 reads 
     call mpi_bcast(buf,NW8+1,MPI_INTEGER,0,com,ierr)           ! and broadcasts (this is lazy, but in host broadcast deemed cheap)
     nwr = buf(0)                                                   ! valid everywhere after broadcast
+    nww = buf(0)                                                   ! for those that do not write
+    if(rank /= 0 .and. rank_on_host == 0 .and. nwr > 0 .and. rpn_comm_io_debug) print *,"DEBUG: rank no",rank," writing"
     if(rank /= 0 .and. rank_on_host == 0 .and. nwr > 0) nww = rpn_comm_write(fd,c_loc(buf(1)),nwr)  ! one PE per node writes
     if(nww /= nwr) errors = errors + 1                             ! not everything written, OOPS
   enddo
@@ -215,6 +236,7 @@ integer function RPN_COMM_file_bcst(name,com)
   return
 
 999 continue   ! error exception
+  print *,"ERROR: RPN_COMM_file_bcst errors =", sum_errors," rank =",rank
   RPN_COMM_file_bcst = sum_errors
   return
 
