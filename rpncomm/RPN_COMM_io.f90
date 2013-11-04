@@ -214,6 +214,8 @@ integer function RPN_COMM_file_bcst(name,com)
   else if(rank_on_host ==0) then ! open for write, one process per host, none on same host as PE 0
     fd = rpn_comm_open(name,1) 
     if(rpn_comm_io_debug) print *,"rank=",rank," write fd=",fd," file=",trim(name)," hostid=",my_color
+  else
+    if(rpn_comm_io_debug) print *,"rank=",rank," noop fd=",fd," file=",trim(name)," hostid=",my_color
   endif
   if(fd < 0) errors = errors + 1
   call mpi_reduce(errors,sum_errors,1,MPI_INTEGER,MPI_SUM,0,com,ierr)  !  get global eror count
