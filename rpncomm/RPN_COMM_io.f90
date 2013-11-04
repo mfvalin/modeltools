@@ -1,4 +1,4 @@
-module RPN_COMM_io
+module RPN_COMM_io  ! file replicator across nodes , async file copy, test and helper routines
   use iso_c_binding
   implicit none
 
@@ -77,10 +77,7 @@ module RPN_COMM_io
   rpn_comm_open=c_rpn_comm_open(c_loc(temp),mode)
   end function rpn_comm_open
 
-end module RPN_COMM_io
-
-integer function RPN_COMM_file_copy_test()
-  use rpn_comm_io
+  integer function RPN_COMM_file_copy_test()
   implicit none
   include 'mpif.h'
   integer :: fd1, fd2, status, id, ierr, rank
@@ -146,7 +143,9 @@ integer function RPN_COMM_file_copy_test()
   if(rank == 0) print *,"END OF REPLICATION TEST"
   call mpi_finalize(ierr)
   return
-end function RPN_COMM_file_copy_test
+  end function RPN_COMM_file_copy_test
+
+end module RPN_COMM_io
 
 integer function RPN_COMM_file_copy_start(name1,name2)  ! start asynchronous file copy
   use iso_c_binding
