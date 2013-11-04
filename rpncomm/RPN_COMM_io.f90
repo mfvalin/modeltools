@@ -218,7 +218,7 @@ integer function RPN_COMM_file_bcst(name,com)
     if(rpn_comm_io_debug) print *,"rank=",rank," noop fd=",fd," file=",trim(name)," hostid=",my_color
   endif
   if(fd < 0) errors = errors + 1
-  call mpi_reduce(errors,sum_errors,1,MPI_INTEGER,MPI_SUM,0,com,ierr)  !  get global eror count
+  call mpi_allreduce(errors,sum_errors,1,MPI_INTEGER,MPI_SUM,com,ierr)  !  get global eror count
   if(sum_errors > 0) goto 999  ! on open failed somewhere
 
   nwr = 1
@@ -233,7 +233,7 @@ integer function RPN_COMM_file_bcst(name,com)
     endif
     if(nww /= nwr) errors = errors + 1                             ! not everything written, OOPS
   enddo
-  call mpi_reduce(errors,sum_errors,1,MPI_INTEGER,MPI_SUM,0,com,ierr)  ! OOPS anywhere ?
+  call mpi_allreduce(errors,sum_errors,1,MPI_INTEGER,MPI_SUM,com,ierr)  ! OOPS anywhere ?
   if(sum_errors > 0) goto 999  ! on open failed somewhere
 
   status = rpn_comm_close(fd)
