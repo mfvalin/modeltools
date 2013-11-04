@@ -93,7 +93,7 @@ integer function RPN_COMM_file_copy_test()
   RPN_COMM_file_copy_test = -1
   status = rpn_comm_copy(-1,-1,1)  ! set verbose debug mode
 
-  if(rank /= 0) goto 222
+  if(rank /= 0) goto 222  ! first part of test for PE 0 only
 
   print *,"START OF COPY TEST"
   fd1 = rpn_comm_open("existing_input_file",0) ! open for read
@@ -140,10 +140,10 @@ integer function RPN_COMM_file_copy_test()
 
 222 call mpi_barrier(MPI_COMM_WORLD,ierr)
 
-  print *,"START OF REPLICATION TEST"
-  status = RPN_COMM_file_bcst("/dev/shm/existing_input_file",MPI_COMM_WORLD)
-  print *,"INFO: replication status =",status
-  print *,"END OF REPLICATION TEST"
+  if(rank == 0) print *,"START OF REPLICATION TEST existing_input_file->target_dir/existing_input_file"
+  status = RPN_COMM_file_bcst("target_dir/existing_input_file",MPI_COMM_WORLD)
+  if(rank == 0) print *,"INFO: replication status =",status
+  if(rank == 0) print *,"END OF REPLICATION TEST"
   call mpi_finalize(ierr)
   return
 end function RPN_COMM_file_copy_test
@@ -207,25 +207,28 @@ integer function RPN_COMM_file_bcst(name,com)
   call mpi_comm_rank(same_host,rank_on_host,ierr)           ! my rank on host
 
   errors = 0
+  fd = 0   ! must initialize because some PEs may not call open
   if(rank == 0) then
     fd = rpn_comm_open(name,0)  ! open for read on PE 0
-    if(rpn_comm_io_debug) print *,"rank=",rank," read fd=",fd," file=",trim(name)," color=",my_color
-  else if(rank_on_host ==0) then
-    fd = rpn_comm_open(name,1)  ! open for write elsewhere
-    if(rpn_comm_io_debug) print *,"rank=",rank," write fd=",fd," file=",trim(name)," color=",my_color
+    if(rpn_comm_io_debug) print *,"rank=",rank," read fd=",fd," file=",trim(name)," hostid=",my_color
+  else if(rank_on_host ==0) then ! open for write, one process per host, none on same host as PE 0
+    fd = rpn_comm_open(name,1) 
+    if(rpn_comm_io_debug) print *,"rank=",rank," write fd=",fd," file=",trim(name)," hostid=",my_color
   endif
   if(fd < 0) errors = errors + 1
-  call mpi_reduce(errors,sum_errors,1,MPI_INTEGER,MPI_SUM,0,com,ierr)
+  call mpi_reduce(errors,sum_errors,1,MPI_INTEGER,MPI_SUM,0,com,ierr)  !  get global eror count
   if(sum_errors > 0) goto 999  ! on open failed somewhere
 
   nwr = 1
   do while(nwr > 0)
     if(rank == 0) buf(0) = rpn_comm_read(fd,c_loc(buf(1)),NW8*4)   ! PE ranked at 0 reads 
-    call mpi_bcast(buf,NW8+1,MPI_INTEGER,0,com,ierr)           ! and broadcasts (this is lazy, but in host broadcast deemed cheap)
+    call mpi_bcast(buf,NW8+1,MPI_INTEGER,0,com,ierr)     ! and broadcasts (this is lazy, but intra host broadcast deemed cheap)
     nwr = buf(0)                                                   ! valid everywhere after broadcast
-    nww = buf(0)                                                   ! for those that do not write
-    if(rank /= 0 .and. rank_on_host == 0 .and. nwr > 0 .and. rpn_comm_io_debug) print *,"DEBUG: rank no",rank," writing"
-    if(rank /= 0 .and. rank_on_host == 0 .and. nwr > 0) nww = rpn_comm_write(fd,c_loc(buf(1)),nwr)  ! one PE per node writes
+    nww = buf(0)                                                   ! needed for PEs that do not write to no get errors
+    if(rank /= 0 .and. rank_on_host == 0 .and. nwr > 0) then
+      if(rpn_comm_io_debug) print *,"DEBUG: rank no",rank," writing"
+      nww = rpn_comm_write(fd,c_loc(buf(1)),nwr)  ! one PE per node writes
+    endif
     if(nww /= nwr) errors = errors + 1                             ! not everything written, OOPS
   enddo
   call mpi_reduce(errors,sum_errors,1,MPI_INTEGER,MPI_SUM,0,com,ierr)  ! OOPS anywhere ?
@@ -236,7 +239,7 @@ integer function RPN_COMM_file_bcst(name,com)
   return
 
 999 continue   ! error exception
-  print *,"ERROR: RPN_COMM_file_bcst errors =", sum_errors," rank =",rank
+  if(rank == 0) print *,"ERROR: RPN_COMM_file_bcst errors =", sum_errors," rank =",rank
   RPN_COMM_file_bcst = sum_errors
   return
 
