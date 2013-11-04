@@ -138,9 +138,9 @@ integer function RPN_COMM_file_copy_test()
   endif
   print *,"END OF COPY TEST"
 
-222 call mpi_barrier(MPI_COMM_WORLD,ierr)
+222 call mpi_barrier(MPI_COMM_WORLD,ierr)  ! all PEs wait for PE 0
 
-  if(rank == 0) print *,"START OF REPLICATION TEST existing_input_file->target_dir/existing_input_file"
+  if(rank == 0) print *,"START OF REPLICATION TEST target_dir/existing_input_file"
   status = RPN_COMM_file_bcst("target_dir/existing_input_file",MPI_COMM_WORLD)
   if(rank == 0) print *,"INFO: replication status =",status
   if(rank == 0) print *,"END OF REPLICATION TEST"
@@ -189,7 +189,7 @@ integer function RPN_COMM_file_bcst(name,com)
   integer, intent(IN) :: com              ! communicator
 
   interface
-    integer(C_INT) function c_gethostid()BIND(C,name='gethostid')
+    integer(C_INT) function c_gethostid()BIND(C,name='gethostid')  ! interface to libc gethostid
       use iso_c_binding
     end function c_gethostid
   end interface
@@ -209,12 +209,12 @@ integer function RPN_COMM_file_bcst(name,com)
   errors = 0
   fd = 0   ! must initialize because some PEs may not call open
   if(rank == 0) then
-    fd = rpn_comm_open(name,0)  ! open for read on PE 0
+    fd = rpn_comm_open(name,0)   ! PE 0, open for read 
     if(rpn_comm_io_debug) print *,"rank=",rank," read fd=",fd," file=",trim(name)," hostid=",my_color
-  else if(rank_on_host ==0) then ! open for write, one process per host, none on same host as PE 0
+  else if(rank_on_host ==0) then ! open for write, one process per host, but not if same host as PE 0
     fd = rpn_comm_open(name,1) 
-    if(rpn_comm_io_debug) print *,"rank=",rank," write fd=",fd," file=",trim(name)," hostid=",my_color
-  else
+    if(rpn_comm_io_debug) print *,"rank=",rank," writ fd=",fd," file=",trim(name)," hostid=",my_color
+  else                           ! nothing to do on this PE
     if(rpn_comm_io_debug) print *,"rank=",rank," noop fd=",fd," file=",trim(name)," hostid=",my_color
   endif
   if(fd < 0) errors = errors + 1
