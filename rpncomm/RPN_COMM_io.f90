@@ -211,7 +211,7 @@ integer function RPN_COMM_file_bcst(name,com)
     if(rpn_comm_io_debug) print 111,"rank=",rank," read  fd=",fd," file=",trim(name)," hostid=",my_color
   else if(rank_on_host ==0) then ! open for write, one process per host, but not if same host as PE 0
     fd = rpn_comm_open(name,1) 
-    if(rpn_comm_io_debug) print 111,"rank=",rank," wriet fd=",fd," file=",trim(name)," hostid=",my_color
+    if(rpn_comm_io_debug) print 111,"rank=",rank," write fd=",fd," file=",trim(name)," hostid=",my_color
   else                           ! nothing to do on this PE
     if(rpn_comm_io_debug) print 111,"rank=",rank," noop  fd=",fd," file=",trim(name)," hostid=",my_color
   endif
