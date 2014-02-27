@@ -165,7 +165,7 @@ local_cleanup() {
  ExitStatus=0
  rm ${tmpdir}/fail.*  2>/dev/null 1>/dev/null && ExitStatus=1   # some parallel processes failed
  [[ -n ${nocleanup} ]] && return $ExitStatus  # -nocleanup option used, return
- rm -rf ${tmpdir} || ExitStatus=2             # cannot clean tmpdir
+ rm -rf ${tmpdir}  #   || ExitStatus=2             # cannot clean tmpdir
  return $ExitStatus
 }
 # ===========================================================================
