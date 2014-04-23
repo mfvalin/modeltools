@@ -262,6 +262,7 @@ int MPI_Reduce(void* sendbuf, void* recvbuf, int count,
 	       MPI_Datatype datatype, MPI_Op op, int root, MPI_Comm comm)
 
 {
+  if(sendbuf == MPI_IN_PLACE) return(MPI_SUCCESS) ;  /* nothing to do, operation in "in place" */
   if (root==MPI_ROOT)
     return(MPI_SUCCESS);
 
@@ -284,7 +285,7 @@ FC_FUNC( mpi_allreduce , MPI_ALLREDUCE )
                           ( void *sendbuf, void *recvbuf, int *count,
 			    int *datatype, int *op, int *comm, int *ierror)
 {
-  *ierror=MPI_Allreduce(sendbuf, recvbuf, *count,
+    *ierror=MPI_Allreduce(sendbuf, recvbuf, *count,
 			*datatype, *op, *comm);
 
 }
@@ -293,7 +294,8 @@ FC_FUNC( mpi_allreduce , MPI_ALLREDUCE )
 int MPI_Allreduce(void* sendbuf, void* recvbuf, int count, 
 		  MPI_Datatype datatype, MPI_Op op, MPI_Comm comm)
 {
-
+  if(sendbuf == MPI_IN_PLACE) return(MPI_SUCCESS) ;  /* nothing to do, operation in "in place" */
+    
   memcpy(recvbuf,sendbuf,count * datatype);
 
   return(MPI_SUCCESS);
