@@ -60,19 +60,15 @@ mpiexec_Linux() {
   export ENVIRONMENT_PASSED=yes  # used to check whether mpirun transmits environment variables or not
   if [[ "${OPAL_PREFIX}" == *openmpi_1.6* ]] ; then
     [[ -n "$bind" ]] && bind="-bind-to-core"
-    [[ "$TRUE_HOST" == eole* || -n "$ib" ]] && USE_OPENIB="openib,"
-#    OPEN_MPI_PARMS="--stdin all --mca btl ${USE_OPENIB}tcp,self ${bind}  -cpus-per-proc ${OMP_NUM_THREADS:-1}"
+    [[ "$TRUE_HOST" == eole* || -n "$ib" ]] && USE_OPENIB="openib,"  # always use Infiniband on eole-cluster
     OPEN_MPI_PARMS="--mca btl ${USE_OPENIB}tcp,self ${bind}  -cpus-per-proc ${OMP_NUM_THREADS:-1}"
-#    [[ "$TRUE_HOST" == eole* ]] && OPEN_MPI_PARMS="--stdin all --mca btl openib,tcp,self ${bind}  -cpus-per-proc ${OMP_NUM_THREADS:-1}"
-    [[ "$TRUE_HOST" == eole* ]] && OPEN_MPI_PARMS="--mca btl openib,tcp,self ${bind}  -cpus-per-proc ${OMP_NUM_THREADS:-1}"
-    [[ "$mpirun" == mpirun ]] && OPEN_MPI_PARMS="--prefix ${OPAL_PREFIX} ${OPEN_MPI_PARMS}"
+    [[ "$mpirun" == mpirun ]] && OPEN_MPI_PARMS="--prefix ${OPAL_PREFIX} ${OPEN_MPI_PARMS}"  # if not using rumpirun.openmpi
     unset PE_HOSTFILE
 #    export OMPI_MCA_orte_default_hostfile=${MY_NODEFILE}
     [[ -f "${GECOSHEP_HOSTS_FILE}" ]] && export OMPI_MCA_orte_rsh_agent=rurun
     export OMPI_MCA_plm_rsh_disable_qrsh=1
   fi
 #
-#  touch $tmpdir/.mpi_env
   export MpiCommWorld=0
   export ChildOffset=0
   export WorldOffset=0
@@ -87,19 +83,13 @@ mpiexec_Linux() {
     echo "===== $(cat ${MY_NODEFILE} | wc -l) host(s) in  Mpi World $MpiCommWorld ====="
     cat ${MY_NODEFILE}
 #
-#    if [[ "${OPAL_PREFIX}" == *openmpi_1.6* ]] ; then # export environment ourselves, mpirun does not do it
-###       env | grep -v "'" | grep -v '"' | grep  '^[a-zA-Z0-9]' | sed -e 's/^/export /' -e 's/=/="/' -e 's/$/"/' >$tmpdir/.mpi_env
-#    fi
-#
     [[ "${OPAL_PREFIX}" == *openmpi_1.6* ]] && OPEN_MPI_PARMS="${OPEN_MPI_PARMS} $(s.prefix '-x ' $(env | grep -v "'" | grep -v '"'  | grep  '^[a-zA-Z0-9]' | sed 's/=.*//' | sort ))"
     if ((MpiCommWorlds>1)) ; then   # more than one MPI world, launch mpirun in background
       echo ==== Backgrounding MPI world ${MpiCommWorld} with ${PeInWorld[${MpiCommWorld}]} MPI tasks ====
-#      [[ -z ${dryrun} ]] && cat $tmpdir/.mpi_env | \
-      ${mpirun} ${OPEN_MPI_PARMS} -machinefile ${MY_NODEFILE} -n ${PeInWorld[${MpiCommWorld}]} "$@" ${ParallelScript}.${MpiCommWorld} &
+      [[ -z ${dryrun} ]] && ${mpirun} ${OPEN_MPI_PARMS} -machinefile ${MY_NODEFILE} -n ${PeInWorld[${MpiCommWorld}]} "$@" ${ParallelScript}.${MpiCommWorld} &
     else   # only one MPI world, execute mpirun
       echo ==== Launching MPI world ${MpiCommWorld} with ${PeInWorld[${MpiCommWorld}]} MPI tasks ====
-#      [[ -z ${dryrun} ]] && cat $tmpdir/.mpi_env | \
-      ${mpirun} ${OPEN_MPI_PARMS} -machinefile ${MY_NODEFILE} -n ${PeInWorld[${MpiCommWorld}]} "$@" ${ParallelScript}.${MpiCommWorld}
+      [[ -z ${dryrun} ]] && ${mpirun} ${OPEN_MPI_PARMS} -machinefile ${MY_NODEFILE} -n ${PeInWorld[${MpiCommWorld}]} "$@" ${ParallelScript}.${MpiCommWorld}
     fi
     PeAdded=${PeInWorld[${MpiCommWorld}]}
     ((ChildOffset=ChildOffset+PeAdded))
@@ -155,12 +145,16 @@ mpiexec_AIX() {
 # clean up tmpdir directory used for launch help files and listings
 #
 ListFailed() {
-  ls ${tmpdir}/fail.*  2>/dev/null 1>/dev/null || return 0
+  ls ${tmpdir}/fail.*  2>/dev/null 1>/dev/null || return 0    # if no process failure flag file found
   if [[ "${e}" == YES ]] ; then
     echo "ERROR: some processes have failed during execution"
-    (cd ${tmpdir} ; ls -1 | grep 'fail[.]' | sed 's/fail.//' | xargs -l5 /bin/echo  )
+    (cd ${tmpdir} ; ls -1 | grep 'fail[.]' | sed 's/fail.//' | xargs -l5 /bin/echo  )   # list, 5 per line
   fi
 }
+# ===========================================================================
+#
+# final cleanup and set exit status
+#
 local_cleanup() {
  ExitStatus=0
  rm ${tmpdir}/fail.*  2>/dev/null 1>/dev/null && ExitStatus=1   # some parallel processes failed
@@ -178,8 +172,9 @@ print_separator() {
 }
 # ===========================================================================
 #
-# default script for listings pos-processing
+# default script for post-processing of process listing files
 # stdout/stderr from each task listed in order
+# line tagging already done
 #
 cat_output() {  #  cat captured stdout/stderr files into stdout with appropriate tagging
   for OUTDIR in $* ; do
@@ -336,38 +331,38 @@ wait_for() {
 # ===========================================================================
 echo version avec /bin/ksh93
 eval `cclargs_lite -D "" $0 \
-    -tmpdir "" "" "[temporary directory visible by all processes]" \
-    -pgm "Invalid_Command.EXE" "" "[]" \
     -args "" "" "[arguments to the command]" \
+    -bind "" "bind" "[]" \
+    -debug "" "5" "[]" \
+    -dryrun "" "dryrun" "[]" \
+    -e "NO" "YES" "[list failed processes" \
+    -errp "e" "E" "[stderr prefix in listings]" \
+    -geometry "" "" "[]" \
     -ib "" "ib" "[use Infiniband ]" \
     -inorder "" "yes" "[list out/err of members in process order]" \
-    -processorder "" "yes" "[list out/err of members in order]" \
-    -spliteo "no" "yes" "[split stderr from stdout]" \
+    -instancedir "${PARALLEL_INSTANCES_DIR}" "${PARALLEL_INSTANCES_DIR}" "[directory containing instance names]" \
+    -instances "" "" "[instance name for member or list of instances for master]" \
+    -members "" "" "[NxM, N members of size M, override npey and npex]" \
+    -minstdout "2" "2" "[]" \
+    -mpiargs "" "" "[]" \
+    -mpirun "$(which rumpirun.openmpi)" "mpirun" "[]" \
+    -nocleanup "" "nocleanup" "[]" \
+    -nompi "run_with_mpi" "run_in_background" "[]" \
+    -nosep "" "yes" "[deactivate separator between members]" \
     -npex "${BATCH_MPI_CPUS:-1}" "" "[member size, total number of cpus if 1 member]" \
     -npey "1" "" "[number of members]" \
-    -members "" "" "[NxM, N members of size M, override npey and npex]" \
-    -nompi "run_with_mpi" "run_in_background" "[]" \
-    -instances "" "" "[instance name for member or list of instances for master]" \
-    -bind "" "bind" "[]" \
-    -mpirun "$(which rumpirun.openmpi)" "mpirun" "[]" \
-    -mpiargs "" "" "[]" \
-    -instancedir "${PARALLEL_INSTANCES_DIR}" "${PARALLEL_INSTANCES_DIR}" "[directory containing instance names]" \
-    -geometry "" "" "[]" \
-    -e "NO" "YES" "[list failed processes" \
-    -minstdout "2" "2" "[]" \
-    -dryrun "" "dryrun" "[]" \
-    -timeout "60" "60" "[timeout for multiple instances]" \
-    -debug "" "5" "[]" \
-    -nocleanup "" "nocleanup" "[]" \
-    -version "" "1.0.7 2013/10/24" "[version number]" \
-    -tag "child" "full" "[full/child/member/stderr/none/seq]" \
-    -outp "o" "O" "[stdout prefix in listings]" \
-    -errp "e" "E" "[stderr prefix in listings]" \
-    -nosep "" "yes" "[deactivate separator between members]" \
-    -preexec "" "" "[prefix program execution with this (time/gdb/...)]" \
-    -packoutput "cat_output" "echo" "[]" \
     -offset "0" "1" "[numbering of members from this value]" \
+    -outp "o" "O" "[stdout prefix in listings]" \
+    -packoutput "cat_output" "echo" "[]" \
+    -pgm "Invalid_Command.EXE" "" "[]" \
+    -preexec "" "" "[prefix program execution with this (time/gdb/...)]" \
+    -processorder "" "yes" "[list out/err of members in order]" \
     -selftest "" "selftest.$$" "[quick selftest]" \
+    -spliteo "no" "yes" "[split stderr from stdout]" \
+    -tag "child" "full" "[full/child/member/stderr/none/seq]" \
+    -timeout "60" "60" "[timeout for multiple instances]" \
+    -tmpdir "" "" "[temporary directory visible by all processes]" \
+    -version "" "1.0.8 2013/10/29" "[version number]" \
     ++ "$@"`
 #
 mpirun=${mpirun:-mpirun}   # in case rumpirun.openmpi not found
@@ -392,9 +387,9 @@ OMP_NUM_THREADS=${OMP_NUM_THREADS:-1}
 #
 # do we have co-running instances ?
 #
-if [[ -d "${instancedir}" && -n "${instances}" ]] ; then     # we have co-running instances
+if [[ -d "${instancedir}" && -n "${instances}" ]] ; then     # we have co-running instances only if both are defined
   slaves=$(echo ${instances} | wc -w)   # if 1 it is a slave, if >1 it is the master
-  if ((slaves>1)) ; then  # the master instance
+  if ((slaves>1)) ; then  # the master instance, there is MORE THAN ONE item  in instances
     echo "INFO: START of master task with ${slaves} slaves '${instances}' "
     wait_for creation ${timeout} ${instancedir} ${instances}   # wait for all slaves to submit their resource needs
 #
@@ -412,24 +407,27 @@ if [[ -d "${instancedir}" && -n "${instances}" ]] ; then     # we have co-runnin
 #   -args : ignored, cannot be used in this context
 #   -npex -npey -processorder -tmpdir -tag -spliteo -debug -nocleanup -geometry : passthrough
 #   -outp -errp -preexec -packoutput -offset -mpiargs -dryrun -minstdout : passthrough
+#   -ib -mpirun : passthrough
 #   all other arguments : ignored
 #
     unset PARALLEL_INSTANCES_DIR
     set -x
     ${0} -npex ${npex} -npey ${npey} -processorder "${processorder}" -tmpdir "${tmpdir}" -minstdout ${minstdout} \
+         -ib ${ib} -mpirun ${mpirun} \
          -tag "${tag}" -spliteo "${spliteo}" -debug "${debug}" -nocleanup "${nocleanup}" -geometry ${geometry} \
          -outp "${outp}" -errp "${errp}" -preexec "${preexec}" -packoutput "${packoutput}" -dryrun "${dryrun}" \
-         -offset "${offset}" -mpiargs "${mpiargs}" -pgm $(cd ${instancedir} ; cat ${instances} | xargs) %%${OMP_NUM_THREADS} /./$(pwd -P) ${pgm}
+         -offset "${offset}" -mpiargs "${mpiargs}" \
+         -pgm $(cd ${instancedir} ; cat ${instances} | xargs) %%${OMP_NUM_THREADS} /./$(pwd -P) ${pgm}
     set +x
     for i in ${instances} ; do
        rm ${instancedir}/${i}                      # remove slave work requests
-       touch ${instancedir}/${i}.DONE              # acknowledge completion of all slave tasks
+       touch ${instancedir}/${i}.DONE              # acknowledge completion of all slave tasks by creating DONE and then deleting ACK
        rm ${instancedir}/${i}.ACK                  # remove acknowledge flag
        echo "INFO: master task  ${instancedir}/${i}.DONE"
     done
     echo "INFO: END of master task with ${slaves} slaves '${instances}'"
     exit                                           # master job done
-  else                    # a slave instance, there is ONE item  in instances
+  else                    # a slave instance, there is ONE AND ONLY ONE item  in instances
 #
 #   -instances -instancedir : used, not passed on
 #   -npex -npey -pgm : massaged and passed on to master
@@ -439,11 +437,11 @@ if [[ -d "${instancedir}" && -n "${instances}" ]] ; then     # we have co-runnin
     (( 1 == $(echo ${pgm} | wc -w) )) && pgm=" ${pgm} 0 1 $((npe_total-1)) @@ "  # transform -pgm name  into -pgm name first increment last
     echo "%%${OMP_NUM_THREADS} /./$(pwd -P) ::${npe_total} ${pgm} " >${instancedir}/${instances}.tmp || exit 1
     mv ${instancedir}/${instances}.tmp ${instancedir}/${instances}  || exit 1
-      echo "INFO: START of slave instance ${instances}"
-    if wait_for creation ${timeout} ${instancedir} ${instances}.ACK ; then
-      wait_for deletion 2000000000 ${instancedir} ${instances}.ACK  # wait for master to acknowledge resources then wait for master to signal done (infinite timeout)
-#      echo "INFO: (slave) ${instances}.ACK  deleted"
-      wait_for creation ${timeout} ${instancedir} ${instances}.DONE # done is signalled by deleting creating DONE and then deleting ACK
+    echo "INFO: START of slave instance ${instances}"
+    if wait_for creation ${timeout} ${instancedir} ${instances}.ACK # wait for master to acknowledge resources (ACK created)
+    then
+      wait_for deletion 2000000000 ${instancedir} ${instances}.ACK  # wait for master to signal job done (infinite timeout)
+      wait_for creation ${timeout} ${instancedir} ${instances}.DONE # done is signalled by creating DONE and then deleting ACK
       rm ${instancedir}/${instances}.DONE
       echo "INFO: (slave) ${instances}.DONE received"
       echo "INFO: END of slave instance ${instances}"
@@ -452,17 +450,10 @@ if [[ -d "${instancedir}" && -n "${instances}" ]] ; then     # we have co-runnin
       exit 1
     fi
   fi
-fi  # [[ -d "${instancedir}" ]] 
-#
-# number of MPI worlds
+fi  # we have co-running instances
 #
 ((MpiCommWorlds=0))  # number of MPI comm worlds
 PeInWorld[0]=${npe_total}
-#for i in ${worlds}
-#do
-#  PeInWorld[${MpiCommWorlds}]=${i}
-#  ((MpiCommWorlds=MpiCommWorlds+1))  # number of MPI comm worlds
-#done
 #
 # MY_NODEFILE now contains the node list if one was specified before
 #
@@ -529,7 +520,7 @@ export  Prefix2="${outp}${errp}-"   # prepare for stderr not split from stdout
 # communication variables for RPN_COMM toolkit
 #
 RPN_COMM_DOM=""
-RPN_COMM_DIRS="' '"     # RPN_COMM_DIRS no longer used, cd done in secondary script(s)
+RPN_COMM_DIRS="' '"     # RPN_COMM_DIRS no longer used, cd now done in secondary script(s)
 SetCurrentDir=$(pwd -P)
 set -- $pgm @@
 #
@@ -660,6 +651,7 @@ EOT
   done # while [[ "$1" != "" ]]
 #
   if [[ "$ErRoR" != "0" ]] ; then echo "$ErRoR ERROR(S) detected" ; local_cleanup ; exit 1 ; fi
+#
 else # simple SPMD case, one MPI world, old style call
 #
   ((TotalInstances=npe_total))
@@ -713,10 +705,6 @@ do
 [[ -n "${debug}" ]] && set -x
 #
 export MP_CHILD=\${MP_CHILD:-\${PMI_RANK:-\${OMPI_COMM_WORLD_RANK}}}  # poe/mpich2/openmpi
-#if [[ -z \${ENVIRONMENT_PASSED} ]] ; then
-#  cat >${tmpdir}/.mpi_env_\$\$_\$(hostname)
-#  . ${tmpdir}/.mpi_env_\$\$_\$(hostname)
-#fi
 typeset -Z4 MP_SeqNum    # NOT VALID FOR bash, ksh family only
 ((MP_CHILD=MP_CHILD+ChildOffset))   # need to add ChildOffset for this MPI world to MP_CHILD (always 0 for poe)
 export RP_WorldChild
@@ -727,14 +715,12 @@ export RP_Child="\$((MP_CHILD))"            # global child number, same as MP_CH
 export RP_Member=\$((RP_WorldChild/${npex}+${offset}))      # member number in this world (including offset)
 export RP_MemberChild=\$((RP_WorldChild-RP_WorldChild/${npex}*${npex}))   # child ordinal within this member
 MP_Tag="\$(/usr/bin/printf '${F_world}${F_member}${F_child}${F_seq}' ${V_world} ${V_member} ${V_child} ${V_seq})"
-###[[ -n "${debug}" ]] && env | sort >${tmpdir}/.mpi_env_\$\$_\$(hostname)
+[[ -n "${debug}" ]] && env | sort >${tmpdir}/.mpi_env_\$\$_\$(hostname)
 #
 touch ${tmpdir}/fail.\${MP_Tag}
-#[[ -d ${tmpdir}/\${MP_SeqNum} ]] && /usr/bin/printf '${tag_format}' ${tag_values} >${tmpdir}/\${MP_SeqNum}/stdtag
 . ${MpiRunScript}.${MpiCommWorld}  ${RedirectStdout} ${RedirectStderr}
 [[ -n "${processorder}" ]] || exit 0
 lines=0
-#the_file=\$(ls -1 ${tmpdir}/\${MP_SeqNum}/stdout.* 2>/dev/null)
 the_file=${tmpdir}/\${MP_SeqNum}/stdout.\${MP_Tag}
 [[ -r \${the_file} ]] && lines="\$(wc -l <\${the_file})" && ((lines<${minstdout})) && rm \${the_file}  # remove stdout files shorter than minimum
 [[ \${MP_SeqNum} != *00 ]] && true && exit
@@ -800,4 +786,4 @@ if [[ -n ${packoutput} && -n ${processorder} ]] ; then   # post process stderr/s
   echo "INFO: END of listing processing : $(date)"
 fi
 #
-local_cleanup
+local_cleanup  # exit status set here 0:OK 1:processes failed 2:tmpdir removal failed
