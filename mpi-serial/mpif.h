@@ -44,6 +44,10 @@
         integer MPI_MAX_PROCESSOR_NAME
         parameter (MPI_MAX_PROCESSOR_NAME=128)
 
+        integer MPI_IN_PLACE
+        common /MPI_IN_PLACE/ MPI_IN_PLACE
+        bind(C) :: /MPI_IN_PLACE/
+
 !
 ! Return codes
 !

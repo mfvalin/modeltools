@@ -1,4 +1,4 @@
-
+#define ALLOCATE_externs   /* define all external symbols */
 
 #include "mpiP.h"
 
@@ -170,6 +170,10 @@ int MPI_Init(int *argc, char **argv[])
   return(MPI_SUCCESS);
 }
 
+FC_FUNC(mpi_init,MPI_INIT)(int *ierror)
+{
+  *ierror=MPI_Init(NULL,NULL);
+}
 
 /*********/
 

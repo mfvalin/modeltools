@@ -17,6 +17,12 @@ typedef int MPI_Group;
 #define MPI_GROUP_EMPTY (-1)  
 #define MPI_GROUP_NULL  (0)
 
+#ifdef ALLOCATE_externs
+int mpi_in_place=-1;
+#else
+extern int mpi_in_place;
+#endif
+#define MPI_IN_PLACE ((void *) &mpi_in_place)
 
 /*
  * Return codes
