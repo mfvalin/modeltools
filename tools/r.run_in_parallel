@@ -702,6 +702,7 @@ do
   ((npex=${PeInWorld[${MpiCommWorld}]}/${MembersInWorld[${MpiCommWorld}]}))
   cat <<EOT >${ParallelScript}.${MpiCommWorld}
 #!/bin/ksh93
+ulimit -s unlimited
 [[ -n "${debug}" ]] && set -x
 #
 export MP_CHILD=\${MP_CHILD:-\${PMI_RANK:-\${OMPI_COMM_WORLD_RANK}}}  # poe/mpich2/openmpi
