@@ -362,7 +362,7 @@ eval `cclargs_lite -D "" $0 \
     -tag "child" "full" "[full/child/member/stderr/none/seq]" \
     -timeout "60" "60" "[timeout for multiple instances]" \
     -tmpdir "" "" "[temporary directory visible by all processes]" \
-    -version "" "1.0.8 2013/10/29" "[version number]" \
+    -version "" "1.0.8 2014/04/30" "[version number]" \
     ++ "$@"`
 #
 mpirun=${mpirun:-mpirun}   # in case rumpirun.openmpi not found
