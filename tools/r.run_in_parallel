@@ -6,24 +6,44 @@
 # CAVEAT: this script uses typeset -Z (does not work for the bash shell, only for ksh93)
 typeset -Z4 SeqNum MemberNo MemberChild
 #################################################################################################################################
-# MPI launcher for Linux systems using mpich2
-# not implemented yet
-mpiexec_Linux_mpich2() {
-  echo "ERROR: mpich2 Linux MPI launcher not implemented yet by ${0}"
-  return 1
-}
-#################################################################################################################################
-# generic MPI launcher for Linux systems using mpich2 or openmpi
-# not implemented yet
+# MPI prelauncher for Linux systems using mpich2 or openmpi. takes kare of most OpemMPI/Mpich2 issues
 mpiexec_Linux() {
-  echo "ERROR: generic Linux MPI launcher not implemented yet by ${0}"
-  return 1
+  RANK_VAR=$(mpirun -n 2 /usr/bin/env | grep RANK | grep -E "OMPI_COMM_WORLD_RANK|PMI_RANK")
+  case "$RANK_VAR" in
+    OMPI_COMM_WORLD_RANK*)                                     # OpenMPI
+      OPEN_MPI_PARMS="-cpus-per-proc ${OMP_NUM_THREADS:-1}"
+      [[ "$bind" == bind ]] && \
+        OPEN_MPI_PARMS="-bind-to-core ${OPEN_MPI_PARMS}"
+      [[ "$bind" == none ]] && \
+        OPEN_MPI_PARMS="-bind-to-none ${OPEN_MPI_PARMS}"
+      [[ -n "$ib" ]] && \
+        OPEN_MPI_PARMS="--mca btl openib,tcp,self ${OPEN_MPI_PARMS}"  # force use of infiniband
+      [[ -n "$noib" ]] && \
+        OPEN_MPI_PARMS="--mca btl tcp,self ${OPEN_MPI_PARMS}"         # do not try to use infiniband
+      [[ "$mpirun" == mpirun ]] && [[ -n ${OPAL_PREFIX} ]] && \
+        OPEN_MPI_PARMS="--prefix ${OPAL_PREFIX} ${OPEN_MPI_PARMS}"    # if not using rumpirun.openmpi (Dorval EC clusters)
+      mpiexec_Linux_launch OpenMPI ${OPEN_MPI_PARMS} "$@"
+      ;;
+    PMI_RANK*)                                                 # mpich2 family
+      echo "ERROR: (${0}) mpich2 Linux MPI launcher not implemented yet"
+      MPICH_PARMS="-envall"
+      return 1
+      mpiexec_Linux_launch Mpich2 "${MPICH_PARMS}" "$@"
+      ;;
+    *)
+      echo "ERROR: (${0}) Linux MPI launcher other than OpenMPI or mpich2 not implemented yet "
+      return 1
+      ;;
+  esac
+  return
 }
 #################################################################################################################################
-# MPI launcher for Linux systems using openmpi 
+# MPI launcher for Linux systems (
 # tested with openmpi interactively and under GridEngine
 #
-mpiexec_Linux_openmpi() {
+mpiexec_Linux_launch() {
+  Launcher="$1"
+  shift
 #
   ((npe_total=TotalInstances))
 #  ((npe_total=TotalThreads)) # not ready yet
@@ -33,17 +53,6 @@ mpiexec_Linux_openmpi() {
 # should this assumption be false the following line must be uncommented
 #  ((MpiCommWorlds>1)) && echo "ERROR: MpiCommWorlds>1 not supported yet" && return
 #
-  OPEN_MPI_PARMS="-cpus-per-proc ${OMP_NUM_THREADS:-1}"
-  [[ "$bind" == bind ]] && \
-    OPEN_MPI_PARMS="-bind-to-core ${OPEN_MPI_PARMS}"
-  [[ "$bind" == none ]] && \
-    OPEN_MPI_PARMS="-bind-to-none ${OPEN_MPI_PARMS}"
-  [[ "$TRUE_HOST" == eole* || -n "$ib" ]] && \
-    OPEN_MPI_PARMS="--mca btl openib,tcp,self ${OPEN_MPI_PARMS}"  # use Infiniband or Dorval eole-cluster
-  [[ -n "$noib" ]] && \
-    OPEN_MPI_PARMS="--mca btl tcp,self ${OPEN_MPI_PARMS}"         # do not try to use infiniband
-  [[ "$mpirun" == mpirun ]] && \
-    OPEN_MPI_PARMS="--prefix ${OPAL_PREFIX} ${OPEN_MPI_PARMS}"  # if not using rumpirun.openmpi (Dorval EC clusters)
   unset PE_HOSTFILE                                                             # Dorval EC clusters
   [[ -f "${GECOSHEP_HOSTS_FILE}" ]] && export OMPI_MCA_orte_rsh_agent=rurun     # Dorval EC clusters
   export OMPI_MCA_plm_rsh_disable_qrsh=1
@@ -53,28 +62,32 @@ mpiexec_Linux_openmpi() {
   export WorldOffset=0
   HostOffset=0
   MY_NODEFILE_ORI=${MY_NODEFILE}
-  echo "INFO: using : mpirun=${mpirun}"
+  echo "INFO: using : mpirun = '${mpirun}'"
   while(( MpiCommWorld<MpiCommWorlds)) ; do   # loop over MPI worlds
 #
     ((FirstHost=HostOffset+1))
     ((HostOffset=HostOffset+${PeInWorld[${MpiCommWorld}]}))
+#    ((HostOffset=HostOffset+${PeInWorld[${MpiCommWorld}]}*${ThreadsInWorld[${MpiCommWorld}]}))
     export MY_NODEFILE=${MY_NODEFILE_ORI}.${MpiCommWorld}
     sed -n ${FirstHost},${HostOffset}p ${MY_NODEFILE_ORI} >${MY_NODEFILE}
-    echo "INFO: ===== $(cat ${MY_NODEFILE} | wc -l) host(s) in  Mpi World $MpiCommWorld ====="
+#   transformer ${MY_NODEFILE} en map file pour OpenMPI et en host file pour Mpich2
+    echo "INFO: ===== $(cat ${MY_NODEFILE} | wc -l) host(s) in  ${Launcher} World $MpiCommWorld ====="
     cat ${MY_NODEFILE}
-#   pass environment variables (only names starting with letter or digit)
-    OPEN_MPI_PARMS="${OPEN_MPI_PARMS} $(s.prefix '-x ' $(env | grep -v "'" | grep -v '"'  | grep  '^[a-zA-Z0-9]' | sed 's/=.*//' | sort ))"
+    EXTRA_MPI_PARMS=""
+    if [[ $Launcher == OpenMPI ]] ; then #   pass environment variables (only names starting with letter or digit) (only for OpenMPI)
+      EXTRA_MPI_PARMS="$(s.prefix '-x ' $(env | grep -v "'" | grep -v '"'  | grep  '^[a-zA-Z0-9]' | sed 's/=.*//' | sort ))"
+    fi
 #
     if ((MpiCommWorlds>1)) ; then   # more than one MPI world, launch mpirun in background
-      echo INFO: ==== Backgrounding MPI world ${MpiCommWorld} with ${PeInWorld[${MpiCommWorld}]} MPI tasks ====
+      echo "INFO: ==== Backgrounding ${Launcher} world ${MpiCommWorld} with ${PeInWorld[${MpiCommWorld}]} MPI tasks ===="
       [[ -z ${dryrun} ]] && \
-        ${mpirun} ${OPEN_MPI_PARMS} -machinefile ${MY_NODEFILE} -n ${PeInWorld[${MpiCommWorld}]} "$@" ${ParallelScript}.${MpiCommWorld} &
+        ${mpirun} ${EXTRA_MPI_PARMS} -machinefile ${MY_NODEFILE} -n ${PeInWorld[${MpiCommWorld}]} "$@" ${ParallelScript}.${MpiCommWorld} &
     else   # only one MPI world, execute mpirun
-      echo "INFO: ==== Launching MPI world ${MpiCommWorld} with ${PeInWorld[${MpiCommWorld}]} MPI tasks ===="
-      [[ -n ${debug} ]] && \
-        echo "${mpirun} ${OPEN_MPI_PARMS} -machinefile ${MY_NODEFILE} -n ${PeInWorld[${MpiCommWorld}]} "$@" ${ParallelScript}.${MpiCommWorld}"
+      echo "INFO: ==== Launching ${Launcher} world ${MpiCommWorld} with ${PeInWorld[${MpiCommWorld}]} MPI tasks ===="
+      [[ -n ${verbose} ]] && \
+        echo "INFO: ${mpirun} ${EXTRA_MPI_PARMS} -machinefile ${MY_NODEFILE} -n ${PeInWorld[${MpiCommWorld}]} "$@" ${ParallelScript}.${MpiCommWorld}"
       [[ -z ${dryrun} ]] && \
-        ${mpirun} ${OPEN_MPI_PARMS} -machinefile ${MY_NODEFILE} -n ${PeInWorld[${MpiCommWorld}]} "$@" ${ParallelScript}.${MpiCommWorld}
+        ${mpirun} ${EXTRA_MPI_PARMS} -machinefile ${MY_NODEFILE} -n ${PeInWorld[${MpiCommWorld}]} "$@" ${ParallelScript}.${MpiCommWorld}
     fi
     PeAdded=${PeInWorld[${MpiCommWorld}]}
     ((ChildOffset=ChildOffset+PeAdded))
@@ -82,7 +95,7 @@ mpiexec_Linux_openmpi() {
     ((MpiCommWorld=MpiCommWorld+1))
   done
   if ((MpiCommWorlds>1)) ; then
-    echo "==== Waiting for ${MpiCommWorlds} MPI worlds to terminate ===="
+    echo "==== Waiting for ${MpiCommWorlds} ${Launcher} worlds to terminate ===="
     wait
   fi
 #
@@ -120,7 +133,7 @@ mpiexec_AIX() {
   echo "COMPLETE" >>${ParallelScript}.ALL # terminate POE command file
   echo "========== poe command file with ${MP_PROCS} tasks in ${MpiCommWorlds} MPI worlds =========="
   cat ${ParallelScript}.ALL
-  # multiple poe instances in parallel, gather, consolidate, run 
+  # multiple poe instances in parallel, gather, consolidate, run
   [[ -z ${dryrun} ]] && poe -cmdfile ${ParallelScript}.ALL </dev/null
 }
 #################################################################################################################################
@@ -162,13 +175,13 @@ print_separator() {
 #
 cat_output() {  #  cat captured stdout/stderr files into stdout with appropriate tagging
   for OUTDIR in $* ; do
-    [[ -r ${OUTDIR}/stdout ]] && cat ${OUTDIR}/stdout 
+    [[ -r ${OUTDIR}/stdout ]] && cat ${OUTDIR}/stdout
   done
 }
 #################################################################################################################################
 #
 # create the MPI C and Fortran executables used in the self test
-# 
+#
 make_cf_test() {
 echo INFO: creating C test program source mpi_c_test.c
 echo INFO: creating Fortran test program source mpi_f_test.f90
@@ -218,7 +231,7 @@ which mpxlf90_r 2>/dev/null 1>/dev/null && \
   mpxlf90_r ${tmpdir}/mpi_f_test.f90 -o ${tmpdir}/mpi_f_test
 [[ -x ${tmpdir}/mpi_f_test ]] && echo INFO: mpi_f_test created
 [[ -x ${tmpdir}/mpi_c_test ]] && echo INFO: mpi_c_test created
-echo INFO: removing Fortran test source program mpi_f_test.f90 
+echo INFO: removing Fortran test source program mpi_f_test.f90
 rm ${tmpdir}/mpi_f_test.f90
 }
 #################################################################################################################################
@@ -263,7 +276,7 @@ remap_nodes() {
 # are lines in the geometry file
 # under AIX the remapping is expected to be performed by the LoadLeveler
 # geometry keyword in the job header
-# all this will have to be revisited in the future in order to support 
+# all this will have to be revisited in the future in order to support
 # heterogenous OpenMP factors (probably using the geometry)
 # OMP_NUM_THREADS consistency with computed "loops" is not checked
 # the script tries to keep the master node at the beginning of the node list
@@ -272,9 +285,10 @@ remap_nodes() {
 make_node_file() {   # this will be rewritten
   # if there is a geometry file, remap the node list file
   # remapping will fail if there is no node file pointed to by MY_NODEFILE
+  ThreadCount=${1:-1}   # number of threads per process
   if [[ -z ${MY_NODEFILE} ]] ; then  # no node file has been found
     if tty -s ; then   # interactive, create a node file
-      ((npe_temp=npe_total))
+      ((npe_temp=npe_total*ThreadCount))
       while (( npe_temp > 0 )) ; do ((npe_temp=npe_temp-1)) ; echo $(hostname) >> ${TMPDIR}/MY_NODEFILE ; done
     fi
   fi
@@ -369,10 +383,13 @@ eval `cclargs_lite -D "" $0 \
     -tag "child" "full" "[full/child/member/stderr/none/seq]" \
     -timeout "60" "60" "[timeout for multiple instances]" \
     -tmpdir "" "" "[temporary directory visible by all processes]" \
+    -verbose "" "verbose" "[]" \
     -version "" "1.1.0 2014/05/05" "[version number]" \
     ++ "$@" ${RUN_IN_PARALLEL_EXTRAS}`
 #
 [[ -n ${version} ]] && echo "${0##*/} version $version" && exit 0
+#
+[[ "$TRUE_HOST" == eole* ]] && ib="ib"  # Dorval eole cluster
 #
 if [[ "${mpich2}" == "mpich2" ]] ; then
   mpich2="$(which rumpirun.mpich2 2>/dev/null)"
@@ -403,7 +420,7 @@ fi
 OMP_NUM_THREADS=${OMP_NUM_THREADS:-1}
 #
 [[ "${coremap}" == @* ]] && [[ -r "${coremap#@}" ]] && coremap="$(cat ${coremap#@})"   # -coremap @readable_file
-coremap=${coremap:-1,${npe_total}}        # by default, use all PEs in order
+coremap=${coremap:-0,$((npe_total-1))}        # by default, use all PEs in order
 #################################################################################################################################
 #                                   do we have co-running master/slave instances ?
 #################################################################################################################################
@@ -427,17 +444,17 @@ if [[ -d "${instancedir}" && -n "${instances}" ]] ; then     # we have co-runnin
 #   -args : ignored, cannot be used in this context
 #   -npex -npey -processorder -tmpdir -tag -spliteo -debug -nocleanup -geometry : passthrough
 #   -outp -errp -preexec -packoutput -offset -mpiargs -dryrun -minstdout : passthrough
-#   -ib -mpirun -coremap -openmpi -mpich2 : passthrough
+#   -ib -noib -mpirun -coremap -openmpi -mpich2 -verbose : passthrough
 #   all other arguments : ignored
 #
     unset PARALLEL_INSTANCES_DIR
     set -x
     ${0} -npex ${npex} -npey ${npey} -processorder "${processorder}" -tmpdir "${tmpdir}" -minstdout ${minstdout} \
-         -coremap "${coremap}" -ib ${ib} \
-         -tag "${tag}" -spliteo "${spliteo}" -debug "${debug}" -nocleanup "${nocleanup}" -geometry ${geometry} \
+         -coremap "${coremap}" -ib "${ib}" -noib "${noib}" -verbose "${verbose}" \
+         -tag "${tag}" -spliteo "${spliteo}" -debug "${debug}" -nocleanup "${nocleanup}" -geometry "${geometry}" \
          -outp "${outp}" -errp "${errp}" -preexec "${preexec}" -packoutput "${packoutput}" -dryrun "${dryrun}" \
          -offset "${offset}" -mpiargs "${mpiargs}" \
-         -mpirun ${mpirun} -openmpi "${openmpi}" -mpich2 "${mpich2}" \
+         -mpirun "${mpirun}" -openmpi "${openmpi}" -mpich2 "${mpich2}" \
          -pgm $(cd ${instancedir} ; cat ${instances} | xargs) %%${OMP_NUM_THREADS} /./$(pwd -P) ${pgm}
     set +x
     for i in ${instances} ; do
@@ -475,11 +492,12 @@ fi  #                                             co-running instances
 #################################################################################################################################
 ((MpiCommWorlds=0))  # number of MPI comm worlds
 PeInWorld[0]=${npe_total}
+ThreadsInWorld[0]=${OMP_NUM_THREADS}
 # process -args @file
 [[ "${args}" == @* ]] && args2=${args#@} && [[ -f ${args2} ]] && args="$(xargs <${args2})"
 # args variable now contains all programs
 #
-# -pgm @file 
+# -pgm @file
 # up to 5 items per line (same syntax as -pgm)
 # [directory] executable first_pe increment last_pe|@
 # [directory] executable first_pe increment
@@ -498,22 +516,31 @@ PeInWorld[0]=${npe_total}
 mkdir -p ${tmpdir}
 #################################################################################################################################
 # prepare node_name array (list of node names) and slot_number array (core ordinal on node)
-core_map_array=($(expand_node_map ${coremap}))   # create core map array, one entry per core map element
-if [[ ! -r ${nodefile} ]] ; then   # no nodefile supplied, make one 
+#################################################################################################################################
+#  THIS WILL HAVE TO BE MOVER TO A LATER POIT
+#  AS IT IS PREMATURE AT THIS POINT
+#  WE NEED TO KNOW HOW MANY THREADS ARE NEEDED FOR EACH PROCESS
+#################################################################################################################################
+CoreMapArray=($(expand_node_map ${coremap}))   # create core map array, one entry per core map element
+NumberOfCores=${#CoreMapArray[@]}
+echo "INFO: NumberOfCores = $NumberOfCores"
+echo "INFO: core map = ${CoreMapArray[@]}"
+if [[ ! -r ${nodefile} ]] ; then   # no nodefile supplied, make one
+  echo "INFO: no nodefile found, creating one"
   nodefile=$tmpdir/PBS_NODEFILE$$
   rm -f ${nodefile}
   ((r=0))
   while ((r < npe_total*OMP_NUM_THREADS)) ; do echo localhost >>${nodefile} ; ((r=r+1)) ; done
 fi
+ListOfHosts=($cat ${nodefile})
 ((r=0))
-for i in $(uniq ${nodefile} ) ; do
-  ((count=$(grep $i ${nodefile} | wc -l )-1))
-  for j in $(seq 0 $count) ; do
-    node_name[$r]=$i
-    slot_num[$r]=$j
-    ((r=r+1))
-  done
+NumberOfHosts=${#ListOfHosts[@]}
+while ((r<NumberOfHosts)) ; do
+  node_name[$r]=${ListOfHosts[${CoreMapArray[$r]}]}
+  ((r=r+1))
 done
+echo "INFO: NumberOfHosts = $NumberOfHosts"
+echo "INFO: Host list = ${ListOfHosts[@]}"
 MY_NODEFILE=${nodefile}
 #################################################################################################################################
 # create script anc C executable used in self test if needed
@@ -523,7 +550,7 @@ if [[ -n ${selftest} ]] ; then
   pgm="$( echo ${pgm} | sed -e s:PGM:${selftest}:g )"
   cat <<EOT >${selftest}
 #!/bin/ksh93
-echo "NODE FILE='\${MY_NODEFILE}' arguments:'\$@'"
+echo "NODE FILE='\${MY_NODEFILE}' arguments='\$@' \$(taskset -c -p \$\$ 2>/dev/null)"
 echo "\$(hostname)(\${MP_CHILD}): WORLD_CHILD=\${WORLD_CHILD}, RP_Child=\${RP_Child}, RP_Member=\${RP_Member}, RP_MemberChild=\${RP_MemberChild}, MP_SeqNum=\${MP_SeqNum}, RP_CommWorld=\${RP_CommWorld}, RP_WorldChild=\${RP_WorldChild}"
 set -x
 [[ -x ${tmpdir}/mpi_c_test ]] && ${tmpdir}/mpi_c_test
@@ -560,17 +587,18 @@ RPN_COMM_DIRS="' '"     # RPN_COMM_DIRS no longer used, cd now done in secondary
 SetCurrentDir=$(pwd -P)
 set -- $pgm @@
 #################################################################################################################################
+((ErRoR=0))
+((NDomains=0))
+((Next=0))
+((MpiCommWorld=0))
+((npe_total=${PeInWorld[0]}))
+((MaxPe=0))
+((InstanceOffset=0))
+((Instances=0))
+((TotalInstances=0))
+((TotalThreads=0))
+#################################################################################################################################
 if [[ "$3" != "" ]] ; then # complex sequence, SPMD or MPMD, (automatic multiple MPI worlds with @@)
-  ((ErRoR=0))
-  ((NDomains=0))
-  ((Next=0))
-  ((MpiCommWorld=0))
-  ((npe_total=${PeInWorld[0]}))
-  ((MaxPe=0))
-  ((InstanceOffset=0))
-  ((Instances=0))
-  ((TotalInstances=0))
-  ((TotalThreads=0))
 #  for i in $(seq 0 1 ${npe_total_m1}) ; do ProGrams[$i]="NoNe" ; Directories[$i]="." ; done
   unset ProGrams Directories
 #
@@ -612,12 +640,14 @@ export RPN_COMM_DIRS="${RPN_COMM_DIRS}"
 export OMP_NUM_THREADS=${NLThreads}
 ((WORLD_CHILD=MP_CHILD-${InstanceOffset}))
 export WORLD_CHILD
-[[ -z "${nosep}" ]] && [[ -n "${processorder}" ]] && /usr/bin/printf "============== stdout W:${MpiCommWorld}:%4.4d M:%4.4d-%4.4d Seq:%s ==============\n" \${RP_WorldChild} \${RP_Member} \${RP_MemberChild} \${MP_SeqNum}
+[[ -z "${nosep}" ]] &&
+  [[ -n "${processorder}" ]] &&
+  /usr/bin/printf "============== stdout W:${MpiCommWorld}:%4.4d M:%4.4d-%4.4d Seq:%s ==============\n" \${RP_WorldChild} \${RP_Member} \${RP_MemberChild} \${MP_SeqNum}
 EOT
       for i in  $(seq 0 1 $((Instances-1))) ; do
         cat <<EOT >>${MpiRunScript}.${MpiCommWorld}
           if (( MP_CHILD == $((i+InstanceOffset)) ))
-          then 
+          then
             cd ${Directories[$i]}
             ${preexec} ${ProGrams[$i]} ${args} && rm -f ${tmpdir}/fail.\${MP_Tag}
             echo "END of child \${WORLD_CHILD} : \$(date)"
@@ -683,22 +713,24 @@ EOT
         ((i>MaxPe)) && ((MaxPe=i))
       fi
     done
-    echo "${LocalInstances} instances of '$Program' ( $((InstanceOffset+First)) , $((InstanceOffset+Last)) , ${Increment} ) in MPI world ${MpiCommWorld}"
+    echo "INFO: ${LocalInstances} instances of '$Program' ( $((InstanceOffset+First)) , $((InstanceOffset+Last)) , ${Increment} ) in MPI world ${MpiCommWorld}"
   done # while [[ "$1" != "" ]]
 #
   if [[ "$ErRoR" != "0" ]] ; then echo "$ErRoR ERROR(S) detected" ; local_cleanup ; exit 1 ; fi
 #
-else # simple SPMD case, one MPI world, old style call
+else #################### simple SPMD case, one MPI world, old style call ##########################
 #
   ((TotalInstances=npe_total))
   if [[ ! -x $pgm ]] ; then                        # same executable for all worlds
-    echo $pgm does not exist or is not executable
+    echo "ERROR: $pgm does not exist or is not executable"
     exit 1
   fi
   MpiCommWorld=0
   MpiCommWorlds=1
   PeInWorld[0]=${npe_total}
+  ThreadsInWorld[0]=${OMP_NUM_THREADS}
   MembersInWorld[0]=${npey}
+  ((TotalThreads=OMP_NUM_THREADS))
   cat <<EOT >${MpiRunScript}.${MpiCommWorld}
 #!/bin/ksh93
 export RPN_COMM_DOM='${NDomains}${RPN_COMM_DOM}'
@@ -711,10 +743,10 @@ export WORLD_CHILD
   /usr/bin/printf "============== stdout W:${MpiCommWorld}:%4.4d M:%4.4d-%4.4d Seq:%s ==============\n" \${RP_WorldChild} \${RP_Member} \${RP_MemberChild} \${MP_SeqNum}
 EOT
   echo "${preexec} $pgm $args  && rm -f ${tmpdir}/fail.\${MP_Tag}" >>${MpiRunScript}.0   # MpiCommWorld is 0 in this case
-  echo 'echo END of child $WORLD_CHILD : $(date)' >>${MpiRunScript}.0 
+  echo 'echo INFO: END of child $WORLD_CHILD : $(date)' >>${MpiRunScript}.0
   echo "INFO: ${npe_total} instances of '$pgm'"
 #
-fi # complex sequence, possibly MPMD
+fi ########################## complex sequence, possibly MPMD ####################
 #################################################################################################################################
 # prepare primary launch scripts (one per world)
 #
@@ -748,7 +780,7 @@ typeset -Z4 MP_SeqNum    # NOT VALID FOR bash, ksh family only
 ((MP_CHILD=MP_CHILD+ChildOffset))   # need to add ChildOffset for this MPI world to MP_CHILD (always 0 for poe)
 export RP_WorldChild
 ((RP_WorldChild=MP_CHILD-${WorldOffset}))   # child ordinal in this world
-export RP_CommWorld=${MpiCommWorld}         # ordinal of this MPI world 
+export RP_CommWorld=${MpiCommWorld}         # ordinal of this MPI world
 export MP_SeqNum="\$((MP_CHILD))"           # global sequence number
 export RP_Child="\$((MP_CHILD))"            # global child number, same as MP_CHILD
 export RP_Member=\$((RP_WorldChild/${npex}+${offset}))      # member number in this world (including offset)
@@ -785,9 +817,9 @@ export TMPDIR=${tmpdir}
 # create stdout/stderr directories if necessary
 if [[ -n ${processorder} ]] ; then
   for ISeqNum in $(seq 0 1 $((TotalInstances-1)) )    #  a arranger pour le cas MPMD ====================================
-  do 
+  do
     /usr/bin/printf "%s/%4.4d\n" ${tmpdir} ${ISeqNum}
-  done  | xargs -l30 mkdir 
+  done  | xargs -l30 mkdir
   echo "INFO: =============================================="
   echo "INFO: temporary listings for all members in ${tmpdir}"
   echo "INFO: =============================================="
@@ -798,7 +830,7 @@ if [[ ${nompi} == run_with_mpi ]] ; then  # MPI launch (linux or AIX supported)
 #
   SystemPlatform=$(uname -s)
   MpiImplementation=""
-  [[ -n ${OPAL_PREFIX} || -n ${openmpi} ]] && MpiImplementation="_openmpi"  # openmpi MPI implementation
+  [[ -n ${openmpi} ]] && MpiImplementation="_openmpi"  # openmpi MPI implementation
   [[ -n ${mpich2} ]] && MpiImplementation="_mpich2"                         # mpich2 MPI implementation
   echo "INFO: ${MPI_EXEC:-mpiexec_${SystemPlatform}${MpiImplementation}} ${mpiargs}"
   ${MPI_EXEC:-mpiexec_${SystemPlatform}${MpiImplementation}} ${mpiargs}
