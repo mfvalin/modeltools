@@ -65,6 +65,7 @@ mpiexec_Linux_launch() {
   echo "INFO: using : mpirun = '${mpirun}'"
   while(( MpiCommWorld<MpiCommWorlds)) ; do   # loop over MPI worlds
 #
+    echo "INFO: MPI world ${MpiCommWorld} will be using ${PeInWorld[${MpiCommWorld}]} tasks  with ${ThreadsInWorld[${MpiCommWorld}]} thread(s) per task"
     ((FirstHost=HostOffset+1))
     ((HostOffset=HostOffset+${PeInWorld[${MpiCommWorld}]}))
 #    ((HostOffset=HostOffset+${PeInWorld[${MpiCommWorld}]}*${ThreadsInWorld[${MpiCommWorld}]}))
@@ -184,7 +185,6 @@ cat_output() {  #  cat captured stdout/stderr files into stdout with appropriate
 #
 make_cf_test() {
 echo INFO: creating C test program source mpi_c_test.c
-echo INFO: creating Fortran test program source mpi_f_test.f90
 #
 cat >${tmpdir}/mpi_c_test.c <<EOT
 #include <unistd.h>
@@ -204,6 +204,7 @@ void main(int argc, char **argv)
  MPI_Finalize();
 }
 EOT
+echo INFO: creating Fortran test program source mpi_f_test.f90
 cat >${tmpdir}/mpi_f_test.f90 <<EOT
 program demo
 include 'mpif.h'
@@ -235,14 +236,33 @@ echo INFO: removing Fortran test source program mpi_f_test.f90
 rm ${tmpdir}/mpi_f_test.f90
 }
 #################################################################################################################################
-# expand_node_map (expand a series of a,b number pairs into a full list)
-# usage: expand_node_map pairs
-# ex   :    list=($(expand_node_map 0,6 12,23))
-expand_node_map() {
-  for i in ${@}
-  do
-    seq $(echo $i | tr , ' ')
+# process -coremap option
+#         -coremap series of 'start,increment,end' triplets or 'start,end' doublets
+#         -coremap @readable_file        (contents as above)
+#
+# example: -coremap 0,1,6 12,2,23   ( 0 thru 6 , 12 thru 23 by 2)
+expand_core_map() {
+  [[ "$hostos" == Linux ]] || return   # Linux only
+  [[ "${coremap}" == @* ]] && [[ -r "${coremap#@}" ]] && coremap="$(cat ${coremap#@})"   # -coremap @readable_file
+  coremap=${coremap:-0,${OMP_NUM_THREADS},$((TotalThreads-1))}        # by default, use all threads from all PEs in order
+# expand_core_map (expand a series of number doublets/triplets into a full list)
+  CoreMapArray=( $(for i in ${@} ; do seq $(echo $i | tr , ' ') ; done) )
+  NumberOfCores=${#CoreMapArray[@]}
+  ListOfHosts=($(cat ${nodefile}))
+  NumberOfHosts=${#ListOfHosts[@]}
+  ((r=0))
+  while ((r<NumberOfCores)) ; do
+    h=${CoreMapArray[$r]}
+    ((h>=NumberOfHosts)) && echo "ERROR: core number ${h} > maximum (${NumberOfHosts})" && rm -rf ${tmpdir} && exit 1
+    echo "${ListOfHosts[$h]}" >>${MY_NODEFILE}
+    ListOfNodes[$r]=${ListOfHosts[$h]}
+    ((r=r+1))
   done
+  [[ -n $verbose ]] && echo "INFO: CoresOnNode = $CoresOnNode"
+  [[ -n $verbose ]] && echo "INFO: NumberOfHosts = $NumberOfHosts"
+#  [[ -n $verbose ]] && echo "INFO: Host list = ${ListOfHosts[@]}"
+  [[ -n $verbose ]] && echo "INFO: Node list = ${ListOfNodes[@]}"
+  [[ -n $verbose ]] && echo "INFO: Base core map = ${CoreMapArray[@]}"
 }
 #################################################################################################################################
 # remap_nodes , uses node file and geometry file
@@ -354,7 +374,8 @@ eval `cclargs_lite -D "" $0 \
     -e "NO" "YES" "[list failed processes" \
     -errp "e" "E" "[stderr prefix in listings]" \
     -geometry "" "" "[]" \
-    -ib "" "ib" "[use Infiniband ]" \
+    -ib "" "ib" "[use Infiniband]" \
+    -hostos "$(uname -s)" "" "[local OS]" \
     -inorder "" "yes" "[list out/err of members in process order]" \
     -instancedir "${PARALLEL_INSTANCES_DIR}" "${PARALLEL_INSTANCES_DIR}" "[directory containing instance names]" \
     -instances "" "" "[instance name for member or list of instances for master]" \
@@ -382,14 +403,18 @@ eval `cclargs_lite -D "" $0 \
     -spliteo "no" "yes" "[split stderr from stdout]" \
     -tag "child" "full" "[full/child/member/stderr/none/seq]" \
     -timeout "60" "60" "[timeout for multiple instances]" \
-    -tmpdir "" "" "[temporary directory visible by all processes]" \
+    -tmpdir "$(pwd -P)/tmpdir${TRUE_HOST}$$" "" "[temporary directory visible by all processes]" \
     -verbose "" "verbose" "[]" \
     -version "" "1.1.0 2014/05/05" "[version number]" \
     ++ "$@" ${RUN_IN_PARALLEL_EXTRAS}`
 #
 [[ -n ${version} ]] && echo "${0##*/} version $version" && exit 0
+OMP_NUM_THREADS=${OMP_NUM_THREADS:-1}
 #
-[[ "$TRUE_HOST" == eole* ]] && ib="ib"  # Dorval eole cluster
+CoresOnNode=1
+[[ "$hostos" == Linux ]] && CoresOnNode=$(grep MHz /proc/cpuinfo 2>/dev/null | wc -l)   # Linux only
+((CoresOnNode<=0)) && CoresOnNode=1
+[[ "$TRUE_HOST" == eole* ]] && ib="ib"  # force usage of Infiniband on Dorval eole cluster
 #
 if [[ "${mpich2}" == "mpich2" ]] ; then
   mpich2="$(which rumpirun.mpich2 2>/dev/null)"
@@ -402,7 +427,7 @@ fi
 mpirun=${openmpi:-${mpich2:-${mpirun:-mpirun}}}   # in case rumpirun.openmpi not found
 #
 echo "INFO: START of ${0##*/} : $(date)"
-[[ -z ${tmpdir} ]]  && tmpdir="$(pwd -P)/tmpdir${TRUE_HOST}$$"
+#[[ -z ${tmpdir} ]]  && tmpdir="$(pwd -P)/tmpdir${TRUE_HOST}$$"
 [[ -n ${inorder} ]] && processorder="yes"
 if [[ -n ${members} ]] ; then
   if [[ ${members} == *x* ]] ; then
@@ -417,10 +442,7 @@ fi
 ((npe_total=npex*npey))
 ((TotalInstances=npe_total))
 ((TotalTasks=npe_total))
-OMP_NUM_THREADS=${OMP_NUM_THREADS:-1}
-#
-[[ "${coremap}" == @* ]] && [[ -r "${coremap#@}" ]] && coremap="$(cat ${coremap#@})"   # -coremap @readable_file
-coremap=${coremap:-0,$((npe_total-1))}        # by default, use all PEs in order
+((TotalThreads=npe_total*OMP_NUM_THREADS))
 #################################################################################################################################
 #                                   do we have co-running master/slave instances ?
 #################################################################################################################################
@@ -488,7 +510,7 @@ if [[ -d "${instancedir}" && -n "${instances}" ]] ; then     # we have co-runnin
       exit 1
     fi
   fi # master or slave instance
-fi  #                                             co-running instances
+fi  #                                 end of co-running instances processing
 #################################################################################################################################
 ((MpiCommWorlds=0))  # number of MPI comm worlds
 PeInWorld[0]=${npe_total}
@@ -512,36 +534,24 @@ ThreadsInWorld[0]=${OMP_NUM_THREADS}
 # pgm variable now contains all that is needed
 #
 [[ -n "${debug}" ]] && echo "INFO: debug flag = '${debug}'" && set -x
+#################################################################################################################################
 # reset TMPDIR to make sure it is visible to all MPI tasks
 mkdir -p ${tmpdir}
+export TMPDIR=${tmpdir}
 #################################################################################################################################
-# prepare node_name array (list of node names) and slot_number array (core ordinal on node)
+# prepare node file (list of node names) and slot_number array (core ordinal on node)
 #################################################################################################################################
-#  THIS WILL HAVE TO BE MOVER TO A LATER POIT
-#  AS IT IS PREMATURE AT THIS POINT
-#  WE NEED TO KNOW HOW MANY THREADS ARE NEEDED FOR EACH PROCESS
-#################################################################################################################################
-CoreMapArray=($(expand_node_map ${coremap}))   # create core map array, one entry per core map element
-NumberOfCores=${#CoreMapArray[@]}
-echo "INFO: NumberOfCores = $NumberOfCores"
-echo "INFO: core map = ${CoreMapArray[@]}"
+MY_NODEFILE=$tmpdir/PBS_NODEFILE$$
+rm -f ${MY_NODEFILE}
 if [[ ! -r ${nodefile} ]] ; then   # no nodefile supplied, make one
   echo "INFO: no nodefile found, creating one"
-  nodefile=$tmpdir/PBS_NODEFILE$$
+  nodefile=${MY_NODEFILE}
   rm -f ${nodefile}
   ((r=0))
   while ((r < npe_total*OMP_NUM_THREADS)) ; do echo localhost >>${nodefile} ; ((r=r+1)) ; done
 fi
-ListOfHosts=($cat ${nodefile})
-((r=0))
-NumberOfHosts=${#ListOfHosts[@]}
-while ((r<NumberOfHosts)) ; do
-  node_name[$r]=${ListOfHosts[${CoreMapArray[$r]}]}
-  ((r=r+1))
-done
-echo "INFO: NumberOfHosts = $NumberOfHosts"
-echo "INFO: Host list = ${ListOfHosts[@]}"
-MY_NODEFILE=${nodefile}
+expand_core_map ${coremap}
+exit 0
 #################################################################################################################################
 # create script anc C executable used in self test if needed
 #
@@ -813,7 +823,6 @@ done    # while ((MpiCommWorld<MpiCommWorlds))
 # we are now almost ready to launch
 #
 ((npe_total=TotalInstances))
-export TMPDIR=${tmpdir}
 # create stdout/stderr directories if necessary
 if [[ -n ${processorder} ]] ; then
   for ISeqNum in $(seq 0 1 $((TotalInstances-1)) )    #  a arranger pour le cas MPMD ====================================
