@@ -47,7 +47,7 @@ mpiexec_Linux_launch() {
 #
   ((npe_total=TotalInstances))
 #  ((npe_total=TotalThreads)) # not ready yet
-  make_node_file
+#  make_node_file
 #
 # we are assuming that mpirun/mpiexec can be backgrounded.
 # should this assumption be false the following line must be uncommented
@@ -236,32 +236,53 @@ echo INFO: removing Fortran test source program mpi_f_test.f90
 rm ${tmpdir}/mpi_f_test.f90
 }
 #################################################################################################################################
-# process -coremap option
-#         -coremap series of 'start,increment,end' triplets or 'start,end' doublets
-#         -coremap @readable_file        (contents as above)
+# process  -nodemap option
+#          -nodemap s1,e1:np1 s2,e2:np2 ... sN,eN:npN
+#          si : first host, ei : last host, npi : number of PEs on node
+#          (alternate form : si,di,ei , hosts si thru ei every di )
+# example: -nodemap 0:1 5:3 6,2,10:4     (1 PE on host 0, 3PEs on host 5, 4 PEs on hosts 6, 8, 10 )
+expand_node_map() {
+  [[ "$hostos" == Linux ]] || return   # Linux only
+  [[ "${coremap}" == NoNe ]] || return # mutually exclusive options coremap/nodemap
+
+  [[ "${nodemap}" == @* ]] && [[ -r "${nodemap#@}" ]] && nodemap="$(cat ${nodemap#@})"   # -nodemap @readable_file
+# expand_node_map (expand a series of number doublets/triplets into a full list)
+  ListOfHosts=($(uniq ${nodefile}))
+  NumberOfHosts=${#ListOfHosts[@]}
+  for Entry in ${nodemap} ; do
+    npe=${Entry#*:}
+    hlist="$(echo ${Entry%:*} | tr , ' ')"
+    [[ "${hlist}" == 0 ]] && hlist="0 0"
+    for hnum in $(seq ${hlist}) ; do
+      while ((npe>0)) ; do echo ${ListOfHosts[${hnum}]} >>${MY_NODEFILE} ; ((npe=npe-1)) ;done
+    done
+  done
+}
+#################################################################################################################################
+# process  -coremap option
+#          -coremap series of 'start,increment,end' triplets or 'start,end' doublets
+#          -coremap @readable_file        (contents as above)
 #
 # example: -coremap 0,1,6 12,2,23   ( 0 thru 6 , 12 thru 23 by 2)
 expand_core_map() {
   [[ "$hostos" == Linux ]] || return   # Linux only
+  [[ "${nodemap}" == NoNe ]] || return # mutually exclusive options coremap/nodemap
+
   [[ "${coremap}" == @* ]] && [[ -r "${coremap#@}" ]] && coremap="$(cat ${coremap#@})"   # -coremap @readable_file
   coremap=${coremap:-0,${OMP_NUM_THREADS},$((TotalThreads-1))}        # by default, use all threads from all PEs in order
 # expand_core_map (expand a series of number doublets/triplets into a full list)
-  CoreMapArray=( $(for i in ${@} ; do seq $(echo $i | tr , ' ') ; done) )
+  CoreMapArray=( $(for i in ${coremap} ; do ii="${i}" ; [[ "${ii}" == 0 ]] && ii="0 0" ; seq $(echo ${ii} | tr , ' ') ; done) )
   NumberOfCores=${#CoreMapArray[@]}
   ListOfHosts=($(cat ${nodefile}))
   NumberOfHosts=${#ListOfHosts[@]}
   ((r=0))
   while ((r<NumberOfCores)) ; do
     h=${CoreMapArray[$r]}
-    ((h>=NumberOfHosts)) && echo "ERROR: core number ${h} > maximum (${NumberOfHosts})" && rm -rf ${tmpdir} && exit 1
+    ((h>=NumberOfHosts)) && echo "ERROR: core number ${h} > maximum ($((NumberOfHosts-1)))" && rm -rf ${tmpdir} && exit 1
     echo "${ListOfHosts[$h]}" >>${MY_NODEFILE}
-    ListOfNodes[$r]=${ListOfHosts[$h]}
     ((r=r+1))
   done
-  [[ -n $verbose ]] && echo "INFO: CoresOnNode = $CoresOnNode"
-  [[ -n $verbose ]] && echo "INFO: NumberOfHosts = $NumberOfHosts"
-#  [[ -n $verbose ]] && echo "INFO: Host list = ${ListOfHosts[@]}"
-  [[ -n $verbose ]] && echo "INFO: Node list = ${ListOfNodes[@]}"
+  [[ -n $verbose ]] && echo "INFO: Cores map entries = $NumberOfCores"
   [[ -n $verbose ]] && echo "INFO: Base core map = ${CoreMapArray[@]}"
 }
 #################################################################################################################################
@@ -306,6 +327,7 @@ make_node_file() {   # this will be rewritten
   # if there is a geometry file, remap the node list file
   # remapping will fail if there is no node file pointed to by MY_NODEFILE
   ThreadCount=${1:-1}   # number of threads per process
+
   if [[ -z ${MY_NODEFILE} ]] ; then  # no node file has been found
     if tty -s ; then   # interactive, create a node file
       ((npe_temp=npe_total*ThreadCount))
@@ -368,7 +390,7 @@ echo version avec /bin/ksh93
 eval `cclargs_lite -D "" $0 \
     -args "" "" "[arguments to the command]" \
     -bind "" "bind" "[]" \
-    -coremap "" "" "[core affinity and node map]" \
+    -coremap "NoNe" "NoNe" "[core affinity map]" \
     -debug "" "5" "[]" \
     -dryrun "" "dryrun" "[]" \
     -e "NO" "YES" "[list failed processes" \
@@ -387,6 +409,7 @@ eval `cclargs_lite -D "" $0 \
     -mpirun "$(which rumpirun.openmpi 2>/dev/null)" "mpirun" "[]" \
     -nocleanup "" "nocleanup" "[]" \
     -nodefile "${MY_NODEFILE}"  "${MY_NODEFILE}" "[list of nodes to use]" \
+    -nodemap "NoNe" "NoNe" "[process to node map]" \
     -noib "" "noib" "[do not use Infiniband ]" \
     -nompi "run_with_mpi" "run_in_background" "[do not use mpi to launch]" \
     -nosep "" "yes" "[deactivate separator between members]" \
@@ -411,7 +434,7 @@ eval `cclargs_lite -D "" $0 \
 [[ -n ${version} ]] && echo "${0##*/} version $version" && exit 0
 OMP_NUM_THREADS=${OMP_NUM_THREADS:-1}
 #
-CoresOnNode=1
+CoresOnNode=32
 [[ "$hostos" == Linux ]] && CoresOnNode=$(grep MHz /proc/cpuinfo 2>/dev/null | wc -l)   # Linux only
 ((CoresOnNode<=0)) && CoresOnNode=1
 [[ "$TRUE_HOST" == eole* ]] && ib="ib"  # force usage of Infiniband on Dorval eole cluster
@@ -541,17 +564,55 @@ export TMPDIR=${tmpdir}
 #################################################################################################################################
 # prepare node file (list of node names) and slot_number array (core ordinal on node)
 #################################################################################################################################
+echo "INFO: Cores per Node = $CoresOnNode"
 MY_NODEFILE=$tmpdir/PBS_NODEFILE$$
 rm -f ${MY_NODEFILE}
+
 if [[ ! -r ${nodefile} ]] ; then   # no nodefile supplied, make one
-  echo "INFO: no nodefile found, creating one"
-  nodefile=${MY_NODEFILE}
+  nodefile=${MY_NODEFILE}__
   rm -f ${nodefile}
-  ((r=0))
-  while ((r < npe_total*OMP_NUM_THREADS)) ; do echo localhost >>${nodefile} ; ((r=r+1)) ; done
+  if tty -s ; then
+    echo "INFO: no nodefile found, interactive job, creating one"
+    ((r=0))
+    while ((r < npe_total*OMP_NUM_THREADS)) ; do echo localhost >>${nodefile} ; ((r=r+1)) ; done
+  else
+    if [[ "$hostos" == Linux ]] ; then
+      echo "ERROR: no nodefile found, not an interactive job, Linux OS, aborting"
+      exit 1
+    fi
+  fi  # tty -s
+fi  # no nodefile
+
+if [[ "${coremap}" == NoNe && "${nodemap}" == NoNe ]] ; then
+#  take every OMP_NUM_THREADS entry from ${nodefile} and put it into ${MY_NODEFILE}
+  nhosts=$(sort -u ${nodefile} | wc -l | sed 's/ .*//')   # number of hosts
+  ((loops=(npe_total+nhosts-1)/nhosts))   # number of tasks per host
+  if ((loops*OMP_NUM_THREADS > CoresOnNode)) ; then
+    echo "ERROR: not enough cores available on node, $((loops*OMP_NUM_THREADS)) requested, $((CoresOnNode)) available"
+    exit 1
+  fi
+  for i in $(uniq ${nodefile}) ; do
+    for j in $(seq $loops) ; do
+      echo ${i} >>${MY_NODEFILE}   # one entry per task
+    done
+  done
 fi
-expand_core_map ${coremap}
-exit 0
+if [[ "${coremap}" != NoNe ]] ; then
+  expand_core_map
+fi
+if [[ "${nodemap}" != NoNe ]] ; then
+  expand_node_map
+fi
+ListOfNodes=($(cat ${MY_NODEFILE}))
+NumberOfNodes=${#ListOfNodes[@]}
+#  [[ -n $verbose ]] && echo "INFO: NumberOfHosts = $NumberOfHosts"
+#  [[ -n $verbose ]] && echo "INFO: Host list = ${ListOfHosts[@]}"
+[[ -n $verbose ]] && echo "INFO: Number or processes = $NumberOfNodes"
+[[ -n $verbose ]] && echo "INFO: Node list = ${ListOfNodes[@]}"
+if ((NumberOfNodes!=npe_total)) ; then
+  echo "ERROR: inconsistent number of processes, requested ${npe_total}, mapped ${NumberOfNodes}"
+  exit 1
+fi
 #################################################################################################################################
 # create script anc C executable used in self test if needed
 #
