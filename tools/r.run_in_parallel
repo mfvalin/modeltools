@@ -11,7 +11,6 @@ mpiexec_Linux() {
   RANK_VAR=$(mpirun -n 2 /usr/bin/env | grep RANK | grep -E "OMPI_COMM_WORLD_RANK|PMI_RANK")
   case "$RANK_VAR" in
     OMPI_COMM_WORLD_RANK*)                                     # OpenMPI
-      OPEN_MPI_PARMS="-cpus-per-proc ${OMP_NUM_THREADS:-1}"
       [[ "$bind" == bind ]] && \
         OPEN_MPI_PARMS="-bind-to-core ${OPEN_MPI_PARMS}"
       [[ "$bind" == none ]] && \
@@ -70,13 +69,16 @@ mpiexec_Linux_launch() {
     ((HostOffset=HostOffset+${PeInWorld[${MpiCommWorld}]}))
 #    ((HostOffset=HostOffset+${PeInWorld[${MpiCommWorld}]}*${ThreadsInWorld[${MpiCommWorld}]}))
     export MY_NODEFILE=${MY_NODEFILE_ORI}.${MpiCommWorld}
+    export MY_RANKFILE=${MY_NODEFILE_ORI}.rank.${MpiCommWorld}
     sed -n ${FirstHost},${HostOffset}p ${MY_NODEFILE_ORI} >${MY_NODEFILE}
 #   transformer ${MY_NODEFILE} en map file pour OpenMPI et en host file pour Mpich2
+#    node_to_rank ${MY_NODEFILE} ${ThreadsInWorld[${MpiCommWorld}]} > ${MY_RANKFILE}
     echo "INFO: ===== $(cat ${MY_NODEFILE} | wc -l) host(s) in  ${Launcher} World $MpiCommWorld ====="
     cat ${MY_NODEFILE}
     EXTRA_MPI_PARMS=""
     if [[ $Launcher == OpenMPI ]] ; then #   pass environment variables (only names starting with letter or digit) (only for OpenMPI)
-      EXTRA_MPI_PARMS="$(s.prefix '-x ' $(env | grep -v "'" | grep -v '"'  | grep  '^[a-zA-Z0-9]' | sed 's/=.*//' | sort ))"
+#      EXTRA_MPI_PARMS="-cpus-per-proc ${ThreadsInWorld[${MpiCommWorld}]}"
+      EXTRA_MPI_PARMS="${EXTRA_MPI_PARMS} $(s.prefix '-x ' $(env | grep -v "'" | grep -v '"'  | grep  '^[a-zA-Z0-9]' | sed 's/=.*//' | sort ))"
     fi
 #
     if ((MpiCommWorlds>1)) ; then   # more than one MPI world, launch mpirun in background
@@ -239,7 +241,8 @@ rm ${tmpdir}/mpi_f_test.f90
 # process  -nodemap option
 #          -nodemap s1,e1:np1 s2,e2:np2 ... sN,eN:npN
 #          si : first host, ei : last host, npi : number of PEs on node
-#          (alternate form : si,di,ei , hosts si thru ei every di )
+#          (alternate form : si,di,ei:npi , npi PEs on hosts si thru ei every di )
+#          (alternate form : si:npi , npi PEs on host si, equivalent to si,si:npi or si,1,si:npi )
 # example: -nodemap 0:1 5:3 6,2,10:4     (1 PE on host 0, 3PEs on host 5, 4 PEs on hosts 6, 8, 10 )
 expand_node_map() {
   [[ "$hostos" == Linux ]] || return   # Linux only
@@ -250,10 +253,11 @@ expand_node_map() {
   ListOfHosts=($(uniq ${nodefile}))
   NumberOfHosts=${#ListOfHosts[@]}
   for Entry in ${nodemap} ; do
-    npe=${Entry#*:}
-    hlist="$(echo ${Entry%:*} | tr , ' ')"
-    [[ "${hlist}" == 0 ]] && hlist="0 0"
+    npe0=${Entry#*:}
+    hlist="$(echo ${Entry%:*} | tr , ' ')"                          # replace , with space for seq
+    [[ "${Entry%:*}" != *,* ]] && hlist="${Entry%:*} ${Entry%:*}"   # single number si:npi
     for hnum in $(seq ${hlist}) ; do
+      ((npe=npe0))
       while ((npe>0)) ; do echo ${ListOfHosts[${hnum}]} >>${MY_NODEFILE} ; ((npe=npe-1)) ;done
     done
   done
@@ -465,7 +469,6 @@ fi
 ((npe_total=npex*npey))
 ((TotalInstances=npe_total))
 ((TotalTasks=npe_total))
-((TotalThreads=npe_total*OMP_NUM_THREADS))
 #################################################################################################################################
 #                                   do we have co-running master/slave instances ?
 #################################################################################################################################
@@ -578,17 +581,20 @@ if [[ ! -r ${nodefile} ]] ; then   # no nodefile supplied, make one
   else
     if [[ "$hostos" == Linux ]] ; then
       echo "ERROR: no nodefile found, not an interactive job, Linux OS, aborting"
+      rm -rf ${tmpdir}
       exit 1
     fi
   fi  # tty -s
 fi  # no nodefile
 
+((TotalThreads=npe_total*OMP_NUM_THREADS))
 if [[ "${coremap}" == NoNe && "${nodemap}" == NoNe ]] ; then
 #  take every OMP_NUM_THREADS entry from ${nodefile} and put it into ${MY_NODEFILE}
   nhosts=$(sort -u ${nodefile} | wc -l | sed 's/ .*//')   # number of hosts
   ((loops=(npe_total+nhosts-1)/nhosts))   # number of tasks per host
   if ((loops*OMP_NUM_THREADS > CoresOnNode)) ; then
     echo "ERROR: not enough cores available on node, $((loops*OMP_NUM_THREADS)) requested, $((CoresOnNode)) available"
+    rm -rf ${tmpdir}
     exit 1
   fi
   for i in $(uniq ${nodefile}) ; do
@@ -611,6 +617,7 @@ NumberOfNodes=${#ListOfNodes[@]}
 [[ -n $verbose ]] && echo "INFO: Node list = ${ListOfNodes[@]}"
 if ((NumberOfNodes!=npe_total)) ; then
   echo "ERROR: inconsistent number of processes, requested ${npe_total}, mapped ${NumberOfNodes}"
+  rm -rf ${tmpdir}
   exit 1
 fi
 #################################################################################################################################
@@ -697,7 +704,7 @@ if [[ "$3" != "" ]] ; then # complex sequence, SPMD or MPMD, (automatic multiple
       PeInWorld[${MpiCommWorld}]=${Instances}
       MembersInWorld[${MpiCommWorld}]=${npey}  # number of members in this world
       ThreadsInWorld[${MpiCommWorld}]=${NLThreads}
-      ((TotalThreads=TotalThreads*NLThreads))
+      ((TotalThreads=npe_total*NLThreads))
       echo "INFO: MPI world ${MpiCommWorld} will be using ${NLThreads} thread(s) per task"
 #     make sure that MaxPe <= npe_total (no overflow) and Instances == MaxPe+1 (no holes)
       ((Instances != MaxPe+1)) && echo "ERROR: holes found, Instances=${Instances}, MaxPe=${MaxPe}" && ((ErRoR=ErRoR+1))
