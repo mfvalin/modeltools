@@ -238,6 +238,16 @@ echo INFO: removing Fortran test source program mpi_f_test.f90
 rm ${tmpdir}/mpi_f_test.f90
 }
 #################################################################################################################################
+# process  -geometry option
+expand_geometry_map() {
+  echo -geometry option not implemented yet
+  return 1
+#
+  if [[ -f "${PARALLEL_NODEFILE}" ]] ; then  # PARALLEL_NODEFILE used, override computed node list
+    cp ${PARALLEL_NODEFILE} ${MY_NODEFILE}
+  fi
+}
+#################################################################################################################################
 # process  -nodemap option
 #          -nodemap s1,e1:np1 s2,e2:np2 ... sN,eN:npN
 #          si : first host, ei : last host, npi : number of PEs on node
