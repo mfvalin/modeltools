@@ -42,7 +42,11 @@ node_to_rank() {
   ((r=0))
   Increment=${2:-1}
   for Target in $(cat ${1}) ; do
-    echo "rank $r=$Target  slot=${nodecore[$Target]}-$((nodecore[$Target]+Increment-1))"
+    if ((Increment>1)) ; then
+      echo "rank $r=$Target  slot=${nodecore[$Target]}-$((nodecore[$Target]+Increment-1))"
+    else
+      echo "rank $r=$Target  slot=${nodecore[$Target]}"
+    fi
     ((nodecore[$Target]=nodecore[$Target]+Increment))
     ((r=r+1))
   done
@@ -96,6 +100,7 @@ mpiexec_Linux_launch() {
 #      EXTRA_MPI_PARMS="-cpus-per-proc ${ThreadsInWorld[${MpiCommWorld}]}"
       EXTRA_MPI_PARMS="${EXTRA_MPI_PARMS} $(s.prefix '-x ' $(env | grep -v "'" | grep -v '"'  | grep  '^[a-zA-Z0-9]' | sed 's/=.*//' | sort ))"
       EXTRA_MPI_PARMS="${EXTRA_MPI_PARMS} --rankfile ${MY_RANKFILE}"
+#      cat ${MY_RANKFILE}
     fi
 #
     if ((MpiCommWorlds>1)) ; then   # more than one MPI world, launch mpirun in background
@@ -529,7 +534,7 @@ if [[ -d "${instancedir}" && -n "${instances}" ]] ; then     # we have co-runnin
          -coremap "${coremap}" -nodemap "${nodemap}" -ib "${ib}" -noib "${noib}" -verbose "${verbose}" \
          -tag "${tag}" -spliteo "${spliteo}" -debug "${debug}" -nocleanup "${nocleanup}" -geometry "${geometry}" \
          -outp "${outp}" -errp "${errp}" -preexec "${preexec}" -packoutput "${packoutput}" -dryrun "${dryrun}" \
-         -offset "${offset}" -mpiargs "${mpiargs}" \
+         -offset "${offset}" -mpiargs "${mpiargs}" -selftest "${selftest}" \
          -mpirun "${mpirun}" -openmpi "${openmpi}" -mpich2 "${mpich2}" \
          -pgm $(cd ${instancedir} ; cat ${instances} | xargs) %%${OMP_NUM_THREADS} ::${npex}x${npey} /./$(pwd -P) ${pgm}
     set +x
@@ -629,9 +634,9 @@ if [[ "${coremap}" == NoNe && "${nodemap}" == NoNe ]] ; then
   fi
   for i in $(uniq ${nodefile}) ; do
     for j in $(seq $loops) ; do
-      echo ${i} >>${MY_NODEFILE}   # one entry per task
+      echo ${i}
     done
-  done
+  done | head -${npe_total} >>${MY_NODEFILE}  # one entry per task
 fi
 if [[ "${coremap}" != NoNe ]] ; then
   expand_core_map
@@ -821,7 +826,7 @@ EOT
         ((i>MaxPe)) && ((MaxPe=i))
       fi
     done
-    echo "INFO: ${LocalInstances} instances of '$Program' ( $((InstanceOffset+First)) , $((InstanceOffset+Last)) , ${Increment} ) in MPI world ${MpiCommWorld}"
+    echo "INFO: ${LocalInstances} instances of '$Program' ( $((InstanceOffset+First)) to $((InstanceOffset+Last)) by ${Increment} ) in MPI world ${MpiCommWorld}"
   done # while [[ "$1" != "" ]]
 #
   if [[ "$ErRoR" != "0" ]] ; then echo "$ErRoR ERROR(S) detected" ; local_cleanup ; exit 1 ; fi
@@ -852,7 +857,7 @@ export WORLD_CHILD
 EOT
   echo "${preexec} $pgm $args  && rm -f ${tmpdir}/fail.\${MP_Tag}" >>${MpiRunScript}.0   # MpiCommWorld is 0 in this case
   echo 'echo INFO: END of child $WORLD_CHILD : $(date)' >>${MpiRunScript}.0
-  echo "INFO: ${npe_total} instances of '$pgm'"
+  echo "INFO: ${npe_total} instances of '$pgm' in MPI world 0"
 #
 fi ########################## complex sequence, possibly MPMD ####################
 #################################################################################################################################
