@@ -5,6 +5,23 @@
 [[ "$1" == --version ]] && set -- -version
 # CAVEAT: this script uses typeset -Z (does not work for the bash shell, only for ksh93)
 typeset -Z4 SeqNum MemberNo MemberChild
+typeset -A nodecore
+
+#################################################################################################################################
+#    node_to_rank ${MY_NODEFILE} ${ThreadsInWorld[${MpiCommWorld}]}
+node_to_rank() {
+  ((r=0))
+  Increment=${2:-1}
+  for Target in $(cat ${1}) ; do
+    if ((Increment>1)) ; then
+      echo "rank $r=$Target  slot=${nodecore[$Target]}-$((nodecore[$Target]+Increment-1))"
+    else
+      echo "rank $r=$Target  slot=${nodecore[$Target]}"
+    fi
+    ((nodecore[$Target]=nodecore[$Target]+Increment))
+    ((r=r+1))
+  done
+}
 #################################################################################################################################
 # MPI prelauncher for Linux systems using mpich2 or openmpi. takes kare of most OpemMPI/Mpich2 issues
 mpiexec_Linux() {
@@ -37,21 +54,6 @@ mpiexec_Linux() {
   return
 }
 #################################################################################################################################
-#    node_to_rank ${MY_NODEFILE} ${ThreadsInWorld[${MpiCommWorld}]}
-node_to_rank() {
-  ((r=0))
-  Increment=${2:-1}
-  for Target in $(cat ${1}) ; do
-    if ((Increment>1)) ; then
-      echo "rank $r=$Target  slot=${nodecore[$Target]}-$((nodecore[$Target]+Increment-1))"
-    else
-      echo "rank $r=$Target  slot=${nodecore[$Target]}"
-    fi
-    ((nodecore[$Target]=nodecore[$Target]+Increment))
-    ((r=r+1))
-  done
-}
-#################################################################################################################################
 # MPI launcher for Linux systems (
 # tested with openmpi interactively and under GridEngine
 #
@@ -75,7 +77,6 @@ mpiexec_Linux_launch() {
   export ChildOffset=0
   export WorldOffset=0
   HostOffset=0
-  typeset -A nodecore
   for i in $(uniq ${MY_NODEFILE}) ; do  # start core table at 0 for all nodes
     nodecore[$i]=0
   done
@@ -620,13 +621,12 @@ if [[ ! -r ${nodefile} ]] ; then   # no nodefile supplied, make one
       exit 1
     fi
   fi  # tty -s
-fi  # no nodefile
+fi  # no nodefile supplied
 
 ((TotalThreads=npe_total*OMP_NUM_THREADS))
 if [[ "${coremap}" == NoNe && "${nodemap}" == NoNe ]] ; then
-#  take every OMP_NUM_THREADS entry from ${nodefile} and put it into ${MY_NODEFILE}
-  nhosts=$(sort -u ${nodefile} | wc -l | sed 's/ .*//')   # number of hosts
-  ((loops=(npe_total+nhosts-1)/nhosts))   # number of tasks per host
+  nhosts=$(uniq ${nodefile} | wc -l | sed 's/ .*//')   # number of hosts in node file
+  ((loops=(npe_total+nhosts-1)/nhosts))   # number of tasks per host (rounded up)
   if ((loops*OMP_NUM_THREADS > CoresOnNode)) ; then
     echo "ERROR: not enough cores available on node, $((loops*OMP_NUM_THREADS)) requested, $((CoresOnNode)) available"
     rm -rf ${tmpdir}
