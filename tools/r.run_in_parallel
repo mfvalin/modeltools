@@ -37,6 +37,17 @@ mpiexec_Linux() {
   return
 }
 #################################################################################################################################
+#    node_to_rank ${MY_NODEFILE} ${ThreadsInWorld[${MpiCommWorld}]}
+node_to_rank() {
+  ((r=0))
+  Increment=${2:-1}
+  for Target in $(cat ${1}) ; do
+    echo "rank $r=$Target  slot=${nodecore[$Target]}-$((nodecore[$Target]+Increment-1))"
+    ((nodecore[$Target]=nodecore[$Target]+Increment))
+    ((r=r+1))
+  done
+}
+#################################################################################################################################
 # MPI launcher for Linux systems (
 # tested with openmpi interactively and under GridEngine
 #
@@ -60,6 +71,10 @@ mpiexec_Linux_launch() {
   export ChildOffset=0
   export WorldOffset=0
   HostOffset=0
+  typeset -A nodecore
+  for i in $(uniq ${MY_NODEFILE}) ; do  # start core table at 0 for all nodes
+    nodecore[$i]=0
+  done
   MY_NODEFILE_ORI=${MY_NODEFILE}
   echo "INFO: using : mpirun = '${mpirun}'"
   while(( MpiCommWorld<MpiCommWorlds)) ; do   # loop over MPI worlds
@@ -72,13 +87,15 @@ mpiexec_Linux_launch() {
     export MY_RANKFILE=${MY_NODEFILE_ORI}.rank.${MpiCommWorld}
     sed -n ${FirstHost},${HostOffset}p ${MY_NODEFILE_ORI} >${MY_NODEFILE}
 #   transformer ${MY_NODEFILE} en map file pour OpenMPI et en host file pour Mpich2
-#    node_to_rank ${MY_NODEFILE} ${ThreadsInWorld[${MpiCommWorld}]} > ${MY_RANKFILE}
+    node_to_rank ${MY_NODEFILE} ${ThreadsInWorld[${MpiCommWorld}]} > ${MY_RANKFILE}
+#    cat ${MY_RANKFILE}
     echo "INFO: ===== $(cat ${MY_NODEFILE} | wc -l) host(s) in  ${Launcher} World $MpiCommWorld ====="
     cat ${MY_NODEFILE}
     EXTRA_MPI_PARMS=""
     if [[ $Launcher == OpenMPI ]] ; then #   pass environment variables (only names starting with letter or digit) (only for OpenMPI)
 #      EXTRA_MPI_PARMS="-cpus-per-proc ${ThreadsInWorld[${MpiCommWorld}]}"
       EXTRA_MPI_PARMS="${EXTRA_MPI_PARMS} $(s.prefix '-x ' $(env | grep -v "'" | grep -v '"'  | grep  '^[a-zA-Z0-9]' | sed 's/=.*//' | sort ))"
+      EXTRA_MPI_PARMS="${EXTRA_MPI_PARMS} --rankfile ${MY_RANKFILE}"
     fi
 #
     if ((MpiCommWorlds>1)) ; then   # more than one MPI world, launch mpirun in background
@@ -383,8 +400,8 @@ wait_for() {
   shift ; shift; shift
   for file in $* ; do
     while ((time_out>=0)); do
-      [[ -f ${dir}/${file} ]]   && [[ ${action} == creation ]] && break   # creation mode and file found
-      [[ ! -f ${dir}/${file} ]] && [[ ${action} != creation ]] && break   # absence mode and file not found
+      [[ -f ${dir}/${file} ]]   && [[ ${action} == creation ]] && echo "INFO: ${dir}/${file} created" &&  break   # creation mode and file found
+      [[ ! -f ${dir}/${file} ]] && [[ ${action} != creation ]] && echo "INFO: ${dir}/${file} deleted"  && break   # absence mode and file not found
       ((time_out=time_out-1))      # timeout decremented only if action failed
       sleep 1
     done
@@ -433,6 +450,7 @@ eval `cclargs_lite -D "" $0 \
     -openmpi "" "openmpi" "[use openmpi]" \
     -outp "o" "O" "[stdout prefix in listings]" \
     -packoutput "cat_output" "echo" "[]" \
+    -pes "" "" "[number of PEs for ALL instances]" \
     -pgm "Invalid_Command.EXE" "" "[]" \
     -preexec "" "" "[prefix program execution with this (time/gdb/...)]" \
     -processorder "" "yes" "[list out/err of members in order]" \
@@ -485,13 +503,13 @@ fi
 if [[ -d "${instancedir}" && -n "${instances}" ]] ; then     # we have co-running instances only if both are defined
   slaves=$(echo ${instances} | wc -w)   # if 1 it is a slave, if >1 it is the master
   if ((slaves>1)) ; then  # the master instance, there is MORE THAN ONE item  in instances
-    echo "INFO: (master task) START of ${slaves} slaves '${instances}' "
+    echo "INFO: (master) START of ${slaves} slaves '${instances}' "
     wait_for creation ${timeout} ${instancedir} ${instances}   # wait for all slaves to submit their resource needs
 #
 #   build compound launch parameters using ${instancedir}/${instances} files
 #
     for i in ${instances} ; do
-       echo "INFO: (master task) creating ${instancedir}/${i}.ACK"
+       echo "INFO: (master) creating ${instancedir}/${i}.ACK"
        touch ${instancedir}/${i}.ACK                           # acknowledge reception of slave task requirements
     done
     sleep 2
@@ -502,26 +520,27 @@ if [[ -d "${instancedir}" && -n "${instances}" ]] ; then     # we have co-runnin
 #   -args : ignored, cannot be used in this context
 #   -npex -npey -processorder -tmpdir -tag -spliteo -debug -nocleanup -geometry : passthrough
 #   -outp -errp -preexec -packoutput -offset -mpiargs -dryrun -minstdout : passthrough
-#   -ib -noib -mpirun -coremap -openmpi -mpich2 -verbose : passthrough
+#   -ib -noib -mpirun -coremap -nodemap -openmpi -mpich2 -verbose : passthrough
 #   all other arguments : ignored
 #
     unset PARALLEL_INSTANCES_DIR
     set -x
-    ${0} -npex ${npex} -npey ${npey} -processorder "${processorder}" -tmpdir "${tmpdir}" -minstdout ${minstdout} \
-         -coremap "${coremap}" -ib "${ib}" -noib "${noib}" -verbose "${verbose}" \
+    ${0} -npex ${pes} -npey 1 -processorder "${processorder}" -tmpdir "${tmpdir}" -minstdout ${minstdout} \
+         -coremap "${coremap}" -nodemap "${nodemap}" -ib "${ib}" -noib "${noib}" -verbose "${verbose}" \
          -tag "${tag}" -spliteo "${spliteo}" -debug "${debug}" -nocleanup "${nocleanup}" -geometry "${geometry}" \
          -outp "${outp}" -errp "${errp}" -preexec "${preexec}" -packoutput "${packoutput}" -dryrun "${dryrun}" \
          -offset "${offset}" -mpiargs "${mpiargs}" \
          -mpirun "${mpirun}" -openmpi "${openmpi}" -mpich2 "${mpich2}" \
-         -pgm $(cd ${instancedir} ; cat ${instances} | xargs) %%${OMP_NUM_THREADS} /./$(pwd -P) ${pgm}
+         -pgm $(cd ${instancedir} ; cat ${instances} | xargs) %%${OMP_NUM_THREADS} ::${npex}x${npey} /./$(pwd -P) ${pgm}
     set +x
+    echo ""
     for i in ${instances} ; do
-       rm ${instancedir}/${i}                      # remove slave work requests
-       touch ${instancedir}/${i}.DONE              # acknowledge completion of all slave tasks by creating DONE and then deleting ACK
+       mv ${instancedir}/${i} ${instancedir}/${i}.DONE      # remove slave work requests
+#      acknowledge completion of all slave tasks by creating DONE and then deleting ACK
        rm ${instancedir}/${i}.ACK                  # remove acknowledge flag
-       echo "INFO: (master task) ${instancedir}/${i}.DONE"
+       echo "INFO: (master) ${instancedir}/${i}.DONE"
     done
-    echo "INFO: (master task) END of ${slaves} slaves '${instances}'"
+    echo "INFO: (master) END of ${slaves} slave(s) '${instances}'"
     exit                                           # master job done
   else                    # a slave instance, there is ONE AND ONLY ONE item  in instances
 #
@@ -531,7 +550,7 @@ if [[ -d "${instancedir}" && -n "${instances}" ]] ; then     # we have co-runnin
 #   all other arguments : ignored
 #
     (( 1 == $(echo ${pgm} | wc -w) )) && pgm=" ${pgm} 0 1 $((npe_total-1)) @@ "  # transform -pgm name  into -pgm name first increment last
-    echo "%%${OMP_NUM_THREADS} /./$(pwd -P) ::${npe_total} ${pgm} " >${instancedir}/${instances}.tmp || exit 1
+    echo "%%${OMP_NUM_THREADS} /./$(pwd -P) ::${npex}x${npey} ${pgm} " >${instancedir}/${instances}.tmp || exit 1
     mv ${instancedir}/${instances}.tmp ${instancedir}/${instances}  || exit 1
     echo "INFO: START of slave instance ${instances}"
     if wait_for creation ${timeout} ${instancedir} ${instances}.ACK # wait for master to acknowledge resources (ACK created)
@@ -539,10 +558,11 @@ if [[ -d "${instancedir}" && -n "${instances}" ]] ; then     # we have co-runnin
       wait_for deletion 2000000000 ${instancedir} ${instances}.ACK  # wait for master to signal job done (infinite timeout)
       wait_for creation ${timeout} ${instancedir} ${instances}.DONE # done is signalled by creating DONE and then deleting ACK
       rm ${instancedir}/${instances}.DONE
-      echo "INFO: (slave) ${instances}.DONE received"
+      echo "INFO: (slave ${instances}) ${instances}.DONE received"
       echo "INFO: END of slave instance ${instances}"
       exit $?     # slave job done
     else
+      echo "ERROR: instance ${instances} never found ${instances}.ACK"
       exit 1
     fi
   fi # master or slave instance
@@ -845,7 +865,7 @@ export WorldOffset=0
 #
 #tag_values='${RP_CommWorld} ${RP_Member} ${RP_MemberChild}'
 #tag_format='%1d-%4.4d-%4.4d'
-[[ "${tag}" == full ]] && ((MpiCommWorlds>2)) && F_world='%1d-' && V_world='${RP_CommWorld}'
+[[ "${tag}" == full ]] && ((MpiCommWorlds>1)) && F_world='%1d-' && V_world='${RP_CommWorld}'
 [[ "${tag}" == full ]] && F_member='%4.4d-' && V_member='${RP_Member}' && \
                           F_child='%4.4d' && V_child='${RP_MemberChild}'
 [[ "${tag}" == member ]] && F_member='%4.4d-' && V_member='${RP_Member}'
