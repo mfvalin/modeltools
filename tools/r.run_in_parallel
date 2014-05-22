@@ -374,7 +374,7 @@ make_node_file() {   # this will be rewritten
 #
   if [[ -f "${MY_NODEFILE}" ]] ; then  # node file exists
         rm -f $TMPDIR/MY_NODEFILE
-        nhosts=$(sort -u ${MY_NODEFILE} | wc -l | sed 's/ .*//')   # number of hosts
+        nhosts=$(sort -u ${MY_NODEFILE} | wc -l | sed -e 's/ //g')   # number of hosts
         ((loops=(npe_total+nhosts-1)/nhosts))   # number of tasks per host
         for i in $(uniq < $MY_NODEFILE) ; do
           for j in $(seq $loops) ; do
@@ -615,7 +615,7 @@ if [[ ! -r ${nodefile} ]] ; then   # no nodefile supplied, make one
     ((r=0))
     while ((r < npe_total*OMP_NUM_THREADS)) ; do echo localhost >>${nodefile} ; ((r=r+1)) ; done
   else
-    if [[ "$hostos" == Linux ]] ; then
+    if [[ "$hostos" == Linux ]] ; then  # no nodefile expected under AIX in batch mode
       echo "ERROR: no nodefile found, not an interactive job, Linux OS, aborting"
       rm -rf ${tmpdir}
       exit 1
@@ -625,7 +625,7 @@ fi  # no nodefile supplied
 
 ((TotalThreads=npe_total*OMP_NUM_THREADS))
 if [[ "${coremap}" == NoNe && "${nodemap}" == NoNe ]] ; then
-  nhosts=$(uniq ${nodefile} | wc -l | sed 's/ .*//')   # number of hosts in node file
+  nhosts=$(uniq ${nodefile} | wc -l | sed -e 's/ //g')   # number of hosts in node file
   ((loops=(npe_total+nhosts-1)/nhosts))   # number of tasks per host (rounded up)
   if ((loops*OMP_NUM_THREADS > CoresOnNode)) ; then
     echo "ERROR: not enough cores available on node, $((loops*OMP_NUM_THREADS)) requested, $((CoresOnNode)) available"
