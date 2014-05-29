@@ -38,6 +38,8 @@ mpiexec_Linux() {
         OPEN_MPI_PARMS="--mca btl tcp,self ${OPEN_MPI_PARMS}"         # do not try to use infiniband
       [[ "$mpirun" == mpirun ]] && [[ -n ${OPAL_PREFIX} ]] && \
         OPEN_MPI_PARMS="--prefix ${OPAL_PREFIX} ${OPEN_MPI_PARMS}"    # if not using rumpirun.openmpi (Dorval EC clusters)
+      OPEN_MPI_PARMS="--mca shmem posix ${OPEN_MPI_PARMS}"
+      echo "=== OPEN_MPI_PARMS=${OPEN_MPI_PARMS} ==="
       mpiexec_Linux_launch OpenMPI ${OPEN_MPI_PARMS} "$@"
       ;;
     PMI_RANK*)                                                 # mpich2 family
@@ -70,8 +72,8 @@ mpiexec_Linux_launch() {
 #  ((MpiCommWorlds>1)) && echo "ERROR: MpiCommWorlds>1 not supported yet" && return
 #
   unset PE_HOSTFILE                                                             # Dorval EC clusters
-  [[ -f "${GECOSHEP_HOSTS_FILE}" ]] && export OMPI_MCA_orte_rsh_agent=rurun     # Dorval EC clusters
-  export OMPI_MCA_plm_rsh_disable_qrsh=1
+#  [[ -f "${GECOSHEP_HOSTS_FILE}" ]] && export OMPI_MCA_orte_rsh_agent=rurun     # Dorval EC clusters
+#  export OMPI_MCA_plm_rsh_disable_qrsh=1
 #
   export MpiCommWorld=0
   export ChildOffset=0
@@ -106,14 +108,18 @@ mpiexec_Linux_launch() {
 #
     if ((MpiCommWorlds>1)) ; then   # more than one MPI world, launch mpirun in background
       echo "INFO: ==== Backgrounding ${Launcher} world ${MpiCommWorld} with ${PeInWorld[${MpiCommWorld}]} MPI tasks ===="
+#      set -x
       [[ -z ${dryrun} ]] && \
         ${mpirun} ${EXTRA_MPI_PARMS} -machinefile ${MY_NODEFILE} -n ${PeInWorld[${MpiCommWorld}]} "$@" ${ParallelScript}.${MpiCommWorld} &
+      set +x
     else   # only one MPI world, execute mpirun
       echo "INFO: ==== Launching ${Launcher} world ${MpiCommWorld} with ${PeInWorld[${MpiCommWorld}]} MPI tasks ===="
       [[ -n ${verbose} ]] && \
         echo "INFO: ${mpirun} ${EXTRA_MPI_PARMS} -machinefile ${MY_NODEFILE} -n ${PeInWorld[${MpiCommWorld}]} "$@" ${ParallelScript}.${MpiCommWorld}"
+#      set -x
       [[ -z ${dryrun} ]] && \
         ${mpirun} ${EXTRA_MPI_PARMS} -machinefile ${MY_NODEFILE} -n ${PeInWorld[${MpiCommWorld}]} "$@" ${ParallelScript}.${MpiCommWorld}
+      set +x
     fi
     PeAdded=${PeInWorld[${MpiCommWorld}]}
     ((ChildOffset=ChildOffset+PeAdded))
@@ -621,6 +627,11 @@ if [[ ! -r ${nodefile} ]] ; then   # no nodefile supplied, make one
       exit 1
     fi
   fi  # tty -s
+#else
+#  echo "INFO: sorting ${nodefile} into ${MY_NODEFILE}__"
+#  sort  <${nodefile} >${MY_NODEFILE}__
+#  nodefile=${MY_NODEFILE}__
+#  cat ${nodefile}
 fi  # no nodefile supplied
 
 ((TotalThreads=npe_total*OMP_NUM_THREADS))
