@@ -852,6 +852,7 @@ else #################### simple SPMD case, one MPI world, old style call ######
   MpiCommWorld=0
   MpiCommWorlds=1
   ((NDomains=NDomains+1))
+  RPN_COMM_DOM=",1,1,${npe_total}"
   PeInWorld[0]=${npe_total}
   ThreadsInWorld[0]=${OMP_NUM_THREADS}
   MembersInWorld[0]=${npey}
