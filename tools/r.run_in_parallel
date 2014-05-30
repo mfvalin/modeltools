@@ -472,7 +472,7 @@ eval `cclargs_lite -D "" $0 \
     -timeout "60" "60" "[timeout for multiple instances]" \
     -tmpdir "$(pwd -P)/tmpdir${TRUE_HOST}$$" "" "[temporary directory visible by all processes]" \
     -verbose "" "verbose" "[]" \
-    -version "" "1.1.2 2014/05/30" "[version number]" \
+    -version "" "1.1.2a 2014/05/30" "[version number]" \
     ++ "$@" ${RUN_IN_PARALLEL_EXTRAS}`
 #
 [[ -n ${version} ]] && echo "${0##*/} version $version" && exit 0
@@ -852,7 +852,7 @@ else #################### simple SPMD case, one MPI world, old style call ######
   MpiCommWorld=0
   MpiCommWorlds=1
   ((NDomains=NDomains+1))
-  RPN_COMM_DOM=",1,1,${npe_total}"
+  RPN_COMM_DOM=",0,1,$((npe_total-1))"
   PeInWorld[0]=${npe_total}
   ThreadsInWorld[0]=${OMP_NUM_THREADS}
   MembersInWorld[0]=${npey}
