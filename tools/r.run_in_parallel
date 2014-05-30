@@ -466,7 +466,7 @@ eval `cclargs_lite -D "" $0 \
     -timeout "60" "60" "[timeout for multiple instances]" \
     -tmpdir "$(pwd -P)/tmpdir${TRUE_HOST}$$" "" "[temporary directory visible by all processes]" \
     -verbose "" "verbose" "[]" \
-    -version "" "1.1.1 2014/05/21" "[version number]" \
+    -version "" "1.1.2 2014/05/30" "[version number]" \
     ++ "$@" ${RUN_IN_PARALLEL_EXTRAS}`
 #
 [[ -n ${version} ]] && echo "${0##*/} version $version" && exit 0
@@ -663,7 +663,7 @@ if [[ -n ${selftest} ]] ; then
   pgm="$( echo ${pgm} | sed -e s:PGM:${selftest}:g )"
   cat <<EOT >${selftest}
 #!/bin/ksh93
-echo "NODE FILE='\${MY_NODEFILE}' arguments='\$@' \$(taskset -c -p \$\$ 2>/dev/null)"
+echo "NODE FILE='\${MY_NODEFILE}' RPN_COMM_DOM='\${RPN_COMM_DOM}' arguments='\$@' \$(taskset -c -p \$\$ 2>/dev/null)"
 echo "\$(hostname)(\${MP_CHILD}): WORLD_CHILD=\${WORLD_CHILD}, RP_Child=\${RP_Child}, RP_Member=\${RP_Member}, RP_MemberChild=\${RP_MemberChild}, MP_SeqNum=\${MP_SeqNum}, RP_CommWorld=\${RP_CommWorld}, RP_WorldChild=\${RP_WorldChild}"
 set -x
 [[ -x ${tmpdir}/mpi_c_test ]] && ${tmpdir}/mpi_c_test
@@ -840,6 +840,7 @@ else #################### simple SPMD case, one MPI world, old style call ######
   fi
   MpiCommWorld=0
   MpiCommWorlds=1
+  ((NDomains=NDomains+1))
   PeInWorld[0]=${npe_total}
   ThreadsInWorld[0]=${OMP_NUM_THREADS}
   MembersInWorld[0]=${npey}
