@@ -188,7 +188,7 @@ local_cleanup() {
  ExitStatus=0
  rm ${tmpdir}/fail.*  2>/dev/null 1>/dev/null && ExitStatus=1   # some parallel processes failed
  [[ -n ${nocleanup} ]] && return $ExitStatus  # -nocleanup option used, return
- rm -rf ${tmpdir}  #   || ExitStatus=2             # cannot clean tmpdir
+ rm -rf ${tmpdir} || ( sleep 2 ; rm -rf ${tmpdir} ) & #   || ExitStatus=2             # cannot clean tmpdir
  return $ExitStatus
 }
 # ===========================================================================
@@ -472,7 +472,7 @@ eval `cclargs_lite -D "" $0 \
     -timeout "60" "60" "[timeout for multiple instances]" \
     -tmpdir "$(pwd -P)/tmpdir${TRUE_HOST}$$" "" "[temporary directory visible by all processes]" \
     -verbose "" "verbose" "[]" \
-    -version "" "1.1.2a 2014/05/30" "[version number]" \
+    -version "" "1.1.3b 2014/06/02" "[version number]" \
     ++ "$@" ${RUN_IN_PARALLEL_EXTRAS}`
 #
 [[ -n ${version} ]] && echo "${0##*/} version $version" && exit 0
@@ -759,6 +759,7 @@ if [[ "$3" != "" ]] ; then # complex sequence, SPMD or MPMD, (automatic multiple
       unset RPN_COMM_DIRS  # RPN_COMM_DIRS no longer needed by RPN_COMM_init as cd is now performed by script
       cat <<EOT >${MpiRunScript}.${MpiCommWorld}
 #!/bin/ksh93
+# SHELL for scripts run under AIX/POE MUST BE /bin/ksh93
 export RPN_COMM_DOM='${NDomains}${RPN_COMM_DOM}'
 export RPN_COMM_DIRS="${RPN_COMM_DIRS}"
 export OMP_NUM_THREADS=${NLThreads}
@@ -859,8 +860,9 @@ else #################### simple SPMD case, one MPI world, old style call ######
   ((TotalThreads=OMP_NUM_THREADS))
   cat <<EOT >${MpiRunScript}.${MpiCommWorld}
 #!/bin/ksh93
-export RPN_COMM_DOM='${NDomains}${RPN_COMM_DOM}'
-export RPN_COMM_DIRS="${RPN_COMM_DIRS}"
+# SHELL for scripts run under AIX/POE MUST BE /bin/ksh93
+unset RPN_COMM_DOM
+unset RPN_COMM_DIRS
 export OMP_NUM_THREADS=${NLThreads:-${OMP_NUM_THREADS}}
 ((WORLD_CHILD=MP_CHILD))
 export WORLD_CHILD
@@ -914,7 +916,7 @@ export RP_MemberChild=\$((RP_WorldChild-RP_WorldChild/${npex}*${npex}))   # chil
 MP_Tag="\$(/usr/bin/printf '${F_world}${F_member}${F_child}${F_seq}' ${V_world} ${V_member} ${V_child} ${V_seq})"
 [[ -n "${debug}" ]] && env | sort >${tmpdir}/.mpi_env_\$\$_\$(hostname)
 #
-touch ${tmpdir}/fail.\${MP_Tag}
+[[ -n "${processorder}" ]] && touch ${tmpdir}/fail.\${MP_Tag}
 . ${MpiRunScript}.${MpiCommWorld}  ${RedirectStdout} ${RedirectStderr}
 [[ -n "${processorder}" ]] || exit 0
 lines=0
@@ -987,3 +989,4 @@ if [[ -n ${packoutput} && -n ${processorder} ]] ; then   # post process stderr/s
 fi
 #
 local_cleanup  # exit status set here 0:OK 1:processes failed 2:tmpdir removal failed
+
