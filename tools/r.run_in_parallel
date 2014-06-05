@@ -428,7 +428,7 @@ wait_for() {
 # MY_NODEFILE now contains the node list if one was specified before
 # and will be the default value for -nodefile
 #
-MY_NODEFILE=${PARALLEL_NODEFILE:-${GECOSHEP_HOSTS_FILE:-${PBS_NODEFILE}}}
+MY_NODEFILE=${PARALLEL_NODEFILE:-${GECOSHEP_HOSTS_FILE:-${GECOSHEP_HOSTFILE:-${PBS_NODEFILE}}}}
 echo version avec /bin/ksh93
 eval `cclargs_lite -D "" $0 \
     -args "" "" "[arguments to the command]" \
@@ -472,7 +472,7 @@ eval `cclargs_lite -D "" $0 \
     -timeout "60" "60" "[timeout for multiple instances]" \
     -tmpdir "$(pwd -P)/tmpdir${TRUE_HOST}$$" "" "[temporary directory visible by all processes]" \
     -verbose "" "verbose" "[]" \
-    -version "" "1.1.3b 2014/06/02" "[version number]" \
+    -version "" "1.1.3c 2014/06/08" "[version number]" \
     ++ "$@" ${RUN_IN_PARALLEL_EXTRAS}`
 #
 [[ -n ${version} ]] && echo "${0##*/} version $version" && exit 0
