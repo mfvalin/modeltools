@@ -25,7 +25,9 @@ node_to_rank() {
 #################################################################################################################################
 # MPI prelauncher for Linux systems using mpich2 or openmpi. takes kare of most OpemMPI/Mpich2 issues
 mpiexec_Linux() {
-  RANK_VAR=$(mpirun -n 2 /usr/bin/env | grep RANK | grep -E "OMPI_COMM_WORLD_RANK|PMI_RANK")
+#  RANK_VAR=$(${mpirun} -n 1 /usr/bin/env | grep RANK | grep -E "OMPI_COMM_WORLD_RANK|PMI_RANK")
+  RANK_VAR=OMPI_COMM_WORLD_RANK
+  which orted >/dev/null || RANK_VAR=PMI_RANK
   case "$RANK_VAR" in
     OMPI_COMM_WORLD_RANK*)                                     # OpenMPI
       [[ "$bind" == bind ]] && \
@@ -49,6 +51,7 @@ mpiexec_Linux() {
       mpiexec_Linux_launch Mpich2 "${MPICH_PARMS}" "$@"
       ;;
     *)
+      echo "ERROR: (${0}) RANK_VAR=$RANK_VAR "
       echo "ERROR: (${0}) Linux MPI launcher other than OpenMPI or mpich2 not implemented yet "
       return 1
       ;;
@@ -429,7 +432,8 @@ wait_for() {
 # and will be the default value for -nodefile
 #
 MY_NODEFILE=${PARALLEL_NODEFILE:-${GECOSHEP_HOSTS_FILE:-${GECOSHEP_HOSTFILE:-${PBS_NODEFILE}}}}
-echo version avec /bin/ksh93
+Version="1.1.3d 2014/06/08"
+echo "${0##*/} version $Version avec /bin/ksh93"
 eval `cclargs_lite -D "" $0 \
     -args "" "" "[arguments to the command]" \
     -bind "" "bind" "[]" \
@@ -472,10 +476,10 @@ eval `cclargs_lite -D "" $0 \
     -timeout "60" "60" "[timeout for multiple instances]" \
     -tmpdir "$(pwd -P)/tmpdir${TRUE_HOST}$$" "" "[temporary directory visible by all processes]" \
     -verbose "" "verbose" "[]" \
-    -version "" "1.1.3c 2014/06/08" "[version number]" \
+    -version "" "${Version}" "[version number]" \
     ++ "$@" ${RUN_IN_PARALLEL_EXTRAS}`
 #
-[[ -n ${version} ]] && echo "${0##*/} version $version" && exit 0
+[[ -n ${version} ]] && exit 0
 OMP_NUM_THREADS=${OMP_NUM_THREADS:-1}
 #
 CoresOnNode=32
