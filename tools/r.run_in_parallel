@@ -160,6 +160,10 @@ mpiexec_AIX() {
     echo "========== poe command file with ${MP_PROCS} tasks in single MPI world =========="
     [[ -z ${dryrun} ]] && poe ${ParallelScript}.0 </dev/null
   else
+    if [[ "${LOADL_STEP_CLASS}" == "preemptable" ]] ; then
+      echo "multiple MPI worlds not supported for preemptable jobs"
+      exit 1
+    fi
     rm -f ${ParallelScript}.ALL
     ((MP_PROCS=0))
     while(( MpiCommWorld<MpiCommWorlds)) ; do  # build POE command file((MpiCommWorlds=MpiCommWorlds+1))
@@ -438,7 +442,7 @@ wait_for() {
 # and will be the default value for -nodefile
 #
 MY_NODEFILE=${PARALLEL_NODEFILE:-${GECOSHEP_HOSTS_FILE:-${GECOSHEP_HOSTFILE:-${PBS_NODEFILE}}}}
-Version="1.1.4d 2014/06/12"
+Version="1.1.4e 2014/06/12"
 echo "${0##*/} version $Version avec /bin/ksh93"
 eval `cclargs_lite -D "" $0 \
     -args "" "" "[arguments to the command]" \
