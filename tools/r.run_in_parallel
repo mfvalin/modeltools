@@ -438,7 +438,7 @@ wait_for() {
 # and will be the default value for -nodefile
 #
 MY_NODEFILE=${PARALLEL_NODEFILE:-${GECOSHEP_HOSTS_FILE:-${GECOSHEP_HOSTFILE:-${PBS_NODEFILE}}}}
-Version="1.1.4 2014/06/12"
+Version="1.1.4d 2014/06/12"
 echo "${0##*/} version $Version avec /bin/ksh93"
 eval `cclargs_lite -D "" $0 \
     -args "" "" "[arguments to the command]" \
@@ -488,7 +488,8 @@ eval `cclargs_lite -D "" $0 \
 [[ -n ${version} ]] && exit 0
 OMP_NUM_THREADS=${OMP_NUM_THREADS:-1}
 #
-CoresOnNode=32
+CoresOnNode=128
+[[ "$hostos" == AIX ]]&& CoresOnNode=$(($(bindprocessor -q | sed 's/.*[ ]//')+1))
 [[ "$hostos" == Linux ]] && CoresOnNode=$(grep MHz /proc/cpuinfo 2>/dev/null | wc -l)   # Linux only
 ((CoresOnNode<=0)) && CoresOnNode=1
 [[ "$TRUE_HOST" == eole* ]] && ib="ib"  # force usage of Infiniband on Dorval eole cluster
