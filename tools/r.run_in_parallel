@@ -100,13 +100,16 @@ mpiexec_Linux_launch() {
 #
     echo "INFO: MPI world ${MpiCommWorld} will be using ${PeInWorld[${MpiCommWorld}]} tasks  with ${ThreadsInWorld[${MpiCommWorld}]} thread(s) per task"
     ((FirstHost=HostOffset+1))
-#    ((HostOffset=HostOffset+${PeInWorld[${MpiCommWorld}]}))
-    ((HostOffset=HostOffset+${PeInWorld[${MpiCommWorld}]}*${ThreadsInWorld[${MpiCommWorld}]}))
+    if [[ "${nodemap}" == NoNe ]] ; then
+      ((HostOffset=HostOffset+${PeInWorld[${MpiCommWorld}]}*${ThreadsInWorld[${MpiCommWorld}]})) ; ThinBy=${ThreadsInWorld[${MpiCommWorld}]}
+    else
+      ((HostOffset=HostOffset+${PeInWorld[${MpiCommWorld}]})) ; ThinBy=1
+    fi
     export MY_NODEFILE=${MY_NODEFILE_ORI}.${MpiCommWorld}
     export MY_RANKFILE=${MY_NODEFILE_ORI}.rank.${MpiCommWorld}
     sed -n ${FirstHost},${HostOffset}p ${MY_NODEFILE_ORI} >${MY_NODEFILE}
 #   transformer ${MY_NODEFILE} en map file pour OpenMPI et en host file pour Mpich2
-    node_to_rank ${MY_NODEFILE} ${ThreadsInWorld[${MpiCommWorld}]} > ${MY_RANKFILE}
+    node_to_rank ${MY_NODEFILE} ${ThreadsInWorld[${MpiCommWorld}]} ${ThinBy} > ${MY_RANKFILE}
 #    cat ${MY_RANKFILE}
     echo "INFO: ===== $(cat ${MY_NODEFILE} | wc -l) host(s) in  ${Launcher} World $MpiCommWorld ====="
     cat ${MY_NODEFILE}
