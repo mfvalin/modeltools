@@ -1,9 +1,10 @@
 #!/bin/bash
+# =============================================================================================
 function usage {
 echo " usage: ${0##*/} [-debug level] [-instances number_of] [-cpus cpu_specification] -name stream_name -maxidle n_seconds -queues spec_1 spec_2 ... spec_N"
 echo "        options are POSITIONAL, queue spec of the form: [instance#:]queue_name "
 }
-#
+# =============================================================================================
 function map_instance_nodes {
 #  usage: map_instance_nodes JobNodeFile N1 C1 [N2 C2] ..... [Ni Ci]
 JobNodeFile="$1"
@@ -37,14 +38,15 @@ for j in  $(seq ${HostNumber}) ; do
   shift; shift;
 done
 }  # end of function map_instance_nodes
-#
+# =============================================================================================
 function InstanceEcho {
   echo "$@" | sed "s/^/ I-0${CurrentInstance}: /"
 }
-#
+# =============================================================================================
 function InstanceCat {
   cat "$@" | sed "s/^/ I-0${CurrentInstance}: /"
 }
+# =============================================================================================
 #
 #============================= PASS 1 and 2  =============================
 #
@@ -88,12 +90,12 @@ then
   MyArguments="$@"
   ((BATCH_MPI_CPUS>=Instances)) || ((Instances=BATCH_MPI_CPUS))
 #
-  if [[ -f "$MapFile" ]] ; then
+  if [[ -f "$MapFile" ]] ; then  # we have a map file
     for Instance in $(seq $Instances) ; do
       MAP="$(cat $MapFile | sed -n ${Instance},${Instance}p | sed 's/#.*//' )"
       map_instance_nodes ${PBS_NODEFILE} ${MAP:-ALL 1} >${JobNodeFilesBase}.${Instance}
     done
-  else
+  else                         # we have a number of instances
     ((BATCH_MPI_CPUS=BATCH_MPI_CPUS/Instances))
     ((Start=1))
     ((Limit=Start+BATCH_MPI_CPUS-1))
@@ -138,10 +140,10 @@ fi
 #============================= PASS 2 begins here =============================
 sleep $((CurrentInstance))
 #PBS_NODEFILE=${PARALLEL_NODEFILE:-${PBS_NODEFILE}}
-export BATCH_MPI_CPUS="$(cat ${PARALLEL_NODEFILE} | wc -l)"
+export BATCH_MPI_CPUS="$(wc -l <${PARALLEL_NODEFILE})"
 export OMP_NUM_THREADS=1
 #
-((DebugFlag>5)) && /sb/home/valin/test/SUPERJOBS/job_instance_job # petit test
+#((DebugFlag>5)) && /sb/home/valin/test/SUPERJOBS/job_instance_job # petit test
 #
 if ((DebugFlag>0)) ; then
   InstanceEcho ================================================================
@@ -149,7 +151,7 @@ if ((DebugFlag>0)) ; then
   ((DebugFlag>1)) && InstanceCat ${PARALLEL_NODEFILE}
 fi
 #
-# collect optional -cpus option  -cpus [instance:][mincpus],[maxcpus] 
+# collect optional -cpumap option:   -cpumap [instance:][mincpus],[maxcpus] 
 #               no instance: all instances
 #               no mincpus : 1
 #               no maxcpus : number of cpus available to the instance
