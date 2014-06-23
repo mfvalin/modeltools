@@ -1,0 +1,14 @@
+#!/bin/bash
+Delay=${1:-10}
+((Delay<5)) && echo "a delay of $Delay seconds is too small (must be >= 5 seconds)" && exit 1
+#set -x
+#tty -s && echo ERROR: not in batch mode && exit 1
+mkdir -p $HOME/top_in_batch
+cd $HOME/top_in_batch || exit 1
+TopFile=$HOME/top_in_batch/$(hostname)_$$
+[[ -n "${PBS_JOBID}" ]] && TopFile=$HOME/top_in_batch/${PBS_JOBNAME%%.*}_$(hostname)_${PBS_JOBID%%.*} # PBS/TORQUE
+[[ -n "${JOB_ID}" ]]    && TopFile=$HOME/top_in_batch/${JOB_NAME%%.*}_$(hostname)_${JOB_ID%%.*}       # GridEngine
+[[ -r ${TopFile}.top ]] && exit 0
+touch $TopFile.out && chmod 644 $TopFile.out
+exec 2>>$TopFile.out 1>>$TopFile.out
+${0%/*}/repeat_command.$(uname -s)-$(uname -m) -n ${Delay} "top -b -n 1 -u $USER > $TopFile.top ; if [[ -s $TopFile.cmd ]] ; then bash -x -c '. $TopFile.cmd' ; fi ; rm -f $TopFile.cmd ; touch $TopFile.cmd ; chmod 700 $TopFile.cmd"
