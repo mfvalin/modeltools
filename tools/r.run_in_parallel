@@ -100,9 +100,9 @@ mpiexec_Linux_launch() {
 #
     echo "INFO: MPI world ${MpiCommWorld} will be using ${PeInWorld[${MpiCommWorld}]} tasks  with ${ThreadsInWorld[${MpiCommWorld}]} thread(s) per task"
     ((FirstHost=HostOffset+1))
-    if [[ "${nodemap}" == NoNe ]] ; then
+    if [[ "${nodemap}" == NoNe ]] ; then    # one entry per thread in nodefile, thinning needed
       ((HostOffset=HostOffset+${PeInWorld[${MpiCommWorld}]}*${ThreadsInWorld[${MpiCommWorld}]})) ; ThinBy=${ThreadsInWorld[${MpiCommWorld}]}
-    else
+    else                                    # one entry per process in nodefile
       ((HostOffset=HostOffset+${PeInWorld[${MpiCommWorld}]})) ; ThinBy=1
     fi
     export MY_NODEFILE=${MY_NODEFILE_ORI}.${MpiCommWorld}
@@ -785,12 +785,11 @@ if [[ "$3" != "" ]] ; then # complex sequence, SPMD or MPMD, (automatic multiple
       ((Instances != MaxPe+1)) && echo "ERROR: holes found, Instances=${Instances}, MaxPe=${MaxPe}" && ((ErRoR=ErRoR+1))
       ((MaxPe > npe_total)) && echo "ERROR: task number overflow, MaxPe(${MaxPe}) > npe_total(${npe_total})" && ((ErRoR=ErRoR+1))
       rm -f ${MpirunScript}.${MpiCommWorld}
-      unset RPN_COMM_DIRS  # RPN_COMM_DIRS no longer needed by RPN_COMM_init as cd is now performed by script
       cat <<EOT >${MpiRunScript}.${MpiCommWorld}
 #!/bin/ksh93
 # SHELL for scripts run under AIX/POE MUST BE /bin/ksh93
 export RPN_COMM_DOM='${NDomains}${RPN_COMM_DOM}'
-export RPN_COMM_DIRS="${RPN_COMM_DIRS}"
+export RPN_COMM_DIRS="${RPN_COMM_DIRS}"        # RPN_COMM_DIRS no longer needed by RPN_COMM_init as cd is now performed by script
 export OMP_NUM_THREADS=${NLThreads}
 ((WORLD_CHILD=MP_CHILD-${InstanceOffset}))
 export WORLD_CHILD
@@ -850,7 +849,8 @@ EOT
       shift ; shift ; shift
     fi
     RPN_COMM_DOM="$RPN_COMM_DOM,${First},${Increment},${Last}"
-#    RPN_COMM_DIRS="$RPN_COMM_DIRS,'${Directory}'"   # no longer needed, we do the cd ..... in the script
+#    RPN_COMM_DIRS="$RPN_COMM_DIRS,'${Directory}'" 
+    RPN_COMM_DIRS="$RPN_COMM_DIRS,'.'"  # no longer needed, we do the cd ..... in the script, so every directory becomes . :-)
     ((LocalInstances=0))
     for i in $(seq ${First} ${Increment} ${Last} )
     do
