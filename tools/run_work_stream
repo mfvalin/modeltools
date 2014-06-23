@@ -153,11 +153,11 @@ fi
 #               no instance: all instances
 #               no mincpus : 1
 #               no maxcpus : number of cpus available to the instance
-# not specifying the opion is equivalent to "-cpus ,"
+# not specifying the option is equivalent to "-cpus ,"
 #
 export MinCpusInJob=1                    # do not execute a job that uses less than this number of cpus
 export MaxCpusInJob=${BATCH_MPI_CPUS}    # do not execute a job that uses more than this number of cpus
-if [[ "$1" == -cpumap ]] ; then
+if [[ "$1" == -cpumap ]] ; then          # process optional -cpumap argument
   shift
   while [[ -n "$1" && "$1" != -* ]] ; do
     [[ "$1" != *:* || "${1%%:*}" == ${CurrentInstance} ]] && CpusInJob=${1##*:}

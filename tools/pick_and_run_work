@@ -1,5 +1,10 @@
 #!/bin/bash
 #set -x
+#
+# thish script uses the following line inserted by soumet batch manager layer (PBS/SGE/...)
+#SOUMET_RESOURCE_PROFILE_FOR_JOB MaxNumberOfCores=${TotalCpus};MaxNumberOfThreads=${OMP_NUM_THREADS};MaxWallTime=${t}
+# this insertion could be done by any other means provided it is in same file as job manager headers
+#
 TimeLeft=${1:-0}
 ((TimeLeft < 60)) && echo LESS than ${TimeLeft} wall clock seconds left, EXITING && exit 1
 JobFile=""
