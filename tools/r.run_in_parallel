@@ -11,16 +11,25 @@ typeset -A nodecore
 #    node_to_rank ${MY_NODEFILE} ${ThreadsInWorld[${MpiCommWorld}]}
 node_to_rank() {
   ((r=0))
+  ((rr=-1))
   Increment=${2:-1}
+  Thinning=${3:-${Increment}}
+  rm -f ${1}.thinned
   for Target in $(cat ${1}) ; do
+    ((rr=rr+1))
+    if ((rr%Thinning!=0)) ; then continue ; fi
+    echo "$Target" >>${1}.thinned
     if ((Increment>1)) ; then
       echo "rank $r=$Target  slot=${nodecore[$Target]}-$((nodecore[$Target]+Increment-1))"
+#      echo "rank $r=$Target  slot=${nodecore[$Target]}-$((nodecore[$Target]+Increment-1))" 1>&2
     else
       echo "rank $r=$Target  slot=${nodecore[$Target]}"
+#      echo "rank $r=$Target  slot=${nodecore[$Target]}" 1>&2
     fi
     ((nodecore[$Target]=nodecore[$Target]+Increment))
     ((r=r+1))
   done
+  mv ${1}.thinned ${1}
 }
 #################################################################################################################################
 # MPI prelauncher for Linux systems using mpich2 or openmpi. takes kare of most OpemMPI/Mpich2 issues
@@ -91,8 +100,8 @@ mpiexec_Linux_launch() {
 #
     echo "INFO: MPI world ${MpiCommWorld} will be using ${PeInWorld[${MpiCommWorld}]} tasks  with ${ThreadsInWorld[${MpiCommWorld}]} thread(s) per task"
     ((FirstHost=HostOffset+1))
-    ((HostOffset=HostOffset+${PeInWorld[${MpiCommWorld}]}))
-#    ((HostOffset=HostOffset+${PeInWorld[${MpiCommWorld}]}*${ThreadsInWorld[${MpiCommWorld}]}))
+#    ((HostOffset=HostOffset+${PeInWorld[${MpiCommWorld}]}))
+    ((HostOffset=HostOffset+${PeInWorld[${MpiCommWorld}]}*${ThreadsInWorld[${MpiCommWorld}]}))
     export MY_NODEFILE=${MY_NODEFILE_ORI}.${MpiCommWorld}
     export MY_RANKFILE=${MY_NODEFILE_ORI}.rank.${MpiCommWorld}
     sed -n ${FirstHost},${HostOffset}p ${MY_NODEFILE_ORI} >${MY_NODEFILE}
@@ -442,7 +451,7 @@ wait_for() {
 # and will be the default value for -nodefile
 #
 MY_NODEFILE=${PARALLEL_NODEFILE:-${GECOSHEP_HOSTS_FILE:-${GECOSHEP_HOSTFILE:-${PBS_NODEFILE}}}}
-Version="1.1.4e 2014/06/12"
+Version="1.1.5 2014/06/23"
 echo "${0##*/} version $Version avec /bin/ksh93"
 eval `cclargs_lite -D "" $0 \
     -args "" "" "[arguments to the command]" \
@@ -476,7 +485,7 @@ eval `cclargs_lite -D "" $0 \
     -openmpi "" "openmpi" "[use openmpi]" \
     -outp "o" "O" "[stdout prefix in listings]" \
     -packoutput "cat_output" "echo" "[]" \
-    -pes "" "" "[number of PEs for ALL instances]" \
+    -pes "${BATCH_MPI_CPUS:-1}" "${BATCH_MPI_CPUS:-1}" "[number of PEs for ALL instances]" \
     -pgm "Invalid_Command.EXE" "" "[]" \
     -preexec "" "" "[prefix program execution with this (time/gdb/...)]" \
     -processorder "" "yes" "[list out/err of members in order]" \
@@ -551,6 +560,8 @@ if [[ -d "${instancedir}" && -n "${instances}" ]] ; then     # we have co-runnin
 #   all other arguments : ignored
 #
     unset PARALLEL_INSTANCES_DIR
+    MasterPgm="%%${OMP_NUM_THREADS} ::${npex}x${npey} /./$(pwd -P) ${pgm}"
+    [[ "$pgm" == NoNe ]] && MasterPgm=""
     set -x
     ${0} -npex ${pes} -npey 1 -processorder "${processorder}" -tmpdir "${tmpdir}" -minstdout ${minstdout} \
          -coremap "${coremap}" -nodemap "${nodemap}" -ib "${ib}" -noib "${noib}" -verbose "${verbose}" \
@@ -558,7 +569,7 @@ if [[ -d "${instancedir}" && -n "${instances}" ]] ; then     # we have co-runnin
          -outp "${outp}" -errp "${errp}" -preexec "${preexec}" -packoutput "${packoutput}" -dryrun "${dryrun}" \
          -offset "${offset}" -mpiargs "${mpiargs}" -selftest "${selftest}" \
          -mpirun "${mpirun}" -openmpi "${openmpi}" -mpich2 "${mpich2}" \
-         -pgm $(cd ${instancedir} ; cat ${instances} | xargs) %%${OMP_NUM_THREADS} ::${npex}x${npey} /./$(pwd -P) ${pgm}
+         -pgm $(cd ${instancedir} ; cat ${instances} | xargs) ${MasterPgm}
     set +x
     echo ""
     for i in ${instances} ; do
