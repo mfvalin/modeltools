@@ -2,7 +2,7 @@
 usage()
 {
 cat <<EOT
-  ${0##*/} [-instances n|@mapfile] [-debug 0|1|2] -t mseconds -cpus ncpus [-cpumap map] -name stream_name -maxidle nseconds -queues q1 q2 ... qn [--] "arguments_for_ord_soumet"
+  ${0##*/} [-clone] [-instances n|@mapfile] [-debug 0|1|2] -t mseconds -cpus ncpus [-cpumap map] -name stream_name -maxidle nseconds -queues q1 q2 ... qn [--] "arguments_for_ord_soumet"
   arguments_for_ord_soumet may include -q, -jn, and any other relevant argument
   example of map file (4 instances, 4 lines)  sequence of [ALL|node_no number_cpus] number_cpus=0 allowed
 ALL 1 1 0 2 3 3 3  # ALL nodes 1 cpu by default, node 1 : 0 cpus, node 2 : 3 cpus, node 3 : 3 cpus for instance no 1
@@ -30,6 +30,10 @@ case $1 in
  -t)
     walltime="$2"
     shift; shift;
+    ;;
+ -clone)
+    AutoResubmit="yes"
+    shift;
     ;;
  -dry-run)
     DryRun="1"
@@ -88,6 +92,15 @@ unset QUEUE_1CPU
 unset QUEUE_2CPU
 unset QUEUE_3CPU
 unset QUEUE_4CPU
-echo "${0%/*}/run_work_stream+ -debug ${debug:-0} -instances ${instances:-1} ${cpumap} -name $name -maxidle $maxidle -queues $queues"
-echo "${0%/*}/run_work_stream+ -debug ${debug:-0} -instances ${instances:-1} ${cpumap} -name $name -maxidle $maxidle -queues $queues"  | \
-      ord_soumet - -t ${walltime} -mpi -cpus ${cpus}x1 -jn STREAM_${name} "$@" -shell nologin
+[[ "${AutoResubmit}" == yes ]] && NoSubmit="-nosubmit" && mkdir -p ${HOME}/.ord_soumet.d/wrap/lajob.tar && JobTar="${HOME}/.ord_soumet.d/wrap/lajob.tar/$(hostname)-$(date +%F_%R:%S)"
+#echo "${0%/*}/run_work_stream+ -debug ${debug:-0} -instances ${instances:-1} ${cpumap} -name $name -maxidle $maxidle -queues $queues" 
+set -x
+cat <<EOJ | ord_soumet - -t ${walltime} -mpi -cpus ${cpus}x1 -jn STREAM_${name} "$@" -shell nologin -nosubmit -jobtar ${JobTar}
+export JobTar=${JobTar}
+${0%/*}/run_work_stream+ -debug ${debug:-0} -instances ${instances:-1} ${cpumap} -name $name -maxidle $maxidle -queues $queues
+TimeNow=\$(date +%s)
+((TimeLeft=JobStartTime+JobTimeLimit-TimeNow))
+((TimeLeft>100)) && rm ${JobTar}.tar
+[[ -f ${JobTar}.tar ]] && $(which soumet_lajob) ${JobTar}.tar
+EOJ
+
