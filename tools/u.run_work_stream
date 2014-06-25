@@ -87,13 +87,13 @@ ErrStatus=1
 [[ -n "$DryRun" ]]   && echo DRY RUN                        && exit 0
 #printf "\n"
 #echo arguments to soumet are "$@"
-for i in $queues ; do mkdir -p ${HOME}/.job_queues/$i ; done 
+for i in $queues ; do mkdir -p ${HOME}/.job_queues/$i ; done
 unset QUEUE_1CPU
 unset QUEUE_2CPU
 unset QUEUE_3CPU
 unset QUEUE_4CPU
 [[ "${AutoResubmit}" == yes ]] && NoSubmit="-nosubmit" && mkdir -p ${HOME}/.ord_soumet.d/wrap/lajob.tar && JobTar="${HOME}/.ord_soumet.d/wrap/lajob.tar/$(hostname)-$(date +%F_%R:%S)"
-#echo "${0%/*}/run_work_stream+ -debug ${debug:-0} -instances ${instances:-1} ${cpumap} -name $name -maxidle $maxidle -queues $queues" 
+#echo "${0%/*}/run_work_stream+ -debug ${debug:-0} -instances ${instances:-1} ${cpumap} -name $name -maxidle $maxidle -queues $queues"
 set -x
 cat <<EOJ | ord_soumet - -t ${walltime} -mpi -cpus ${cpus}x1 -jn STREAM_${name} "$@" -shell nologin -nosubmit -jobtar ${JobTar}
 export JobTar=${JobTar}
