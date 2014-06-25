@@ -1,7 +1,8 @@
 #!/bin/bash
+PBS_NODEFILE=${PBS_NODEFILE:-${GECOSHEP_HOSTS_FILE:-${GECOSHEP_HOSTFILE}}}  # takes care of PBS/TORQUE and Grid Engine
 # =============================================================================================
 function usage {
-echo " usage: ${0##*/} [-debug level] [-instances number_of] [-cpus cpu_specification] -name stream_name -maxidle n_seconds -queues spec_1 spec_2 ... spec_N"
+echo " usage: ${0##*/} [-debug level] [-instances number_of|@map_file] [-cpumap cpu_specification] -name stream_name -maxidle n_seconds -queues spec_1 spec_2 ... spec_N"
 echo "        options are POSITIONAL, queue spec of the form: [instance#:]queue_name "
 }
 # =============================================================================================
@@ -151,11 +152,11 @@ if ((DebugFlag>0)) ; then
   ((DebugFlag>1)) && InstanceCat ${PARALLEL_NODEFILE}
 fi
 #
-# collect optional -cpumap option:   -cpumap [instance:][mincpus],[maxcpus] 
+# collect optional -cpumap option:   -cpumap [instance:][mincpus],[maxcpus]
 #               no instance: all instances
 #               no mincpus : 1
 #               no maxcpus : number of cpus available to the instance
-# not specifying the option is equivalent to "-cpus ,"
+# not specifying the option is equivalent to "-cpumap ,"
 #
 export MinCpusInJob=1                    # do not execute a job that uses less than this number of cpus
 export MaxCpusInJob=${BATCH_MPI_CPUS}    # do not execute a job that uses more than this number of cpus

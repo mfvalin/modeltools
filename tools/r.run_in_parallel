@@ -469,7 +469,7 @@ eval `cclargs_lite -D "" $0 \
     -hostos "$(uname -s)" "" "[local OS]" \
     -inorder "" "yes" "[list out/err of members in process order]" \
     -instancedir "${PARALLEL_INSTANCES_DIR}" "${PARALLEL_INSTANCES_DIR}" "[directory containing instance names]" \
-    -instances "" "" "[instance name for member or list of instances for master]" \
+    -instances "${PARALLEL_INSTANCES}" "${PARALLEL_INSTANCES}" "[instance name for member or list of instances for master]" \
     -map "" "map" "[display processor map]" \
     -members "" "" "[NxM, N members of size M, override npey and npex]" \
     -minstdout "2" "2" "[]" \
@@ -849,7 +849,7 @@ EOT
       shift ; shift ; shift
     fi
     RPN_COMM_DOM="$RPN_COMM_DOM,${First},${Increment},${Last}"
-#    RPN_COMM_DIRS="$RPN_COMM_DIRS,'${Directory}'" 
+#    RPN_COMM_DIRS="$RPN_COMM_DIRS,'${Directory}'"
     RPN_COMM_DIRS="$RPN_COMM_DIRS,'.'"  # no longer needed, we do the cd ..... in the script, so every directory becomes . :-)
     ((LocalInstances=0))
     for i in $(seq ${First} ${Increment} ${Last} )
