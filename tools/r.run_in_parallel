@@ -19,11 +19,12 @@ node_to_rank() {
     ((rr=rr+1))
     if ((rr%Thinning!=0)) ; then continue ; fi
     echo "$Target" >>${1}.thinned
+    BaseCore=${nodecore[$Target]}
     if ((Increment>1)) ; then
-      echo "rank $r=$Target  slot=${nodecore[$Target]}-$((nodecore[$Target]+Increment-1))"
+      echo "rank $r=$Target  slot=${BaseCore}-$((BaseCore+Increment-1))"
 #      echo "rank $r=$Target  slot=${nodecore[$Target]}-$((nodecore[$Target]+Increment-1))" 1>&2
     else
-      echo "rank $r=$Target  slot=${nodecore[$Target]}"
+      echo "rank $r=$Target  slot=${BaseCore}"
 #      echo "rank $r=$Target  slot=${nodecore[$Target]}" 1>&2
     fi
     ((nodecore[$Target]=nodecore[$Target]+Increment))
@@ -117,7 +118,8 @@ mpiexec_Linux_launch() {
     if [[ $Launcher == OpenMPI ]] ; then #   pass environment variables (only names starting with letter or digit) (only for OpenMPI)
 #      EXTRA_MPI_PARMS="-cpus-per-proc ${ThreadsInWorld[${MpiCommWorld}]}"
       EXTRA_MPI_PARMS="${EXTRA_MPI_PARMS} $(s.prefix '-x ' $(env | grep -v "'" | grep -v '"'  | grep  '^[a-zA-Z0-9]' | sed 's/=.*//' | sort ))"
-      EXTRA_MPI_PARMS="${EXTRA_MPI_PARMS} --rankfile ${MY_RANKFILE}"
+#     ignore rank file in interactive case
+      tty -s || EXTRA_MPI_PARMS="${EXTRA_MPI_PARMS} --rankfile ${MY_RANKFILE}"
 #      cat ${MY_RANKFILE}
     fi
 #
@@ -322,7 +324,8 @@ expand_node_map() {
     [[ "${Entry%:*}" != *,* ]] && hlist="${Entry%:*} ${Entry%:*}"   # single number si:npi
     for hnum in $(seq ${hlist}) ; do
       ((npe=npe0))
-      while ((npe>0)) ; do echo ${ListOfHosts[${hnum}]} >>${MY_NODEFILE} ; ((npe=npe-1)) ;done
+      tty -s && ((hnum=hnum%NumberOfHosts))    # number of hosts is phony (often 1) if interactive
+      while ((npe>0)) ; do echo ${ListOfHosts[$((hnum))]} >>${MY_NODEFILE} ; ((npe=npe-1)) ;done
     done
   done
 }
@@ -346,7 +349,7 @@ expand_core_map() {
   ((r=0))
   while ((r<NumberOfCores)) ; do
     h=${CoreMapArray[$r]}
-    ((h>=NumberOfHosts)) && echo "ERROR: core number ${h} > maximum ($((NumberOfHosts-1)))" && rm -rf ${tmpdir} && exit 1
+    ((h>=NumberOfHosts)) && echo "ERROR: host number (${h}) > maximum ($((NumberOfHosts-1)))" && rm -rf ${tmpdir} && exit 1
     echo "${ListOfHosts[$h]}" >>${MY_NODEFILE}
     ((r=r+1))
   done
@@ -454,7 +457,7 @@ wait_for() {
 # and will be the default value for -nodefile
 #
 MY_NODEFILE=${PARALLEL_NODEFILE:-${GECOSHEP_HOSTS_FILE:-${GECOSHEP_HOSTFILE:-${PBS_NODEFILE}}}}
-Version="1.1.5 2014/06/23"
+Version="1.1.6 2014/06/26"
 echo "${0##*/} version $Version avec /bin/ksh93"
 eval `cclargs_lite -D "" $0 \
     -args "" "" "[arguments to the command]" \
@@ -471,6 +474,7 @@ eval `cclargs_lite -D "" $0 \
     -instancedir "${PARALLEL_INSTANCES_DIR}" "${PARALLEL_INSTANCES_DIR}" "[directory containing instance names]" \
     -instances "${PARALLEL_INSTANCES}" "${PARALLEL_INSTANCES}" "[instance name for member or list of instances for master]" \
     -map "" "map" "[display processor map]" \
+    -maxcores "${MAX_CORES}" "65536" "[]" \
     -members "" "" "[NxM, N members of size M, override npey and npex]" \
     -minstdout "2" "2" "[]" \
     -mpiargs "" "" "[]" \
@@ -508,6 +512,8 @@ CoresOnNode=128
 [[ "$hostos" == AIX ]]&& CoresOnNode=$(($(bindprocessor -q | sed 's/.*[ ]//')+1))
 [[ "$hostos" == Linux ]] && CoresOnNode=$(grep MHz /proc/cpuinfo 2>/dev/null | wc -l)   # Linux only
 ((CoresOnNode<=0)) && CoresOnNode=1
+((MaxCores=CoresOnNode))
+[[ -n $maxcores ]] && ((MaxCores=maxcores))
 [[ "$TRUE_HOST" == eole* ]] && ib="ib"  # force usage of Infiniband on Dorval eole cluster
 #
 if [[ "${mpich2}" == "mpich2" ]] ; then
@@ -566,13 +572,14 @@ if [[ -d "${instancedir}" && -n "${instances}" ]] ; then     # we have co-runnin
     MasterPgm="%%${OMP_NUM_THREADS} ::${npex}x${npey} /./$(pwd -P) ${pgm}"
     [[ "$pgm" == NoNe ]] && MasterPgm=""
     set -x
-    ${0} -npex ${pes} -npey 1 -processorder "${processorder}" -tmpdir "${tmpdir}" -minstdout ${minstdout} \
+    ${0} -npex ${pes:-${npex}} -npey 1 -processorder "${processorder}" -tmpdir "${tmpdir}" -minstdout ${minstdout} \
          -coremap "${coremap}" -nodemap "${nodemap}" -ib "${ib}" -noib "${noib}" -verbose "${verbose}" \
          -tag "${tag}" -spliteo "${spliteo}" -debug "${debug}" -nocleanup "${nocleanup}" -geometry "${geometry}" \
          -outp "${outp}" -errp "${errp}" -preexec "${preexec}" -packoutput "${packoutput}" -dryrun "${dryrun}" \
          -offset "${offset}" -mpiargs "${mpiargs}" -selftest "${selftest}" \
          -mpirun "${mpirun}" -openmpi "${openmpi}" -mpich2 "${mpich2}" \
          -pgm $(cd ${instancedir} ; cat ${instances} | xargs) ${MasterPgm}
+    StAtUs=$?
     set +x
     echo ""
     for i in ${instances} ; do
@@ -582,7 +589,7 @@ if [[ -d "${instancedir}" && -n "${instances}" ]] ; then     # we have co-runnin
        echo "INFO: (master) ${instancedir}/${i}.DONE"
     done
     echo "INFO: (master) END of ${slaves} slave(s) '${instances}'"
-    exit                                           # master job done
+    exit  ${StAtUs}                                        # master job done
   else                    # a slave instance, there is ONE AND ONLY ONE item  in instances
 #
 #   -instances -instancedir : used, not passed on
@@ -646,7 +653,7 @@ if [[ ! -r ${nodefile} ]] ; then   # no nodefile supplied, make one
   nodefile=${MY_NODEFILE}__
   rm -f ${nodefile}
   if tty -s || [[ "$hostos" == AIX ]]; then
-    echo "INFO: no nodefile found, creating one"
+    echo "INFO: no nodefile found, creating one with $npe_total x $OMP_NUM_THREADS entries"
     ((r=0))
     while ((r < npe_total*OMP_NUM_THREADS)) ; do echo localhost >>${nodefile} ; ((r=r+1)) ; done
   else
@@ -667,8 +674,8 @@ fi  # no nodefile supplied
 if [[ "${coremap}" == NoNe && "${nodemap}" == NoNe ]] ; then
   nhosts=$(uniq ${nodefile} | wc -l | sed -e 's/ //g')   # number of hosts in node file
   ((loops=(npe_total+nhosts-1)/nhosts))   # number of tasks per host (rounded up)
-  if ((loops*OMP_NUM_THREADS > CoresOnNode)) ; then
-    echo "ERROR: not enough cores available on node, $((loops*OMP_NUM_THREADS)) requested, $((CoresOnNode)) available"
+  if ((loops*OMP_NUM_THREADS > MaxCores)) ; then
+    echo "ERROR: not enough cores available on node, $((loops*OMP_NUM_THREADS)) requested, $((MaxCores)) available"
     rm -rf ${tmpdir}
     exit 1
   fi
@@ -686,6 +693,7 @@ if [[ "${nodemap}" != NoNe ]] ; then
 fi
 ListOfNodes=($(cat ${MY_NODEFILE}))
 NumberOfNodes=${#ListOfNodes[@]}
+echo "INFO: Node list = ${ListOfNodes[@]}"
 #  [[ -n $verbose ]] && echo "INFO: NumberOfHosts = $NumberOfHosts"
 #  [[ -n $verbose ]] && echo "INFO: Host list = ${ListOfHosts[@]}"
 [[ -n $verbose ]] && echo "INFO: Number or processes = $NumberOfNodes"
@@ -952,7 +960,7 @@ lines=0
 the_file=${tmpdir}/\${MP_SeqNum}/stdout.\${MP_Tag}
 [[ -r \${the_file} ]] && lines="\$(wc -l <\${the_file})" && ((lines<${minstdout})) && rm \${the_file}  # remove stdout files shorter than minimum
 [[ \${MP_SeqNum} != *00 ]] && true && exit
-sleep 1
+sleep 3
 for the_file in ${tmpdir}/\${MP_SeqNum%??}[0-9][0-9]/stdout.*
 do
   MP_Tag=\${the_file##*.}
