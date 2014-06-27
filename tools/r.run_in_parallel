@@ -169,7 +169,7 @@ mpiexec_AIX() {
     grep -q $(hostname) ${HOME}/.rhosts 2>/dev/null || echo $(hostname) ${USER} >>${HOME}/.rhosts
     chmod 700 ${HOME}/.rhosts
   fi
-  if((MpiCommWorlds==1)) ; then  # only one world, use regular call to poe
+  if((MpiCommWorlds==1 && ${npe_total} == ${BATCH_MPI_CPUS:-npe_total} )) ; then  # only one world, use regular call to poe
     ((MP_PROCS=${PeInWorld[0]}))
     echo "========== poe command file with ${MP_PROCS} tasks in single MPI world =========="
     [[ -z ${dryrun} ]] && poe ${ParallelScript}.0 </dev/null
@@ -178,6 +178,15 @@ mpiexec_AIX() {
       echo "multiple MPI worlds not supported for preemptable jobs"
       exit 1
     fi
+    cat <<EOT >${tmpdir}/null_mpi.c
+#include <mpi.h>
+void main(int argc, char **argv)
+{
+ MPI_Init(&argc,&argv);
+ MPI_Finalize();
+}
+EOT
+    mpcc -o ${tmpdir}/null_mpi ${tmpdir}/null_mpi.c
     rm -f ${ParallelScript}.ALL
     ((MP_PROCS=0))
     while(( MpiCommWorld<MpiCommWorlds)) ; do  # build POE command file((MpiCommWorlds=MpiCommWorlds+1))
@@ -457,7 +466,7 @@ wait_for() {
 # and will be the default value for -nodefile
 #
 MY_NODEFILE=${PARALLEL_NODEFILE:-${GECOSHEP_HOSTS_FILE:-${GECOSHEP_HOSTFILE:-${PBS_NODEFILE}}}}
-Version="1.1.6 2014/06/26"
+Version="1.1.7 2014/06/27"
 echo "${0##*/} version $Version avec /bin/ksh93"
 eval `cclargs_lite -D "" $0 \
     -args "" "" "[arguments to the command]" \
@@ -515,6 +524,10 @@ CoresOnNode=128
 ((MaxCores=CoresOnNode))
 [[ -n $maxcores ]] && ((MaxCores=maxcores))
 [[ "$TRUE_HOST" == eole* ]] && ib="ib"  # force usage of Infiniband on Dorval eole cluster
+if [[ "$hostos" == AIX ]] ; then
+  [[ "${nodemap}" != NoNe ]] && nodemap="" && echo "-nodemap not supported for AIX, use LoadLeveler geometry instead" && exit 1
+  [[ "${coremap}" != NoNe ]] && coremap="" && echo "-coremap not supported for AIX, use LoadLeveler geometry instead" && exit 1
+fi
 #
 if [[ "${mpich2}" == "mpich2" ]] ; then
   mpich2="$(which rumpirun.mpich2 2>/dev/null)"
@@ -693,7 +706,6 @@ if [[ "${nodemap}" != NoNe ]] ; then
 fi
 ListOfNodes=($(cat ${MY_NODEFILE}))
 NumberOfNodes=${#ListOfNodes[@]}
-echo "INFO: Node list = ${ListOfNodes[@]}"
 #  [[ -n $verbose ]] && echo "INFO: NumberOfHosts = $NumberOfHosts"
 #  [[ -n $verbose ]] && echo "INFO: Host list = ${ListOfHosts[@]}"
 [[ -n $verbose ]] && echo "INFO: Number or processes = $NumberOfNodes"
@@ -955,6 +967,7 @@ MP_Tag="\$(/usr/bin/printf '${F_world}${F_member}${F_child}${F_seq}' ${V_world} 
 #
 [[ -n "${processorder}" ]] && touch ${tmpdir}/fail.\${MP_Tag}
 . ${MpiRunScript}.${MpiCommWorld}  ${RedirectStdout} ${RedirectStderr}
+[[ -x ${tmpdir}/null_mpi ]] && ${tmpdir}/null_mpi
 [[ -n "${processorder}" ]] || exit 0
 lines=0
 the_file=${tmpdir}/\${MP_SeqNum}/stdout.\${MP_Tag}
