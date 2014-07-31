@@ -2,11 +2,21 @@
 # this script is the successor to the r.mpirun... series of scripts with expanded functionality
 # (stdout/stderr post processing and "launch in background" capability)
 #
+c_rm=$(which rm)
+c_date=$(which date)
+c_cat=$(which cat)
+c_sleep=$(which sleep)
+c_true=$(which true)
+c_sed=$(which sed)
+c_env=$(which env)
+c_wc=$(which wc)
+c_touch=$(which touch)
+c_sort=$(which sort)
+c_hostname=$(which hostname)
 [[ "$1" == --version ]] && set -- -version
 # CAVEAT: this script uses typeset -Z (does not work for the bash shell, only for ksh93)
 typeset -Z4 SeqNum MemberNo MemberChild
 typeset -A nodecore
-
 #################################################################################################################################
 #    node_to_rank ${MY_NODEFILE} ${ThreadsInWorld[${MpiCommWorld}]}
 node_to_rank() {
@@ -466,7 +476,7 @@ wait_for() {
 # and will be the default value for -nodefile
 #
 MY_NODEFILE=${PARALLEL_NODEFILE:-${GECOSHEP_HOSTS_FILE:-${GECOSHEP_HOSTFILE:-${PBS_NODEFILE:-${LOADL_HOSTFILE}}}}}
-Version="1.1.8 2014/07/30"
+Version="1.1.9 2014/07/30"
 echo "${0##*/} version $Version avec /bin/ksh93"
 eval `cclargs_lite -D "" $0 \
     -args "" "" "[arguments to the command]" \
@@ -822,8 +832,8 @@ EOT
           if (( MP_CHILD == $((i+InstanceOffset)) ))
           then
             cd ${Directories[$i]}
-            ${preexec} ${ProGrams[$i]} ${args} && /usr/bin/rm -f ${tmpdir}/fail.\${MP_Tag}
-            echo "END of child \${WORLD_CHILD} : \$(date)"
+            ${preexec} ${ProGrams[$i]} ${args} && $c_rm -f ${tmpdir}/fail.\${MP_Tag}
+            echo "END of child \${WORLD_CHILD} : \$($c_date)"
           fi
 EOT
       done
@@ -919,8 +929,8 @@ export WORLD_CHILD
   [[ -n "${processorder}" ]] && \
   /usr/bin/printf "============== stdout W:${MpiCommWorld}:%4.4d M:%4.4d-%4.4d Seq:%s ==============\n" \${RP_WorldChild} \${RP_Member} \${RP_MemberChild} \${MP_SeqNum}
 EOT
-  echo "${preexec} $pgm $args  && /usr/bin/rm -f ${tmpdir}/fail.\${MP_Tag}" >>${MpiRunScript}.0   # MpiCommWorld is 0 in this case
-  echo 'echo INFO: END of child $WORLD_CHILD : $(/usr/bin/date)' >>${MpiRunScript}.0
+  echo "${preexec} $pgm $args  && $c_rm -f ${tmpdir}/fail.\${MP_Tag}" >>${MpiRunScript}.0   # MpiCommWorld is 0 in this case
+  echo 'echo INFO: END of child $WORLD_CHILD : $($c_date)' >>${MpiRunScript}.0
   echo "INFO: ${npe_total} instances of '$pgm' in MPI world 0"
 #
 fi ########################## complex sequence, possibly MPMD ####################
@@ -963,22 +973,22 @@ export RP_Child="\$((MP_CHILD))"            # global child number, same as MP_CH
 export RP_Member=\$((RP_WorldChild/${npex}+${offset}))      # member number in this world (including offset)
 export RP_MemberChild=\$((RP_WorldChild-RP_WorldChild/${npex}*${npex}))   # child ordinal within this member
 MP_Tag="\$(/usr/bin/printf '${F_world}${F_member}${F_child}${F_seq}' ${V_world} ${V_member} ${V_child} ${V_seq})"
-[[ -n "${debug}" ]] && /usr/bin/env | /usr/bin/sort >${tmpdir}/.mpi_env_\$\$_\$(hostname)
+[[ -n "${debug}" ]] && $c_env | $c_sort >${tmpdir}/.mpi_env_\$\$_\$($c_hostname)
 #
-[[ -n "${processorder}" ]] && /usr/bin/touch ${tmpdir}/fail.\${MP_Tag}
+[[ -n "${processorder}" ]] && $c_touch ${tmpdir}/fail.\${MP_Tag}
 . ${MpiRunScript}.${MpiCommWorld}  ${RedirectStdout} ${RedirectStderr}
 [[ -x ${tmpdir}/null_mpi ]] && ${tmpdir}/null_mpi
 [[ -n "${processorder}" ]] || exit 0
 lines=0
 the_file=${tmpdir}/\${MP_SeqNum}/stdout.\${MP_Tag}
-[[ -r \${the_file} ]] && lines="\$(/usr/bin/wc -l <\${the_file})" && ((lines<${minstdout})) && /usr/bin/rm \${the_file}  # remove stdout files shorter than minimum
-[[ \${MP_SeqNum} != *00 ]] && /usr/bin/true && exit
-/usr/bin/sleep 3
+[[ -r \${the_file} ]] && lines="\$($c_wc -l <\${the_file})" && ((lines<${minstdout})) && $c_rm \${the_file}  # remove stdout files shorter than minimum
+[[ \${MP_SeqNum} != *00 ]] && $c_true && exit
+$c_sleep 3
 for the_file in ${tmpdir}/\${MP_SeqNum%??}[0-9][0-9]/stdout.*
 do
   MP_Tag=\${the_file##*.}
-  [[ -f \${the_file} ]] && { [[ -z "${nosep}" ]] && echo "" ; /usr/bin/cat \${the_file} | /usr/bin/sed "s/^/${Prefix2}\${MP_Tag}: /" ;} >>${tmpdir}/\${MP_SeqNum}/stdout
-  [[ -f \${the_file%/*}/stderr ]] && { [[ -z "${nosep}" ]] && echo "" ; [[ -z "${nosep}" ]] && echo "${Prefix3}\${MP_Tag}: ============== stderr \${MP_Tag} ==============" ; cat \${the_file%/*}/stderr | sed "s/^/${Prefix3}\${MP_Tag}: /" ; } >>${tmpdir}/\${MP_SeqNum}/stdout
+  [[ -f \${the_file} ]] && { [[ -z "${nosep}" ]] && echo "" ; $c_cat \${the_file} | $c_sed "s/^/${Prefix2}\${MP_Tag}: /" ;} >>${tmpdir}/\${MP_SeqNum}/stdout
+  [[ -f \${the_file%/*}/stderr ]] && { [[ -z "${nosep}" ]] && echo "" ; [[ -z "${nosep}" ]] && echo "${Prefix3}\${MP_Tag}: ============== stderr \${MP_Tag} ==============" ; $c_cat \${the_file%/*}/stderr | $c_sed "s/^/${Prefix3}\${MP_Tag}: /" ; } >>${tmpdir}/\${MP_SeqNum}/stdout
 done
 true
 EOT
