@@ -476,7 +476,7 @@ wait_for() {
 # and will be the default value for -nodefile
 #
 MY_NODEFILE=${PARALLEL_NODEFILE:-${GECOSHEP_HOSTS_FILE:-${GECOSHEP_HOSTFILE:-${PBS_NODEFILE:-${LOADL_HOSTFILE}}}}}
-Version="1.1.9 2014/07/30"
+Version="1.1.10 2014/08/25"
 echo "${0##*/} version $Version avec /bin/ksh93"
 eval `cclargs_lite -D "" $0 \
     -args "" "" "[arguments to the command]" \
@@ -486,6 +486,7 @@ eval `cclargs_lite -D "" $0 \
     -dryrun "" "dryrun" "[]" \
     -e "NO" "YES" "[list failed processes" \
     -errp "e" "E" "[stderr prefix in listings]" \
+    -gdb "" "Default" "[directive file for gdb]" \
     -geometry "" "" "[]" \
     -ib "" "ib" "[use Infiniband]" \
     -hostos "$(uname -s)" "" "[local OS]" \
@@ -525,6 +526,11 @@ eval `cclargs_lite -D "" $0 \
     ++ "$@" ${RUN_IN_PARALLEL_EXTRAS}`
 #
 [[ -n ${version} ]] && exit 0
+# are we uisng gdb ?
+if [[ -n $gdb ]] ; then
+  [[ $gdb == Default ]] && preexec="$(which gdb) -batch -ex run -ex where"
+  [[ -r $gdb ]] && preexec="$(which gdb) -batch -x $(true_path $gdb)"
+fi
 OMP_NUM_THREADS=${OMP_NUM_THREADS:-1}
 #
 CoresOnNode=128
