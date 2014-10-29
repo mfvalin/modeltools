@@ -1,0 +1,15 @@
+#ENV_TEST_MODE='-alpha'
+if [[ "$1" != "--dry-run" ]]
+then
+ . s.ssmuse-4.dot 2>/dev/null
+else
+ shift
+ env | sort >$TMPDIR/tmp_env_before
+ (. s.ssmuse-4.dot 2>/dev/null 1>/dev/null ; env | sort ) >$TMPDIR/tmp_env_after
+ DiffProgram=diff
+ which xxdiff 2>/dev/null 1>/dev/null && DiffProgram=xxdiff
+ which kdiff3 2>/dev/null 1>/dev/null && DiffProgram=kdiff3
+ $DiffProgram $TMPDIR/tmp_env_before $TMPDIR/tmp_env_after
+ rm -f $TMPDIR/tmp_env_before $TMPDIR/tmp_env_after
+ unset DiffProgram || true
+fi

@@ -1,0 +1,133 @@
+#!/bin/bash or /bin/ksh
+if [[ "$1" = -h || "$1" = --he* ]] ; then
+  echo "usage: . s.ssmuse.dot [--dry-run] [-list ] [-append] [-unuse] ITEM1 ... ITEMn"
+  echo "NOTE: arguments are ORDER DEPENDENT"
+  return
+fi
+[[ "$1" = -list || "$1" = --list ]] && shift && s.list_ssm_shortcuts
+unset -f ssmuse || true
+SsMuSe=`which ssmuse`
+#echo SsMuSe=$SsMuSe
+function is_package
+{
+  typeset target
+  for target in $*
+  do
+    [[ -d ${target}/../etc/ssm.d ]] && return
+  done
+  false
+}
+function ssmuse
+{
+  ShElL=$1
+  shift
+#  echo ${SsMuSe} ${ShElL} --order ${OrDeR} "$@"
+  ${SsMuSe} ${ShElL} --order ${OrDeR} "$@"
+  unset ShElL || true
+}
+function ssmuse_domain
+{
+ echo subscribing to $*
+ eval "`ssmuse sh -d $*`"
+}
+#
+function ssmunuse_domain
+{
+ echo unsubscribing from $*
+ eval "`ssmuse sh -d ${1:-NO_DOMAIN}  | grep '^export' | sed -e 's/${[A-Z_]*}//' -e  's/=/ /' -e 's/^[ ]*export/. r.unexport.dot/' -e 's/:/ /'`"
+}
+#
+StAtUs=0
+#
+OrDeR='prepend'
+if [[ "$1" = '-append' ]] ; then
+  OrDeR='append'
+  shift
+fi
+fonc='use'
+if [[ "$1" = '-unuse' ]] ; then
+  fonc='unuse'
+  shift
+fi
+if [[ "$2" = "-p" ]]
+then
+  echo using $3@$1 instead of $1 -p $3
+  set -- $3@$1
+fi
+echo s.ssmuse${ENV_TEST_MODE}.dot "$@"
+#s.resolve_ssm_shortcuts "$@"
+[[ -n ${ENV_TEST_MODE} ]] && echo "WARNING: using s.resolve_ssm_shortcuts${ENV_TEST_MODE}"
+Targets="$(s.resolve_ssm_shortcuts${ENV_TEST_MODE} $*  2>$TMPDIR/resolve_messages_$$)"
+cat $TMPDIR/resolve_messages_$$
+rm -f $TMPDIR/resolve_messages_$$
+for Target in $(s.resolve_ssm_shortcuts${ENV_TEST_MODE} "$@" )
+do
+  export SSM_SHORTCUT="$Target"
+
+  [[ "$Target" = Append ]] && OrDeR='append' && echo "switching to 'APPEND' mode" && continue
+  [[ "$Target" = Prepend ]] && OrDeR='prepend' && echo "switching to 'PREPEND' mode" && continue
+
+# resolver detected error
+  if [[ "$Target" == @* ]] ; then echo ERROR: NO SHORTCUT FOUND FOR ${Target#@} ; continue ; fi
+
+# resolver marker for start/end of bundle, used to set/unset SSM_BUNDLE_PATH
+  if [[ "$Target" == ++* ]] ; then export SSM_BUNDLE_PATH="${Target#++}" ; continue ; fi
+
+  [[ "${SSM_BUNDLE_PATH}" != "" ]] && echo BUNDLE PATH=${SSM_BUNDLE_PATH}
+
+# package@domain, use true_path fully qualified package (name_version_platform)
+  if [[ -d "${Target#*@}/etc/ssm.d" && -d "${Target#*@}/${Target%@*}" ]] ; then
+     echo USING PACKAGE "(fully qualified)" ${Target%@*} from DOMAIN $(true_path ${Target#*@})
+     ssm${fonc}_domain $(true_path ${Target#*@}) -p ${Target%@*}
+    continue
+  fi
+
+# package@domain, use true_path NOT fully qualified package (name or name_version)
+  if [[ -d "${Target#*@}/etc/ssm.d" ]] ; then
+    if  is_package ${Target#*@}/${Target%@*}_*
+    then
+      echo USING PACKAGE ${Target%@*} from DOMAIN $(true_path ${Target#*@})
+      ssm${fonc}_domain $(true_path ${Target#*@}) -p ${Target%@*}
+      continue
+    fi
+  fi
+
+# domain with cache
+  if [[ -f "${Target}/cache.$BASE_ARCH" && "${ARCH_CACHE}" == yes ]] ; then
+      echo USING cache for DOMAIN `true_path $Target`
+      . ${Target}/cache.$BASE_ARCH
+      continue
+  fi
+
+# domain
+  if [[ -d "${Target}/etc/ssm.d" ]] ; then echo USING DOMAIN `true_path $Target` ; ssm${fonc}_domain `true_path $Target` ; continue ; fi
+
+# name.sh type shortcut
+  if [[ "$Target" = *.sh && -r "$Target" ]] ;
+  then 
+    echo USING SHORTCUT $Target ;
+    . $Target ;
+    StAtUs=$? ;
+    if [[ ${StAtUs} == "111" ]] ; then echo "ABORT Requested while processing shortcut ${Target}" ; break ; fi
+    continue ;
+  fi
+
+# OOPS, nothing matches
+  echo ERROR: NO SHORTCUT FOUND FOR ${Target}
+done
+unset SSM_SHORTCUT || true
+# cleanup of PATHS, creation of EC_INCLUDE_PATH and EC_LD_LIBRARY_PATH
+if [[ "${fonc}" == "use" ]] ; then
+  eval `s.path_cleanup +${BASE_ARCH} PATH MANPATH LD_LIBRARY_PATH LD_RUN_PATH PYTHONPATH TCL_LIBRARY LIBPATH SSM_INCLUDE_PATH`
+  export MANPATH="${MANPATH}:"
+#  export EC_LD_LIBRARY_PATH="$(echo $LD_LIBRARY_PATH | sed 's/:/ /g')"
+#  export EC_INCLUDE_PATH="$(echo ${LD_LIBRARY_PATH}: | sed -e 's%/lib:%/include %g' -e 's/:/ /g' )"
+  export EC_INCLUDE_PATH="$(echo $SSM_INCLUDE_PATH | sed 's/:/ /g') "
+  export EC_LD_LIBRARY_PATH="$(echo ${SSM_INCLUDE_PATH}: | sed -e 's%/include:%/lib %g' -e 's/:/ /g' ) "
+  eval `s.path_cleanup +${EC_ARCH} EC_INCLUDE_PATH +${EC_ARCH} EC_LD_LIBRARY_PATH`
+#  . gen_ld_build_path.dot
+#  . augment_arch_path.dot
+fi
+unset -f ssmuse_domain ssmunuse_domain ssmuse || true
+unset fonc DoMaIn Target SSM_BUNDLE_PATH SSM_SHORTCUT || true
+return ${StAtUs}

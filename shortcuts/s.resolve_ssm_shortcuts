@@ -1,0 +1,233 @@
+#!/usr/bin/env ksh93
+# Author: M.Valin Jan 2011
+# Notes:
+#        this script needs ksh93 (associative arrays and string substitution)
+#        this is a full rewrite of original using recursive function calls
+function is_shortcut
+{
+  typeset Prefix
+  [[ -d ${1}/etc/ssm.d ]] && echo  ${1} && return 0  # path or soft link to a domain
+  for Prefix in ${Prefixes}
+  do
+    [[ -r ${Prefix}/${1}.bndl       ]] && echo ${Prefix}/${1}.bndl && return 0   # bundle
+    [[ -r ${Prefix}/${1}.sh         ]] && echo ${Prefix}/${1}.sh   && return 0   # sh type shortcut
+    [[ -d ${Prefix}/${1}/etc/ssm.d  ]] && echo ${Prefix}/${1}      && return 0   # link to domain
+  done
+  return 1  # nothing found
+}
+
+function is_package
+{
+  typeset target
+  for target in $*
+  do
+    [[ -d ${target}/../etc/ssm.d ]] && return 0  # package@domain (fully qualified or not)
+  done
+  return 1
+}
+
+function is_package_in_domain
+{
+  typeset Prefix
+  if [[ "$1" = *@* && -d ${1#*@}/etc/ssm.d ]]
+  then
+    [[ -d ${1#*@}/${1%@*} ]]     && echo ${1} && return 0
+    is_package ${1#*@}/${1%@*}_* && echo ${1}  && return 0
+  fi
+  for Prefix in ${Prefixes}
+  do
+    if [[ "$1" = *@* && -d $Prefix/${1#*@}/etc/ssm.d ]]
+    then
+      [[ -d $Prefix/${1#*@}/${1%@*} ]]     && echo ${1%@*}@${Prefix}/${1#*@} && return 0
+      is_package $Prefix/${1#*@}/${1%@*}_* && echo ${1%@*}@${Prefix}/${1#*@} && return 0
+    fi
+  done
+  return 1
+}
+
+function evaluate_condition
+{
+#  typeset Status
+  typeset Condition
+  Condition=${1#:}
+#  Condition=${1//[:]*/:}
+#  echo "validating $Condition" 1>&2
+  echo "${Condition//[:]*/ ; }" | \
+  sed -e 's/[.]not[.]/!/' -e 's/\([a-zA-Z0-9]*\)[.]\([a-z][a-z]\)[.]\([a-zA-Z0-9]*\)/[[ \$\1 -\2 \3 ]] || exit 1/g'  -e 's/![[][[]/[[ !/' | \
+  ksh93
+}
+
+function validate_item
+{
+# argument syntax is condition_1:condition_2:...:condition_n:[item]
+# item is optional (pure conditions)
+# any condition may be negated with the .not.prefix
+# condition can be GLOB/tty/architecture/tag_check/tag_assignment
+# tag assignment: name=value
+# tag check:      name.op.value
+# value is INTEGER
+# op can be:      lt le gt ge eq ne
+  typeset IsLocal
+  typeset Dependency
+  typeset Dependencies
+  typeset Condition
+  typeset invert
+  typeset localdep
+  typeset Failures
+
+  [[ -n ${GlobalAbort} ]] && return 1   # global abort is on, get out quick
+
+  [[ "${1}" = *:* ]] || return 0  # no condition to validate
+  set -f                          # disable filename expansion because of possible undesirable wildcards expansions
+  Dependencies="${1%:*}"
+  invert='.not.*'
+  IsLocal=1   # conditions are local by default, failure means ignore item
+              # if GLOB flag set, failure means cancel everything, not only current item
+  Failures=0
+  for Dependency in ${Dependencies//:/ }
+  do
+    Condition=0
+    case "${Dependency#.not.}" in                                    # remove .not. if present for test
+    (GLOB)      IsLocal=0 && continue ;;                             # condition is global
+    (LOG=*)      LogFlags=${Dependency#LOG=} && continue ;;          # keep the LOG flags in a global variable
+    (*.* | *=*) localdep="${localdep}:${Dependency}" && continue ;;  # accumulate conditions
+    (tty)       tty -s || Condition=1 ;;                             # interactive ?
+    (*)         [[ $ValidArch == $Dependency ]] || Condition=1 ;;    # architecture check
+    esac
+
+    [[ "$Dependency" == $invert ]] && ((Condition=!Condition))  # invert logic if prefixed with .not.
+    ((Condition == 1)) && ((Failures=Failures+1))
+  done
+# collect conditions for further processing if item is not ignored for other reasons
+  set +f    # we are now safe from wildcards
+
+  evaluate_condition "${GlobalDep#:}${localdep}" || ((Failures=Failures+1))
+  ((Failures > 0)) && ((IsLocal==1)) && return 1      # local mode and failed, bail out
+
+  if ((IsLocal==0 && Failures > 0)) ; then            # OUCH, failure is global
+      GlobalAbort="YES"                               # set global abort flag
+      ProcessedItems=""                               # cancel everything
+      echo "ERROR: ${GlobalDep#:}:${Dependencies} failed" 1>&2
+  fi
+  GlobalDep="${GlobalDep#:}${localdep}"             # global condition update if we are keeping item
+  return ${Failures}
+}
+
+function process_item
+{
+  typeset ItemName
+  typeset ItemShortName
+  typeset Condition
+  typeset DepFile
+  typeset BundleName
+  typeset BundleContents
+  typeset BundleDep
+  typeset Item
+
+  [[ -n ${GlobalAbort} ]] && return 1   # global abort is on, get out quick
+
+  ItemShortName=${1##*:}
+
+  [[ "${ItemShortName}" == StopDup ]] && NoDupMark="YES" && return
+  [[ "${ItemShortName}" == StartDup ]] && NoDupMark="" && return
+  [[ "${ItemShortName}" == Append ]] && ProcessedItems="${ProcessedItems} Append" && return
+  [[ "${ItemShortName}" == Prepend ]] && ProcessedItems="${ProcessedItems} Prepend" && return
+
+  [[ -z ${NoDupMark} ]] && \
+  [[ "" != ${Constraints[${ItemShortName}]} ]] && \
+  printf "WARNING: duplicate item ${ItemShortName} in  ${BundlePath//@/+}+ ignored\n" 1>&2 && return
+
+  ItemName=`is_shortcut ${ItemShortName}`
+  DepFile=${ItemName%.sh|.bndl}.dep
+  if [[ -r ${DepFile} ]] ; then
+    validate_item $(<${DepFile}) || return 1   # if there is a dependency file, validate it first
+  fi
+
+  Condition=${1%${ItemShortName}}          # get condition associated with item
+  validate_item "${Condition}" || return   # ignore item if it is not valid
+  [[ "${1}" == *: ]]           && return   # pure condition, nothing more to do
+
+  ((DepthCount=DepthCount-1))
+  ((DepthCount<=0)) && echo "ERROR: bundle nesting is too deep " 1>&2 && return 1
+
+#  [[ -z ${NoDupMark} ]] && \
+  Constraints[${ItemShortName}]=${Condition:- }   # mark item as seen
+
+  if [[ -n $ItemName ]]   # we have a straight shortcut
+  then
+    if [[ $ItemName == *.bndl ]]    # xxx.bndl bundle, process it recursively
+    then
+      BundleName=${ItemName##*/}
+      BundleName=${BundleName%.bndl}
+      LogFlags=""
+      set -A BundleContents $(grep -v '^#' $ItemName | xargs)
+      if [[ ${BundleContents[0]} == *: ]] ; then
+#echo "condition at head of bundle: ${BundleContents[0]}" 1>&2
+        if ! validate_item ${BundleContents[0]} ; then     # bundle dependencies satisfied ?
+          Constraints[${ItemShortName}]=""                 # no, forget we ever saw it
+          echo "WARNING: ignoring ${ItemShortName} because of ${BundleContents[0]}" 1>&2
+          return 1
+        fi
+        BundleContents[0]=""
+      fi
+      BundlePath="${BundlePath}@${BundleName}"
+      ProcessedItems="${ProcessedItems} ++${BundlePath}"
+      [[ -n ${LogFlags} ]] && echo "Bundle ${BundleName} will be logged(${LogFlags})" 1>&2
+      LogFlags=""
+#echo "'${BundleContents[*]}'" 1>&2
+      for Item in ${BundleContents[*]}
+      do
+        process_item "$Item"
+      done
+      BundlePath="${BundlePath%@*}"
+      ProcessedItems="${ProcessedItems} ++${BundlePath}"
+    else                            # xxx.sh or soft link to a domain
+      ProcessedItems="${ProcessedItems} $ItemName"
+      [[ -f "${ItemName%.sh}.dep" ]] && GlobalDep="${GlobalDep}:$(cat ${ItemName%.sh}.dep)"
+    fi
+  else  # must be package@domain or it is an error
+    ItemName=`is_package_in_domain ${1##*:}`
+    if [[ -n ${ItemName} ]]
+    then
+      ProcessedItems="${ProcessedItems} ${ItemName}"
+    else
+      NotFound="$NotFound ${1}"
+      ProcessedItems="${ProcessedItems} @${1}"
+    fi
+  fi
+  ((DepthCount=DepthCount+1))
+}
+typeset item
+typeset -A Constraints   # associative array indexed by item name containing Constraints/Dependencies
+LogFlags=""
+BundlePath=""
+GlobalAbort=""           # set if a GLOB condition failed
+LocalData="$(r.unified_setup-cfg -local || echo $ARMNLIB)/data"     # get path to "system" data
+# add SSM_SHORTCUT_PATH to places to scan, but get rid of . because it is unsafe
+Prefixes="$(echo $SSM_SHORTCUT_PATH | sed -e 's/:/ /g' -e 's/[.] //'g -e 's/ [.]//g') $HOME/my_ssm_domains ${LocalData}/ssm_domains"
+# we could also use ${BASE_ARCH}
+ValidArch=$(COMP_ARCH="" s.get_ec_arch)
+# list of processed and verified items
+ProcessedItems=""
+# list of global dependencies
+GlobalDep=""
+[[ -r ${TMPDIR}/.GlobalDep ]] && GlobalDep="$(cat ${TMPDIR}/.GlobalDep)"
+# expand bundles recursively, max depth=9
+DepthCount=10
+# process all items
+for item in "$@"
+do
+  process_item $item
+done
+[[ -n $NotFound ]] && echo "WARNING: following item(s) not found:" 1>&2 && echo "$NotFound" 1>&2
+evaluate_condition "${GlobalDep#:}"
+status=$?
+[[ $status != 0 ]] && echo "ERROR:S ${GlobalDep#:} failed, exiting" 1>&2 &&  exit $status
+Assignations="$(echo ${GlobalDep#:} | \sed -e 's/[.]not[.]//' -e 's/[a-zA-Z0-9]*[.][a-z][a-z][.][a-zA-Z0-9]*//g' -e 's/[:][:]*/;/g')"
+echo "Global tag values: ${Assignations//;/ }" 1>&2
+# output names if global dependencies are satisfied
+for i in  $ProcessedItems
+do
+  echo $i
+done
+echo "${Assignations//;/:}" >${TMPDIR}/.GlobalDep
