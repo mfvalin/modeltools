@@ -2,6 +2,9 @@
 # this script is the successor to the r.mpirun... series of scripts with expanded functionality
 # (stdout/stderr post processing and "launch in background" capability)
 #
+# commands used in the highly parallel area, we want to use the actual path
+# to avoid undue searches through the command path (involving shared filesystems)
+# this is highly desirable when hundreds of MPI processes are fired
 c_rm=$(which rm)
 c_date=$(which date)
 c_cat=$(which cat)
@@ -273,12 +276,13 @@ cat_output() {  #  cat captured stdout/stderr files into stdout with appropriate
 #################################################################################################################################
 #
 # create the MPI C and Fortran executables used in the self test
+# these programs will be built to fail for process N (N may be higher than actual number of PEs for the call)
 #
 make_cf_test() {
-echo "INFO: creating C test program source mpi_c_test.c"
 [[ ${selftest} == *.fail.* ]] && selftest_fail=${selftest##*fail.}
 selftest_fail=${selftest_fail:--1}
-[[ ${selftest} == *fail* ]] && echo "INFO: test program(s) will be created to fail in process ${selftest_fail}"
+[[ ${selftest} == *fail* ]] && echo "INFO: test program(s) will be configured to fail in process ${selftest_fail}"
+echo "INFO: creating C test program source mpi_c_test.c"
 #
 cat >${tmpdir}/mpi_c_test.c <<EOT
 #include <unistd.h>
@@ -507,7 +511,7 @@ wait_for() {
 # and will be the default value for -nodefile
 #
 MY_NODEFILE=${PARALLEL_NODEFILE:-${GECOSHEP_HOSTS_FILE:-${GECOSHEP_HOSTFILE:-${PBS_NODEFILE:-${LOADL_HOSTFILE}}}}}
-Version="1.1.11 2014/10/25"
+Version="1.1.11 2014/10/30"
 echo "${0##*/} version $Version avec /bin/ksh93"
 eval `cclargs_lite -D "" $0 \
     -args "" "" "[arguments to the command]" \
@@ -547,7 +551,7 @@ eval `cclargs_lite -D "" $0 \
     -pgm "Invalid_Command.EXE" "" "[]" \
     -preexec "" "" "[prefix program execution with this (time/gdb/...)]" \
     -processorder "" "yes" "[list out/err of members in order]" \
-    -selftest "" "c.f." "[quick selftest]" \
+    -selftest "" "c.f.fail.999999" "[quick selftest]" \
     -spliteo "no" "yes" "[split stderr from stdout]" \
     -tag "child" "full" "[full/child/member/stderr/none/seq]" \
     -timeout "60" "60" "[timeout for multiple instances]" \
@@ -674,7 +678,9 @@ if [[ -d "${instancedir}" && -n "${instances}" ]] ; then     # we have co-runnin
       exit 1
     fi
   fi # master or slave instance
-fi  #                                 end of co-running instances processing
+fi  # co-running
+#################################################################################################################################
+#            end of co-running instances processing
 #################################################################################################################################
 ((MpiCommWorlds=0))  # number of MPI comm worlds
 PeInWorld[0]=${npe_total}
@@ -688,10 +694,16 @@ ThreadsInWorld[0]=${OMP_NUM_THREADS}
 # [directory] executable first_pe increment last_pe|@
 # [directory] executable first_pe increment
 # [directory] executable +number_of_pes
+# -pgm @file will be replaced by   -pgm $(cat file)
 #
 # -pgm syntax  (@ for last_pe means number of pes - 1)
-# -pgm [directory] executable first_pe increment last_pe|@  (repeated)
-# -pgm [directory] executable +number_of_pes (repeated)
+# -pgm {    [directory] executable first_pe increment last_pe|@  } (repeated)
+# -pgm {    [directory] executable +number_of_pes   }  (repeated)
+#
+#  @@ end of an MPI world
+#  ::N   ::NXxNY       PE specification for a world
+#  %%nthreads          thread(OpenMP) specification for a world
+#  /./dir_path         base directory for a world
 #
 # process -pgm @file
 [[ "${pgm}" == @* ]] && pgm2=${pgm#@} && [[ -f ${pgm2} ]] && pgm="$(xargs <${pgm2})"
@@ -873,7 +885,7 @@ EOT
             cd ${Directories[$i]}
             ${preexec} ${ProGrams[$i]} ${args}
             Status=\$?
-            ((Status==0)) && echo "removing ${tmpdir}/fail.\${MP_Tag}.\${MP_SeqNum}" && $c_rm -f ${tmpdir}/fail.\${MP_Tag}.\${MP_SeqNum}
+            ((Status==0)) && $c_rm -f ${tmpdir}/fail.\${MP_Tag}.\${MP_SeqNum}
             echo "END of child \${WORLD_CHILD}, status = \${Status}  \$($c_date)"
           fi
 EOT
@@ -973,7 +985,7 @@ EOT
   cat <<EOT >>${MpiRunScript}.0   # MpiCommWorld is 0 in this case
     ${preexec} ${pgm} ${args}
     Status=\$?
-    ((Status==0)) && echo "removing ${tmpdir}/fail.\${MP_Tag}.\${MP_SeqNum}" && $c_rm -f ${tmpdir}/fail.\${MP_Tag}.\${MP_SeqNum}
+    ((Status==0)) && $c_rm -f ${tmpdir}/fail.\${MP_Tag}.\${MP_SeqNum}
     echo "END of child \${WORLD_CHILD} with status = \${Status}  \$($c_date)"
 EOT
   echo "INFO: ${npe_total} instances of '$pgm' in MPI world 0"
@@ -1020,7 +1032,7 @@ export RP_MemberChild=\$((RP_WorldChild-RP_WorldChild/${npex}*${npex}))   # chil
 MP_Tag="\$(/usr/bin/printf '${F_world}${F_member}${F_child}${F_seq}' ${V_world} ${V_member} ${V_child} ${V_seq})"
 [[ -n "${debug}" ]] && $c_env | $c_sort >${tmpdir}/.mpi_env_\$\$_\$($c_hostname)
 #
-#[[ -n "${processorder}" ]] && $c_touch ${tmpdir}/fail.\${MP_Tag}.\${MP_SeqNum}
+#[[ -n "${processorder}" ]] && 
 $c_touch ${tmpdir}/fail.\${MP_Tag}.\${MP_SeqNum}
 . ${MpiRunScript}.${MpiCommWorld}  ${RedirectStdout} ${RedirectStderr}
 [[ -x ${tmpdir}/null_mpi ]] && ${tmpdir}/null_mpi
@@ -1028,9 +1040,8 @@ $c_touch ${tmpdir}/fail.\${MP_Tag}.\${MP_SeqNum}
 lines=0
 the_file=${tmpdir}/\${MP_SeqNum}/stdout.\${MP_Tag}
 [[ -r \${the_file} ]] && lines="\$($c_wc -l <\${the_file})" && ((lines<${minstdout})) && $c_rm \${the_file}  # remove stdout files shorter than minimum
-[[ \${MP_SeqNum} != *00 ]] && $c_sleep 3 && $c_true && exit
-#echo PROCESS \${MP_SeqNum} consolidating listings
-$c_sleep 2
+[[ \${MP_SeqNum} != *00 ]] && $c_true && exit
+$c_sleep 3
 for the_file in ${tmpdir}/\${MP_SeqNum%??}[0-9][0-9]/stdout.*
 do
   MP_Tag=\${the_file##*.}
