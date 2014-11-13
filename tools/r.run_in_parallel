@@ -21,6 +21,14 @@ c_hostname=$(which hostname)
 typeset -Z4 SeqNum MemberNo MemberChild
 typeset -A nodecore
 #################################################################################################################################
+list_message()
+{
+  [[ -n ${processorder} ]] || return
+  echo "INFO: =============================================="
+  echo "INFO: temporary listings for all members in ${tmpdir}"
+  echo "INFO: =============================================="
+}
+#################################################################################################################################
 #    node_to_rank ${MY_NODEFILE} ${ThreadsInWorld[${MpiCommWorld}]}
 node_to_rank() {
   ((r=0))
@@ -127,6 +135,7 @@ mpiexec_Linux_launch() {
 #    cat ${MY_RANKFILE}
     echo "INFO: ===== $(cat ${MY_NODEFILE} | wc -l) host(s) in  ${Launcher} World $MpiCommWorld ====="
     cat ${MY_NODEFILE}
+    list_message
     EXTRA_MPI_PARMS=""
     if [[ $Launcher == OpenMPI ]] ; then #   pass environment variables (only names starting with letter or digit) (only for OpenMPI)
 #      EXTRA_MPI_PARMS="-cpus-per-proc ${ThreadsInWorld[${MpiCommWorld}]}"
@@ -182,6 +191,7 @@ mpiexec_AIX() {
     grep -q $(hostname) ${HOME}/.rhosts 2>/dev/null || echo $(hostname) ${USER} >>${HOME}/.rhosts
     chmod 700 ${HOME}/.rhosts
   fi
+  list_message
   if((MpiCommWorlds==1 && ${npe_total} == ${BATCH_MPI_CPUS:-npe_total} )) ; then  # only one world, use regular call to poe
     ((MP_PROCS=${PeInWorld[0]}))
     echo "========== poe command file with ${MP_PROCS} tasks in single MPI world =========="
@@ -1065,9 +1075,9 @@ if [[ -n ${processorder} ]] ; then
   do
     /usr/bin/printf "%s/%4.4d\n" ${tmpdir} ${ISeqNum}
   done  | xargs -l30 mkdir
-  echo "INFO: =============================================="
-  echo "INFO: temporary listings for all members in ${tmpdir}"
-  echo "INFO: =============================================="
+#  echo "INFO: =============================================="
+#  echo "INFO: temporary listings for all members in ${tmpdir}"
+#  echo "INFO: =============================================="
 fi
 echo "INFO: START of parallel execution : $(date)"
 #
