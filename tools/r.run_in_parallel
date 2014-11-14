@@ -521,7 +521,7 @@ wait_for() {
 # and will be the default value for -nodefile
 #
 MY_NODEFILE=${PARALLEL_NODEFILE:-${GECOSHEP_HOSTS_FILE:-${GECOSHEP_HOSTFILE:-${PBS_NODEFILE:-${LOADL_HOSTFILE}}}}}
-Version="1.1.11 2014/10/30"
+Version="1.1.12 2014/11/13"
 echo "${0##*/} version $Version avec /bin/ksh93"
 eval `cclargs_lite -D "" $0 \
     -args "" "" "[arguments to the command]" \
