@@ -1,0 +1,15 @@
+#!/bin/bash
+[[ "$1" == -f ]] && shift
+[[ -r ${1:-IaRiEnLaDuToUt} ]] || exit 1
+TheFile=${1}
+Target="$(tail -50 ${1:-IaRiEnLaDuToUt} | grep 'temporary listings' | head -1 | sed 's/.* //')"
+if [[ -n "${Target}" ]] ; then
+  Target="$(echo ${Target}/0000/stdout.*)"
+  if [[ -f ${Target} ]] ; then
+    echo "INFO: tail --lines=100 -s1 -f ${Target}"
+    tail --lines=100 -s1 -f ${Target}
+    exit 0
+  fi
+fi
+echo "INFO: tail --lines=100 -s1 -f ${1}"
+tail --lines=100 -s1 -f ${1}
