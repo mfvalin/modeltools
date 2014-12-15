@@ -236,7 +236,7 @@ ListFailed() {
 local_cleanup() {
  ExitStatus=0
  ls  ${tmpdir}/fail.* 2>/dev/null 1>/dev/null && echo "INFO: RUN FAILED" && echo "INFO: first 10 failing processes :" && ExitStatus=1
- ls  ${tmpdir}/fail.* 2>/dev/null | head -10 | sed "s:${tmpdir}/::g" | xargs -l5 echo  
+ ls  ${tmpdir}/fail.* 2>/dev/null | head -10 | sed "s:${tmpdir}/::g" | xargs -l5 echo
  [[ ${nocleanup} == on_error && $ExitStatus == 0 ]] && nocleanup=""  # -nocleanup on_error , unset nocleanup if no error detected
  [[ -n ${nocleanup} ]] && return $ExitStatus  # -nocleanup option used, return
  rm -rf ${tmpdir} || ( sleep 1 ; rm -rf ${tmpdir} ) &   # cannot clean tmpdir while script runs, use delayed remove
@@ -267,7 +267,7 @@ cat_output() {  #  cat captured stdout/stderr files into stdout with appropriate
   do
     MP_Tag=${the_file##*.}
     [[ -f ${the_file} ]] && \
-    cat ${the_file} | sed "s/^/${Prefix2}${MP_Tag}: /" 
+    cat ${the_file} | sed "s/^/${Prefix2}${MP_Tag}: /"
     [[ -f ${the_file%/*}/stderr ]] && \
     echo "${Prefix3}${MP_Tag}: ============== stderr ${MP_Tag} ==============" && \
     cat ${the_file%/*}/stderr | sed "s/^/${Prefix3}${MP_Tag}: /"
@@ -1032,7 +1032,7 @@ export RP_MemberChild=\$((RP_WorldChild-RP_WorldChild/${npex}*${npex}))   # chil
 MP_Tag="\$(/usr/bin/printf '${F_world}${F_member}${F_child}${F_seq}' ${V_world} ${V_member} ${V_child} ${V_seq})"
 [[ -n "${debug}" ]] && $c_env | $c_sort >${tmpdir}/.mpi_env_\$\$_\$($c_hostname)
 #
-#[[ -n "${processorder}" ]] && 
+#[[ -n "${processorder}" ]] &&
 $c_touch ${tmpdir}/fail.\${MP_Tag}.\${MP_SeqNum}
 . ${MpiRunScript}.${MpiCommWorld}  ${RedirectStdout} ${RedirectStderr}
 [[ -x ${tmpdir}/null_mpi ]] && ${tmpdir}/null_mpi
