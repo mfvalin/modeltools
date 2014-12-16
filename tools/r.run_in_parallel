@@ -31,6 +31,7 @@ list_message()
 #################################################################################################################################
 #    node_to_rank ${MY_NODEFILE} ${ThreadsInWorld[${MpiCommWorld}]}
 node_to_rank() {
+#  echo "INFO: MaxCores=${MaxCores}" 1>&2
   ((r=0))
   ((rr=-1))
   Increment=${2:-1}
@@ -41,6 +42,10 @@ node_to_rank() {
     if ((rr%Thinning!=0)) ; then continue ; fi
     echo "$Target" >>${1}.thinned
     BaseCore=${nodecore[$Target]}
+    if ((MaxCores <  BaseCore+Increment)) ; then
+      echo "ERROR in world ${MpiCommWorld}: cores available = $MaxCores, cores needed = $((BaseCore+Increment))" 1>&2
+      return 1
+    fi
     if ((Increment>1)) ; then
       echo "rank $r=$Target  slot=${BaseCore}-$((BaseCore+Increment-1))"
 #      echo "rank $r=$Target  slot=${nodecore[$Target]}-$((nodecore[$Target]+Increment-1))" 1>&2
@@ -54,7 +59,7 @@ node_to_rank() {
   mv ${1}.thinned ${1}
 }
 #################################################################################################################################
-# MPI prelauncher for Linux systems using mpich2 or openmpi. takes kare of most OpemMPI/Mpich2 issues
+# MPI prelauncher for Linux systems using mpich2 or openmpi. takes care of most OpemMPI/Mpich2 issues
 mpiexec_Linux() {
 #  RANK_VAR=$(${mpirun} -n 1 /usr/bin/env | grep RANK | grep -E "OMPI_COMM_WORLD_RANK|PMI_RANK")
   RANK_VAR=OMPI_COMM_WORLD_RANK
@@ -95,6 +100,7 @@ mpiexec_Linux() {
 #
 mpiexec_Linux_launch() {
   Launcher="$1"
+  LaunchStatus=""
   shift
 #
   ((npe_total=TotalInstances))
@@ -122,16 +128,16 @@ mpiexec_Linux_launch() {
 #
     echo "INFO: MPI world ${MpiCommWorld} will be using ${PeInWorld[${MpiCommWorld}]} tasks  with ${ThreadsInWorld[${MpiCommWorld}]} thread(s) per task"
     ((FirstHost=HostOffset+1))
-    if [[ "${nodemap}" == NoNe ]] ; then    # one entry per thread in nodefile, thinning needed
-      ((HostOffset=HostOffset+${PeInWorld[${MpiCommWorld}]}*${ThreadsInWorld[${MpiCommWorld}]})) ; ThinBy=${ThreadsInWorld[${MpiCommWorld}]}
-    else                                    # one entry per process in nodefile
+#    if [[ "${nodemap}" == NoNe ]] ; then    # one entry per thread in nodefile, thinning needed
+#      ((HostOffset=HostOffset+${PeInWorld[${MpiCommWorld}]}*${ThreadsInWorld[${MpiCommWorld}]})) ; ThinBy=${ThreadsInWorld[${MpiCommWorld}]}
+#    else                                    # one entry per process in nodefile
       ((HostOffset=HostOffset+${PeInWorld[${MpiCommWorld}]})) ; ThinBy=1
-    fi
+#    fi
     export MY_NODEFILE=${MY_NODEFILE_ORI}.${MpiCommWorld}
     export MY_RANKFILE=${MY_NODEFILE_ORI}.rank.${MpiCommWorld}
     sed -n ${FirstHost},${HostOffset}p ${MY_NODEFILE_ORI} >${MY_NODEFILE}
 #   transformer ${MY_NODEFILE} en map file pour OpenMPI et en host file pour Mpich2
-    node_to_rank ${MY_NODEFILE} ${ThreadsInWorld[${MpiCommWorld}]} ${ThinBy} > ${MY_RANKFILE}
+    node_to_rank ${MY_NODEFILE} ${ThreadsInWorld[${MpiCommWorld}]} ${ThinBy} > ${MY_RANKFILE} || { LaunchStatus="$LaunchStatus ${MpiCommWorld}" ; break; }
 #    cat ${MY_RANKFILE}
     echo "INFO: ===== $(cat ${MY_NODEFILE} | wc -l) host(s) in  ${Launcher} World $MpiCommWorld ====="
     cat ${MY_NODEFILE}
@@ -142,6 +148,7 @@ mpiexec_Linux_launch() {
       EXTRA_MPI_PARMS="${EXTRA_MPI_PARMS} $(s.prefix '-x ' $(env | grep -v "'" | grep -v '"'  | grep  '^[a-zA-Z0-9]' | sed 's/=.*//' | sort ))"
 #     ignore rank file in interactive case
       tty -s || EXTRA_MPI_PARMS="${EXTRA_MPI_PARMS} --rankfile ${MY_RANKFILE}"
+#      echo "INFO: RANK file for ${Launcher}  world $MpiCommWorld"
 #      cat ${MY_RANKFILE}
     fi
 #
@@ -169,6 +176,13 @@ mpiexec_Linux_launch() {
     echo "==== Waiting for ${MpiCommWorlds} ${Launcher} worlds to terminate ===="
     wait
   fi
+  if [[ -n $LaunchStatus ]] ; then
+    echo "###########################################################################################"
+    echo "#   ERRORS detected during launch in world $LaunchStatus, some process(es) will be missing           #"
+    echo "###########################################################################################"
+    return 1
+  fi
+  return 0
 #
 }
 #################################################################################################################################
@@ -521,7 +535,7 @@ wait_for() {
 # and will be the default value for -nodefile
 #
 MY_NODEFILE=${PARALLEL_NODEFILE:-${GECOSHEP_HOSTS_FILE:-${GECOSHEP_HOSTFILE:-${PBS_NODEFILE:-${LOADL_HOSTFILE}}}}}
-Version="1.1.12 2014/11/13"
+Version="1.1.14 2014/12/16"
 echo "${0##*/} version $Version avec /bin/ksh93"
 eval `cclargs_lite -D "" $0 \
     -args "" "" "[arguments to the command]" \
@@ -697,13 +711,13 @@ PeInWorld[0]=${npe_total}
 ThreadsInWorld[0]=${OMP_NUM_THREADS}
 # process -args @file
 [[ "${args}" == @* ]] && args2=${args#@} && [[ -f ${args2} ]] && args="$(xargs <${args2})"
-# args variable now contains all programs
+# args variable now contains all program arguments (BEWARE: args will be passed to ALL programs)
 #
 # -pgm @file
 # up to 5 items per line (same syntax as -pgm)
-# [directory] executable first_pe increment last_pe|@
-# [directory] executable first_pe increment
-# [directory] executable +number_of_pes
+# [directory] executable first_pe increment last_pe|@       (all 5 items)
+# [directory] executable first_pe increment                 (last pe will be number of PEs - 1)
+# [directory] executable +number_of_pes                     (use next number_of_pes PEs)
 # -pgm @file will be replaced by   -pgm $(cat file)
 #
 # -pgm syntax  (@ for last_pe means number of pes - 1)
@@ -721,7 +735,7 @@ ThreadsInWorld[0]=${OMP_NUM_THREADS}
 #
 [[ -n "${debug}" ]] && echo "INFO: debug flag = '${debug}'" && set -x
 #################################################################################################################################
-# reset TMPDIR to make sure it is visible to all MPI tasks
+# reset TMPDIR to make sure it is visible to all MPI tasks  (ideally on a COHERENT filesystem, NFS BEWARE)
 mkdir -p ${tmpdir}
 export TMPDIR=${tmpdir}
 #################################################################################################################################
@@ -767,6 +781,10 @@ if [[ "${coremap}" == NoNe && "${nodemap}" == NoNe ]] ; then
     done
   done | head -${npe_total} >>${MY_NODEFILE}  # one entry per task
 fi
+if [[ "${coremap}" != NoNe && "${nodemap}" != NoNe ]] ; then
+  echo "ERROR: coremap and nodemap are mutually exclusive options"
+  exit 1
+fi
 if [[ "${coremap}" != NoNe ]] ; then
   expand_core_map
 fi
@@ -786,7 +804,7 @@ if ((NumberOfNodes!=npe_total)) ; then
 fi
 #################################################################################################################################
 # create script anc C executable used in self test if needed
-#
+#################################################################################################################################
 if [[ -n ${selftest} ]] ; then
   selftest="${tmpdir}/${selftest}"
   pgm="$( echo ${pgm} | sed -e s:PGM:${selftest}:g )"
@@ -806,14 +824,14 @@ EOT
 fi
 #################################################################################################################################
 # primary and secondary launching scripts
-#
+#################################################################################################################################
 export MpiRunScript=${tmpdir}/MpiRunScript_$$       # secondary script(s), one per "MPI" world
 export ParallelScript=${tmpdir}/ParallelScript_$$   # primary script(s), one per "MPI" world, will source secondary script(s)
 touch ${ParallelScript}.0
 [[ ! -r ${ParallelScript}.0 ]] && echo "ERROR: ${tmpdir} not a writable directory" 1>&2 && exit 1
 #################################################################################################################################
 # stdout and stderr redirection
-#
+#################################################################################################################################
 export RedirectStdout="1>${tmpdir}/\${MP_SeqNum}/stdout.\${MP_Tag}"   # will be expanded at run time in ParallelScript
 export RedirectStderr="2>${tmpdir}/\${MP_SeqNum}/stderr"   # will be expanded at run time in ParallelScript
 [[ "${spliteo}" == no ]] && RedirectStderr="2>&1"
@@ -825,7 +843,7 @@ export  Prefix2="${outp}${errp}-"   # prepare for stderr not split from stdout
 [[ "${tag}" == stderr  ]] && Prefix2="" && Prefix3="stderr: "
 #################################################################################################################################
 # communication variables for RPN_COMM toolkit
-#
+#################################################################################################################################
 RPN_COMM_DOM=""
 RPN_COMM_DIRS="' '"     # RPN_COMM_DIRS no longer used, cd now done in secondary script(s)
 SetCurrentDir=$(pwd -P)
@@ -1000,10 +1018,10 @@ EOT
 EOT
   echo "INFO: ${npe_total} instances of '$pgm' in MPI world 0"
 #
-fi ########################## complex sequence, possibly MPMD ####################
+fi ########################## if complex sequence, possibly MPMD ####################
 #################################################################################################################################
 # prepare primary launch scripts (one per world)
-#
+#################################################################################################################################
 MpiCommWorld=0
 export WorldOffset=0
 #
