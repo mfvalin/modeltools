@@ -3,6 +3,7 @@
 # Notes:
 #        this script needs ksh93 (associative arrays and string substitution)
 #        this is a full rewrite of original using recursive function calls
+
 function is_shortcut
 {
   typeset Prefix
@@ -13,7 +14,7 @@ function is_shortcut
     [[ -r ${Prefix}/${1}.sh         ]] && echo ${Prefix}/${1}.sh   && return 0   # sh type shortcut
     [[ -d ${Prefix}/${1}/etc/ssm.d  ]] && echo ${Prefix}/${1}      && return 0   # link to domain
   done
-  return 1  # nothing found
+  return 1  # nothing appropriate found
 }
 
 function is_package
@@ -23,7 +24,7 @@ function is_package
   do
     [[ -d ${target}/../etc/ssm.d ]] && return 0  # package@domain (fully qualified or not)
   done
-  return 1
+  return 1  # nothing appropriate found
 }
 
 function is_package_in_domain
@@ -42,12 +43,11 @@ function is_package_in_domain
       is_package $Prefix/${1#*@}/${1%@*}_* && echo ${1%@*}@${Prefix}/${1#*@} && return 0
     fi
   done
-  return 1
+  return 1  # nothing appropriate found
 }
 
 function evaluate_condition
 {
-#  typeset Status
   typeset Condition
   Condition=${1#:}
 #  Condition=${1//[:]*/:}
@@ -57,6 +57,9 @@ function evaluate_condition
   ksh93
 }
 
+##########################################################################
+#   check if item is valid, return 0 if OK, return # of failures if not
+##########################################################################
 function validate_item
 {
 # argument syntax is condition_1:condition_2:...:condition_n:[item]
@@ -77,7 +80,7 @@ function validate_item
 
   [[ -n ${GlobalAbort} ]] && return 1   # global abort is on, get out quick
 
-  [[ "${1}" = *:* ]] || return 0  # no condition to validate
+  [[ "${1}" = *:* ]] || return 0  # no condition to validate, return OK
   set -f                          # disable filename expansion because of possible undesirable wildcards expansions
   Dependencies="${1%:*}"
   invert='.not.*'
@@ -113,6 +116,9 @@ function validate_item
   return ${Failures}
 }
 
+##########################################################################
+#   process one item, may be called recursively, counter is $DepthCount
+##########################################################################
 function process_item
 {
   typeset ItemName
@@ -128,10 +134,12 @@ function process_item
 
   ItemShortName=${1##*:}
 
-  [[ "${ItemShortName}" == StopDup ]] && NoDupMark="YES" && return
-  [[ "${ItemShortName}" == StartDup ]] && NoDupMark="" && return
-  [[ "${ItemShortName}" == Append ]] && ProcessedItems="${ProcessedItems} Append" && return
-  [[ "${ItemShortName}" == Prepend ]] && ProcessedItems="${ProcessedItems} Prepend" && return
+  [[ "${ItemShortName}" == StopDup  ]] && NoDupMark="YES" && return    # do not issue a warning if duplicate item found
+  [[ "${ItemShortName}" == StartDup ]] && NoDupMark=""    && return    # issue a warning if duplicate item found
+#  [[ "${ItemShortName}" == Append ]] && ProcessedItems="${ProcessedItems} Append" && return
+#  [[ "${ItemShortName}" == Prepend ]] && ProcessedItems="${ProcessedItems} Prepend" && return
+  [[ "${ItemShortName}" == Append  ]] && return
+  [[ "${ItemShortName}" == Prepend ]] && return
 
   [[ -z ${NoDupMark} ]] && \
   [[ "" != ${Constraints[${ItemShortName}]} ]] && \
@@ -144,10 +152,10 @@ function process_item
   fi
 
   Condition=${1%${ItemShortName}}          # get condition associated with item
-  validate_item "${Condition}" || return   # ignore item if it is not valid
+  validate_item "${Condition}" || return   # ignore item if condition is not true
   [[ "${1}" == *: ]]           && return   # pure condition, nothing more to do
 
-  ((DepthCount=DepthCount-1))
+  ((DepthCount=DepthCount-1))              # increment recursion depth counter
   ((DepthCount<=0)) && echo "ERROR: bundle nesting is too deep " 1>&2 && return 1
 
 #  [[ -z ${NoDupMark} ]] && \
@@ -157,12 +165,13 @@ function process_item
   then
     if [[ $ItemName == *.bndl ]]    # xxx.bndl bundle, process it recursively
     then
-      BundleName=${ItemName##*/}
-      BundleName=${BundleName%.bndl}
+#      BundleName=${ItemName##*/}
+#      BundleName=${BundleName%.bndl}
+      BundleName=${ItemShortName}
       LogFlags=""
       set -A BundleContents $(grep -v '^#' $ItemName | xargs)
       if [[ ${BundleContents[0]} == *: ]] ; then
-#echo "condition at head of bundle: ${BundleContents[0]}" 1>&2
+        #echo "condition at head of bundle: ${BundleContents[0]}" 1>&2
         if ! validate_item ${BundleContents[0]} ; then     # bundle dependencies satisfied ?
           Constraints[${ItemShortName}]=""                 # no, forget we ever saw it
           echo "WARNING: ignoring ${ItemShortName} because of ${BundleContents[0]}" 1>&2
@@ -174,7 +183,7 @@ function process_item
       ProcessedItems="${ProcessedItems} ++${BundlePath}"
       [[ -n ${LogFlags} ]] && echo "Bundle ${BundleName} will be logged(${LogFlags})" 1>&2
       LogFlags=""
-#echo "'${BundleContents[*]}'" 1>&2
+      #echo "'${BundleContents[*]}'" 1>&2
       for Item in ${BundleContents[*]}
       do
         process_item "$Item"
@@ -195,25 +204,34 @@ function process_item
       ProcessedItems="${ProcessedItems} @${1}"
     fi
   fi
-  ((DepthCount=DepthCount+1))
+  ((DepthCount=DepthCount+1))             # decrement recursion depth counter
 }
+##########################################################################
+#              MAIN  CODE
+##########################################################################
 typeset item
 typeset -A Constraints   # associative array indexed by item name containing Constraints/Dependencies
 LogFlags=""
 BundlePath=""
 GlobalAbort=""           # set if a GLOB condition failed
 LocalData="$(r.unified_setup-cfg -local || echo $ARMNLIB)/data"     # get path to "system" data
+
 # add SSM_SHORTCUT_PATH to places to scan, but get rid of . because it is unsafe
 Prefixes="$(echo $SSM_SHORTCUT_PATH | sed -e 's/:/ /g' -e 's/[.] //'g -e 's/ [.]//g') $HOME/my_ssm_domains ${LocalData}/ssm_domains"
+
 # we could also use ${BASE_ARCH}
 ValidArch=$(COMP_ARCH="" s.get_ec_arch)
+
 # list of processed and verified items
 ProcessedItems=""
+
 # list of global dependencies
 GlobalDep=""
 [[ -r ${TMPDIR}/.GlobalDep ]] && GlobalDep="$(cat ${TMPDIR}/.GlobalDep)"
+
 # expand bundles recursively, max depth=9
 DepthCount=10
+
 # process all items
 for item in "$@"
 do

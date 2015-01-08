@@ -1,0 +1,118 @@
+#!/bin/bash
+function is_package
+{
+  typeset target
+  for target in $*
+  do
+    [[ -d ${target}/../etc/ssm.d ]] && return
+  done
+  false
+}
+function ssm_resolve
+{
+  typeset Prefix
+  [[ "${1}" = ++ ]] && BundlePath="${BundlePath%@*}" && return
+  [[ "${1}" = ++* ]] && BundlePath="${BundlePath}@${1#++}" && return
+  [[ "${BundlePath}" != "${PreviousBundlePath}" ]] && echo ++${BundlePath}
+  PreviousBundlePath=${BundlePath}
+
+# package@domain_path where package is fully qualified (name_version_platform), return it verbatim
+  [[ "$1" = *@* ]] && [[ -d ${1#*@}/etc/ssm.d ]] && [[ -d ${1#*@}/${1%@*} ]] && echo ${1} && return
+
+# domain directory, return true_path to it
+  [[ -d ${1}/etc/ssm.d ]] && echo $(true_path ${1}) && return
+
+#   package@domain_name where package is not fully qualified (name or name_version), return it verbatim
+  [[ "$1" = *@* ]] && [[ -d ${1#*@}/etc/ssm.d ]] && is_package ${1#*@}/${1%@*}_* && echo ${1}  && return
+
+  for Prefix in ${Prefixes}
+  do
+#   name.sh shortcut return it with proper prefix
+    [[ -r $Prefix/${1#+}.sh ]] && echo $Prefix/${1#+}.sh && return
+
+#   package@domain_name where package is fully qualified (name_version_platform), return it with proper prefix
+    [[ "$1" = *@* ]] && [[ -d $Prefix/${1#*@}/etc/ssm.d ]] && [[ -d $Prefix/${1#*@}/${1%@*} ]] && echo ${1%@*}@${Prefix}/${1#*@} && return
+
+#   domain_name, return true path to domain with proper prefix
+    [[ -d $Prefix/${1#+}/etc/ssm.d ]] && echo $(true_path $Prefix/${1#+})    && return
+
+#   package@domain_name where package is not fully qualified (name or name_version), return it with proper prefix
+    [[ "$1" = *@* ]] && [[ -d $Prefix/${1#*@}/etc/ssm.d ]] && is_package $Prefix/${1#*@}/${1%@*}_* && echo ${1%@*}@${Prefix}/${1#*@} && return
+
+  done
+  echo "@${1#+}"
+  NotFound="$NotFound ${1#+}"
+}
+function ssm_bundle
+{
+  typeset Prefix
+  typeset ListTemp
+  typeset BundleName
+  BundleName="${1}"
+# already processed, return it verbatim
+  [[ "$1" = +* ]] && ListAux="${1}" && return
+
+# package@domain, do not process here
+  [[ "$1" = *@* ]] && ListAux="${1}" && return
+
+# domain_path, do not process here
+  [[ -d ${1}/etc/ssm.d ]] && ListAux="${1}" && return
+
+  ListTemp="+${1}"
+  for Prefix in ${Prefixes}
+  do
+#   path to an actual domain, do not process here
+    [[ -d ${Prefix}/${1}/etc/ssm.d ]] && ListAux="${1}" && return
+
+#   name.sh shortcut, do not process here
+    [[ -r ${Prefix}/${1}.sh ]] && ListAux="${1}" && return
+
+#   is it a bundle ? if it is, expand it
+    if [[ -r ${Prefix}/${1}.bndl ]] ; then ListTemp=$(grep -v '^#' ${Prefix}/${1}.bndl) ; SeenBundle=1 ; break ; fi
+  done
+# validate that bundle element is valid on platform
+  ValidArch=$(COMP_ARCH="" s.get_ec_arch)
+  ListAux="++${BundleName}"
+  for Prefix in ${ListTemp}
+  do
+    [[ "${Prefix}" = *:* ]] && [[ "${Prefix}" != ${ValidArch}:* ]] && continue
+    ListAux="${ListAux} ${Prefix#*:}"
+  done
+  ListAux="${ListAux} ++"
+}
+BundlePath=""
+# get path to our installed shortcuts
+LocalData="$(r.unified_setup-cfg -local || echo $ARMNLIB)/data"
+# add SSM_SHORTCUT_PATH to places to scan, but get rid of . because it is unsafe
+Prefixes="$(echo $SSM_SHORTCUT_PATH | sed -e 's/:/ /g' -e 's/[.] //'g -e 's/ [.]//g') $HOME/my_ssm_domains ${LocalData}/ssm_domains"
+# expand bundles recursively, max depth=6
+count=7
+while (( count > 0 ))
+do
+  ((count=count-1))
+  list=""
+  SeenBundle=""
+  for Target in "$@"
+  do
+    ssm_bundle $Target
+    list="$list $ListAux"
+  done
+  unset ListAux
+  [[ -z $SeenBundle ]] && break
+  set -- $list
+done
+unset count SeenBundle
+# remove duplicates from list
+list2=" "
+for i in $list
+do
+  [[ "$i" != ++* ]] && echo " $list2 " | grep -q " $i "  || list2="${list2}${i} "
+done
+unset list
+# resolve names
+for i in  $list2
+do
+  ssm_resolve $i
+done
+[[ -n $NotFound ]] && echo "WARNING: the following elements were not found" 1>&2 && echo "$NotFound" 1>&2
+unset list2 LocalData NotFound BundlePath PreviousBundlePath
