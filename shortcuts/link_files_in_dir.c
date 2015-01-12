@@ -27,9 +27,12 @@ if(argc!=3)  {
 // fprintf(stderr,"Scanning %s\n",argv[1]);
 dirp = opendir(argv[1]); /* There should be error handling after this */
 while ((entry = readdir(dirp)) != NULL) {
+
+#ifdef __linux
     if (entry->d_type == DT_DIR) { /* If the entry is a directory */
       continue;
     }
+#endif
     snprintf(old_path,sizeof(old_path),"%s/%s",argv[1],entry->d_name);
     snprintf(new_path,sizeof(new_path),"%s/%s",argv[2],entry->d_name);
 
