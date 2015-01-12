@@ -1,0 +1,5 @@
+#!/bin/bash
+for i in $( echo $* | tr ':' ' ')
+do
+  printf  "=== %5d %5d %5d === $i  ===\n" $(ls  $i/ | wc -l) $(ls -F $i/ | grep -v '/$' | wc -l) $(ls  $i/*.so* 2>/dev/null | wc -l)
+done
