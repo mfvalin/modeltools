@@ -1,0 +1,70 @@
+#!/bin/bash
+Where=$(true_path ${0})
+Where=${Where%/bin/*}
+function filter_name_list
+{
+[[ -d ${1}/etc/ssm.d ]] && echo ${Prefix}${1} && return
+[[ -f ${1}.sh ]] && echo ${Prefix}${1} && return
+[[ -f ${1}.bndl ]] && echo ${Prefix}${1} && return
+}
+function list_documentation
+{
+ExTrA=" "
+[[ -L ${1}.sh ]] && ExTrA=" (link to shortcut $(r.read_link ${1}.sh | sed 's/[.]sh$//')) "
+[[ -L ${1}.bndl ]] && ExTrA=" (link to bundle $(r.read_link ${1}.bndl | sed 's/[.]bndl$//')) "
+[[ -d ${1}/etc/ssm.d ]] && \
+    echo "=== Domain `true_path ${1}` ===" && \
+    ssm listd -d ${1} && return
+[[ -f ${1}.sh ]] && \
+    echo "=== ${Prefix}${1}${ExTrA}===" && \
+    grep '^##' ${1}.sh && return
+[[ -f ${1}.bndl ]] && \
+    echo "=== ${Prefix}${1}${ExTrA}===" && \
+    grep '^##' ${1}.bndl && return
+}
+#for i in "$@"
+Filter='.*'
+PostProcess="filter_name_list"
+while test "$1"
+do
+   case $1 in
+   --help|-h )
+          echo "usage: ${0##*/} [--help] [--subset=xxx] [--filter=file_pattern] [--doc]"
+          echo "       --subset=  subdirectory of interest "
+          echo "       --filter=  grep style pattern used to filter out items"
+          echo "       --doc lists the documentation associated with item (ssm listd if a domain)"
+          exit
+          ;;
+   --subset=* )
+          Prefix=${1#*=}/
+          shift
+          ;;
+   --filter=* )
+          Filter=${1#*=}
+          shift
+          ;;
+   --doc )
+          PostProcess="list_documentation"
+          shift
+          ;;
+   * )
+          set -- --help
+	  ;;
+   esac
+done
+LocalData="$(r.unified_setup-cfg -local || echo $ARMNLIB)/data"
+# add SSM_SHORTCUT_PATH, but get rid of . because it is unsafe
+Prefixes="$(echo $SSM_SHORTCUT_PATH | sed -e 's/:/ /g' -e 's/[.] //'g -e 's/ [.]//g') $HOME/my_ssm_domains ${LocalData}/ssm_domains"
+for Scan in ${Prefixes}
+do
+#  echo SCANNING $Scan 
+  cd ${Scan}/${Prefix} 2>/dev/null || continue
+  echo FROM: ${Scan}/${Prefix}
+  find . -print | grep -v '[.]svn/' | grep -v '[.]git/' | sort \
+                | sed -e 's/.[/]//' -e 's/[.]bndl$//' -e 's/[.]sh$//' -e "s/^/${PostProcess} /" \
+                | grep "$Filter" >$TMPDIR/filter$$
+  [[ ${PostProcess} = filter* ]] && . $TMPDIR/filter$$ | xargs -l3 printf "%-20s %-20s %-20s\n" && continue
+  . $TMPDIR/filter$$
+#  find . \( -type l -o -type f \) -print 
+done
+rm -f $TMPDIR/filter$$

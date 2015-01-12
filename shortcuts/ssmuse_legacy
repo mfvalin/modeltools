@@ -1,0 +1,56 @@
+#! /bin/bash
+#
+# ssmuse
+#
+# mimic behavior of old/deprecated ssmuse call
+
+# GPL--start
+# This file is part of ssm (Simple Software Manager)
+# Copyright (C) 2005-2012 Environment/Environnement Canada
+#
+# This program is free software; you can redistribute it and/or
+# modify it under the terms of the GNU General Public License
+# as published by the Free Software Foundation; version 2
+# of the License.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write to the Free Software
+# Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
+# GPL--end
+
+args=()
+option=""
+value=""
+shell_type=$1; shift 1
+while [ $# -gt 0 ]; do
+	arg=$1; shift 1
+	case "${arg}" in
+	-d)
+		option="-d"
+		arg=$1; shift 1
+		domain_home="${arg}"
+		value="${arg}"
+		;;
+	-p)
+		option="-p"
+		arg=$1; shift 1
+		if [ "${domain_home}" = "" ]; then
+			echo "error: domain home not specified"
+			exit 1
+		fi
+		value="${domain_home}/${arg}"
+		;;
+	--order)
+		# no longer supported
+		shift 1
+		continue
+		;;
+	esac
+done
+echo "warning: deprecated; use ssmuse-sh or ssmuse-csh" 1>&2
+_ssmuse.sh "${shell_type}" "${option}" "${value}"
