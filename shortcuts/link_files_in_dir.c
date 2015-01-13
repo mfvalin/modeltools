@@ -4,8 +4,11 @@
 #include <dirent.h>
 #include <string.h>
 
+#define MAX_ENTRIES 200
+
 main(int argc, char **argv){
 
+int entries=0;
 int file_count = 0;
 DIR * dirp;
 struct dirent * entry;
@@ -26,6 +29,17 @@ if(argc!=3)  {
 
 // fprintf(stderr,"Scanning %s\n",argv[1]);
 dirp = opendir(argv[1]); /* There should be error handling after this */
+
+while ((entry = readdir(dirp)) != NULL) {
+  entries++;
+  if(entries > MAX_ENTRIES) break;
+}
+if(entries > MAX_ENTRIES){
+//  fprintf(stderr,"more than %d entries found in %s, EXITING\n",MAX_ENTRIES,argv[1]);
+  exit(2);
+}
+
+rewinddir(dirp);
 while ((entry = readdir(dirp)) != NULL) {
 
 #ifdef __linux
@@ -43,6 +57,6 @@ while ((entry = readdir(dirp)) != NULL) {
 //    fprintf(stderr,"%d ln -s %s %s\n",status,old_path,new_path);
     if(status==0)file_count++;
 }
-fprintf(stderr,"Linked %d files from %s into %s\n",file_count,argv[1],argv[2]);
+//fprintf(stderr,"Linked %d files from %s into %s\n",file_count,argv[1],argv[2]);
 closedir(dirp);
 }
