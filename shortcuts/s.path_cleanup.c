@@ -18,17 +18,17 @@ print_usage(char *name)
    fprintf(stderr,"       item = EnvName \n");
    fprintf(stderr,"       EnvName is the name of an environment variable containing a path\n");
    fprintf(stderr,"ex:    %s PATH MANPATH EC_LD_LIBRARY_PATH\n",name);
-   fprintf(stderr,"       %s +$BASE_ARCH PATH MANPATH +EC_ARCH EC_LD_LIBRARY_PATH\n",name);
-   fprintf(stderr,"       %s LD_LIBRARY_PATH +EC_ARCH EC_INCLUDE_PATH\n",name);
+   fprintf(stderr,"       %s +$BASE_ARCH PATH MANPATH +$EC_ARCH EC_LD_LIBRARY_PATH\n",name);
+   fprintf(stderr,"       %s LD_LIBRARY_PATH +$EC_ARCH EC_INCLUDE_PATH\n",name);
    fprintf(stderr,"ex:    %s -/a/b/ -machin/patente PATH MANPATH EC_LD_LIBRARY_PATH\n",name);
 }
 
-int is_duplicate(char *what, char **table, int nentries)
+int is_duplicate(char *what, char **table, int nentries)  /* a non existent directory is treated like a duplicate */
 {
   int i;
   struct stat stat_buf;
 
-  for(i=0;i<n_eliminate;i++) { if ( strstr(what,1+eliminate[i]) ) return 1; }
+  for(i=0;i<n_eliminate;i++) { if ( strstr(what,1+eliminate[i]) ) return 1; } /* if found in list to eliminate, treat as dulpicate */
   if( 0 == stat(what,&stat_buf)) {           /* what exists */
     if( S_ISDIR(stat_buf.st_mode) ) {        /* and is a directory */
       while(nentries>0){                     /* let's now find if it is a duplicate */
