@@ -43,7 +43,7 @@ rewinddir(dirp);
 while ((entry = readdir(dirp)) != NULL) {
 
 #ifdef __linux
-    if (entry->d_type == DT_DIR) { /* If the entry is a directory */
+    if (entry->d_type == DT_DIR) { /* If the entry is a directory (linux only feature) */
       continue;
     }
 #endif

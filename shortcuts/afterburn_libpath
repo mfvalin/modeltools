@@ -2,11 +2,15 @@
 NewDir=0
 BaseDir=100
 ((LastDir=BaseDir))
+
+rm -f $TMPDIR/.lib_path_cache_*
+echo "INFO: removing fast path directories $TMPDIR/.lib_path_cache_1*"  1>&2
+
 NewPath=$TMPDIR/.lib_path_cache_${BaseDir}
 for i in $(echo $LD_LIBRARY_PATH | tr ':' '\n') 
 do
   mkdir -p $TMPDIR/.lib_path_cache_${BaseDir}
-  ./link_files_in_dir -so $i $TMPDIR/.lib_path_cache_${BaseDir}
+  ./link_files_in_dir.${BASE_ARCH} -so $i $TMPDIR/.lib_path_cache_${BaseDir}
   status=$?
   if ((status==2)) ; then
     NewPath=${NewPath}:$i

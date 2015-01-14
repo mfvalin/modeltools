@@ -1,4 +1,12 @@
 #!/bin/bash
+[[ -f $TMPDIR/.path_cache ]] && . $TMPDIR/.path_cache
+echo $PATH >$TMPDIR/.path_cache
+
+rm -rf $TMPDIR/.path_cache_1*   # cleanup before processing
+echo "INFO: removing fast path directories $TMPDIR/.path_cache_1*"  1>&2
+
+[[ "$1" == restore ]] && echo "PATH=${OldPathValue:-${PATH}}" && exit 0
+
 NewDir=0
 BaseDir=100
 ((LastDir=BaseDir))
@@ -6,7 +14,7 @@ NewPath=$TMPDIR/bin:$TMPDIR/.path_cache_${BaseDir}
 for i in $(echo $PATH | tr ':' '\n') 
 do
   mkdir -p $TMPDIR/.path_cache_${BaseDir}
-  ./link_files_in_dir $i $TMPDIR/.path_cache_${BaseDir}
+  ./link_files_in_dir.${BASE_ARCH} $i $TMPDIR/.path_cache_${BaseDir}
   status=$?
   if ((status==2)) ; then
     NewPath=${NewPath}:$i
@@ -22,5 +30,8 @@ do
     ((NewDir=0))
   fi
 done
-echo "INFO: NEW PATH will be"
-echo "${NewPath}" | tr ':' '\n'
+echo "INFO: NEW PATH will be"   1>&2
+echo "${NewPath}" | tr ':' '\n' 1>&2
+echo "OldPathValue=${PATH}"    >$TMPDIR/.path_cache
+echo "NewPathValue=${NewPath}" >>$TMPDIR/.path_cache
+echo "PATH=${NewPath}"
