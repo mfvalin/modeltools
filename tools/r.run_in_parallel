@@ -535,6 +535,27 @@ wait_for() {
 # and will be the default value for -nodefile
 #
 MY_NODEFILE=${PARALLEL_NODEFILE:-${GECOSHEP_HOSTS_FILE:-${GECOSHEP_HOSTFILE:-${PBS_NODEFILE:-${LOADL_HOSTFILE}}}}}
+#Version="1.0.8 2014/04/30"  # last version with mpich2, safe stack limit, modified return status leftovers
+#Version="1.1.0 2014/05/05"  # multi world with node map fixes + core mapping changes + rank files
+#Version="1.1.1 2014/05/21"  # mapping problem with 1 thread + instances related fixes + geometry work
+#Version="1.1.2 2014/05/30"  # bad value of RPM_COMM_DOM + mca fixes + AIX wc -l command output
+#Version="1.1.2a 2014/05/30" # fix RPM_COMM_DOM  value causing problems to rpn_comm
+#Version="1.1.3b 2014/06/02" # fixed debug env variable processing + tmpdir removal error
+#Version="1.1.3c 2014/06/08" # one more SGE triggered fix (host file name)
+#Version="1.1.3d 2014/06/08" # fixes related to new SGE + castor + pollux differences
+#Version="1.1.4 2014/06/12"  # old style poe call when only 1 MPI world + fixed AIX hostfile problem
+#Version="1.1.4d 2014/06/12" # fix for fixed number of cores on AIX
+#Version="1.1.4e 2014/06/12" # safety mod for preemptable class
+#Version="1.1.5 2014/06/23"  # mods related to instances, nodemap thinning bug
+#Version="1.1.6 2014/06/26"  # linux fixes for node mapping
+#Version="1.1.7 2014/06/27"  # AIX multi wolrd hang with preemption workaround
+#Version="1.1.8 2014/07/30"  # fixes for LoadLeveler
+#Version="1.1.9 2014/07/30"  # fixes for LoadLeveler
+#Version="1.1.10 2014/08/25" # added gdb option
+#Version="1.1.11 2014/10/25" # new options for testing
+#Version="1.1.11 2014/10/30" # fixed lost listing with openmpi problem
+#Version="1.1.12 2014/11/13" #  mods for r.run_tail
+#Version="1.1.14 2014/12/16" # thinning mods
 Version="1.1.15 2015/01/13"  # corrige un probleme avec typeset -Z cause par certaines versions de ksh93
 echo "${0##*/} version $Version avec /bin/ksh93"
 eval `cclargs_lite -D "" $0 \
