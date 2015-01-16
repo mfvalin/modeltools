@@ -21,8 +21,8 @@ function ssmuse
 {
   ShElL=$1
   shift
-#  echo ${SsMuSe} ${ShElL} --order ${OrDeR} "$@"
-  ${SsMuSe} ${ShElL} --order ${OrDeR} "$@"
+#  echo ${SsMuSe} ${ShElL} "$@"
+  ${SsMuSe} ${ShElL} "$@"
   unset ShElL || true
 }
 function ssmuse_domain
@@ -31,22 +31,19 @@ function ssmuse_domain
  eval "`ssmuse sh -d $*`"
 }
 #
-function ssmunuse_domain
-{
- echo unsubscribing from $*
- eval "`ssmuse sh -d ${1:-NO_DOMAIN}  | grep '^export' | sed -e 's/${[A-Z_]*}//' -e  's/=/ /' -e 's/^[ ]*export/. r.unexport.dot/' -e 's/:/ /'`"
-}
+#function ssmunuse_domain  # deprecated feature
+#{
+# echo unsubscribing from $*
+# eval "`ssmuse sh -d ${1:-NO_DOMAIN}  | grep '^export' | sed -e 's/${[A-Z_]*}//' -e  's/=/ /' -e 's/^[ ]*export/. #r.unexport.dot/' -e 's/:/ /'`"
+#}
 #
 StAtUs=0
 #
-OrDeR='prepend'
-if [[ "$1" = '-append' ]] ; then
-  OrDeR='append'
-  shift
-fi
+if [[ "$1" = '-append' ]] ; then   shift ; fi # feature no longer supported by ssm, accepted and ignored for backward compatibility
+#
 fonc='use'
-if [[ "$1" = '-unuse' ]] ; then
-  fonc='unuse'
+if [[ "$1" = '-unuse' ]] ; then  # will now work only for gnu modules 
+#  fonc='unuse'
   shift
 fi
 if [[ "$2" = "-p" ]]
@@ -122,17 +119,8 @@ do
 done
 unset SSM_SHORTCUT || true
 # cleanup of PATHS, creation of EC_INCLUDE_PATH and EC_LD_LIBRARY_PATH
-if [[ "${fonc}" == "use" ]] ; then
-  eval `s.path_cleanup +${BASE_ARCH} PATH MANPATH LD_LIBRARY_PATH LD_RUN_PATH PYTHONPATH TCL_LIBRARY LIBPATH SSM_INCLUDE_PATH`
-  export MANPATH="${MANPATH}:"
-#  export EC_LD_LIBRARY_PATH="$(echo $LD_LIBRARY_PATH | sed 's/:/ /g')"
-#  export EC_INCLUDE_PATH="$(echo ${LD_LIBRARY_PATH}: | sed -e 's%/lib:%/include %g' -e 's/:/ /g' )"
-  export EC_INCLUDE_PATH="$(echo $SSM_INCLUDE_PATH | sed 's/:/ /g') "
-  export EC_LD_LIBRARY_PATH="$(echo ${SSM_INCLUDE_PATH}: | sed -e 's%/include:%/lib %g' -e 's/:/ /g' ) "
-  eval `s.path_cleanup +${EC_ARCH} EC_INCLUDE_PATH +${EC_ARCH} EC_LD_LIBRARY_PATH`
-#  . gen_ld_build_path.dot
-#  . augment_arch_path.dot
-fi
+. r.path_cleanup.dot
+
 unset -f ssmuse_domain ssmunuse_domain ssmuse || true
 unset fonc DoMaIn Target SSM_BUNDLE_PATH SSM_SHORTCUT || true
 return ${StAtUs}

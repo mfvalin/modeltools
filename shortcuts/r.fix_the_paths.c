@@ -12,7 +12,7 @@ static  int n_eliminate=0;
 
 print_usage(char *name)
 {
-   fprintf(stderr,"USAGE: %s -pat1 -pat2 ... -patn [+supp1] item1 [+supp1] item2 ... [+suppn] itemn \n",name);
+   fprintf(stderr,"USAGE: %s [-v|--verbose] -pat1 -pat2 ... -patn [+supp1] item1 [+supp1] item2 ... [+suppn] itemn \n",name);
    fprintf(stderr,"       pat1..patn simple patterns to eliminate\n");
    fprintf(stderr,"       supp1..suppn if item/supp is a directory, add it in front of item\n");
    fprintf(stderr,"       item = EnvName \n");
@@ -62,12 +62,14 @@ main(int argc, char **argv)
   int len_ovbin;
   char *varname;
   struct stat stat_buf;
+  int verbose=0;
 
   progname=argv[0];
   if(argc < 2 ) { print_usage(argv[0]) ; exit(1); }
 
   if(strcmp( "-h",argv[1])==0 || strcmp("--help",argv[1])==0 ) { print_usage(argv[0]) ; exit(1); }
   argc-- ; argv++;
+  if(strcmp( "-v",*argv)==0 || strcmp( "--verbose",*argv)==0 ) {verbose=1 ; argc-- ; argv++; }
   if(**argv == '-') {
     eliminate=argv;
     while(argc > 0 && **argv == '-') { n_eliminate++ ; argc-- ; argv++ ; }
@@ -153,11 +155,11 @@ main(int argc, char **argv)
             fprintf(stdout,"%s%c",sub_path[i],separator);
         }
     }else{   /* specified path environment variable does notexist, do nothing */
-      fprintf(stderr,"%s: ERROR environment variable %s not found\n",progname,*argv);
+      if(verbose) fprintf(stderr,"%s: ERROR environment variable %s not found\n",progname,*argv);
     }
 try_next:
     if(nsubpath == 0) {
-      fprintf(stderr,"%s: ERROR no valid directory found in path variable %s\n",progname,*argv);
+      if(verbose) fprintf(stderr,"%s: ERROR no valid directory found in path variable %s\n",progname,*argv);
     }
     supplement="";
     argv++;
