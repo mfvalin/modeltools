@@ -12,23 +12,23 @@ static  int n_eliminate=0;
 
 print_usage(char *name)
 {
-   fprintf(stderr,"USAGE: %s -pat1 -pat2 ... -patn [+supp1] item1 [+supp1] item2 ... [+suppn] itemn \n",name);
+   fprintf(stderr,"USAGE: %s [-v|--verbose] -pat1 -pat2 ... -patn [+supp1] item1 [+supp1] item2 ... [+suppn] itemn \n",name);
    fprintf(stderr,"       pat1..patn simple patterns to eliminate\n");
    fprintf(stderr,"       supp1..suppn if item/supp is a directory, add it in front of item\n");
    fprintf(stderr,"       item = EnvName \n");
    fprintf(stderr,"       EnvName is the name of an environment variable containing a path\n");
    fprintf(stderr,"ex:    %s PATH MANPATH EC_LD_LIBRARY_PATH\n",name);
-   fprintf(stderr,"       %s +$BASE_ARCH PATH MANPATH +EC_ARCH EC_LD_LIBRARY_PATH\n",name);
-   fprintf(stderr,"       %s LD_LIBRARY_PATH +EC_ARCH EC_INCLUDE_PATH\n",name);
+   fprintf(stderr,"       %s +$BASE_ARCH PATH MANPATH +$EC_ARCH EC_LD_LIBRARY_PATH\n",name);
+   fprintf(stderr,"       %s LD_LIBRARY_PATH +$EC_ARCH EC_INCLUDE_PATH\n",name);
    fprintf(stderr,"ex:    %s -/a/b/ -machin/patente PATH MANPATH EC_LD_LIBRARY_PATH\n",name);
 }
 
-int is_duplicate(char *what, char **table, int nentries)
+int is_duplicate(char *what, char **table, int nentries)  /* a non existent directory is treated like a duplicate */
 {
   int i;
   struct stat stat_buf;
 
-  for(i=0;i<n_eliminate;i++) { if ( strstr(what,1+eliminate[i]) ) return 1; }
+  for(i=0;i<n_eliminate;i++) { if ( strstr(what,1+eliminate[i]) ) return 1; } /* if found in list to eliminate, treat as dulpicate */
   if( 0 == stat(what,&stat_buf)) {           /* what exists */
     if( S_ISDIR(stat_buf.st_mode) ) {        /* and is a directory */
       while(nentries>0){                     /* let's now find if it is a duplicate */
@@ -62,12 +62,14 @@ main(int argc, char **argv)
   int len_ovbin;
   char *varname;
   struct stat stat_buf;
+  int verbose=0;
 
   progname=argv[0];
   if(argc < 2 ) { print_usage(argv[0]) ; exit(1); }
 
   if(strcmp( "-h",argv[1])==0 || strcmp("--help",argv[1])==0 ) { print_usage(argv[0]) ; exit(1); }
   argc-- ; argv++;
+  if(strcmp( "-v",*argv)==0 || strcmp( "--verbose",*argv)==0 ) {verbose=1 ; argc-- ; argv++; }
   if(**argv == '-') {
     eliminate=argv;
     while(argc > 0 && **argv == '-') { n_eliminate++ ; argc-- ; argv++ ; }
@@ -153,11 +155,11 @@ main(int argc, char **argv)
             fprintf(stdout,"%s%c",sub_path[i],separator);
         }
     }else{   /* specified path environment variable does notexist, do nothing */
-      fprintf(stderr,"%s: ERROR environment variable %s not found\n",progname,*argv);
+      if(verbose) fprintf(stderr,"%s: ERROR environment variable %s not found\n",progname,*argv);
     }
 try_next:
     if(nsubpath == 0) {
-      fprintf(stderr,"%s: ERROR no valid directory found in path variable %s\n",progname,*argv);
+      if(verbose) fprintf(stderr,"%s: ERROR no valid directory found in path variable %s\n",progname,*argv);
     }
     supplement="";
     argv++;

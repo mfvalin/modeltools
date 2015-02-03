@@ -12,6 +12,7 @@ function is_shortcut
   do
     [[ -r ${Prefix}/${1}.bndl       ]] && echo ${Prefix}/${1}.bndl && return 0   # bundle
     [[ -r ${Prefix}/${1}.sh         ]] && echo ${Prefix}/${1}.sh   && return 0   # sh type shortcut
+    [[ -r ${Prefix}/${1}            ]] && echo ${Prefix}/${1}      && return 0   # must be a module
     [[ -d ${Prefix}/${1}/etc/ssm.d  ]] && echo ${Prefix}/${1}      && return 0   # link to domain
   done
   return 1  # nothing appropriate found
@@ -217,7 +218,9 @@ GlobalAbort=""           # set if a GLOB condition failed
 LocalData="$(r.unified_setup-cfg -local || echo $ARMNLIB)/data"     # get path to "system" data
 
 # add SSM_SHORTCUT_PATH to places to scan, but get rid of . because it is unsafe
-Prefixes="$(echo $SSM_SHORTCUT_PATH | sed -e 's/:/ /g' -e 's/[.] //'g -e 's/ [.]//g') $HOME/my_ssm_domains ${LocalData}/ssm_domains"
+#Prefixes="$(echo $SSM_SHORTCUT_PATH | sed -e 's/:/ /g' -e 's/[.] //'g -e 's/ [.]//g') $HOME/my_ssm_domains ${LocalData}/ssm_domains"
+Prefixes="$( echo ${SSM_SHORTCUT_PATH} ${HOME}/my_ssm_domains  $(r.unified_setup-cfg -local || echo $ARMNLIB)/data/ssm_domains $MODULEPATH | \
+             sed -e 's/:/ /g' -e 's/[.] //g' -e 's/ [.]//g' )"
 
 # we could also use ${BASE_ARCH}
 ValidArch=$(COMP_ARCH="" s.get_ec_arch)

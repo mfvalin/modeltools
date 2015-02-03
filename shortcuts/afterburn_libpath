@@ -1,0 +1,30 @@
+#!/bin/bash
+NewDir=0
+BaseDir=100
+((LastDir=BaseDir))
+
+rm -f $TMPDIR/.lib_path_cache_*
+echo "INFO: removing fast path directories $TMPDIR/.lib_path_cache_1*"  1>&2
+
+NewPath=$TMPDIR/.lib_path_cache_${BaseDir}
+for i in $(echo $LD_LIBRARY_PATH | tr ':' '\n') 
+do
+  mkdir -p $TMPDIR/.lib_path_cache_${BaseDir}
+  ./link_files_in_dir.${BASE_ARCH} -so $i $TMPDIR/.lib_path_cache_${BaseDir}
+  status=$?
+  if ((status==2)) ; then
+    NewPath=${NewPath}:$i
+    if ((NewDir==0)) ; then
+      ((BaseDir=BaseDir+1))
+      ((NewDir=1))
+    fi
+  else
+    if ((LastDir!=BaseDir)) ; then
+      NewPath=${NewPath}:$TMPDIR/.lib_path_cache_${BaseDir}
+      ((LastDir=BaseDir))
+    fi
+    ((NewDir=0))
+  fi
+done
+echo "INFO: NEW LD_LIBRARY_PATH will be"
+echo "${NewPath}" | tr ':' '\n'

@@ -5,17 +5,17 @@
 # commands used in the highly parallel area, we want to use the actual path
 # to avoid undue searches through the command path (involving shared filesystems)
 # this is highly desirable when hundreds of MPI processes are fired
-c_rm=$(which rm)
-c_date=$(which date)
-c_cat=$(which cat)
-c_sleep=$(which sleep)
-c_true=$(which true)
-c_sed=$(which sed)
-c_env=$(which env)
-c_wc=$(which wc)
-c_touch=$(which touch)
-c_sort=$(which sort)
-c_hostname=$(which hostname)
+CMD_rm=$(which rm)
+CMD_date=$(which date)
+CMD_cat=$(which cat)
+CMD_sleep=$(which sleep)
+CMD_true=$(which true)
+CMD_sed=$(which sed)
+CMD_env=$(which env)
+CMD_wc=$(which wc)
+CMD_touch=$(which touch)
+CMD_sort=$(which sort)
+CMD_hostname=$(which hostname)
 [[ "$1" == --version ]] && set -- -version
 # CAVEAT: this script uses typeset -Z (does not work for the bash shell, only for ksh93)
 #typeset -Z4 SeqNum MemberNo MemberChild
@@ -535,7 +535,29 @@ wait_for() {
 # and will be the default value for -nodefile
 #
 MY_NODEFILE=${PARALLEL_NODEFILE:-${GECOSHEP_HOSTS_FILE:-${GECOSHEP_HOSTFILE:-${PBS_NODEFILE:-${LOADL_HOSTFILE}}}}}
-Version="1.1.15 2015/01/13"
+#Version="1.0.8 2014/04/30"  # last version with mpich2, safe stack limit, modified return status leftovers
+#Version="1.1.0 2014/05/05"  # multi world with node map fixes + core mapping changes + rank files
+#Version="1.1.1 2014/05/21"  # mapping problem with 1 thread + instances related fixes + geometry work
+#Version="1.1.2 2014/05/30"  # bad value of RPM_COMM_DOM + mca fixes + AIX wc -l command output
+#Version="1.1.2a 2014/05/30" # fix RPM_COMM_DOM  value causing problems to rpn_comm
+#Version="1.1.3b 2014/06/02" # fixed debug env variable processing + tmpdir removal error
+#Version="1.1.3c 2014/06/08" # one more SGE triggered fix (host file name)
+#Version="1.1.3d 2014/06/08" # fixes related to new SGE + castor + pollux differences
+#Version="1.1.4 2014/06/12"  # old style poe call when only 1 MPI world + fixed AIX hostfile problem
+#Version="1.1.4d 2014/06/12" # fix for fixed number of cores on AIX
+#Version="1.1.4e 2014/06/12" # safety mod for preemptable class
+#Version="1.1.5 2014/06/23"  # mods related to instances, nodemap thinning bug
+#Version="1.1.6 2014/06/26"  # linux fixes for node mapping
+#Version="1.1.7 2014/06/27"  # AIX multi wolrd hang with preemption workaround
+#Version="1.1.8 2014/07/30"  # fixes for LoadLeveler
+#Version="1.1.9 2014/07/30"  # fixes for LoadLeveler
+#Version="1.1.10 2014/08/25" # added gdb option
+#Version="1.1.11 2014/10/25" # new options for testing
+#Version="1.1.11 2014/10/30" # fixed lost listing with openmpi problem
+#Version="1.1.12 2014/11/13" #  mods for r.run_tail
+#Version="1.1.14 2014/12/16" # thinning mods
+#Version="1.1.15 2015/01/13" # corrige un probleme avec typeset -Z cause par certaines versions de ksh93
+Version="1.1.16 2015/01/20"  # changed c_ command variables to CMD_
 echo "${0##*/} version $Version avec /bin/ksh93"
 eval `cclargs_lite -D "" $0 \
     -args "" "" "[arguments to the command]" \
@@ -913,8 +935,8 @@ EOT
             cd ${Directories[$i]}
             ${preexec} ${ProGrams[$i]} ${args}
             Status=\$?
-            ((Status==0)) && $c_rm -f ${tmpdir}/fail.\${MP_Tag}.\${MP_SeqNum}
-            echo "END of child \${WORLD_CHILD}, status = \${Status}  \$($c_date)"
+            ((Status==0)) && $CMD_rm -f ${tmpdir}/fail.\${MP_Tag}.\${MP_SeqNum}
+            echo "END of child \${WORLD_CHILD}, status = \${Status}  \$($CMD_date)"
           fi
 EOT
       done
@@ -1013,8 +1035,8 @@ EOT
   cat <<EOT >>${MpiRunScript}.0   # MpiCommWorld is 0 in this case
     ${preexec} ${pgm} ${args}
     Status=\$?
-    ((Status==0)) && $c_rm -f ${tmpdir}/fail.\${MP_Tag}.\${MP_SeqNum}
-    echo "END of child \${WORLD_CHILD} with status = \${Status}  \$($c_date)"
+    ((Status==0)) && $CMD_rm -f ${tmpdir}/fail.\${MP_Tag}.\${MP_SeqNum}
+    echo "END of child \${WORLD_CHILD} with status = \${Status}  \$($CMD_date)"
 EOT
   echo "INFO: ${npe_total} instances of '$pgm' in MPI world 0"
 #
@@ -1059,23 +1081,23 @@ export RP_Child="\$((MP_CHILD))"            # global child number, same as MP_CH
 export RP_Member=\$((RP_WorldChild/${npex}+${offset}))      # member number in this world (including offset)
 export RP_MemberChild=\$((RP_WorldChild-RP_WorldChild/${npex}*${npex}))   # child ordinal within this member
 MP_Tag="\$(/usr/bin/printf '${F_world}${F_member}${F_child}${F_seq}' ${V_world} ${V_member} ${V_child} ${V_seq})"
-[[ -n "${debug}" ]] && $c_env | $c_sort >${tmpdir}/.mpi_env_\$\$_\$($c_hostname)
+[[ -n "${debug}" ]] && $CMD_env | $CMD_sort >${tmpdir}/.mpi_env_\$\$_\$($CMD_hostname)
 #
 #[[ -n "${processorder}" ]] &&
-$c_touch ${tmpdir}/fail.\${MP_Tag}.\${MP_SeqNum}
+$CMD_touch ${tmpdir}/fail.\${MP_Tag}.\${MP_SeqNum}
 . ${MpiRunScript}.${MpiCommWorld}  ${RedirectStdout} ${RedirectStderr}
 [[ -x ${tmpdir}/null_mpi ]] && ${tmpdir}/null_mpi
 [[ -n "${processorder}" ]] || exit 0     # no listings to process, exit
 lines=0
 the_file=${tmpdir}/\${MP_SeqNum}/stdout.\${MP_Tag}
-[[ -r \${the_file} ]] && lines="\$($c_wc -l <\${the_file})" && ((lines<${minstdout})) && $c_rm \${the_file}  # remove stdout files shorter than minimum
-[[ \${MP_SeqNum} != *00 ]] && $c_true && exit
-$c_sleep 3
+[[ -r \${the_file} ]] && lines="\$($CMD_wc -l <\${the_file})" && ((lines<${minstdout})) && $CMD_rm \${the_file}  # remove stdout files shorter than minimum
+[[ \${MP_SeqNum} != *00 ]] && $CMD_true && exit
+$CMD_sleep 3
 for the_file in ${tmpdir}/\${MP_SeqNum%??}[0-9][0-9]/stdout.*
 do
   MP_Tag=\${the_file##*.}
-  [[ -f \${the_file} ]] && { [[ -z "${nosep}" ]] && echo "" ; $c_cat \${the_file} | $c_sed "s/^/${Prefix2}\${MP_Tag}: /" ;} >>${tmpdir}/\${MP_SeqNum}/stdout
-  [[ -f \${the_file%/*}/stderr ]] && { [[ -z "${nosep}" ]] && echo "" ; [[ -z "${nosep}" ]] && echo "${Prefix3}\${MP_Tag}: ============== stderr \${MP_Tag} ==============" ; $c_cat \${the_file%/*}/stderr | $c_sed "s/^/${Prefix3}\${MP_Tag}: /" ; } >>${tmpdir}/\${MP_SeqNum}/stdout
+  [[ -f \${the_file} ]] && { [[ -z "${nosep}" ]] && echo "" ; $CMD_cat \${the_file} | $CMD_sed "s/^/${Prefix2}\${MP_Tag}: /" ;} >>${tmpdir}/\${MP_SeqNum}/stdout
+  [[ -f \${the_file%/*}/stderr ]] && { [[ -z "${nosep}" ]] && echo "" ; [[ -z "${nosep}" ]] && echo "${Prefix3}\${MP_Tag}: ============== stderr \${MP_Tag} ==============" ; $CMD_cat \${the_file%/*}/stderr | $CMD_sed "s/^/${Prefix3}\${MP_Tag}: /" ; } >>${tmpdir}/\${MP_SeqNum}/stdout
 done
 true
 EOT
