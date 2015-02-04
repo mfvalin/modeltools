@@ -1,11 +1,14 @@
-test: test_missing
 
-include Makefile.common
+#include Makefile.common
+CC = s.cc
+F90C = s.f90
 
 TESTS = test001 test002
 
-ALL: $(TESTS)
+all: $(TESTS) u.re_tag_scale
 	echo making all
+
+runtest: test_missing
 
 test001:
 	cat f_glob_fn.c | sed 's://:/;/:g' |cpp -P -DFTEST | sed 's:/;/://:g' >f_glob_fn2.f90
@@ -43,8 +46,14 @@ runtestfst: testfst
 	rm -f file1.tfs file2.tfs file3.tfs testfst
 
 test_missing:
-	s.cc -c fstd98.c fst_missing.c DlInterface.c
-	s.f90 -o a.out bidon_001.f90 test_missing.f90 fstd98.o fst_missing.o DlInterface.o  -lrmnbeta_014
+	$(CC) -c fstd98.c fst_missing.c DlInterface.c
+	$(F90C) -o a.out bidon_001.f90 test_missing.f90 fstd98.o fst_missing.o DlInterface.o  -lrmn_015
 	./a.out
 	echo "missing.fst created, must be removed manually"
 	rm -f a.out test_missing.o fstd98.o DlInterface.o bidon_001.o fst_missing.o
+
+u.re_tag_scale: u.re_tag_scale.F90
+	$(F90C) -o $@ $< -lrmn_015
+
+clean:
+	rm -f $(TESTS) u.re_tag_scale ./a.out *.o

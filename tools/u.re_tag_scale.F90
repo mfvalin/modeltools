@@ -21,6 +21,7 @@ program re_tag_scale
   integer :: ni, nj, nk, nrec, realloc
   integer :: nia, nja
   integer :: nbits,datyp,ip1,ip2,ip3,dateo,deet,npas
+  integer :: datyp_m
   integer :: new_dateo, datev
   integer :: new_ip1
   integer :: ig1,ig2,ig3,ig4,swa,lng,dltf,ubc,extra1,extra2,extra3
@@ -41,6 +42,7 @@ program re_tag_scale
 
   open(1,file=trim(dir_file),FORM='FORMATTED',status='OLD')
   print *,'INFO: contents of directive table'
+  ntags = 0
   do i = 1 , MAXTABLE
     read(1,*,end=1) tags(i)
     print *,i,tags(i)
@@ -81,7 +83,10 @@ program re_tag_scale
 !
 !   transform the record as and if needed
 !
-    call fstprm(status,dateo,deet,npas,ni,nj,nk,nbits,datyp,ip1,ip2,ip3,typvar,nomvar,etiket,grtyp,ig1,ig2,ig3,ig4,swa,lng,dltf,ubc,extra1,extra2,extra3)
+    call fstprm(status,dateo,deet,npas,ni,nj,nk,nbits,datyp,ip1,ip2,ip3, &
+                typvar,nomvar,etiket,grtyp,ig1,ig2,ig3,ig4, &
+                swa,lng,dltf,ubc,extra1,extra2,extra3)
+    if(nbits > 32) goto 2   ! for now encoding with more than 32 bits is not supported
     deetnpas = deet
     deetnpas = deetnpas * npas
     no_change = .true.
@@ -95,7 +100,12 @@ program re_tag_scale
         if(tags(i)%ip1_old == -1 .or. tags(i)%ip1_old == ip1) then
           if(tags(i)%ip1_new .ne. -1) new_ip1 = tags(i)%ip1_new           ! new ip1
         endif
-        array = array * tags(i)%sf
+        datyp_m = mod(datyp,64)
+        if(datyp_m == 1 .or. datyp_m == 5 .or. datyp_m == 6) then   ! can scale only 32 bit floating point data
+          if(tags(i)%sf .ne. 1.0) array = array * tags(i)%sf
+        else
+          print *,'WARNING: cannot scale non 32 bit floating point data'
+        endif
         call incdatr(new_dateo,dateo,tags(i)%ts)                          ! time tag shift
         call incdatr(datev,new_dateo,deetnpas)
         call fstecr(array,array,-nbits,fstdout,datev,deet,npas,ni,nj,nk,new_ip1,ip2,ip3,typvar,new_nomvar,etiket,grtyp,ig1,ig2,ig3,ig4,datyp,.false.)
@@ -106,6 +116,7 @@ program re_tag_scale
       call incdatr(datev,dateo,deetnpas)
       call fstecr(array,array,-nbits,fstdout,datev,deet,npas,ni,nj,nk,ip1,ip2,ip3,typvar,nomvar,etiket,grtyp,ig1,ig2,ig3,ig4,datyp,.false.)
     endif
+2   continue
     status = fstsui(fstdin,ni,nj,nk)
   enddo
   print *,'INFO: number of records read and written =',nrec
