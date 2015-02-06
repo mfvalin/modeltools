@@ -557,7 +557,8 @@ MY_NODEFILE=${PARALLEL_NODEFILE:-${GECOSHEP_HOSTS_FILE:-${GECOSHEP_HOSTFILE:-${P
 #Version="1.1.12 2014/11/13" #  mods for r.run_tail
 #Version="1.1.14 2014/12/16" # thinning mods
 #Version="1.1.15 2015/01/13" # corrige un probleme avec typeset -Z cause par certaines versions de ksh93
-Version="1.1.16 2015/01/20"  # changed c_ command variables to CMD_
+#Version="1.1.16 2015/01/20"  # changed c_ command variables to CMD_
+Version="1.1.17 2015/02/05"  # other typeset -Z issue
 echo "${0##*/} version $Version avec /bin/ksh93"
 eval `cclargs_lite -D "" $0 \
     -args "" "" "[arguments to the command]" \
@@ -1070,13 +1071,13 @@ ulimit -s unlimited
 [[ -n "${debug}" ]] && set -x
 #
 export MP_CHILD=\${MP_CHILD:-\${PMI_RANK:-\${OMPI_COMM_WORLD_RANK}}}  # poe/mpich2/openmpi
-typeset -Z4 MP_SeqNum    # NOT VALID FOR bash, ksh family only
 ((MP_CHILD=MP_CHILD+ChildOffset))   # need to add ChildOffset for this MPI world to MP_CHILD (always 0 for poe)
 export RP_WorldChild
 ((RP_WorldChild=MP_CHILD-${WorldOffset}))   # child ordinal in this world
 export RP_CommWorld=${MpiCommWorld}         # ordinal of this MPI world
 export MP_SeqNum                            # global sequence number
 ((MP_SeqNum=MP_CHILD))
+typeset -Z4 MP_SeqNum    # NOT VALID FOR bash, ksh family only
 export RP_Child="\$((MP_CHILD))"            # global child number, same as MP_CHILD
 export RP_Member=\$((RP_WorldChild/${npex}+${offset}))      # member number in this world (including offset)
 export RP_MemberChild=\$((RP_WorldChild-RP_WorldChild/${npex}*${npex}))   # child ordinal within this member
