@@ -250,7 +250,7 @@ ListFailed() {
   ls ${tmpdir}/fail.*  2>/dev/null 1>/dev/null || return 0    # if no process failure flag file found
   if [[ "${e}" == YES ]] ; then
     echo "ERROR: some processes have failed during execution"
-    (cd ${tmpdir} ; ls -1 | grep 'fail[.]' | sed 's/fail.//' | xargs -l5 /bin/echo  )   # list, 5 per line
+    (cd ${tmpdir} ; ls -1 | grep 'fail[.]' | sed 's/fail.//' | xargs -L5 /bin/echo  )   # list, 5 per line
   fi
 }
 # ===========================================================================
@@ -260,7 +260,7 @@ ListFailed() {
 local_cleanup() {
  ExitStatus=0
  ls  ${tmpdir}/fail.* 2>/dev/null 1>/dev/null && echo "INFO: RUN FAILED" && echo "INFO: first 10 failing processes :" && ExitStatus=1
- ls  ${tmpdir}/fail.* 2>/dev/null | head -10 | sed "s:${tmpdir}/::g" | xargs -l5 echo
+ ls  ${tmpdir}/fail.* 2>/dev/null | head -10 | sed "s:${tmpdir}/::g" | xargs -L5 echo
  [[ ${nocleanup} == on_error && $ExitStatus == 0 ]] && nocleanup=""  # -nocleanup on_error , unset nocleanup if no error detected
  [[ -n ${nocleanup} ]] && return $ExitStatus  # -nocleanup option used, return
  rm -rf ${tmpdir} || ( sleep 1 ; rm -rf ${tmpdir} ) &   # cannot clean tmpdir while script runs, use delayed remove
@@ -558,7 +558,8 @@ MY_NODEFILE=${PARALLEL_NODEFILE:-${GECOSHEP_HOSTS_FILE:-${GECOSHEP_HOSTFILE:-${P
 #Version="1.1.14 2014/12/16" # thinning mods
 #Version="1.1.15 2015/01/13" # corrige un probleme avec typeset -Z cause par certaines versions de ksh93
 #Version="1.1.16 2015/01/20"  # changed c_ command variables to CMD_
-Version="1.1.17 2015/02/05"  # other typeset -Z issue
+#Version="1.1.17 2015/02/05"  # other typeset -Z issue
+Version="1.1.17a 2015/02/15"  # -L instead of -l for xargs
 echo "${0##*/} version $Version avec /bin/ksh93"
 eval `cclargs_lite -D "" $0 \
     -args "" "" "[arguments to the command]" \
@@ -1116,7 +1117,7 @@ if [[ -n ${processorder} ]] ; then
   for ISeqNum in $(seq 0 1 $((TotalInstances-1)) )    #  a arranger pour le cas MPMD ====================================
   do
     /usr/bin/printf "%s/%4.4d\n" ${tmpdir} ${ISeqNum}
-  done  | xargs -l30 mkdir
+  done  | xargs -L30 mkdir
 #  echo "INFO: =============================================="
 #  echo "INFO: temporary listings for all members in ${tmpdir}"
 #  echo "INFO: =============================================="
