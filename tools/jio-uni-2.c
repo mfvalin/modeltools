@@ -1,6 +1,7 @@
 #ifdef linux
 #define _GNU_SOURCE
 #define _LARGEFILE64_SOURCE
+#define _FILE_OFFSET_BITS 64
 #define ioroutines64
 #endif
 
@@ -743,7 +744,7 @@ int close(int fd)
 /* read */
 ssize_t read(int fd, void * buf, size_t n)
 {
-  int result;
+  ssize_t result;
   long long int t0;
 
   t0 =  jio_init();
@@ -755,7 +756,7 @@ ssize_t read(int fd, void * buf, size_t n)
 /* write */
 ssize_t write(int fd, const void * buf, size_t n)
 {
-  int result;
+  ssize_t result;
   long long int t0;
 
   t0 =  jio_init();
@@ -796,7 +797,7 @@ int fseek(FILE *stream, long offset, int whence)
 /* lseek, lseek64 */
 off_t lseek(int fd, off_t offset, int whence)
 {
-  int result;
+  off_t result;
   long long int t0;
 
   t0 =  jio_init();
@@ -807,7 +808,7 @@ off_t lseek(int fd, off_t offset, int whence)
 #ifdef ioroutines64
 off64_t lseek64(int fd, off64_t offset, int whence)
 {
-  int result;
+  off64_t result;
   long long int t0;
 
   t0 =  jio_init();
