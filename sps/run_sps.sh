@@ -5,6 +5,11 @@ do
   [[ -r exper.cfg ]] || { echo "ERROR: cannot find $(pwd -P)/exper.cfg" ; exit 1 ; }
   source ./exper.cfg
   #
+  if [[ "${exper_current_date}" == "${exper_fold_date}" ]] ; then
+    echo "INFO: flod date reached: ${exper_fold_date}"
+    exit 0
+  fi
+  #
   if [[ "${exper_current_date}" == "${exper_end_date}" ]] ; then
     echo "INFO: last date reached: ${exper_end_date}"
     exit 0

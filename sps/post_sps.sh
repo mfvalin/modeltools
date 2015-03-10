@@ -4,9 +4,11 @@
 source ./exper.cfg
 #
 Delta=${exper_delta:-1month}
-exper_current_date=${exper_current_date:-${exper_start_date}}
-CurrentDate=${exper_current_date}
-FileDate=$(date -d${CurrentDate}-${Delta} +%Y%m%d)
+# exper_current_date MUST be defined at this point
+FileDate=${exper_current_date}
+#FileDate=$(date -d${CurrentDate}-${Delta} +%Y%m%d)
+CurrentDate=$(date -d${FileDate}+${Delta} +%Y%m%d)
+#CurrentDate=${exper_current_date}
 CurrentCmcStamp=$(r.date ${CurrentDate})
 echo "INFO: looking for output valid at ${CurrentDate}, CMC stamp = ${CurrentCmcStamp}"
 Date2=$(date -d${CurrentDate}GMT0 +%s)
@@ -20,11 +22,13 @@ echo bemol -src OUT/*/pm${FileDate}000000-??-??_000000h -dst OUT/${exper}_${File
 ls -l OUT/*/pm${FileDate}000000-??-??_000000h
 bemol -src OUT/*/pm${FileDate}000000-??-??_000000h -dst OUT/${exper}_${FileDate} >/dev/null
 #
-# copy output file to archive after making it read only (background)
+# copy output file to archive after making it read only (background copy)
 #
 mkdir -p ${exper_archive}/${exper}
 chmod 444 OUT/${exper}_${FileDate}
-cp OUT/${exper}_${FileDate} ${exper_archive}/${exper}/${exper}_${FileDate} &
+Extension=""
+((exper_cycle_year>0)) && Extension="$(printf '_%3.3d' ${exper_cycle_year})"
+cp OUT/${exper}_${FileDate} ${exper_archive}/${exper}/${exper}_${FileDate}${Extension} &
 #
 # extract last time frame to be used as part of initial conditions for next run
 #
@@ -60,3 +64,10 @@ rm -f OUT/${exper}_${FileDate}
 echo cp OUT/${exper}_anal Data/Input/.
 cp OUT/${exper}_anal Data/Input/anal
 rm -f OUT/${exper}_anal
+#
+# update exper_current_date
+#
+grep -v exper_current_date exper.cfg >exper.cfg_new
+mv exper.cfg_new exper.cfg
+echo "exper_current_date=${CurrentDate}" >>exper.cfg
+#
