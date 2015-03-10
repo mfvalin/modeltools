@@ -16,9 +16,9 @@ echo "INFO: running from ${StepStartDate} to ${StepEndDate}, (${Delta})"
 rm -f Data/Input/anal     # get rid of old file
 for Target in ${exper_anal1} ${exper_anal2}
 do
-  [[ -f ${Target}_${CurrentDate} ]] && cp ${Target}_${CurrentDate} Data/Input/anal && echo "INFO: using ${Target}_${CurrentDate}" && break
+  [[ -f ${Target}_${StepStartDate} ]] && cp ${Target}_${StepStartDate} Data/Input/anal && echo "INFO: using ${Target}_${StepStartDate}" && break
 done
-[[ -f Data/Input/anal ]] || { echo "ERROR: cound not find initial conditions file for ${CurrentDate}" ; exit 1 ; }
+[[ -f Data/Input/anal ]] || { echo "ERROR: cound not find initial conditions file for ${StepStartDate}" ; exit 1 ; }
 #
 # get driving data files for this month (better be available or else !!)
 #
@@ -31,10 +31,11 @@ do
     echo "INFO: ${Target2} found in Data/Input/inrep/"
   else
     cp ${Target} Data/Input/inrep/.     # file not already there,  copy it
+    echo "INFO: using ${Target}"
   fi
   ((Nfiles=Nfiles+1))
 done
-if ((Nfiles == 0)) then
+if ((Nfiles == 0));then
   echo "ERROR: no driving data found for ${StepStartDate%??}"
   exit 1
 fi
@@ -50,6 +51,7 @@ do
     echo "INFO: ${Target2} found in Data/Input/inrep/"
   else
     cp ${Target} Data/Input/inrep/.    # file not already there,  copy it
+    echo "INFO: using ${Target}"
   fi
 done
 #ls -l Data/Input/inrep/*_${StepStartDate%??}
