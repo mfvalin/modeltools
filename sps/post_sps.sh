@@ -3,17 +3,20 @@
 [[ -r exper.cfg ]] || { echo "ERROR: cannot find $(pwd -P)/exper.cfg" ; exit 1 ; }
 source ./exper.cfg
 #
+Extension=""
+((exper_cycle_year>0)) && Extension="$(printf '_%3.3d' ${exper_cycle_year})"
+#
 Delta=${exper_delta:-1month}
 # exper_current_date MUST be defined at this point
 FileDate=${exper_current_date}
-#FileDate=$(date -d${CurrentDate}-${Delta} +%Y%m%d)
-CurrentDate=$(date -d${FileDate}+${Delta} +%Y%m%d)
-#CurrentDate=${exper_current_date}
+#
+CurrentDate=$(date -d${FileDate}+${Delta} +%Y%m%d)                 # bump exper_current_date by Delta
 CurrentCmcStamp=$(r.date ${CurrentDate})
 echo "INFO: looking for output valid at ${CurrentDate}, CMC stamp = ${CurrentCmcStamp}"
+#
 Date2=$(date -d${CurrentDate}GMT0 +%s)
 Date1=$(date -d${FileDate}GMT0 +%s)
-Nhours=$(((Date2-Date1)/3600))
+Nhours=$(((Date2-Date1)/3600))     # number of hours for this integration
 #
 # patch together the output file (bemol)
 #
@@ -26,8 +29,6 @@ bemol -src OUT/*/pm${FileDate}000000-??-??_000000h -dst OUT/${exper}_${FileDate}
 #
 mkdir -p ${exper_archive}/${exper}
 chmod 444 OUT/${exper}_${FileDate}
-Extension=""
-((exper_cycle_year>0)) && Extension="$(printf '_%3.3d' ${exper_cycle_year})"
 cp OUT/${exper}_${FileDate} ${exper_archive}/${exper}/${exper}_${FileDate}${Extension} &
 #
 # extract last time frame to be used as part of initial conditions for next run
@@ -61,12 +62,14 @@ rm Data/Input/inrep/*${FileDate%??}
 #
 wait
 rm -f OUT/${exper}_${FileDate}
-echo cp OUT/${exper}_anal Data/Input/.
+rm -f Data/Input/anal
+set -x
+cp OUT/${exper}_anal ${exper_archive}/${exper}/anal_depart_${CurrentDate}${Extension}
+chmod 444 ${exper_archive}/${exper}/anal_depart_${CurrentDate}${Extension}
 cp OUT/${exper}_anal Data/Input/anal
 rm -f OUT/${exper}_anal
 #
-# update exper_current_date
-#
+[[ -r ${exper_archive}/${exper}/anal_depart_${CurrentDate}${Extension} ]] || { echo "ERROR: failed to create initial conditions file anal_depart_${CurrentDate}${Extension}" ; exit 1; }
 grep -v exper_current_date exper.cfg >exper.cfg_new
 mv exper.cfg_new exper.cfg
 echo "exper_current_date=${CurrentDate}" >>exper.cfg

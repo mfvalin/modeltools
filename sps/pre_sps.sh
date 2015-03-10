@@ -17,6 +17,15 @@ echo "INFO: running from ${StepStartDate} to ${StepEndDate}, (${Delta})"
 #
 # initial conditions and driving data files for this month (better be available or else !!)
 #
+rm -f Data/Input/anal     # get rid of old file
+for Target in ${exper_anal1} ${exper_anal2}
+do
+  [[ -f ${Target}_${CurrentDate} ]] && cp ${Target}_${CurrentDate} Data/Input/anal && echo "INFO: using ${Target}_${CurrentDate}" && break
+done
+[[ -f Data/Input/anal ]] || { echo "ERROR: cound not find initial conditions file for ${CurrentDate}" ; exit 1 ; }
+#
+# files for this month (better be available or else !!)
+#
 #ls -l ${exper_depot1}/*_${StepStartDate%??} ${exper_depot2}/*_${StepStartDate%??}
 Nfiles=0
 for Target in $(ls -1 ${exper_depot1}/*_${StepStartDate%??} ${exper_depot2}/*_${StepStartDate%??} )

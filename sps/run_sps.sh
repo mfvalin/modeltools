@@ -1,4 +1,9 @@
 #!/bin/bash
+set -x
+#
+export storage_model=$(readlink -e storage_model)
+echo storage_model=${storage_model}
+[[ -d "${storage_model}" ]] || { echo "ERROR: $storage_model} does not exist" ; exit 1 ; }
 #
 while [[ yes == yes ]]
 do
@@ -6,7 +11,7 @@ do
   source ./exper.cfg
   #
   if [[ "${exper_current_date}" == "${exper_fold_date}" ]] ; then
-    echo "INFO: flod date reached: ${exper_fold_date}"
+    echo "INFO: fold date reached: ${exper_fold_date}"
     exit 0
   fi
   #
@@ -17,7 +22,8 @@ do
   #
   ./pre_sps.sh  || { echo "ERROR: pre_sps failed" ; exit 1 ; }
   #
-  sps.ksh --ptopo=${exper_cpu_config:-1x1x1} >sps_${exper_current_date:-${exper_start_date}}.lst 2>&1 || { echo "ERROR: sps.ksh failed" ; exit 1 ; }
+  echo TMPDIR=${TMPDIR}
+  sps.ksh --verbosity=error --ptopo=${exper_cpu_config:-1x1x1} >sps_${exper_current_date:-${exper_start_date}}.lst 2>&1 || { echo "ERROR: sps.ksh failed" ; exit 1 ; }
   #
   ./post_sps.sh  || { echo "ERROR: post_sps failed" ; exit 1 ; }
   #
