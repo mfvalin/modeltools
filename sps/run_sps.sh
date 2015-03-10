@@ -2,6 +2,7 @@
 set -x
 #
 [[ -r exper.cfg ]] || { echo "ERROR: cannot find $(pwd -P)/exper.cfg" ; exit 1 ; }
+source ./exper.cfg
 #
 # make sure that there is a value for exper_current_date, exper_fold_date and storage_model in configuration file
 #
