@@ -10,7 +10,7 @@ source ./exper.cfg
 #
 [[ -z ${exper_fold_date} ]] && exper_fold_date="$(date -d${exper_end_date}+1year  +%Y%m%d)" && echo "exper_fold_date=${exper_fold_date}" >>./exper.cfg
 #
-[[ -z ${storage_model} ]] && storage_model=$(readlink -e storage_model) && echo "storage_model=${storage_model}" >>./exper.cfg
+[[ -d storage_model ]] && storage_model=$(readlink -e storage_model) && echo "storage_model=${storage_model}" >>./exper.cfg
 export storage_model
 #
 [[ -d "${storage_model}" ]] || { echo "ERROR: $storage_model} does not exist" ; exit 1 ; }
