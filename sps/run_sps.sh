@@ -4,7 +4,7 @@
 if [[ -d storage_model ]] ; then
   storage_model=$(readlink -e storage_model)
 fi
-grep -q storage_model exper.cfg && echo "storage_model=${storage_model}" >>./exper.cfg
+grep -q storage_model exper.cfg || echo "storage_model=${storage_model}" >>./exper.cfg
 export storage_model
 #
 [[ -r exper.cfg ]] || { echo "ERROR: cannot find $(pwd -P)/exper.cfg" ; exit 1 ; }
