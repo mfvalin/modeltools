@@ -3,6 +3,8 @@
 [[ -r exper.cfg ]] || { echo "ERROR: cannot find $(pwd -P)/exper.cfg" ; exit 1 ; }
 source ./exper.cfg
 #
+[[ -n "${exper_current_date}" ]] || { echo "ERROR: exper_current_date not set" ; exit 1 ; }
+#
 Extension=""
 ((exper_cycle_year>0)) && Extension="$(printf '_%3.3d' ${exper_cycle_year})"
 #

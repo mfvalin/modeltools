@@ -1,19 +1,24 @@
 #!/bin/bash
 set -x
 #
-export storage_model=$(readlink -e storage_model)
-echo storage_model=${storage_model}
+[[ -r exper.cfg ]] || { echo "ERROR: cannot find $(pwd -P)/exper.cfg" ; exit 1 ; }
+#
+# make sure that there is a value for exper_current_date, exper_fold_date and storage_model in configuration file
+#
+exper_current_date=${exper_current_date:-${exper_start_date}}
+echo "exper_current_date=${exper_current_date}" >>exper.cfg
+#
+exper_fold_date="${exper_fold_date:-$(date -d${exper_end_date}+1year  +%Y%m%d)}"
+echo "exper_fold_date=${exper_fold_date}" >>./exper.cfg
+#
+storage_model=$(readlink -e storage_model)
+echo "export storage_model=${storage_model}" >>./exper.cfg
+#
 [[ -d "${storage_model}" ]] || { echo "ERROR: $storage_model} does not exist" ; exit 1 ; }
 #
-while [[ yes == yes ]]
+while true
 do
-  [[ -r exper.cfg ]] || { echo "ERROR: cannot find $(pwd -P)/exper.cfg" ; exit 1 ; }
   source ./exper.cfg
-  #
-  if [[ "${exper_current_date}" == "${exper_fold_date}" ]] ; then
-    echo "INFO: fold date reached: ${exper_fold_date}"
-    exit 0
-  fi
   #
   if [[ "${exper_current_date}" == "${exper_end_date}" ]] ; then
     echo "INFO: last date reached: ${exper_end_date}"
@@ -22,8 +27,8 @@ do
   #
   ./pre_sps.sh  || { echo "ERROR: pre_sps failed" ; exit 1 ; }
   #
-  echo TMPDIR=${TMPDIR}
-  sps.ksh --verbosity=error --ptopo=${exper_cpu_config:-1x1x1} >sps_${exper_current_date:-${exper_start_date}}.lst 2>&1 || { echo "ERROR: sps.ksh failed" ; exit 1 ; }
+  echo "INFO: sps.ksh ${exper_cpu_config}"
+  sps.ksh ${exper_cpu_config} >sps_${exper_current_date:-${exper_start_date}}.lst 2>&1 || { echo "ERROR: sps.ksh failed" ; exit 1 ; }
   #
   ./post_sps.sh  || { echo "ERROR: post_sps failed" ; exit 1 ; }
   #

@@ -1,21 +1,17 @@
-#!/bin/ksh93
+#!/bin/bash
 #
 [[ -r exper.cfg ]] || { echo "ERROR: cannot find $(pwd -P)/exper.cfg" ; exit 1 ; }
 source ./exper.cfg
 #
-Delta=${exper_delta:-1month}
-exper_current_date=${exper_current_date:-${exper_start_date}}
+[[ -n "${exper_current_date}" ]] || { echo "ERROR: exper_current_date not set" ; exit 1 ; }
 #
-grep -v exper_current_date exper.cfg >exper.cfg_new
-mv exper.cfg_new exper.cfg
-# make sure that there is a value for exper_current_date in configuration file
-echo "exper_current_date=${exper_current_date}" >>exper.cfg
+Delta=${exper_delta:-1month}
 #
 StepStartDate=${exper_current_date}
 StepEndDate="$(date -d${StepStartDate}+${Delta} +%Y%m%d)"
 echo "INFO: running from ${StepStartDate} to ${StepEndDate}, (${Delta})"
 #
-# initial conditions and driving data files for this month (better be available or else !!)
+# get initial conditions files for this month (better be available or else !!)
 #
 rm -f Data/Input/anal     # get rid of old file
 for Target in ${exper_anal1} ${exper_anal2}
@@ -24,7 +20,7 @@ do
 done
 [[ -f Data/Input/anal ]] || { echo "ERROR: cound not find initial conditions file for ${CurrentDate}" ; exit 1 ; }
 #
-# files for this month (better be available or else !!)
+# get driving data files for this month (better be available or else !!)
 #
 #ls -l ${exper_depot1}/*_${StepStartDate%??} ${exper_depot2}/*_${StepStartDate%??}
 Nfiles=0
@@ -44,7 +40,7 @@ if ((Nfiles == 0)) then
 fi
 #ls -l Data/Input/inrep/*_${StepStartDate%??}
 #
-# get driving data files for next month if available
+# get driving data files for next month (if available and not there)
 #
 #ls -l ${exper_depot2}/*_${StepEndDate%??} ${exper_depot2}/*_${StepEndDate%??}
 for Target in $(ls -1 ${exper_depot1}/*_${StepEndDate%??} ${exper_depot2}/*_${StepEndDate%??} )
@@ -61,9 +57,11 @@ done
 Date1=$(date -d${StepStartDate}GMT0 +%s)
 Date2=$(date -d${StepEndDate}GMT0 +%s)
 Nsteps=$(((Date2-Date1)/900))
-typeset -Z6 Nhours
 Nhours=$(((Date2-Date1)/3600))
 echo INFO: performing ${Nsteps} timesteps in ${Nhours} hours integration   file=pm${DaTe}000000-??-??_000000h
+#
+# fix Step_runstrt_S and Step_total in sps.cfg
+#
 find . -mindepth 3 -maxdepth 3 -name sps.cfg -exec cp {} sps.cfg_old \;
 sed -e "s/Step_runstrt_S =[^.]*/Step_runstrt_S = '${StepStartDate}/" -e "s/Step_total.*/Step_total = ${Nsteps}/" <sps.cfg_old >sps.cfg_new
 find . -mindepth 3 -maxdepth 3 -name sps.cfg -exec mv sps.cfg_new {} \;
