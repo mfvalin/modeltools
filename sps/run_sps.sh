@@ -1,19 +1,17 @@
 #!/bin/bash
-set -x
+[[ "$1" == -v* ]] && set -x
 #
 [[ -r exper.cfg ]] || { echo "ERROR: cannot find $(pwd -P)/exper.cfg" ; exit 1 ; }
 source ./exper.cfg
 #
 # make sure that there is a value for exper_current_date, exper_fold_date and storage_model in configuration file
 #
-exper_current_date=${exper_current_date:-${exper_start_date}}
-echo "exper_current_date=${exper_current_date}" >>exper.cfg
+[[ -z ${exper_current_date} ]] && exper_current_date=${exper_start_date} && echo "exper_current_date=${exper_current_date}" >>exper.cfg
 #
-exper_fold_date="${exper_fold_date:-$(date -d${exper_end_date}+1year  +%Y%m%d)}"
-echo "exper_fold_date=${exper_fold_date}" >>./exper.cfg
+[[ -z ${exper_fold_date} ]] && exper_fold_date="$(date -d${exper_end_date}+1year  +%Y%m%d)" && echo "exper_fold_date=${exper_fold_date}" >>./exper.cfg
 #
-storage_model=$(readlink -e storage_model)
-echo "export storage_model=${storage_model}" >>./exper.cfg
+[[ -z ${storage_model} ]] && storage_model=$(readlink -e storage_model) && echo "storage_model=${storage_model}" >>./exper.cfg
+export storage_model
 #
 [[ -d "${storage_model}" ]] || { echo "ERROR: $storage_model} does not exist" ; exit 1 ; }
 #
