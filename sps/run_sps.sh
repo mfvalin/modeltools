@@ -16,8 +16,6 @@ source ./exper.cfg
 #
 [[ -z ${exper_fold_date} ]] && exper_fold_date="$(date -d${exper_end_date}+1year  +%Y%m%d)" && echo "exper_fold_date=${exper_fold_date}" >>./exper.cfg
 #
-[[ gre ]] &&
-#
 [[ -d "${storage_model}" ]] || { echo "ERROR: ${storage_model} does not exist" ; exit 1 ; }
 #
 while true
