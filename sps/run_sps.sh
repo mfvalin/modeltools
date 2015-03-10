@@ -18,7 +18,7 @@ source ./exper.cfg
 #
 [[ gre ]] &&
 #
-[[ -d "${storage_model}" ]] || { echo "ERROR: $storage_model} does not exist" ; exit 1 ; }
+[[ -d "${storage_model}" ]] || { echo "ERROR: ${storage_model} does not exist" ; exit 1 ; }
 #
 while true
 do
