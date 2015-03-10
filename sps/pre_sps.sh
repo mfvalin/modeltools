@@ -19,6 +19,10 @@ do
   [[ -f ${Target}_${StepStartDate} ]] && cp ${Target}_${StepStartDate} Data/Input/anal && echo "INFO: using ${Target}_${StepStartDate}" && break
 done
 [[ -f Data/Input/anal ]] || { echo "ERROR: cound not find initial conditions file for ${StepStartDate}" ; exit 1 ; }
+######################################################################################################################
+#   if back to the past, force datevalid in Data/Input/anal to exper_start_date
+#   actually, if date is exper_start_date, force it anyway
+######################################################################################################################
 #
 # get driving data files for this month (better be available or else !!)
 #
