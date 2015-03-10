@@ -1,6 +1,18 @@
 #!/bin/bash
 [[ "$1" == -v* ]] && set -x
 #
+[[ -d SHM ]]       || { echo "ERROR: directory SHM not found" ; exit 1 ;}
+mkdir -p SHM/storage_model SHM/Data/Input/inrep
+#
+[[ -d Data ]]      || { echo "ERROR: directory Data not found" ; exit 1 ; }
+[[ -d Data_disk ]] || { echo "ERROR: directory Data_disk not found" ; exit 1 ; }
+#
+[[ -f Data/Input/climato ]]        || { echo "INFO: copying climato" ; cp -f Data_disk/Input/climato Data/Input ; }
+[[ -f Data/Input/Gem_geophy.fst ]] || { echo "INFO: copying Gem_geophy.fst" ; cp -f Data_disk/Input/Gem_geophy.fst Data/Input ; }
+#
+rm -f Data/Input/inrep/anal
+ln -s ../anal Data/Input/inrep/anal
+#
 if [[ -d storage_model ]] ; then
   storage_model=$(readlink -e storage_model)
 fi
