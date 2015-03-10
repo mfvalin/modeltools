@@ -9,6 +9,15 @@ CurrentDate=${exper_current_date}
 EndDate="$(date -d${CurrentDate}+${Delta} +%Y%m%d)"
 echo "INFO: running from ${CurrentDate} to ${EndDate}, (${Delta})"
 #
+# get initial_condition file
+#
+rm -f Data/Input/anal     # get rid of old file
+for Target in ${exper_anal1} ${exper_anal2}
+do
+  [[ -f ${Target}_${CurrentDate} ]] && cp ${Target}_${CurrentDate} Data/Input/anal && echo "INFO: using ${Target}_${CurrentDate}" && break
+done
+[[ -f Data/Input/anal ]] || { echo "ERROR: cound not find initial conditions file for ${CurrentDate}" ; exit 1 ; }
+#
 # files for this month (better be available or else !!)
 #
 #ls -l ${exper_depot1}/*_${CurrentDate%??} ${exper_depot2}/*_${CurrentDate%??}
@@ -45,7 +54,8 @@ done
 #
 grep -v exper_current_date exper.cfg >exper.cfg_new
 mv exper.cfg_new exper.cfg
-echo "exper_current_date=${EndDate}" >>exper.cfg
+#echo "exper_current_date=${EndDate}" >>exper.cfg
+echo "exper_current_date=${exper_current_date}" >>exper.cfg
 #
 Date1=$(date -d${CurrentDate}GMT0 +%s)
 Date2=$(date -d${EndDate}GMT0 +%s)

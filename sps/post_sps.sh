@@ -5,6 +5,8 @@ source ./exper.cfg
 #
 Delta=${exper_delta:-1month}
 exper_current_date=${exper_current_date:-${exper_start_date}}
+# bump exper_current_date by Delta
+exper_current_date=$(date -d${exper_current_date}+${Delta} +%Y%m%d)
 CurrentDate=${exper_current_date}
 FileDate=$(date -d${CurrentDate}-${Delta} +%Y%m%d)
 CurrentCmcStamp=$(r.date ${CurrentDate})
@@ -57,6 +59,16 @@ rm Data/Input/inrep/*${FileDate%??}
 #
 wait
 rm -f OUT/${exper}_${FileDate}
-echo cp OUT/${exper}_anal Data/Input/.
+rm -f Data/Input/anal
+set -x
+cp OUT/${exper}_anal ${exper_archive}/${exper}/anal_depart_${CurrentDate}
+chmod 444 ${exper_archive}/${exper}/anal_depart_${CurrentDate}
 cp OUT/${exper}_anal Data/Input/anal
 rm -f OUT/${exper}_anal
+#
+[[ -r ${exper_archive}/${exper}/anal_depart_${CurrentDate} ]] || { echo "ERROR: failed to create initial conditions file anal_depart_${CurrentDate}" ; exit 1; }
+grep -v exper_current_date exper.cfg >exper.cfg_new
+mv exper.cfg_new exper.cfg
+#echo "exper_current_date=${EndDate}" >>exper.cfg
+echo "exper_current_date=${exper_current_date}" >>exper.cfg
+#
