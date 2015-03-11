@@ -39,6 +39,9 @@ while true
 do
   source ./exper.cfg
   #
+  Extension=""
+  ((exper_current_year>0)) && Extension="$(printf '_%3.3d' ${exper_current_year})"
+  #
   if ((${exper_cycle_year:-999999}==0)) ; then
     echo "INFO: prescribed number of years of integration done"
     rsync -aruvxlH --delete Data/Input ARCHIVE/${exper}.snapshot/.
@@ -61,8 +64,8 @@ do
   pre_sps.sh  || { echo "ERROR: pre_sps failed" ; exit 1 ; }
   #
   echo "INFO: sps.ksh ${exper_cpu_config}"
-  sps.ksh ${exper_cpu_config} >sps_${exper_current_date:-${exper_start_date}}.lst 2>&1 \
-    || sps.ksh ${exper_cpu_config2} >sps_${exper_current_date:-${exper_start_date}}.lst.2 2>&1 \
+  sps.ksh ${exper_cpu_config} >sps_${exper_current_date:-${exper_start_date}}${Extension}.lst 2>&1 \
+    || sps.ksh ${exper_cpu_config2} >sps_${exper_current_date:-${exper_start_date}}${Extension}.lst.2 2>&1 \
     || { echo "ERROR: sps.ksh failed" ; exit 1 ; }
   #
   post_sps.sh  || { echo "ERROR: post_sps failed" ; exit 1 ; }
