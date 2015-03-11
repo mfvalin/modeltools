@@ -33,6 +33,11 @@ source ./exper.cfg
 while true
 do
   source ./exper.cfg
+  #########################################################################
+  #  if we reached a back to the past point, update exper_current_date
+  #  resetting it to exper_start_date, make sure to set
+  #  back to the past flag so that pre_sps.sh will force dates of validity
+  #########################################################################
   #
   if [[ "${exper_current_date}" == "${exper_end_date}" ]] ; then
     echo "INFO: last date reached: ${exper_end_date}"

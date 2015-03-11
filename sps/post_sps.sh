@@ -62,7 +62,7 @@ editfst -s Data/Input/inrep/*${FileDate%??}  -d OUT/${exper}_anal -i editfst2.di
 echo rm Data/Input/inrep/*${FileDate%??}
 rm Data/Input/inrep/*${FileDate%??}
 #
-wait
+wait   # for copy to archive completion
 rm -f OUT/${exper}_${FileDate}
 rm -f Data/Input/anal
 set -x
@@ -72,7 +72,13 @@ cp OUT/${exper}_anal Data/Input/anal
 rm -f OUT/${exper}_anal
 #
 [[ -r ${exper_archive}/${exper}/anal_depart_${CurrentDate}${Extension} ]] || { echo "ERROR: failed to create initial conditions file anal_depart_${CurrentDate}${Extension}" ; exit 1; }
+#
+# update exper_current_date
+#
 grep -v exper_current_date exper.cfg >exper.cfg_new
 mv exper.cfg_new exper.cfg
 echo "exper_current_date=${CurrentDate}" >>exper.cfg
+###################################################################################
+#  if we processed month no 12, bump year count (exper_year_count)
+###################################################################################
 #
