@@ -1,0 +1,10 @@
+update_cfg() {
+# update_cfg config_file variable value
+  ConfigFile="${1}"
+  [[ -f "${ConfigFile}" ]] || return 1
+  [[ -n $2 ]]  || return 1
+  VariableName="${2}"
+  grep -v "^[ ]*${VariableName}=" ${ConfigFile} >${ConfigFile}.new
+  mv ${ConfigFile}.new ${ConfigFile}
+  [[ -n $3 ]] && echo "${VariableName}='${3}'" >>${ConfigFile}
+}

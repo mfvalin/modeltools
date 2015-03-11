@@ -39,11 +39,11 @@ do
     exit 0
   fi
   #
-  ./pre_sps.sh  || { echo "ERROR: pre_sps failed" ; exit 1 ; }
+  pre_sps.sh  || { echo "ERROR: pre_sps failed" ; exit 1 ; }
   #
   echo "INFO: sps.ksh ${exper_cpu_config}"
   sps.ksh ${exper_cpu_config} >sps_${exper_current_date:-${exper_start_date}}.lst 2>&1 || { echo "ERROR: sps.ksh failed" ; exit 1 ; }
   #
-  ./post_sps.sh  || { echo "ERROR: post_sps failed" ; exit 1 ; }
+  post_sps.sh  || { echo "ERROR: post_sps failed" ; exit 1 ; }
   #
 done
