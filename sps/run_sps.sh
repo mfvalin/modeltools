@@ -16,11 +16,16 @@ ln -s ../anal Data/Input/inrep/anal
 if [[ -d storage_model ]] ; then
   storage_model=$(readlink -e storage_model)
 fi
-grep -q storage_model exper.cfg || echo "storage_model=${storage_model}" >>./exper.cfg
+#grep -q storage_model exper.cfg || echo "storage_model=${storage_model}" >>./exper.cfg
 export storage_model
 #
 [[ -r exper.cfg ]] || { echo "ERROR: cannot find $(pwd -P)/exper.cfg" ; exit 1 ; }
 source ./exper.cfg
+source functions_sps.dot
+if [[ -d ARCHIVE/${exper}.snapshot ]] ; then
+  rsync -aruvxlH ARCHIVE/${exper}.snapshot/. Data/.
+  echo  "INFO: syncing run directory from ARCHIVE/${exper}.snapshot"
+fi
 #
 # make sure that there is a value for exper_current_date, exper_fold_date and storage_model in configuration file
 #
@@ -33,22 +38,36 @@ source ./exper.cfg
 while true
 do
   source ./exper.cfg
-  #########################################################################
-  #  if we reached a back to the past point, update exper_current_date
-  #  resetting it to exper_start_date, make sure to set
-  #  back to the past flag so that pre_sps.sh will force dates of validity
-  #########################################################################
+  #
+  if ((${exper_cycle_year:-999999}==0)) ; then
+    echo "INFO: prescribed number of years of integration done"
+    rsync -aruvxlH --delete Data/Input ARCHIVE/${exper}.snapshot/.
+    exit 0
+  fi
   #
   if [[ "${exper_current_date}" == "${exper_end_date}" ]] ; then
     echo "INFO: last date reached: ${exper_end_date}"
+    rsync -aruvxlH --delete Data/Input ARCHIVE/${exper}.snapshot/.
     exit 0
   fi
+  #
+  set -x
+  if [[ -f Data/Input/anal_${exper_fold_date} ]] ; then
+    u.re_tag_date Data/Input/anal_${exper_fold_date} Data/Input/anal_${exper_start_date} $(r.date ${exper_start_date})
+    update_cfg exper.cfg exper_current_date ${exper_start_date}
+  fi
+  set +x
   #
   pre_sps.sh  || { echo "ERROR: pre_sps failed" ; exit 1 ; }
   #
   echo "INFO: sps.ksh ${exper_cpu_config}"
-  sps.ksh ${exper_cpu_config} >sps_${exper_current_date:-${exper_start_date}}.lst 2>&1 || { echo "ERROR: sps.ksh failed" ; exit 1 ; }
+  sps.ksh ${exper_cpu_config} >sps_${exper_current_date:-${exper_start_date}}.lst 2>&1 \
+    || sps.ksh ${exper_cpu_config2} >sps_${exper_current_date:-${exper_start_date}}.lst.2 2>&1 \
+    || { echo "ERROR: sps.ksh failed" ; exit 1 ; }
   #
   post_sps.sh  || { echo "ERROR: post_sps failed" ; exit 1 ; }
+  #
+  source ./exper.cfg
+  [[ "${exper_current_date}" != "${exper_fold_date}" ]] && rm -f Data/Input/anal_${exper_fold_date}
   #
 done

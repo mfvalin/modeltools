@@ -5,6 +5,11 @@ source ./exper.cfg
 #
 [[ -n "${exper_current_date}" ]] || { echo "ERROR: exper_current_date not set" ; exit 1 ; }
 #
+# extension is normally used when running the same driving data over and over (perpetual year or the like)
+#
+Extension=""
+((exper_current_year>0)) && Extension="$(printf '_%3.3d' ${exper_current_year})"
+#
 Delta=${exper_delta:-1month}
 #
 StepStartDate=${exper_current_date}
@@ -13,16 +18,21 @@ echo "INFO: running from ${StepStartDate} to ${StepEndDate}, (${Delta})"
 #
 # get initial conditions files for this month (better be available or else !!)
 #
-rm -f Data/Input/anal     # get rid of old file
-for Target in ${exper_anal1} ${exper_anal2}
-do
-  [[ -f ${Target}_${StepStartDate} ]] && cp ${Target}_${StepStartDate} Data/Input/anal && echo "INFO: using ${Target}_${StepStartDate}" && break
-done
+rm -f Data/Input/anal     # get rid of old initial conditions file
+if [[ -f Data/Input/anal_${StepStartDate} ]] ; then   # normally put there by post_sps or run_sps
+  mv Data/Input/anal_${StepStartDate} Data/Input/anal
+  echo "INFO: using Data/Input/anal_${StepStartDate} as initial conditions"
+else
+  for Target in ${exper_anal1} ${exper_anal2}
+  do
+    echo "INFO: looking for ${Target}_${StepStartDate}${Extension}"
+    [[ -f ${Target}_${StepStartDate}${Extension} ]] && \
+      cp ${Target}_${StepStartDate}${Extension} Data/Input/anal && \
+      echo "INFO: using ${Target}_${StepStartDate}${Extension} as initial conditions" && \
+      break
+  done
+fi
 [[ -f Data/Input/anal ]] || { echo "ERROR: cound not find initial conditions file for ${StepStartDate}" ; exit 1 ; }
-######################################################################################################################
-#   if back to the past, force datevalid in Data/Input/anal to exper_start_date
-#   actually, if date is exper_start_date, force it anyway
-######################################################################################################################
 #
 # get driving data files for this month (better be available or else !!)
 #
