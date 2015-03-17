@@ -2,7 +2,7 @@ exper='experiment_001'                                            # name of the 
 #
 exper_archive=$(pwd -P)/ARCHIVE                                   # where output is to be sent by post_sps.sh
 #
-# anal_depart_YYYYMMDD or anal_depart_YYYYMMDD_yyy
+# anal_*_YYYYMMDD or anal_*_YYYYMMDD_yyy
 #
 exper_anal1=$(pwd -P)/Data_disk/Input/inrep/INI                   # where initial conditions can be found by pre_sps.sh
 exper_anal2=${exper_archive}/${exper}                             # where initial conditions can be found by pre_sps.sh
@@ -22,6 +22,7 @@ exper_cpu_config2='--verbosity=error --ptopo=3x3x1'               # alternate co
 # the following variables get read and adjusted by pre_sps.sh, run_sps.sh, and post_sps.sh
 #   exper_current_date    is the starting date for the current monthly step
 #   exper_current_year    is the current year number in this multi year integration (should start at 1)
+#                         if exper_current_year == 0 , no extension is used for outputs or initial conditions
 #   exper_cycle_year      is the number of years to run
 #
 exper_current_date='19800101'

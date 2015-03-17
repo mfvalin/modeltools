@@ -32,7 +32,7 @@ echo "INFO: running from ${StepStartDate} to ${StepEndDate}, (${Delta})"
 #
 # get initial conditions files for this month (better be available or else !!)
 #   ${exper_anal1} ${exper_anal2} are the 2 possible sources
-#   filenames expected to be anal_depart_YYYYMMDD${Extension}
+#   filenames expected to be anal_*_YYYYMMDD${Extension}  (no more than ONE match for a given month)
 #
 rm -f Data/Input/anal     # get rid of old initial conditions file
 if [[ -f Data/Input/anal_${StepStartDate} ]] ; then   # normally put there by post_sps or run_sps
@@ -41,11 +41,15 @@ if [[ -f Data/Input/anal_${StepStartDate} ]] ; then   # normally put there by po
 else
   for Target in ${exper_anal1} ${exper_anal2}
   do
-    echo "INFO: looking for ${Target}/anal_depart_${StepStartDate}${Extension}"
-    [[ -f ${Target}/anal_depart_${StepStartDate}${Extension} ]] && \
-      cp ${Target}/anal_depart_${StepStartDate}${Extension} Data/Input/anal && \
-      echo "INFO: using ${Target}/anal_depart_${StepStartDate}${Extension} as initial conditions" && \
-      break
+    echo "INFO: looking for ${Target}/anal_*_${StepStartDate}${Extension}"
+    for Target2 in ${Target}/anal_*_${StepStartDate}${Extension}
+    do
+      if [[ -f ${Target2} ]] ; then
+        echo "INFO: using ${Target2} as initial conditions" && \
+        cp ${Target2} Data/Input/anal && \
+        break 2
+      fi
+    done
   done
 fi
 [[ -f Data/Input/anal ]] || { echo "ERROR: cound not find initial conditions file for ${StepStartDate}" ; exit 1 ; }
@@ -94,7 +98,7 @@ done
 #
 Date1=$(date -d${StepStartDate}GMT0 +%s)
 Date2=$(date -d${StepEndDate}GMT0 +%s)
-Nsteps=$(((Date2-Date1)/900))
+Nsteps=$(((Date2-Date1)/10800))
 Nhours=$(((Date2-Date1)/3600))
 echo INFO: performing ${Nsteps} timesteps in ${Nhours} hours integration   file=pm${DaTe}000000-??-??_000000h
 #
