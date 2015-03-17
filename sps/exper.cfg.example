@@ -1,0 +1,27 @@
+exper='experiment_001'                                            # name of the experiment
+#
+exper_archive=$(pwd -P)/ARCHIVE                                   # where output is to be sent by post_sps.sh
+#
+exper_anal1=$(pwd -P)/Data_disk/Input/inrep/INI/anal_depart       # where initial conditions can be found by pre_sps.sh
+exper_anal2=${exper_archive}/${exper}/anal_depart                 # where initial conditions can be found by pre_sps.sh
+#
+exper_depot1=${MODEL_DATA}/Offline_driving/ERA-Interim_0.75/6h_Analysis   # where driving data can be found by pre_sps.sh
+exper_depot2=${MODEL_DATA}/SST_SeaIce/ERA-Interim_0.75deg                 # where driving data can be found by pre_sps.sh
+#
+exper_start_date=19790101                                         # initial date
+exper_end_date=19800101                                           # last date (unused if > exper_fold_date)
+exper_fold_date=19850201                                          # "back to the past" date (unused if > exper_end_date)
+#
+#
+exper_delta='1month'                                              # MUST be 1month for now
+exper_cpu_config='--verbosity=error --ptopo=4x4x1'                # configuration for sps.ksh
+exper_cpu_config2='--verbosity=error --ptopo=3x3x1'               # alternate configuration for sps.ksh
+#
+# the following variables get read and adjusted by pre_sps.sh, run_sps.sh, and post_sps.sh
+#   exper_current_date    is the starting date for the current monthly step
+#   exper_current_year    is the current year number in this multi year integration (should start at 1)
+#   exper_cycle_year      is the number of years to run
+#
+exper_current_date='19800101'
+exper_cycle_year='1'
+exper_current_year='2'

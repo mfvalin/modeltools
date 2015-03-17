@@ -1,11 +1,25 @@
 #!/bin/bash
 #
+# Data/ sould be pointing to where input data is expected for this month
+# Data/Input:
+#  climato             (climatology file)
+#  Gem_geophy.fst      (geophysical fields)
+#  anal                (initial conditions for this month)
+# Data/Input/inrep:
+#  anal (link to ../anal)
+#  driving data for the month (names ending in _YYYYMM)
+#
+# Data/Input might contain anal_YYYYMM left by a previous post_sps.sh
+#
+# local file exper.cfg contains the configuration for this experiment
+#
 [[ -r exper.cfg ]] || { echo "ERROR: cannot find $(pwd -P)/exper.cfg" ; exit 1 ; }
 source ./exper.cfg
 #
 [[ -n "${exper_current_date}" ]] || { echo "ERROR: exper_current_date not set" ; exit 1 ; }
 #
 # extension is normally used when running the same driving data over and over (perpetual year or the like)
+# but it can also be used for normal multi year integrations
 #
 Extension=""
 ((exper_current_year>0)) && Extension="$(printf '_%3.3d' ${exper_current_year})"
@@ -17,6 +31,8 @@ StepEndDate="$(date -d${StepStartDate}+${Delta} +%Y%m%d)"
 echo "INFO: running from ${StepStartDate} to ${StepEndDate}, (${Delta})"
 #
 # get initial conditions files for this month (better be available or else !!)
+#   ${exper_anal1} ${exper_anal2} are the 2 possible sources
+#   filenames expected to be anal_depart_YYYYMMDD${Extension}
 #
 rm -f Data/Input/anal     # get rid of old initial conditions file
 if [[ -f Data/Input/anal_${StepStartDate} ]] ; then   # normally put there by post_sps or run_sps
@@ -35,6 +51,7 @@ fi
 [[ -f Data/Input/anal ]] || { echo "ERROR: cound not find initial conditions file for ${StepStartDate}" ; exit 1 ; }
 #
 # get driving data files for this month (better be available or else !!)
+#  files from ${exper_depot1} or ${exper_depot2}, names expected to end with _YYYYMM
 #
 #ls -l ${exper_depot1}/*_${StepStartDate%??} ${exper_depot2}/*_${StepStartDate%??}
 Nfiles=0
@@ -56,6 +73,7 @@ fi
 #ls -l Data/Input/inrep/*_${StepStartDate%??}
 #
 # get driving data files for next month (if available and not there)
+# (same rules as driving data for this month)
 #
 #ls -l ${exper_depot2}/*_${StepEndDate%??} ${exper_depot2}/*_${StepEndDate%??}
 for Target in $(ls -1 ${exper_depot1}/*_${StepEndDate%??} ${exper_depot2}/*_${StepEndDate%??} )
@@ -69,6 +87,10 @@ do
   fi
 done
 #ls -l Data/Input/inrep/*_${StepStartDate%??}
+#
+# calculate length of integration in hours and time steps (how many in this month)
+# Date1  start of integration
+# Date2  end of integration  (1month later)
 #
 Date1=$(date -d${StepStartDate}GMT0 +%s)
 Date2=$(date -d${StepEndDate}GMT0 +%s)
