@@ -2,8 +2,10 @@ exper='experiment_001'                                            # name of the 
 #
 exper_archive=$(pwd -P)/ARCHIVE                                   # where output is to be sent by post_sps.sh
 #
-exper_anal1=$(pwd -P)/Data_disk/Input/inrep/INI/anal_depart       # where initial conditions can be found by pre_sps.sh
-exper_anal2=${exper_archive}/${exper}/anal_depart                 # where initial conditions can be found by pre_sps.sh
+# anal_depart_YYYYMMDD or anal_depart_YYYYMMDD_yyy
+#
+exper_anal1=$(pwd -P)/Data_disk/Input/inrep/INI                   # where initial conditions can be found by pre_sps.sh
+exper_anal2=${exper_archive}/${exper}                             # where initial conditions can be found by pre_sps.sh
 #
 exper_depot1=${MODEL_DATA}/Offline_driving/ERA-Interim_0.75/6h_Analysis   # where driving data can be found by pre_sps.sh
 exper_depot2=${MODEL_DATA}/SST_SeaIce/ERA-Interim_0.75deg                 # where driving data can be found by pre_sps.sh

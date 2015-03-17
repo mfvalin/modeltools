@@ -22,9 +22,9 @@ export storage_model
 [[ -r exper.cfg ]] || { echo "ERROR: cannot find $(pwd -P)/exper.cfg" ; exit 1 ; }
 source ./exper.cfg
 source functions_sps.dot
-if [[ -d ARCHIVE/${exper}.snapshot ]] ; then
-  rsync -aruvxlH ARCHIVE/${exper}.snapshot/. Data/.
-  echo  "INFO: syncing run directory from ARCHIVE/${exper}.snapshot"
+if [[ -d ${exper_archive}/${exper}.snapshot ]] ; then
+  rsync -aruvxlH ${exper_archive}/${exper}.snapshot/. Data/.
+  echo  "INFO: syncing run directory from ${exper_archive}/${exper}.snapshot"
 fi
 #
 # make sure that there is a value for exper_current_date, exper_fold_date and storage_model in configuration file
@@ -44,13 +44,13 @@ do
   #
   if ((${exper_cycle_year:-999999}==0)) ; then
     echo "INFO: prescribed number of years of integration done"
-    rsync -aruvxlH --delete Data/Input ARCHIVE/${exper}.snapshot/.
+    rsync -aruvxlH --delete Data/Input ${exper_archive}/${exper}.snapshot/.
     exit 0
   fi
   #
   if [[ "${exper_current_date}" == "${exper_end_date}" ]] ; then
     echo "INFO: last date reached: ${exper_end_date}"
-    rsync -aruvxlH --delete Data/Input ARCHIVE/${exper}.snapshot/.
+    rsync -aruvxlH --delete Data/Input ${exper_archive}/${exper}.snapshot/.
     exit 0
   fi
   #

@@ -41,10 +41,10 @@ if [[ -f Data/Input/anal_${StepStartDate} ]] ; then   # normally put there by po
 else
   for Target in ${exper_anal1} ${exper_anal2}
   do
-    echo "INFO: looking for ${Target}_${StepStartDate}${Extension}"
-    [[ -f ${Target}_${StepStartDate}${Extension} ]] && \
-      cp ${Target}_${StepStartDate}${Extension} Data/Input/anal && \
-      echo "INFO: using ${Target}_${StepStartDate}${Extension} as initial conditions" && \
+    echo "INFO: looking for ${Target}/anal_depart_${StepStartDate}${Extension}"
+    [[ -f ${Target}/anal_depart_${StepStartDate}${Extension} ]] && \
+      cp ${Target}/anal_depart_${StepStartDate}${Extension} Data/Input/anal && \
+      echo "INFO: using ${Target}/anal_depart_${StepStartDate}${Extension} as initial conditions" && \
       break
   done
 fi
