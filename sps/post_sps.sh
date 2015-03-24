@@ -54,6 +54,7 @@ rm -f editfst1.dir
 #
 cat <<EOT >editfst2.dir
  DESIRE(-1,-1,-1,${CurrentCmcStamp},-1,-1,-1)
+ DESIRE(-1,['>>','^^'],-1,-1,-1,-1,-1)
  ZAP('A',-1,-1,-1,-1,-1,-1)
  END
 EOT
