@@ -44,12 +44,14 @@ do
   #
   if ((${exper_cycle_year:-999999}==0)) ; then
     echo "INFO: prescribed number of years of integration done"
+    mkdir -p ${exper_archive}/${exper}.snapshot
     rsync -aruvxlH --delete Data/Input ${exper_archive}/${exper}.snapshot/.
     exit 0
   fi
   #
   if [[ "${exper_current_date}" == "${exper_end_date}" ]] ; then
     echo "INFO: last date reached: ${exper_end_date}"
+    mkdir -p ${exper_archive}/${exper}.snapshot
     rsync -aruvxlH --delete Data/Input ${exper_archive}/${exper}.snapshot/.
     exit 0
   fi
