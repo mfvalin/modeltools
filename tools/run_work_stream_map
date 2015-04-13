@@ -1,0 +1,147 @@
+#!/bin/bash
+# usage: run_work_stream [-instances number] -name stream_name [-map mapfile] -maxidle nnn -queues name-1 name-2 ... name-N
+#
+#set -x
+if [[ "$1" == -instances ]]
+then
+  [[ -n "$2" ]] || exit 1
+  ((Instances=$2))
+  shift ; shift
+  if ((Instances>1))   # if not more than one instance, act as usual
+  then
+    ((BATCH_MPI_CPUS>=Instances)) || ((Instances=BATCH_MPI_CPUS))
+    ((BATCH_MPI_CPUS=BATCH_MPI_CPUS/Instances))
+    echo INFO: starting ${Instances} instances of ${0##*/}
+    while ((Instances>0))
+    do
+      echo ${0} -instances 1 "$@"
+      INSTANCE="${Instances}" ${0} -instances 1 "$@" &
+      ((Instances=Instances-1))
+    done
+    wait
+    echo INFO: all instances  terminated
+    exit 0
+  fi
+fi
+[[ "$1" == -name ]] || exit1
+[[ -n "$2" ]] || exit 1
+StreamInstance=${INSTANCE:-1}
+StreamProcessor="${2}_${JOB_ID}.${StreamInstance}"
+StreamName=${2}
+unset INSTANCE
+shift ; shift
+#
+if [[ "$1" == -map ]] ; then
+  [[ -r "$2" ]] || exit1
+  StreamMap="$(sed -n ${StreamInstance},${StreamInstance}p $2)"
+  shift ; shift
+fi
+#
+[[ "$1" == -maxidle ]] || exit1
+[[ -n "$2" ]] || exit 1
+MaxIdle=$2
+shift ; shift
+#
+[[ "$1" == -queues ]] || exit1
+[[ -n "$2" ]] || exit 1
+shift
+Streams="$*"
+#
+set -- ${StreamMap}
+FirstStreamCpu=${1:-1}
+LastStreamCpu=${2:${BATCH_MPI_CPUS:-1}}
+((MaxCpusInJob=LastStreamCpu-FirstStreamCpu+1))
+MinCpusInJob=1
+((MaxCpusInJob>=16)) && MinCpusInJob=16
+#echo BATCH_MPI_CPUS=$BATCH_MPI_CPUS StreamProcessor=$StreamProcessor MaxIdle=$MaxIdle Streams=$Streams
+#exit 0
+#
+IdleSince=$(date +%s)
+export MinCpusInJob       # do not pick a job that uses less than this number of cpus
+export MaxCpusInJob       # do not pick a job that uses more than this number of cpus
+
+cd ${HOME}/.job_queues                       || exit 1
+printf "${Streams}" >${HOME}/.job_queues/.active_${StreamProcessor}.queues || exit 1
+#
+if((MaxCpusInJob>=16)) ; then  # produce correct node file
+  grep -v "^$(hostname)" ${PBS_NODEFILE} | sed -n ${FirstStreamCpu},${LastStreamCpu}p >${HOME}/.job_queues/.active_${StreamProcessor}.hosts
+  export PBS_NODEFILE=${HOME}/.job_queues/.active_${StreamProcessor}.hosts
+fi
+export BATCH_MPI_CPUS=${MaxCpusInJob}
+#for Stream in $${Streams}
+#do
+#    [[ -d ${HOME}/.job_queues/${Stream} ]] || continue
+#    touch ${HOME}/.job_queues/${Stream}/.active_${StreamProcessor}     || exit 1
+#    mkdir ${HOME}/.job_queues/${Stream}/.active_${StreamProcessor}.d   || exit 1
+#done
+
+#
+# launch monitor
+#
+${0%/*}/u.job-monitor &
+cat <<EOT
+INFO: INSTANCE ${StreamInstance}, MinCpus=${MinCpusInJob}, MaxCpus=${MaxCpusInJob}, HOSTS ${FirstStreamCpu},${LastStreamCpu} '.active_${StreamProcessor}.hosts'
+EOT
+TimeNow=$(date +%s)
+((IdleTime=TimeNow-IdleSince))
+while ((IdleTime<MaxIdle))
+do
+    printf "MinCpusInJob=${MinCpusInJob}\nMaxIdle=${MaxIdle}\nTotalIdleTime=${IdleTime}\n" > ${HOME}/.job_queues/.active_${StreamProcessor}
+    ((ProcessedJobs=0))
+    for Stream in $(cat ${HOME}/.job_queues/.active_${StreamProcessor}.queues)   # loop over streams
+    do
+	[[ -d ${HOME}/.job_queues/${Stream} ]] || continue
+	cd ${HOME}/.job_queues/${Stream}       || continue
+        touch .active_${StreamProcessor}       || continue
+        [[ -d .active_${StreamProcessor}.d ]]  || mkdir .active_${StreamProcessor}.d || continue
+
+	export StreamDir=`pwd -P`
+	export StreamFlagFile=${StreamDir}/.active_${StreamProcessor}
+	export StreamFlagDir=${StreamFlagFile}.d
+
+	if [[ -r $StreamFlagFile ]]  # try to get a job from stream if stream is active
+	then
+            [[ -r ${HOME}/.job_queues/.active_${StreamProcessor} ]] || break 10  # stop signal from user
+	    TimeNow=$(date +%s)
+	    ((TimeLeft=JobStartTime+JobTimeLimit-TimeNow))
+	    ((TimeLeft<75)) && \
+              echo "INFO: less than 75 seconds left, exiting" && \
+              break 10   # too little time left, break and cleanup
+	    ${0%/*}/pick_and_run_work  $TimeLeft  && \
+              ((ProcessedJobs=ProcessedJobs+1)) && \
+              IdleSince=$(date +%s) && \
+              break  # got a job, try again to pick from highest queue
+	fi
+
+    done
+
+    if((ProcessedJobs==0))  # no job found in any stream, run a filler job
+    then
+      TimeNow=$(date +%s)
+      ((IdleTime=TimeNow-IdleSince))
+      ((nsleeps==0)) && echo "IDLE=$IdleTime, MAXIDLE=$MaxIdle" 1>&2
+      ((TimeLeft=JobStartTime+JobTimeLimit-TimeNow))
+#      ((TimeLeft>=90))                && time run_simu_opt30_nompi
+      ((TimeLeft>=90))                && sleep 10
+      ((TimeLeft>=15 && TimeLeft<90)) && sleep 10
+      ((nsleeps=(nsleeps+1)%30))
+    fi
+
+    TimeNow=$(date +%s)
+    ((IdleTime=TimeNow-IdleSince))
+
+    [[ -r ${HOME}/.job_queues/.active_${StreamProcessor} ]] || break   # stop signal from user
+    . ${HOME}/.job_queues/.active_${StreamProcessor}                   # update MaxIdle, MinCpusInJob in case user changed the value
+    ((TimeLeft<75)) && echo "INFO: less than 75 seconds left, exiting" && break      # too little time left, break and cleanup
+done
+#
+rm -f ${HOME}/.job_queues/.active_${StreamProcessor}   # cleanup at end of streams
+rm -f ${HOME}/.job_queues/.active_${StreamProcessor}.queues
+for Stream in $Streams
+do
+    [[ -d ${HOME}/.job_queues/$Stream ]] || continue
+    echo ==== JOBS run from stream $Stream ====
+    cat ${HOME}/.job_queues/${Stream}/.active_${StreamProcessor}
+    rm -f ${HOME}/.job_queues/${Stream}/.active_${StreamProcessor}
+    rmdir ${HOME}/.job_queues/${Stream}/.active_${StreamProcessor}.d
+done
