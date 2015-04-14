@@ -155,7 +155,7 @@ function weighted_interp(d,ni,nj,s,nis,njs,w,ij,np,nmax) result(status)
   integer :: status
   integer :: i, j, i0, in, k, maxpts
   integer, parameter :: BSIZE=16
-print *,"IJ min,max nis*njs",minval(ij),maxval(ij),nis*njs
+
   do j = 1 , nj
   do i0 = 1 , ni , BSIZE
     in = min(ni,i0+BSIZE)
