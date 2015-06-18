@@ -145,7 +145,7 @@ mpiexec_Linux_launch() {
     EXTRA_MPI_PARMS=""
     if [[ $Launcher == OpenMPI ]] ; then #   pass environment variables (only names starting with letter or digit) (only for OpenMPI)
 #      EXTRA_MPI_PARMS="-cpus-per-proc ${ThreadsInWorld[${MpiCommWorld}]}"
-      EXTRA_MPI_PARMS="${EXTRA_MPI_PARMS} $(s.prefix '-x ' $(env | grep -v "'" | grep -v '"'  | grep  '^[a-zA-Z0-9]' | sed 's/=.*//' | sort ))"
+      EXTRA_MPI_PARMS="${EXTRA_MPI_PARMS} $(s.prefix '-x ' $(env | grep -v "[']" | grep -v '"'  | grep -v '^BASH_'  | grep  '^[a-zA-Z0-9]' | sed 's/=.*//' | sort ))"
 #     ignore rank file in interactive case
       tty -s || EXTRA_MPI_PARMS="${EXTRA_MPI_PARMS} --rankfile ${MY_RANKFILE}"
 #      echo "INFO: RANK file for ${Launcher}  world $MpiCommWorld"
@@ -561,7 +561,8 @@ MY_NODEFILE=${PARALLEL_NODEFILE:-${GECOSHEP_HOSTS_FILE:-${GECOSHEP_HOSTFILE:-${P
 #Version="1.1.17 2015/02/05" # other typeset -Z issue
 #Version="1.1.17a 2015/02/15" # -L instead of -l for xargs
 #Version="1.1.17b 2015/04/17" # typeset -x -Z4 (again)
-Version="1.1.17c 2015/06/18" # typeset -x -Z4 (again)
+#Version="1.1.17c 2015/06/18" # typeset -x -Z4 (again)
+Version="1.1.18 2015/06/18" # got rid of environment variables names starting with BASH_
 echo "${0##*/} version $Version avec /bin/ksh93"
 eval `cclargs_lite -D "" $0 \
     -args "" "" "[arguments to the command]" \
