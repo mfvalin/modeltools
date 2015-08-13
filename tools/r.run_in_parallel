@@ -264,6 +264,7 @@ local_cleanup() {
  ls  ${tmpdir}/fail.* 2>/dev/null | head -10 | sed "s:${tmpdir}/::g" | xargs -L5 echo
  [[ ${nocleanup} == on_error && $ExitStatus == 0 ]] && nocleanup=""  # -nocleanup on_error , unset nocleanup if no error detected
  [[ -n ${nocleanup} ]] && return $ExitStatus  # -nocleanup option used, return
+ ls  ${tmpdir}/JIO* 2>/dev/null 1>/dev/null && echo "INFO: moving JIO files to current directory" && mv -f ${tmpdir}/JIO* . ; true
  rm -rf ${tmpdir} || ( sleep 1 ; rm -rf ${tmpdir} ) &   # cannot clean tmpdir while script runs, use delayed remove
  return $ExitStatus
 }
@@ -564,7 +565,8 @@ MY_NODEFILE=${PARALLEL_NODEFILE:-${GECOSHEP_HOSTS_FILE:-${GECOSHEP_HOSTFILE:-${P
 #Version="1.1.17b 2015/04/17" # typeset -x -Z4 (again)
 #Version="1.1.17c 2015/06/18" # typeset -x -Z4 (again)
 #Version="1.1.18 2015/06/18" # got rid of environment variables names starting with BASH_
-Version="1.1.19 2015/07/09" # -bind none suppresses the use of the rank file
+#Version="1.1.19 2015/07/09" # -bind none suppresses the use of the rank file
+Version="1.1.20 2015/08/13" # -jio option added
 echo "${0##*/} version $Version avec /bin/ksh93"
 eval `cclargs_lite -D "" $0 \
     -args "" "" "[arguments to the command]" \
@@ -581,6 +583,7 @@ eval `cclargs_lite -D "" $0 \
     -inorder "" "yes" "[list out/err of members in process order]" \
     -instancedir "${PARALLEL_INSTANCES_DIR}" "${PARALLEL_INSTANCES_DIR}" "[directory containing instance names]" \
     -instances "${PARALLEL_INSTANCES}" "${PARALLEL_INSTANCES}" "[instance name for member or list of instances for master]" \
+    -jio "" ". s.jio-prof.dot" "[activate jio]" \
     -map "" "map" "[display processor map]" \
     -maxcores "${MAX_CORES}" "65536" "[]" \
     -members "" "" "[NxM, N members of size M, override npey and npex]" \
@@ -612,6 +615,9 @@ eval `cclargs_lite -D "" $0 \
     -verbose "" "verbose" "[]" \
     -version "" "${Version}" "[version number]" \
     ++ "$@" ${RUN_IN_PARALLEL_EXTRAS}`
+#
+[[ -n ${JIO_ENV} ]] && which s.jio-prof 2>/dev/null 1>/dev/null && jio=". s.jio-prof.dot"
+preexec="${jio} ${preexec}"
 #
 [[ -n ${version} ]] && exit 0
 # are we uisng gdb ?
