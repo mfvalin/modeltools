@@ -617,6 +617,10 @@ ftnword f77_name (mgi_init) (char *channel_name, F2Cl lname)
         }
         /* chn[chan].shmbuf->limit must not be 0 if memory segment was properly initialized at creation  */
       }
+#if defined(WITHOUT_GOSSIP)
+      fprintf(stderr,"ERROR: (mgi_init) cannot find channel %s\n",chn[chan].name);
+      return INIT_ERROR;
+#endif
 
       if (SIG_ACTIVE)
       {
