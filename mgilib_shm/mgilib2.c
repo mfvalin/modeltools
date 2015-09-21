@@ -618,8 +618,10 @@ ftnword f77_name (mgi_init) (char *channel_name, F2Cl lname)
         /* chn[chan].shmbuf->limit must not be 0 if memory segment was properly initialized at creation  */
       }
 #if defined(WITHOUT_GOSSIP)
-      fprintf(stderr,"ERROR: (mgi_init) cannot find channel %s\n",chn[chan].name);
-      return INIT_ERROR;
+      else {
+        fprintf(stderr,"ERROR: (mgi_init) cannot find channel %s\n",chn[chan].name);
+        return INIT_ERROR;
+      }
 #endif
 
       if (SIG_ACTIVE)
@@ -683,7 +685,9 @@ ftnword f77_name (mgi_open) (ftnword *f_chan, char *mode, F2Cl lmode)
         shm->write_status = MGI_SHM_ACTIVE;  /* mark as connected for write */
         chn[chan].gchannel = 100000+chan ;   /* fake fd */
         chn[chan].mode = 'W';
-#if ! defined(WITHOUT_GOSSIP)
+#if defined(WITHOUT_GOSSIP)
+        chn[chan].timeout =  1000000 ; /* default 1000 second timeout */
+#else
         chn[chan].timeout =  get_client_timeout(chn[chan].gchannel);     /* get timeout value for this channel */
 #endif
       }
@@ -706,7 +710,9 @@ ftnword f77_name (mgi_open) (ftnword *f_chan, char *mode, F2Cl lmode)
         shm->read_status = MGI_SHM_ACTIVE;  /* mark as connected for read */
         chn[chan].gchannel = 100000+chan ;   /* fake fd */
         chn[chan].mode = 'R';
-#if ! defined(WITHOUT_GOSSIP)
+#if defined(WITHOUT_GOSSIP)
+        chn[chan].timeout =  1000000 ; /* default 1000 second timeout */
+#else
         chn[chan].timeout =  get_client_timeout(chn[chan].gchannel);     /* get timeout value for this channel */
 #endif
       }
@@ -799,6 +805,7 @@ static int shm_write_c(mgi_shm_buf *shm,void *buf,int nelem,int timeout){
   int maxiter = timeout*1000 ; /* 1000 iterations is one second */
   int iter;
 
+//fprintf(stderr,"DEBUG: shm_write_c, writing %d characters\n",nelem);
   in = shm->in ; out = shm->out ; limit = shm->limit;
   while(ntok > 0){
     inplus = (in+1 > limit) ? 0 : in+1 ;
@@ -885,7 +892,7 @@ static int shm_read_c(mgi_shm_buf *shm,void *buf,int nelem, int len,int timeout)
   int pad = len - nelem;
   int maxiter = timeout*1000 ; /* 1000 iterations is one second */
   int iter;
-
+//fprintf(stderr,"DEBUG: shm_read_c reading %d characters\n",nelem);
   in = shm->in ; out = shm->out ; limit = shm->limit;
   while(ntok > 0){
     iter = maxiter;
@@ -1088,6 +1095,10 @@ ftnword f77_name (mgi_write) (ftnword *f_chan, void *buffer, ftnword *f_nelem, c
 
   return nb;
 #endif
+}
+ftnword f77_name(mgi_write_c) (ftnword *f_chan, void *buffer, ftnword *f_nelem, char *dtype, F2Cl lbuf, F2Cl ltype)
+{
+  return( f77_name(mgi_write) (f_chan, buffer, f_nelem, dtype, lbuf) );
 }
 int C_mgi_write (ftnword *f_chan, void *buffer, int c_nelem, char c_dtype){
   F2Cl ltype=1;
@@ -1295,6 +1306,10 @@ ftnword f77_name (mgi_read) (ftnword *f_chan, void *buffer, ftnword *f_nelem, ch
 #endif
   return ier;
 #endif
+}
+ftnword f77_name(mgi_read_c) (ftnword *f_chan, void *buffer, ftnword *f_nelem, char *dtype, F2Cl lbuf, F2Cl ltype)
+{
+  return ( f77_name(mgi_read) (f_chan, buffer, f_nelem, dtype, lbuf) );
 }
 int C_mgi_read (int c_chan, void *buffer, int c_nelem, char c_dtype){
   ftnword f_chan=c_chan;

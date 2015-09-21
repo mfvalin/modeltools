@@ -63,6 +63,7 @@ subroutine main_mgi_test
 ! usage: f_mgi_test shared_memory_id R|W scenario_file
   use ISO_C_BINDING
   implicit none
+!
   interface
     subroutine sleep_a_bit(duration) bind(C,name='sleep')
     use ISO_C_BINDING
@@ -70,41 +71,68 @@ subroutine main_mgi_test
     integer(C_INT) :: status
     end subroutine sleep_a_bit
   end interface
-
+!
   integer status, status_r, status_w
   integer, external :: mgi_open, mgi_init, mgi_clos, mgi_term
   character(len=1) :: testmode_r, testmode_w
   character(len=1024) :: string, testfile
-  integer :: iostat, nargs, channel_r, channel_w, i
+  integer :: iostat, nargs, channel_r, channel_w, i, minargs
   character(len=128)channel_name, channel_name_r, channel_name_W
 
   nargs = command_argument_count()
+
   if(nargs >= 1) then
-!    call getarg(1,string)
-    call get_command_argument(1, string)
-    channel_name=trim(string)
-    print *,'shared memory channel = ',trim(channel_name)
-    channel_name_r = trim(channel_name)//'_r'
-    channel_name_w = trim(channel_name)//'_w'
+    call getarg(1,string)
+    testmode_r = ' '
+    testmode_W = ' '
+    if(string(1:1) == 'R' .or. string(1:1) == 'r') testmode_r = 'R'
+    if(string(1:1) == 'W' .or. string(1:1) == 'w') testmode_w = 'W'
+    if(string(2:2) == 'R' .or. string(2:2) == 'r') testmode_r = 'R'
+    if(string(2:2) == 'W' .or. string(2:2) == 'w') testmode_w = 'W'
+    print *,'INFO: test mode = ','"'//testmode_r//testmode_w//'"'
+  else
+    print *,'ERROR: test mode (R/W/RW) is mandatory'
+    return
+  endif
+  if(testmode_r .ne. 'R' .and. testmode_w .ne. 'W') then
+    print *,'ERROR: one of R or W must be specified for test mode'
+    return
+  endif
+  minargs = 1
+  if(testmode_r=='R') minargs = minargs + 1
+  if(testmode_w=='W') minargs = minargs + 1
+
+  if(nargs >= minargs) then
+    call get_command_argument(2, string)
+    if(testmode_r=='R') then 
+      channel_name_r = trim(string)
+    else
+      channel_name_w = trim(string)
+    endif
+    if(minargs == 3) then
+      call get_command_argument(3, string)
+      channel_name_w=trim(string)
+    endif
+  else
+    print *,'ERROR: insufficient number of channel names'
+    return
   endif
 
-  if(nargs >= 2) then
-    call getarg(2,string)
-    testmode_r = string(1:1)
-    testmode_W = string(2:2)
-    print *,' test mode = ','"'//testmode_r//testmode_w//'"'
-  endif
+  if(testmode_r=='R') print *,'INFO: reading from channel = ',trim(channel_name_r)
+  if(testmode_w=='W') print *,'INFO: writing into channel = ',trim(channel_name_w)
 
   testfile='mgi_test.txt'
-  if(nargs >= 3) then
-    call getarg(3,testfile)
+  if(nargs >= minargs+1) then
+    call getarg(minargs+1,testfile)
   endif
-  print *,' scenario file: '//'"'//trim(testfile)//'"'
-  if(nargs >= 4) then
+  print *,'INFO: scenario file: '//'"'//trim(testfile)//'"'
+  if(nargs > minargs+1) then
+    print *,'ERROR: too many arguments'
+    return
   endif
 
   call sleep_a_bit(1)
-
+!stop
   channel_r = -1
   if(testmode_r=='R') then
     channel_r = mgi_init(trim(channel_name_r))
@@ -234,7 +262,7 @@ subroutine mgi_test_body(channel_r,channel_w)
     end subroutine sleep_a_bit
   end interface
 
-  integer, external :: mgi_read, mgi_write
+  integer, external :: mgi_read, mgi_write, mgi_read_c, mgi_write_c
   integer, parameter :: MAXVAL=100
   integer, dimension(MAXVAL) :: is, is2
   real, dimension(MAXVAL) :: fs, fs2
@@ -258,60 +286,60 @@ subroutine mgi_test_body(channel_r,channel_w)
           is(i)=nint(start+(i-1)*delta)
         enddo
         print *,is(1:nval)
+        if(channel_w .ne. -1) then
+          status = mgi_write(channel_w,is,nval,what)
+          if(status /= 0) print *,'ERROR: write error, status=',status
+        endif
         if(channel_r .ne. -1) then
           status = mgi_read(channel_r,is2,nval,what)
           if(status <= 0) print *,'ERROR: read error, status=',status
           if(.not. all(is(1:nval)==is2(1:nval))) print *,'ERROR: did not read what was expected (I)'
           if( all(is(1:nval)==is2(1:nval))) print *,'INFO: read what was expected (I)'
         endif
-        if(channel_w .ne. -1) then
-          status = mgi_write(channel_w,is,nval,what)
-          if(status /= 0) print *,'ERROR: write error, status=',status
-        endif
       case('R')
         do i=1,nval
           fs(i)=start+(i-1)*delta
         enddo
         print *,fs(1:nval)
+        if(channel_w .ne. -1) then
+          status = mgi_write(channel_w,fs,nval,what)
+          if(status /= 0) print *,'ERROR: write error, status=',status
+        endif
         if(channel_r .ne. -1) then
           status = mgi_read(channel_r,fs2,nval,what)
           if(status <= 0) print *,'ERROR: read error, status=',status
           if(.not. all(fs(1:nval)==fs2(1:nval))) print *,'ERROR: did not read what was expected (R)'
           if( all(fs(1:nval)==fs2(1:nval))) print *,'INFO: read what was expected (R)'
         endif
-        if(channel_w .ne. -1) then
-          status = mgi_write(channel_w,fs,nval,what)
-          if(status /= 0) print *,'ERROR: write error, status=',status
-        endif
       case('D')
         do i=1,nval
           ds(i)=start+(i-1)*delta
         enddo
         print *,ds(1:nval)
+        if(channel_w .ne. -1) then
+          status = mgi_write(channel_w,ds,nval,what)
+          if(status /= 0) print *,'ERROR: write error, status=',status
+        endif
         if(channel_r .ne. -1) then
           status = mgi_read(channel_r,ds2,nval,what)
           if(status <= 0) print *,'ERROR: read error, status=',status
           if(.not. all(ds(1:nval)==ds2(1:nval))) print *,'ERROR: did not read what was expected (D)'
           if( all(ds(1:nval)==ds2(1:nval))) print *,'INFO: read what was expected (D)'
         endif
-        if(channel_w .ne. -1) then
-          status = mgi_write(channel_w,ds,nval,what)
-          if(status /= 0) print *,'ERROR: write error, status=',status
-        endif
       end select
-    else
+    else   !  what .ne. 'C'
       read(10,*)what,string
       print *,'"'//what//'",','"'//trim(string)//'"'
+        if(channel_w .ne. -1) then
+          status = mgi_write_c(channel_w,trim(string),len(trim(string)),what)
+          if(status /= 0) print *,'ERROR: write error, status=',status
+      endif
       if(channel_r .ne. -1) then
-          status = mgi_read(channel_r,string2,len(trim(string)),what)
+          status = mgi_read_c(channel_r,string2,len(trim(string)),what)
           if(status <= 0) print *,'ERROR: read error, status=',status
           if(trim(string) == trim(string2)) print *,'INFO: read what was expected (C)'
           if(trim(string) /= trim(string2)) print *,'ERROR: expected "'//trim(string)//'"'//' READ back : "'//trim(string2)//'"'
         endif
-        if(channel_w .ne. -1) then
-          status = mgi_write(channel_w,trim(string),len(trim(string)),what)
-          if(status /= 0) print *,'ERROR: write error, status=',status
-      endif
     endif
     read(10,*,iostat=iostat)what
   enddo
