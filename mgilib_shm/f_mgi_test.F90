@@ -29,10 +29,14 @@ program model_main
   print *,'I am PE',me+1,' of',world
   if(me==0) then
 #if defined(ATM)
-  call atmospheric_model
+    call atmospheric_model
 #endif
 #if defined(OCE)
-  call ocean_model
+    call ocean_model
+#endif
+#if ! defined(ATM) && ! defined(OCE)
+    print *,'base test with mpi'
+    call main_mgi_test
 #endif
   endif
   call mpi_finalize(ierr)

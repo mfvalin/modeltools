@@ -1,8 +1,11 @@
 
-all: mgilib2.o atm.Abs oce.Abs test.Abs mgi_shm.Abs
+all: mgilib2.o atm.Abs oce.Abs test.Abs mpi.Abs mgi_shm.Abs
 
 mgi_shm.Abs: mgi_shm.c
 	s.cc -O 2 -Dmgi_shm=main mgi_shm.c -o mgi_shm.Abs
+
+mpi.Abs: mgilib2.o f_mgi_test.F90
+	s.f90 -mpi -DMODEL f_mgi_test.F90 mgilib2.o -o mpi.Abs
 
 atm.Abs: mgilib2.o f_mgi_test.F90
 	s.f90 -mpi -DMODEL -DATM f_mgi_test.F90 mgilib2.o -o atm.Abs
