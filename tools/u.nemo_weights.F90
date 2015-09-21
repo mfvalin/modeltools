@@ -1,4 +1,4 @@
-program re_tag_scale
+program demo_interp
   implicit none
 
   type :: weight_set
@@ -93,7 +93,7 @@ function read_interp_weights(iun,nis,w) result(status)
     integer :: ni, nj, nmax
   end type
   integer, intent(IN) :: iun          ! weight file
-  integer, intent(IN) :: nis
+  integer, intent(IN) :: nis          ! first dimension of output grid
   type(weight_set),intent(OUT) :: w
   integer :: status
 
@@ -110,29 +110,29 @@ function read_interp_weights(iun,nis,w) result(status)
   piov180 = pi/180.0
   status = -1
 
-  status = fstinf(iun,ni,nj,nk,-1,"",-1,-1,-1,"P@","NAVG")
+  status = fstinf(iun,ni,nj,nk,-1,"",-1,-1,-1,"P@","NAVG")       ! use NAVG to get dimensions
   print *,"INFO: ni,nj=",ni,nj
   allocate( w%n(ni,nj), w8(ni,nj), w4(ni,nj), ia(ni,nj), ja(ni,nj) )
-  status = fstlir( w4,iun,ni,nj,nk,-1,"",-1,-1,-1,"P@","NAVG")
+  status = fstlir( w4,iun,ni,nj,nk,-1,"",-1,-1,-1,"P@","NAVG")   ! number of useful points
   w%n = w4 + 0.5
   w%nmax = maxval(w%n)
   print *,"INFO: w%n  max=",w%nmax
   allocate( w%ij(ni,nj,w%nmax), w%w(ni,nj,w%nmax), w%c(ni,nj), w%s(ni,nj) )
   do i = 1, w%nmax
     write(varname,100)'W',i
-    status = fstlir( w8,iun,ni,nj,nk,-1,"",-1,-1,-1,"",varname)
+    status = fstlir( w8,iun,ni,nj,nk,-1,"",-1,-1,-1,"",varname)   ! Wnnn record
     w%w(:,:,i) = w8
     write(varname,100)'I',i
-    status = fstlir( ia,iun,ni,nj,nk,-1,"",-1,-1,-1,"",varname)
+    status = fstlir( ia,iun,ni,nj,nk,-1,"",-1,-1,-1,"",varname)   ! Innn record
     write(varname,100)'J',i
-    status = fstlir( ja,iun,ni,nj,nk,-1,"",-1,-1,-1,"",varname)
+    status = fstlir( ja,iun,ni,nj,nk,-1,"",-1,-1,-1,"",varname)   ! Jnnn record
     print *,"INFO: ia/ja min,max",minval(ia),maxval(ia),minval(ja),maxval(ja)
-    w%ij(:,:,i) = ia + (ja - 1)*nis
+    w%ij(:,:,i) = ia + (ja - 1)*nis                               ! I and J combined into "collapsed index"
     print *,"INFO: w%w  min,max=",minval(w%w(:,:,i)),maxval(w%w(:,:,i))
   enddo
-  status = fstlir( w%c,iun,ni,nj,nk,-1,"",-1,-1,-1,"P@","ANG")
+  status = fstlir( w%c,iun,ni,nj,nk,-1,"",-1,-1,-1,"P@","ANG")    ! rotation angles
   print *,"INFO: ang  min,max=",minval(w%c),maxval(w%c)
-  w%s = sin(w%c * piov180)
+  w%s = sin(w%c * piov180)                                        ! transform into sine and cosine
   w%c = cos(w%c * piov180)
   print *,"INFO: cos  min,max=",minval(w%c),maxval(w%c)
   print *,"INFO: sin  min,max=",minval(w%s),maxval(w%s)
@@ -147,11 +147,11 @@ end function
 function weighted_interp(d,ni,nj,s,nis,njs,w,ij,np,nmax) result(status)
   implicit none
   integer, intent(IN) :: ni, nj, nmax, nis, njs
-  real, intent(OUT), dimension(ni,nj) :: d
-  real, intent(IN), dimension(nis*njs) :: s
-  real, intent(IN),  dimension(ni,nj,nmax) :: w
-  integer, intent(IN),  dimension(ni,nj,nmax) :: ij
-  integer, intent(IN),  dimension(ni,nj) :: np
+  real, intent(OUT), dimension(ni,nj) :: d            ! output grid
+  real, intent(IN), dimension(nis*njs) :: s           ! input grid
+  real, intent(IN),  dimension(ni,nj,nmax) :: w       ! weights
+  integer, intent(IN),  dimension(ni,nj,nmax) :: ij   ! source index table (I and J records from file combined)
+  integer, intent(IN),  dimension(ni,nj) :: np        ! number of useful points
   integer :: status
   integer :: i, j, i0, in, k, maxpts
   integer, parameter :: BSIZE=16
@@ -159,11 +159,11 @@ function weighted_interp(d,ni,nj,s,nis,njs,w,ij,np,nmax) result(status)
   do j = 1 , nj
   do i0 = 1 , ni , BSIZE
     in = min(ni,i0+BSIZE)
-    maxpts = maxval(np(i0:in,j))
+    maxpts = maxval(np(i0:in,j))      ! not used for now
     d(i0:in,j) = 0.0
     do k = 1 , nmax
     do i = i0 , in
-      d(i,j) = d(i,j) + ( w(i,j,k) * s(ij(i,j,k)) )
+      d(i,j) = d(i,j) + ( w(i,j,k) * s(ij(i,j,k)) )   ! weighted sum
     enddo
     enddo
   enddo

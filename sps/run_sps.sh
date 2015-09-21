@@ -1,14 +1,21 @@
 #!/bin/bash
 [[ "$1" == -v* ]] && set -x
 #
-[[ -d SHM ]]       || { echo "ERROR: directory SHM not found" ; exit 1 ;}
+[[ -L ARCHIVE && -d ARCHIVE ]]  || { echo "ERROR: ARCHIVE must be a soft link to an existing directory" ; exit 1 ;}
+[[ -L SHM && -d SHM ]]          || { echo "ERROR: SHM must be a soft link to an existing directory" ; exit 1 ;}
 mkdir -p SHM/storage_model SHM/Data/Input/inrep
+#
+rm -f OUT
+[[ -d OUT ]] && { echo "ERROR: OUT is an existing directory and should not" ; exit 1 ;}
+ln -s __workdir__Linux_x86-64/output/cfg_0000 OUT
 #
 [[ -d Data ]]      || { echo "ERROR: directory Data not found" ; exit 1 ; }
 [[ -d Data_disk ]] || { echo "ERROR: directory Data_disk not found" ; exit 1 ; }
 #
-[[ -f Data/Input/climato ]]        || { echo "INFO: copying climato" ; cp -f Data_disk/Input/climato Data/Input ; }
-[[ -f Data/Input/Gem_geophy.fst ]] || { echo "INFO: copying Gem_geophy.fst" ; cp -f Data_disk/Input/Gem_geophy.fst Data/Input ; }
+[[ -f Data/Input/climato ]]        || \
+   { echo "INFO: copying climato from Data_disk/Input" ; cp -f Data_disk/Input/climato Data/Input ; }
+[[ -f Data/Input/Gem_geophy.fst ]] || \
+   { echo "INFO: copying Gem_geophy.fst from Data_disk/Input" ; cp -f Data_disk/Input/Gem_geophy.fst Data/Input ; }
 #
 rm -f Data/Input/inrep/anal
 ln -s ../anal Data/Input/inrep/anal
