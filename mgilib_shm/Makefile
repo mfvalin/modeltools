@@ -20,4 +20,5 @@ mgilib2.o: mgilib2.c mgi.h
 	s.cc -c -DWITHOUT_GOSSIP -O 2 mgilib2.c -o mgilib2.o
 
 clean:
-	rm -f mgilib2.o atm.Abs oce.Abs mgi_shm.Abs
+	rm -f mgilib2.o atm.Abs oce.Abs mgi_shm.Abs mpi.Abs
+

@@ -92,11 +92,20 @@
    new programs:
    -mgi_shmem (C) is used to create the shared memory area associated with
            a "shared memory channel".
-   -mgi_watch (C) can be used to monitor "shared memory channel" activity.
+    mgi_shmem (C) will also monitor "shared memory channel" activity if needed.
+
    -mgi_test (C) is used to test a "shared memory channel" using the C API
            and a scenario file.
+
    -f_mgi_test (Fortran) is used to test a "shared memory channel" using the
            Fortran API and a scenario file.
+
+   Revision: September 2015, M.Valin, UQAM
+   If the code is compiled with -DWITHOUT_GOSSIP the MGI library will only support
+   the shared memory mode.
+   A bit of code refactoring has been done to make it easier to follow.
+   Fortran callable mgi_read_c function has been added because there are two(2) character
+   strings instead of one(1) in the interface.
 
 */
 
@@ -113,7 +122,12 @@
 #include <string.h>
 #include <ctype.h>
 #include "mgi.h"
+
+#define MEMCPY_LIMIT 10
+
+#if ! defined(WITHOUT_GOSSIP)
 #include <gossip.h>
+#endif
 
 /* error codes header file */
 #include <cgossip.h>
@@ -177,6 +191,8 @@ ftnword f77_name (mgi_clos) (ftnword *f_chan);
 ftnword f77_name (mgi_term) ();
 void f77_name (mgi_set_timeout) (ftnword *chan, ftnword *timeout);
 
+#if ! defined(WITHOUT_GOSSIP)
+
 extern int connect_to_subchannel_by_name (char *channel, char *subchannel, char *mode);
 extern int GET_ack_nack (int socket, char *message);
 extern int write_record (int fclient, void *buf, int longueur, int tokensize);
@@ -184,10 +200,8 @@ extern void *read_record (int fclient, void *buf, int *longueur, int maxlongueur
 extern char *get_gossip_dir (int display);
 
 extern void init_client_table ();
-#if ! defined(WITHOUT_GOSSIP)
 extern void set_client_timeout (int fclient, int timeout);
 extern int get_client_timeout (int fclient);
-#endif
 extern int close_channel (int fclient, char *channel);
 
 extern int get_stream_timeout(int gchannel);
@@ -198,6 +212,7 @@ extern int signal_timeout(int gchannel);
 
 //ftnword f77_name (mgi_read_oob) ();   /* read out of band */
 //ftnword f77_name (mgi_write_oob) ();   /* write out of band */
+#endif
 
 /***********************************************************************************************/
 
@@ -470,7 +485,9 @@ ftnword f77_name (mgi_clos) (ftnword *f_chan)
     return 0;
   }  /* shared memory channel  */
 
-#if ! defined(WITHOUT_GOSSIP)
+#if defined(WITHOUT_GOSSIP)
+  return(CONNECTION_ERROR); /* shared memory channel or else !! */
+#else
   if(chn[chan].gchannel != 0)   /* TCP/IP channel */
     {
       snprintf(buf, 1023, "%s %s", "END", chn[chan].name);
@@ -515,7 +532,9 @@ ftnword f77_name (mgi_term) ()
         continue;
       }
 
-#if ! defined(WITHOUT_GOSSIP)
+#if defined(WITHOUT_GOSSIP)
+      continue;
+#else
       if(chn[chan].name && strcmp((char *)chn[chan].name, "") && chn[chan].gchannel > 0)    /* TCP/IP channel */
 	{
 	  ier = send_command("END");
@@ -591,6 +610,7 @@ ftnword f77_name (mgi_init) (char *channel_name, F2Cl lname)
       chn[chan].shmid = -1;   /* set shared memory id to unused */
       chn[chan].shmbuf = NULL;
       chn[chan].buffer = NULL;
+      chn[chan].timeout = 1000 ; /* default timeout is 1000 seconds */
 
       snprintf(env_var_name,sizeof(env_var_name)-1,"SHM_%s",chn[chan].name);
       env_var_name[sizeof(env_var_name)-1]='\0';
@@ -671,13 +691,13 @@ ftnword f77_name (mgi_open) (ftnword *f_chan, char *mode, F2Cl lmode)
   if (*mode == 'W')
     {
       if(chn[chan].shmbuf == NULL) {   /* not a shared memory channel */
-#if ! defined(WITHOUT_GOSSIP)
+#if defined(WITHOUT_GOSSIP)
+        return(CONNECTION_ERROR); /* invalid channel */
+#else
         chn[chan].gchannel = connect_to_subchannel_by_name( get_gossip_dir(0), chn[chan].name, "write" );
 
         if( chn[chan].gchannel < 0 )
           chn[chan].gchannel = retry_connect( chan );
-#else
-        return(CONNECTION_ERROR); /* invalid channel */
 #endif
       } else {   /* it is  a shared memory channel, initialize it for write  */
         shm = chn[chan].shmbuf;
@@ -696,13 +716,13 @@ ftnword f77_name (mgi_open) (ftnword *f_chan, char *mode, F2Cl lmode)
   else if (*mode == 'R')
     {
       if(chn[chan].shmbuf == NULL) {   /* not a shared memory channel */
-#if ! defined(WITHOUT_GOSSIP)
+#if defined(WITHOUT_GOSSIP)
+        return(CONNECTION_ERROR); /* invalid channel */
+#else
         chn[chan].gchannel = connect_to_subchannel_by_name( get_gossip_dir(0), chn[chan].name, "read" );
 
         if( chn[chan].gchannel < 0 )
           chn[chan].gchannel = retry_connect( chan );
-#else
-        return(CONNECTION_ERROR); /* invalid channel */
 #endif
       } else {   /* it is  a shared memory channel, initialize it for read */
         shm = chn[chan].shmbuf;
@@ -839,7 +859,7 @@ static int shm_write(mgi_shm_buf *shm,void *buf,int nelem,int type,int timeout){
   int ntok, navail;
   unsigned int *buffer = (unsigned int *) buf ;
   int maxiter = timeout*1000 ; /* 1000 iterations is one second */
-  int iter;
+  int iter, i;
 
   if(shm->write_status != MGI_SHM_ACTIVE) return(WRITE_ERROR) ; /* not properly setup to write */
 
@@ -867,7 +887,11 @@ static int shm_write(mgi_shm_buf *shm,void *buf,int nelem,int type,int timeout){
       navail = (out-1) - in;
     }
     navail = (navail > ntok) ? ntok : navail;             /* only need to write ntok tokens */
-    memcpy(&shm->data[in],buffer,sizeof(int)*navail);     //    shm->data[in] = *buffer;
+    if(navail < MEMCPY_LIMIT) {        /* special case for writing few tokens */
+      for (i=0 ; i<navail ; i++) shm->data[in+i] = buffer[i];
+    }else{
+      memcpy(&shm->data[in],buffer,sizeof(int)*navail);     //    shm->data[in] = *buffer;
+    }
 //    fprintf(stderr,"DEBUG: Write navail=%d, buffer = %d, %d, %d\n",navail,buffer[0],shm->data[in],in);
     in += navail;
     if(in > limit) in = 0;  //    in = inplus;
@@ -926,7 +950,7 @@ static int shm_read(mgi_shm_buf *shm,void *buf,int nelem,int type, int len,int t
   int ntok, navail;
   unsigned int *buffer = (unsigned int *) buf ;
   int maxiter = timeout*1000 ; /* 1000 iterations is one second */
-  int iter;
+  int iter, i;
 
   if(shm->read_status != MGI_SHM_ACTIVE) return(READ_ERROR) ; /* not properly setup to read */
 
@@ -953,7 +977,11 @@ static int shm_read(mgi_shm_buf *shm,void *buf,int nelem,int type, int len,int t
       navail = (limit + 1) - out;
     }
     navail = (navail > ntok) ? ntok : navail;             /* only need to read ntok tokens */
-    memcpy(buffer,&shm->data[out],sizeof(int)*navail);    //    *buffer = shm->data[out] ;
+    if(navail < MEMCPY_LIMIT) {   /* special case for reading few tokens */
+      for (i=0 ; i<navail ; i++) buffer[i] = shm->data[out+i];
+    }else{
+      memcpy(buffer,&shm->data[out],sizeof(int)*navail);    //    *buffer = shm->data[out] ;
+    }
 //    fprintf(stderr,"DEBUG: Read navail=%d, buffer = %d, %d, %d\n",navail,buffer[0],shm->data[out],out);
     out += navail;                     /* bump out */
     out = (out > limit) ? 0 : out;     //    out = (out+1 > limit) ? 0 : out+1;
@@ -1024,8 +1052,10 @@ ftnword f77_name (mgi_write) (ftnword *f_chan, void *buffer, ftnword *f_nelem, c
     }
   }
 
-#if ! defined(WITHOUT_GOSSIP)
   /* if we get here, it is a "gossip" TCP/IP channel */
+#if defined(WITHOUT_GOSSIP)
+  return(WRITE_ERROR);  /* MUST be a shared memory channel */
+#else
 
   if ( *dtype == 'C' )
     {
@@ -1164,8 +1194,10 @@ ftnword f77_name (mgi_read) (ftnword *f_chan, void *buffer, ftnword *f_nelem, ch
     }
   }
 
-#if ! defined(WITHOUT_GOSSIP)
 /* if we get here, it is a "gossip" TCP/IP channel */
+#if defined(WITHOUT_GOSSIP)
+  return(READ_ERROR);  /* MUST be a shared memory channel */
+#else
 
   ier = send_command_to_server(chn[chan].gchannel, "READ");
 
@@ -1307,6 +1339,9 @@ ftnword f77_name (mgi_read) (ftnword *f_chan, void *buffer, ftnword *f_nelem, ch
   return ier;
 #endif
 }
+/* 
+ *added mgi_read_c Fortran callable routine because of extra character string 
+*/
 ftnword f77_name(mgi_read_c) (ftnword *f_chan, void *buffer, ftnword *f_nelem, char *dtype, F2Cl lbuf, F2Cl ltype)
 {
   return ( f77_name(mgi_read) (f_chan, buffer, f_nelem, dtype, lbuf) );
