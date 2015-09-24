@@ -38,12 +38,14 @@ program model_main
     print *,'base test with mpi'
     call main_mgi_test
 #endif
+    call mgi_perf_print
   endif
   call mpi_finalize(ierr)
 
 #else
 
   call main_mgi_test
+  call mgi_perf_print
   
 #endif
   stop
@@ -136,6 +138,7 @@ subroutine main_mgi_test
   endif
 
   call sleep_a_bit(1)
+  call mgi_perf_on
 !stop
   channel_r = -1
   if(testmode_r=='R') then
@@ -205,6 +208,7 @@ subroutine model(channel_name_r,channel_name_w)
   character(len=*), intent(IN) :: channel_name_w
 
   call sleep_a_bit(1)
+  call mgi_perf_on
   print *,'reading from '//channel_name_r//', writing to '//channel_name_w
 !  return
 
@@ -267,7 +271,7 @@ subroutine mgi_test_body(channel_r,channel_w)
   end interface
 
   integer, external :: mgi_read, mgi_write, mgi_read_c, mgi_write_c
-  integer, parameter :: MAXVAL=100
+  integer, parameter :: MAXVAL=1000000
   integer, dimension(MAXVAL) :: is, is2
   real, dimension(MAXVAL) :: fs, fs2
   real*8, dimension(MAXVAL) :: ds, ds2
@@ -289,7 +293,7 @@ subroutine mgi_test_body(channel_r,channel_w)
         do i=1,nval
           is(i)=nint(start+(i-1)*delta)
         enddo
-        print *,is(1:nval)
+        if(nval <= 10) print *,is(1:nval)
         if(channel_w .ne. -1) then
           status = mgi_write(channel_w,is,nval,what)
           if(status /= 0) print *,'ERROR: write error, status=',status
@@ -304,7 +308,7 @@ subroutine mgi_test_body(channel_r,channel_w)
         do i=1,nval
           fs(i)=start+(i-1)*delta
         enddo
-        print *,fs(1:nval)
+        if(nval <= 10) print *,fs(1:nval)
         if(channel_w .ne. -1) then
           status = mgi_write(channel_w,fs,nval,what)
           if(status /= 0) print *,'ERROR: write error, status=',status
@@ -319,7 +323,7 @@ subroutine mgi_test_body(channel_r,channel_w)
         do i=1,nval
           ds(i)=start+(i-1)*delta
         enddo
-        print *,ds(1:nval)
+        if(nval <= 10) print *,ds(1:nval)
         if(channel_w .ne. -1) then
           status = mgi_write(channel_w,ds,nval,what)
           if(status /= 0) print *,'ERROR: write error, status=',status

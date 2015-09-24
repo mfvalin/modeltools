@@ -132,6 +132,18 @@
 /* error codes header file */
 #include <cgossip.h>
 
+static int perfmon = 0;  /* if 1 , collect performance stats */
+static int printed = 1;
+static long long time_in;
+
+static long long bytes_read = 0;       /* bytes read */
+static long long time_read = 0;        /* time spent reading */
+static long long call_read = 0;        /* number of calls to mgi_read */
+
+static long long bytes_written = 0;    /* bytes written */
+static long long time_written = 0;     /* time spent writing */
+static  long long call_written = 0;    /* number of calls to mgi_write */
+
 static channel chn[MAX_CHANNELS];
 
 static int ichan = 0;
@@ -214,6 +226,60 @@ extern int signal_timeout(int gchannel);
 //ftnword f77_name (mgi_write_oob) ();   /* write out of band */
 #endif
 
+#pragma weak mgi_perf_print_=mgi_perf_print
+#pragma weak mgi_perf_print__=mgi_perf_print
+void mgi_perf_print_();
+void mgi_perf_print__();
+void mgi_perf_print(){
+  double tim, speed, temp;
+
+  if(printed) return;
+  tim = 0.0;
+  speed = 0.0;
+  fprintf(stderr,"\n====== MGI performance report ======\n");
+
+  tim = time_read * .000001;       /* in seconds */
+  temp = bytes_read * .000001;     /* in MegaBytes */
+  speed = (tim == 0.0) ? 0.0 : temp / tim ;
+  fprintf(stderr,"%10Ld bytes read,    %8Ld calls to mgi_read,  %10.6f seconds : %10.6f MBytes/sec\n",bytes_read,call_read,tim,speed);
+
+  tim = time_written * .000001;       /* in seconds */
+  temp = bytes_written * .000001;     /* in MegaBytes */
+  speed = (tim == 0.0) ? 0.0 : temp / tim ;
+  fprintf(stderr,"%10Ld bytes written, %8Ld calls to mgi_write, %10.6f seconds : %10.6f MBytes/sec\n",bytes_written,call_written,tim,speed);
+  fprintf(stderr,"\n====================================\n");
+  printed = 1;
+}
+
+#pragma weak mgi_perf_on_=mgi_perf_on
+#pragma weak mgi_perf_on__=mgi_perf_on
+void mgi_perf_on_();
+void mgi_perf_on__();
+void mgi_perf_on(){
+  if(perfmon == 0) atexit(mgi_perf_print);
+  perfmon = 1;
+  printed = 0;
+}
+
+#pragma weak mgi_perf_off_=mgi_perf_off
+#pragma weak mgi_perf_off__=mgi_perf_off
+void mgi_perf_off_();
+void mgi_perf_off__();
+void mgi_perf_off(){
+  perfmon = 0;
+}
+
+static long long mgi_time(){
+  struct timeval tv;
+  long long temp;
+
+  gettimeofday(&tv,NULL);
+  temp = tv.tv_sec;
+  temp *= 1000000;
+  temp += tv.tv_usec;
+
+  return(temp);
+}
 /***********************************************************************************************/
 
 static int validchan( int chan )
@@ -827,6 +893,7 @@ static int shm_write_c(mgi_shm_buf *shm,void *buf,int nelem,int timeout){
 
 //fprintf(stderr,"DEBUG: shm_write_c, writing %d characters\n",nelem);
   in = shm->in ; out = shm->out ; limit = shm->limit;
+  bytes_written += ntok;
   while(ntok > 0){
     inplus = (in+1 > limit) ? 0 : in+1 ;
     iter = maxiter;
@@ -836,7 +903,7 @@ static int shm_write_c(mgi_shm_buf *shm,void *buf,int nelem,int timeout){
       out = shm->out;            /* update out pointer from shared memory */
       iter--;                    /* decrement timeout counter */
     }
-    if(iter <= 0) return(WRITE_TIMEOUT);
+    if(iter <= 0) { time_written += (mgi_time() - time_in) ; return(WRITE_TIMEOUT); }
     token = *str++ ;
     token <<= 8 ; if(ntok >  2) token |= *str++ ;
     token <<= 8 ; if(ntok >  1) token |= *str++ ;
@@ -847,6 +914,7 @@ static int shm_write_c(mgi_shm_buf *shm,void *buf,int nelem,int timeout){
     in = inplus;
   }
   shm->in = in;  /* update in pointer in shared memory */
+  time_written += (mgi_time() - time_in) ;
   return(ntok);
 }
 
@@ -865,8 +933,10 @@ static int shm_write(mgi_shm_buf *shm,void *buf,int nelem,int type,int timeout){
 
   if(type == 'C') return ( shm_write_c(shm,buf,nelem,timeout) );                    /* characters */
   if(type != 'I' && type != 'R' && type != 'D') return(WRITE_ERROR) ;       /* unsupported type */
+  time_in = mgi_time();
   ntok = nelem;
   if(type == 'D') ntok = nelem*2 ;                 /* 8 byte tokens */
+  bytes_written += ntok*4;
 
   in = shm->in ; out = shm->out ; limit = shm->limit;
 //  fprintf(stderr,"DEBUG: Write ntok=%d\n",ntok);
@@ -878,7 +948,7 @@ static int shm_write(mgi_shm_buf *shm,void *buf,int nelem,int type,int timeout){
       usleep(1000);              /* sleep for 1 millisecond */
       out = shm->out;            /* update out pointer from shared memory */
       iter--;                    /* decrement timeout counter */
-      if(iter <= 0) return(WRITE_TIMEOUT);
+      if(iter <= 0) { time_written += (mgi_time() - time_in) ; return(WRITE_TIMEOUT); }
     }
     if(in >= out){   /* can write into  in -> limit except if out == 0 (can only use in -> limit-1)*/
       navail = (limit+1) - in;
@@ -899,6 +969,7 @@ static int shm_write(mgi_shm_buf *shm,void *buf,int nelem,int type,int timeout){
     buffer += navail;       //    buffer++;
   }
   shm->in = in;  /* update in pointer in shared memory */
+  time_written += (mgi_time() - time_in) ;
   return(ntok*sizeof(unsigned int));
 }
 int ShmWriteBuf(mgi_shm_buf *shm,void *buf,int nelem,int type,int timeout){
@@ -918,6 +989,7 @@ static int shm_read_c(mgi_shm_buf *shm,void *buf,int nelem, int len,int timeout)
   int iter;
 //fprintf(stderr,"DEBUG: shm_read_c reading %d characters\n",nelem);
   in = shm->in ; out = shm->out ; limit = shm->limit;
+  bytes_read += ntok;
   while(ntok > 0){
     iter = maxiter;
     while(in == out && iter > 0) {           /* shared memory circular buffer is empty */
@@ -926,7 +998,7 @@ static int shm_read_c(mgi_shm_buf *shm,void *buf,int nelem, int len,int timeout)
       in = shm->in;              /* update in pointer from shared memory */
       iter--;                    /* decrement timeout counter */
     }
-    if(iter <= 0) return(READ_TIMEOUT);
+    if(iter <= 0) { time_read += (mgi_time() - time_in) ; return(READ_TIMEOUT); }
     token = shm->data[out] ;
     if(ntok >  3) {*str++ = (token>>24)&0xFF ; *str++ = (token>>16)&0xFF ; *str++ = (token>>8)&0xFF ; *str++ = token&0xFF ; } ;
     if(ntok == 3) {*str++ = (token>>24)&0xFF ; *str++ = (token>>16)&0xFF ; *str++ = (token>>8)&0xFF ; };
@@ -938,6 +1010,7 @@ static int shm_read_c(mgi_shm_buf *shm,void *buf,int nelem, int len,int timeout)
   }
   shm->out = out;  /* update out pointer in shared memory */
   while(pad-- > 0) *str++ = ' ';
+  time_read += (mgi_time() - time_in) ;
   return(nelem);
 }
 
@@ -956,8 +1029,10 @@ static int shm_read(mgi_shm_buf *shm,void *buf,int nelem,int type, int len,int t
 
   if(type == 'C') return ( shm_read_c(shm,buf,nelem,len,timeout) );        /* characters */
   if(type != 'I' && type != 'R' && type != 'D') return(READ_ERROR) ;       /* unsupported type */
+  time_in = mgi_time();
   ntok = nelem ;
   if(type == 'D') ntok = nelem*2 ;                 /* 8 byte tokens */
+  bytes_read += ntok*4;
 
   in = shm->in ; out = shm->out ; limit = shm->limit;
 //  fprintf(stderr,"DEBUG: Read ntok=%d\n",ntok);
@@ -968,7 +1043,7 @@ static int shm_read(mgi_shm_buf *shm,void *buf,int nelem,int type, int len,int t
       usleep(1000);              /* sleep for 1 millisecond */
       in = shm->in;              /* update in pointer from shared memory */
       iter--;                    /* decrement timeout counter */
-      if(iter <= 0) return(READ_TIMEOUT);
+      if(iter <= 0) { time_read += (mgi_time() - time_in) ; return(READ_TIMEOUT); }
     }
     /* at this point out cannot be equal to in */
     if(out < in){   /* can get out -> in-1 */
@@ -989,6 +1064,7 @@ static int shm_read(mgi_shm_buf *shm,void *buf,int nelem,int type, int len,int t
     buffer += navail;                  //    buffer++;
   }
   shm->out = out;  /* update out pointer in shared memory */
+  time_read += (mgi_time() - time_in) ;
   return(nelem);
 }
 int ShmReadBuf(mgi_shm_buf *shm,void *buf,int nelem,int type, int len,int timeout){
@@ -1045,6 +1121,7 @@ ftnword f77_name (mgi_write) (ftnword *f_chan, void *buffer, ftnword *f_nelem, c
     status = shm_write(chn[chan].shmbuf,&len_typ,1,'I',timeout) ;  /* record length + type */
     if(status != 0) return(status);
 
+    call_written++;
     if(*dtype != 'C'){
       return( shm_write(chn[chan].shmbuf,buffer,nelem                    ,*dtype,timeout) );
     }else{
@@ -1187,6 +1264,7 @@ ftnword f77_name (mgi_read) (ftnword *f_chan, void *buffer, ftnword *f_nelem, ch
       fprintf(stderr,"ERROR: (mgi_read) length/type mismatch, expected: %d/%c, got: %d/%c\n",nelem,*dtype,len_typ >> 8,typ);
       return(READ_ERROR);
     }
+    call_read++;
     if(*dtype != 'C'){
       return( shm_read(chn[chan].shmbuf,buffer,nelem,*dtype,nelem,timeout) ) ;
     }else{
