@@ -139,10 +139,12 @@ static long long time_in;
 static long long bytes_read = 0;       /* bytes read */
 static long long time_read = 0;        /* time spent reading */
 static long long call_read = 0;        /* number of calls to mgi_read */
+static long long wait_read = 0;        /* time spent waiting on a read (approximate) */
 
-static long long bytes_written = 0;    /* bytes written */
-static long long time_written = 0;     /* time spent writing */
-static  long long call_written = 0;    /* number of calls to mgi_write */
+static long long bytes_write = 0;    /* bytes written */
+static long long time_write = 0;     /* time spent writing */
+static  long long call_write = 0;    /* number of calls to mgi_write */
+static long long wait_write = 0;     /* time spent waiting on a write (approximate) */
 
 static channel chn[MAX_CHANNELS];
 
@@ -232,6 +234,7 @@ void mgi_perf_print_();
 void mgi_perf_print__();
 void mgi_perf_print(){
   double tim, speed, temp;
+  double tim2, speed2;
 
   if(printed) return;
   tim = 0.0;
@@ -239,14 +242,20 @@ void mgi_perf_print(){
   fprintf(stderr,"\n====== MGI performance report ======\n");
 
   tim = time_read * .000001;       /* in seconds */
+  tim2 = tim - wait_read * .000001;  /* subtract time spent waiting */
   temp = bytes_read * .000001;     /* in MegaBytes */
-  speed = (tim == 0.0) ? 0.0 : temp / tim ;
-  fprintf(stderr,"%10Ld bytes read,    %8Ld calls to mgi_read,  %10.6f seconds : %10.6f MBytes/sec\n",bytes_read,call_read,tim,speed);
+  speed = (tim <= 0.0) ? 0.0 : temp / tim ;
+  speed2 = (tim2 <= 0.0) ? 0.0 : temp / tim2 ;
+  fprintf(stderr,"%10Ld bytes read,    %8Ld calls to mgi_read,  %10.6f(%10.6f) seconds : %10.6f(%10.6f) MBytes/sec\n",
+          bytes_read,call_read,tim,tim2,speed,speed2);
 
-  tim = time_written * .000001;       /* in seconds */
-  temp = bytes_written * .000001;     /* in MegaBytes */
-  speed = (tim == 0.0) ? 0.0 : temp / tim ;
-  fprintf(stderr,"%10Ld bytes written, %8Ld calls to mgi_write, %10.6f seconds : %10.6f MBytes/sec\n",bytes_written,call_written,tim,speed);
+  tim = time_write * .000001;       /* in seconds */
+  tim2 = tim - wait_write * .000001;  /* subtract time spent waiting */
+  temp = bytes_write * .000001;     /* in MegaBytes */
+  speed = (tim <= 0.0) ? 0.0 : temp / tim ;
+  speed2 = (tim2 <= 0.0) ? 0.0 : temp / tim2 ;
+  fprintf(stderr,"%10Ld bytes written, %8Ld calls to mgi_write, %10.6f(%10.6f) seconds : %10.6f(%10.6f) MBytes/sec\n",
+          bytes_write,call_write,tim,tim2,speed,speed2);
   fprintf(stderr,"\n====================================\n");
   printed = 1;
 }
@@ -893,17 +902,18 @@ static int shm_write_c(mgi_shm_buf *shm,void *buf,int nelem,int timeout){
 
 //fprintf(stderr,"DEBUG: shm_write_c, writing %d characters\n",nelem);
   in = shm->in ; out = shm->out ; limit = shm->limit;
-  bytes_written += ntok;
+  bytes_write += ntok;
   while(ntok > 0){
     inplus = (in+1 > limit) ? 0 : in+1 ;
     iter = maxiter;
     while(inplus == out && iter > 0) {       /* shared memory circular buffer is full */
       shm->in = in;              /* update in pointer in shared memory */
       usleep(1000);              /* sleep for 1 millisecond */
+      wait_write += 1000;
       out = shm->out;            /* update out pointer from shared memory */
       iter--;                    /* decrement timeout counter */
     }
-    if(iter <= 0) { time_written += (mgi_time() - time_in) ; return(WRITE_TIMEOUT); }
+    if(iter <= 0) { time_write += (mgi_time() - time_in) ; return(WRITE_TIMEOUT); }
     token = *str++ ;
     token <<= 8 ; if(ntok >  2) token |= *str++ ;
     token <<= 8 ; if(ntok >  1) token |= *str++ ;
@@ -914,7 +924,7 @@ static int shm_write_c(mgi_shm_buf *shm,void *buf,int nelem,int timeout){
     in = inplus;
   }
   shm->in = in;  /* update in pointer in shared memory */
-  time_written += (mgi_time() - time_in) ;
+  time_write += (mgi_time() - time_in) ;
   return(ntok);
 }
 
@@ -936,7 +946,7 @@ static int shm_write(mgi_shm_buf *shm,void *buf,int nelem,int type,int timeout){
   time_in = mgi_time();
   ntok = nelem;
   if(type == 'D') ntok = nelem*2 ;                 /* 8 byte tokens */
-  bytes_written += ntok*4;
+  bytes_write += ntok*4;
 
   in = shm->in ; out = shm->out ; limit = shm->limit;
 //  fprintf(stderr,"DEBUG: Write ntok=%d\n",ntok);
@@ -946,9 +956,10 @@ static int shm_write(mgi_shm_buf *shm,void *buf,int nelem,int type,int timeout){
     while(inplus == out && iter > 0) {       /* shared memory circular buffer is full */
       shm->in = in;              /* update in pointer in shared memory */
       usleep(1000);              /* sleep for 1 millisecond */
+      wait_write += 1000;
       out = shm->out;            /* update out pointer from shared memory */
       iter--;                    /* decrement timeout counter */
-      if(iter <= 0) { time_written += (mgi_time() - time_in) ; return(WRITE_TIMEOUT); }
+      if(iter <= 0) { time_write += (mgi_time() - time_in) ; return(WRITE_TIMEOUT); }
     }
     if(in >= out){   /* can write into  in -> limit except if out == 0 (can only use in -> limit-1)*/
       navail = (limit+1) - in;
@@ -969,7 +980,7 @@ static int shm_write(mgi_shm_buf *shm,void *buf,int nelem,int type,int timeout){
     buffer += navail;       //    buffer++;
   }
   shm->in = in;  /* update in pointer in shared memory */
-  time_written += (mgi_time() - time_in) ;
+  time_write += (mgi_time() - time_in) ;
   return(ntok*sizeof(unsigned int));
 }
 int ShmWriteBuf(mgi_shm_buf *shm,void *buf,int nelem,int type,int timeout){
@@ -995,6 +1006,7 @@ static int shm_read_c(mgi_shm_buf *shm,void *buf,int nelem, int len,int timeout)
     while(in == out && iter > 0) {           /* shared memory circular buffer is empty */
       shm->out = out;            /* update out pointer in shared memory */
       usleep(1000);              /* sleep for 1 millisecond */
+      wait_read += 1000;
       in = shm->in;              /* update in pointer from shared memory */
       iter--;                    /* decrement timeout counter */
     }
@@ -1041,6 +1053,7 @@ static int shm_read(mgi_shm_buf *shm,void *buf,int nelem,int type, int len,int t
     while(in == out && iter > 0) {           /* shared memory circular buffer is empty */
       shm->out = out;            /* update out pointer in shared memory */
       usleep(1000);              /* sleep for 1 millisecond */
+      wait_read += 1000;
       in = shm->in;              /* update in pointer from shared memory */
       iter--;                    /* decrement timeout counter */
       if(iter <= 0) { time_read += (mgi_time() - time_in) ; return(READ_TIMEOUT); }
@@ -1121,7 +1134,7 @@ ftnword f77_name (mgi_write) (ftnword *f_chan, void *buffer, ftnword *f_nelem, c
     status = shm_write(chn[chan].shmbuf,&len_typ,1,'I',timeout) ;  /* record length + type */
     if(status != 0) return(status);
 
-    call_written++;
+    call_write++;
     if(*dtype != 'C'){
       return( shm_write(chn[chan].shmbuf,buffer,nelem                    ,*dtype,timeout) );
     }else{
