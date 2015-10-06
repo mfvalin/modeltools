@@ -49,7 +49,7 @@ The program will wait 20 milliseconds between checks of parent process existence
 
 /* unused as yet borrowed code */
 int mgi_shm(int argc, char **argv){
-int i;
+int i, nc1,nc2;
 pid_t pp=getppid();  /* get pid of my parent */
 #if defined(DAEMONIZE)
 pid_t sid;
@@ -69,6 +69,8 @@ char multiplier='K';
 int items=0;
 int read_att=0;
 int writ_att=0;
+size_t count, count1, count2;
+int monitor=0;
 
 if(argc < 2 || argc >3) {
   fprintf(stderr,"ERROR: there must be one or two arguments \n");
@@ -124,6 +126,8 @@ shm_size_k = shm_size;
 fprintf(stderr,"Monitoring shared memory id '%d' of size %d KBytes\n",to_watch,shm_size_k);
 
 /* initialize memory segment for use by mgilib */
+shm->read_lock = 0;
+shm->write_lock = 0;
 shm->read_status = MGI_SHM_IDLE;
 shm->write_status = MGI_SHM_IDLE;
 shm->first = 0;                     /* first position in buffer */
@@ -161,14 +165,46 @@ if(i < 0) exit(1);  /* fork failed */
 #endif
 
 while(1){
-  if(kill(pp,0)) break;              /* original parent no longer exists, time to quit */
+//  if(kill(pp,0)) break;              /* original parent no longer exists, time to quit */
+  if(kill(pp,0)) {                   /* original parent no longer exists, time to save leftover data and quit */
+    read_att=1 ;
+    writ_att=1 ;
+    shm->read_status=MGI_SHM_IDLE ;
+    shm->write_status=MGI_SHM_IDLE ;
+  }
   usleep(sleep_duration);            /* 10 milliseconds */
   if(shm->read_status == MGI_SHM_ACTIVE) read_att = 1;
   if(shm->write_status == MGI_SHM_ACTIVE) writ_att = 1;
-  if(read_att==1 && writ_att==1) break;  /* channel has been opened at both ends , we can quit */
+
+//  if(read_att==1 && writ_att==1) break;  /* channel has been opened at both ends , we can quit */
+  if(read_att==1 && writ_att==1 && shm->read_status==MGI_SHM_IDLE && shm->write_status==MGI_SHM_IDLE){ /* everybody opened, everything is closed */
+    if(shm->in == shm->out) break; /* buffer is empty, quit */
+    fd = open(channel_filename,O_CREAT+O_RDWR,0644);  /* save leftover data */
+    if(fd >0) {
+      if(shm->out < shm->in) {   /* write from out to in-1 */
+        count = sizeof(shm->data[0])*(shm->in-shm->out);
+        nc1 = write(fd, (void *) shm->data+shm->out, count);
+        fprintf(stderr,"INFO: %d/%d bytes written to %s(%d)\n",nc1,count,channel_filename,fd);
+      }else{                     /* write from out to limit, then first to in-1 */
+        count1 = sizeof(shm->data[0])*(shm->limit-shm->out+1);
+        nc1 = write(fd, shm->data+shm->out, count1);
+        count2 = sizeof(shm->data[0])*(shm->in-shm->first);
+        nc2 = write(fd, shm->data+shm->first, count2);
+        count = count1 + count2;
+        fprintf(stderr,"INFO: %d/%d bytes written to %s\n",nc1+nc2,count,channel_filename);
+      }
+      fprintf(stderr,"INFO: leftover data saved to '%s'\n",channel_filename);
+      close(fd);
+    }else{
+      fprintf(stderr,"ERROR: cannot open %s to save leftover data\n",channel_filename);
+    }
+    break;
+  }
   i = shmctl(to_watch,IPC_STAT,&shm_stat);
   if(i == -1) exit(0);               /* segment no longer accessible, quit */
-#if defined(linux)
+  if(monitor) {
+  }
+#if defined(NOT_USED_ANYMORE)
   if(shm_stat.shm_nattch >= 4) {   /* segment attached by 3 other processes */
     break;                           /* job done, exit */
   }

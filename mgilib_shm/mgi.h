@@ -18,6 +18,8 @@
 
 typedef struct
 {
+  int read_lock;
+  int write_lock;
   int read_status;
   int write_status;
   int first;

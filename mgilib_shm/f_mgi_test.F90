@@ -46,7 +46,7 @@ program model_main
 
   call main_mgi_test
   call mgi_perf_print
-  
+
 #endif
   stop
 end program model_main
@@ -110,7 +110,7 @@ subroutine main_mgi_test
 
   if(nargs >= minargs) then
     call get_command_argument(2, string)
-    if(testmode_r=='R') then 
+    if(testmode_r=='R') then
       channel_name_r = trim(string)
     else
       channel_name_w = trim(string)

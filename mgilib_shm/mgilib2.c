@@ -1430,8 +1430,8 @@ ftnword f77_name (mgi_read) (ftnword *f_chan, void *buffer, ftnword *f_nelem, ch
   return ier;
 #endif
 }
-/* 
- *added mgi_read_c Fortran callable routine because of extra character string 
+/*
+ *added mgi_read_c Fortran callable routine because of extra character string
 */
 ftnword f77_name(mgi_read_c) (ftnword *f_chan, void *buffer, ftnword *f_nelem, char *dtype, F2Cl lbuf, F2Cl ltype)
 {
