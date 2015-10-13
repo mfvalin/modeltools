@@ -99,21 +99,28 @@ int mgi_stop(int argc, char **argv){
   temp = shm_stat.shm_nattch;
   fprintf(stderr,"INFO: %d process(es) currently attached\n",temp-1);
 
-  if( shm->read_status == MGI_SHM_IDLE ) {
+  if( shm->read_status == MGI_SHM_IDLE || strcmp("--force-stop",argv[0]) == 0 ) {
     shm->read_status = MGI_SHM_ACTIVE;
     sleep(1);
     shm->read_status = MGI_SHM_IDLE;
+    fprintf(stderr,"INFO: cycling read status\n");
   }
-  if( shm->write_status == MGI_SHM_IDLE ) {
+  if( shm->write_status == MGI_SHM_IDLE || strcmp("--force-stop",argv[0]) == 0 ) {
     shm->write_status = MGI_SHM_ACTIVE;
     sleep(1);
     shm->write_status = MGI_SHM_IDLE;
+    fprintf(stderr,"INFO: cycling write status\n");
   }
+  sleep(1);
   temp = shmctl(shm_id,IPC_STAT,&shm_stat);
   shm_size = shm_stat.shm_segsz / 1024;
   shm_size_k = shm_size;
   temp = shm_stat.shm_nattch;
-  if(temp==1) fprintf(stderr,"INFO: no process attaching %s (%d) any more\n",channel_filename,shm_id);
+  if(temp==1) {
+    fprintf(stderr,"INFO: no process attached to %s (%d) any more\n",channel_filename,shm_id);
+  }else{
+    fprintf(stderr,"INFO: %d process(es) attached to %s (%d)\n",temp-1,channel_filename,shm_id);
+  }
   exit(0);
 }
 
@@ -164,7 +171,7 @@ if (argc > 1){
 }
 
 if (argc > 1){
-  if(strcmp(argv[1],"--stop") == 0) {    /* -v */
+  if(strcmp(argv[1],"--stop") == 0 || strcmp(argv[1],"--force-stop") == 0 ) {    /* -v */
     if(argc != 3) {
       usage();
     }else{
@@ -179,7 +186,7 @@ if (argc > 1){
 if(argc < 2 || argc >3) {
   usage();
 }
-if(**argv == '-' ){
+if(*argv[1] == '-' ){
   usage();
 }
 //to_create=atoi(argv[1]);
@@ -191,6 +198,9 @@ if(to_create <= 0){
 if(multiplier=='M' || multiplier=='m') to_create *= 1024;   /* megabytes, not kilobytes */
 FD=NULL;
 if(argc == 3){
+  if(*argv[2] == '-' ){
+    usage();
+  }
   snprintf(channel_filename,sizeof(channel_filename),"%s/.gossip/SHM/%s.id",getenv("HOME"),argv[2]);
   unlink(channel_filename);   /* remove previously existing file, ignore errors */
   FD=fopen(channel_filename,"w");
@@ -274,7 +284,7 @@ if(i < 0) exit(1);  /* fork failed */
 
 LOG = stderr;
 if(monitor){
-  LOG = fopen(log_filename,"a");
+  LOG = fopen(log_filename,"w");
   if(LOG == NULL){
     fprintf(stderr,"INFO: cannot open log file '%s'\n",log_filename);
     LOG = stderr;
@@ -298,16 +308,18 @@ while(1){
     if(shm->in == shm->out) break; /* buffer is empty, quit */
     fd = open(channel_filename,O_CREAT+O_RDWR,0644);  /* save leftover data */
     if(fd >0) {
-      if(shm->out < shm->in) {   /* write from out to in-1 */
-        count = sizeof(shm->data[0])*(shm->in-shm->out);
-        nc1 = write(fd, (void *) shm->data+shm->out, count);
-        fprintf(stderr,"INFO: %d/%d bytes written to %s(%d)\n",nc1,count,channel_filename);
+      in = shm->in ;
+      out = shm->out;
+      if(out < in) {   /* write from out to in-1 */
+        count = sizeof(shm->data[0])*(in-out);
+        nc1 = write(fd, &(shm->data[out]), count);
+        fprintf(stderr,"INFO: %d/%d bytes written to %s\n",nc1,count,channel_filename);
         if(monitor)fprintf(LOG,"INFO: %d/%d bytes written to %s\n",nc1,count,channel_filename);
       }else{                     /* write from out to limit, then first to in-1 */
         count1 = sizeof(shm->data[0])*(shm->limit-shm->out+1);
-        nc1 = write(fd, shm->data+shm->out, count1);
+        nc1 = write(fd, &(shm->data[out]), count1);
         count2 = sizeof(shm->data[0])*(shm->in-shm->first);
-        nc2 = write(fd, shm->data+shm->first, count2);
+        nc2 = write(fd, &(shm->data[shm->first]), count2);
         count = count1 + count2;
         fprintf(stderr,"INFO: %d/%d bytes written to %s\n",nc1+nc2,count,channel_filename);
         if(monitor)fprintf(LOG,"INFO: %d/%d bytes written to %s\n",nc1+nc2,count,channel_filename);

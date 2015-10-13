@@ -206,7 +206,6 @@ subroutine model(channel_name_r,channel_name_w)
   integer :: iostat, channel_r, channel_w, i
   character(len=*), intent(IN) :: channel_name_r
   character(len=*), intent(IN) :: channel_name_w
-
   call sleep_a_bit(1)
   call mgi_perf_on
   print *,'reading from '//channel_name_r//', writing to '//channel_name_w
@@ -279,12 +278,16 @@ subroutine mgi_test_body(channel_r,channel_w)
   real :: start, end, delta
   integer :: i, nval, status, iostat
   character(len=1024) :: string, string2
+  integer :: bytesr, bytesw
+
+  bytesr = 0
+  bytesw = 0
 
   read(10,*,iostat=iostat)what
   do while(iostat == 0)
     backspace(10)
     call sleep_a_bit(1)
-    if(what .ne. 'C') then
+    if(what == 'I' .or. what == 'R' .or. what == 'D') then
       read(10,*)what,start,end,delta
       print *,'"'//what//'",',start,end,delta
       nval = min(MAXVAL,nint(1.0+(end-start)/delta))
@@ -297,12 +300,14 @@ subroutine mgi_test_body(channel_r,channel_w)
         if(channel_w .ne. -1) then
           status = mgi_write(channel_w,is,nval,what)
           if(status /= 0) print *,'ERROR: write error, status=',status
+          bytesw = bytesw + 4 + nval*4
         endif
         if(channel_r .ne. -1) then
           status = mgi_read(channel_r,is2,nval,what)
           if(status <= 0) print *,'ERROR: read error, status=',status
           if(.not. all(is(1:nval)==is2(1:nval))) print *,'ERROR: did not read what was expected (I)'
           if( all(is(1:nval)==is2(1:nval))) print *,'INFO: read what was expected (I)'
+          bytesr = bytesr + 4 + nval*4
         endif
       case('R')
         do i=1,nval
@@ -312,12 +317,14 @@ subroutine mgi_test_body(channel_r,channel_w)
         if(channel_w .ne. -1) then
           status = mgi_write(channel_w,fs,nval,what)
           if(status /= 0) print *,'ERROR: write error, status=',status
+          bytesw = bytesw + 4 + nval*4
         endif
         if(channel_r .ne. -1) then
           status = mgi_read(channel_r,fs2,nval,what)
           if(status <= 0) print *,'ERROR: read error, status=',status
           if(.not. all(fs(1:nval)==fs2(1:nval))) print *,'ERROR: did not read what was expected (R)'
           if( all(fs(1:nval)==fs2(1:nval))) print *,'INFO: read what was expected (R)'
+          bytesr = bytesr + 4 + nval*4
         endif
       case('D')
         do i=1,nval
@@ -327,31 +334,39 @@ subroutine mgi_test_body(channel_r,channel_w)
         if(channel_w .ne. -1) then
           status = mgi_write(channel_w,ds,nval,what)
           if(status /= 0) print *,'ERROR: write error, status=',status
+          bytesw = bytesw + 4 + nval*8
         endif
         if(channel_r .ne. -1) then
           status = mgi_read(channel_r,ds2,nval,what)
           if(status <= 0) print *,'ERROR: read error, status=',status
           if(.not. all(ds(1:nval)==ds2(1:nval))) print *,'ERROR: did not read what was expected (D)'
           if( all(ds(1:nval)==ds2(1:nval))) print *,'INFO: read what was expected (D)'
+          bytesr = bytesr + 4 + nval*8
         endif
       end select
-    else   !  what .ne. 'C'
+    elseif(what == 'C') then  !  what .ne. 'C'
       read(10,*)what,string
       print *,'"'//what//'",','"'//trim(string)//'"'
         if(channel_w .ne. -1) then
           status = mgi_write_c(channel_w,trim(string),len(trim(string)),what)
           if(status /= 0) print *,'ERROR: write error, status=',status
+          bytesw = bytesw + 4 + ((len(trim(string))+3)/4)*4
       endif
       if(channel_r .ne. -1) then
           status = mgi_read_c(channel_r,string2,len(trim(string)),what)
           if(status <= 0) print *,'ERROR: read error, status=',status
           if(trim(string) == trim(string2)) print *,'INFO: read what was expected (C)'
           if(trim(string) /= trim(string2)) print *,'ERROR: expected "'//trim(string)//'"'//' READ back : "'//trim(string2)//'"'
+          bytesr = bytesr + 4 + ((len(trim(string))+3)/4)*4
         endif
+    else
+      read(10,*)
+      print *,'"'//what//'" ignored'
     endif
     read(10,*,iostat=iostat)what
   enddo
   close(unit=10)
+  print *,'INFO: bytesw=',bytesw,' bytesr=',bytesr
 
   return
 end subroutine mgi_test_body
