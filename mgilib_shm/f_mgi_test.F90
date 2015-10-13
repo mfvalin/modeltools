@@ -141,6 +141,7 @@ subroutine main_mgi_test
   call mgi_perf_on
 !stop
   channel_r = -1
+  status_r = 0
   if(testmode_r=='R') then
     channel_r = mgi_init(trim(channel_name_r))
     print *,'channel_r=',channel_r
@@ -150,6 +151,7 @@ subroutine main_mgi_test
   endif
 
   channel_w = -1
+  status_w = 0
   if(testmode_w=='W') then
     channel_w = mgi_init(trim(channel_name_w))
     print *,'channel_w=',channel_w
