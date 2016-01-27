@@ -154,6 +154,7 @@ cd $BASEDIR
 echo 'export RPN_TEMPLATE_LIBS=$ARMNLIB' > setup/v_001/dot-profile-setup_1.0_multi/notshared/data/ssm_domains/templates.sh
 echo 'export EC_ARCH=${BASE_ARCH}/gfortran' > setup/v_001/dot-profile-setup_1.0_multi/notshared/data/ssm_domains/fortran.sh
 echo 'fortran dev-tools run-tools rmnlib-dev templates' >setup/v_001/dot-profile-setup_1.0_multi/notshared/data/ssm_domains/all.bndl
+. $BASEDIR/setup/v_001/multi/bin/.profile 2>/dev/null
 resolver=$(readlink -e $(which s.resolve_ssm_shortcuts))
 cp ${resolver}_cygwin ${resolver}  # user resolver with bash rather than resolver with ksh93
 #
