@@ -199,7 +199,7 @@ mpiexec_AIX() {
   export MpiCommWorld=0
   export ChildOffset=0
   export WorldOffset=0
-  if tty -s ; then  # node list only necessary in interactive case
+  if tty -s || [[ -z ${LOADL_HOSTFILE} ]] ; then  # node list only necessary in interactive case
     echo "INFO: interactive use of MPI on AIX"
     export MP_PROCS
     export MP_HOSTFILE=${MY_NODEFILE}
@@ -536,7 +536,7 @@ wait_for() {
 # MY_NODEFILE now contains the node list if one was specified before
 # and will be the default value for -nodefile
 #
-MY_NODEFILE=${PARALLEL_NODEFILE:-${GECOSHEP_HOSTS_FILE:-${GECOSHEP_HOSTFILE:-${PBS_NODEFILE:-${LOADL_HOSTFILE}}}}}
+MY_NODEFILE=${PARALLEL_NODEFILE:-${PBS_NODEFILE:-${GECOSHEP_HOSTS_FILE:-${GECOSHEP_HOSTFILE:-${LOADL_HOSTFILE}}}}}
 #Version="1.0.8 2014/04/30"  # last version with mpich2, safe stack limit, modified return status leftovers
 #Version="1.1.0 2014/05/05"  # multi world with node map fixes + core mapping changes + rank files
 #Version="1.1.1 2014/05/21"  # mapping problem with 1 thread + instances related fixes + geometry work
@@ -566,7 +566,8 @@ MY_NODEFILE=${PARALLEL_NODEFILE:-${GECOSHEP_HOSTS_FILE:-${GECOSHEP_HOSTFILE:-${P
 #Version="1.1.17c 2015/06/18" # typeset -x -Z4 (again)
 #Version="1.1.18 2015/06/18" # got rid of environment variables names starting with BASH_
 #Version="1.1.19 2015/07/09" # -bind none suppresses the use of the rank file
-Version="1.1.20 2015/08/13" # -jio option added
+#Version="1.1.20 2015/08/13" # -jio option added
+Version="1.1.21 2016/02/04" # patched to work in "soumet immediate mode"
 echo "${0##*/} version $Version avec /bin/ksh93"
 eval `cclargs_lite -D "" $0 \
     -args "" "" "[arguments to the command]" \
