@@ -142,7 +142,7 @@
       character(len=*), intent(IN) :: etiket, nomvar, typvar, grtyp
       real, dimension(ni,nj), intent(IN) :: z
       integer :: ix
-      integer :: i, pg, slot
+      integer :: i, j, pg, slot
       type(field), pointer :: p
 
       ix = -1
@@ -185,8 +185,14 @@
       p%npas_max = max(p%npas_max,npas)
       p%npas_min = min(p%npas_min,npas)
       p%nsamples = p%nsamples + 1
-      p%stats(1:ni,1:nj,1) = p%stats(1:ni,1:nj,1) + z(1:ni,1:nj)
-      if(variance) p%stats(1:ni,1:nj,2) = p%stats(1:ni,1:nj,2) + z(1:ni,1:nj)*z(1:ni,1:nj)
+!      p%stats(1:ni,1:nj,1) = p%stats(1:ni,1:nj,1) + z(1:ni,1:nj)
+!      if(variance) p%stats(1:ni,1:nj,2) = p%stats(1:ni,1:nj,2) + z(1:ni,1:nj)*z(1:ni,1:nj)
+      do j = 1 , nj
+      do i = 1 , ni
+         p%stats(i,j,1) = p%stats(i,j,1) + z(i,j)
+         if(variance) p%stats(i,j,2) = p%stats(i,j,2) + z(i,j)*z(i,j)
+      enddo
+      enddo
     end function process_entry
   end module averages_common
 
