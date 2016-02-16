@@ -14,7 +14,8 @@
       integer :: ni, nj
       integer :: nsamples
       integer :: npas_min, npas_max
-      integer :: ip1
+      integer :: ip1, dateo, deet
+      integer :: ig1, ig2, ig3, ig4
       character(len=12) :: etiket
       character(len=4)  :: nomvar
       character(len=2)  :: typvar
@@ -33,6 +34,11 @@
 
     integer, save :: next = -1
     integer, save :: verbose = 2           ! ERROR + WARNING
+    logical, save :: variance = .true.
+    logical, save :: firstfile = .true.
+    integer, save :: fstdmean = 0
+    integer, save :: fstdvar = 0
+    logical, save :: std_dev = .false.     ! output standard deviation rather than variance
 
   contains
 
@@ -81,7 +87,11 @@
       if(associated(ptab(pg)%p(slot)%stats)) return
 
       ix = slot + PAGE_SIZE * pg
-      allocate(ptab(pg)%p(slot)%stats(ni,nj,2),STAT=status)
+      if(variance) then ! need sum and sum of squares
+        allocate(ptab(pg)%p(slot)%stats(ni,nj,2),STAT=status)
+      else              ! only need sum
+        allocate(ptab(pg)%p(slot)%stats(ni,nj,1),STAT=status)
+      endif
       if(verbose > 4) print *,'DEBUG: allocated stats - slot, ni,nj =',ix,ni,nj
       if(status .ne. 0) then
         print *,"FATAL: entry number",slot,'in page',pg,' cannot be allocated'
@@ -93,7 +103,13 @@
       ptab(pg)%p(slot)%nsamples = 0  ! no samples
       ptab(pg)%p(slot)%npas_min = 999999999
       ptab(pg)%p(slot)%npas_max = -1
+      ptab(pg)%p(slot)%dateo = -1
+      ptab(pg)%p(slot)%deet = -1
       ptab(pg)%p(slot)%ip1 = -1
+      ptab(pg)%p(slot)%ig1 = -1
+      ptab(pg)%p(slot)%ig2 = -1
+      ptab(pg)%p(slot)%ig3 = -1
+      ptab(pg)%p(slot)%ig4 = -1
       ptab(pg)%p(slot)%etiket = ""
       ptab(pg)%p(slot)%nomvar = ""
       ptab(pg)%p(slot)%typvar = ""
@@ -119,9 +135,10 @@
       return
     end function new_page_entry
 
-    function process_entry(z,ni,nj,ip1,npas,etiket,nomvar,typvar,grtyp) result(ix)
+    function process_entry(z,ni,nj,ip1,dateo,deet,npas,etiket,nomvar,typvar,grtyp,ig1,ig2,ig3,ig4) result(ix)
       implicit none
-      integer, intent(IN) :: ni, nj, ip1, npas
+      integer, intent(IN) :: ni, nj, ip1, npas, dateo, deet
+      integer, intent(IN) :: ig1, ig2, ig3, ig4
       character(len=*), intent(IN) :: etiket, nomvar, typvar, grtyp
       real, dimension(ni,nj), intent(IN) :: z
       integer :: ix
@@ -137,11 +154,12 @@
         if(trim(p%nomvar) .ne. trim(nomvar)) cycle
         if(trim(p%typvar) .ne. trim(typvar)) cycle
         if(trim(p%grtyp) .ne. trim(grtyp)) cycle
+        if(p%dateo .ne. dateo) cycle
         if(p%ip1 .ne. ip1) cycle
         if(p%ni .ne. ni) cycle
         if(p%nj .ne. nj) cycle
         ix = i                      ! entry has been found
-        if(verbose > 4) print *,'DEBUG: found at',ix,p%nsamples
+        if(verbose > 4) print *,'DEBUG: found entry, previous samples',ix,p%nsamples
         exit
       enddo
       if(ix == -1) then
@@ -153,16 +171,22 @@
         p%nomvar = nomvar
         p%typvar = typvar
         p%grtyp = grtyp
+        p%dateo = dateo
+        p%deet = deet
         p%ip1 = ip1
+        p%ig1 = ig1
+        p%ig2 = ig2
+        p%ig3 = ig3
+        p%ig4 = ig4
         p%ni = ni
         p%nj = nj
-        if(verbose > 4) print *,'DEBUG: created at',ix
+        if(verbose > 4) print *,'DEBUG: created entry',ix
       endif
       p%npas_max = max(p%npas_max,npas)
       p%npas_min = min(p%npas_min,npas)
       p%nsamples = p%nsamples + 1
       p%stats(1:ni,1:nj,1) = p%stats(1:ni,1:nj,1) + z(1:ni,1:nj)
-      p%stats(1:ni,1:nj,2) = p%stats(1:ni,1:nj,2) + z(1:ni,1:nj)*z(1:ni,1:nj)
+      if(variance) p%stats(1:ni,1:nj,2) = p%stats(1:ni,1:nj,2) + z(1:ni,1:nj)*z(1:ni,1:nj)
     end function process_entry
   end module averages_common
 
@@ -171,12 +195,13 @@
     implicit none
     integer :: curarg
     character (len=8) :: option
-    character (len=2048) :: filename, progname
+    character (len=2048) :: filename, progname, meanfile, varfile
     integer :: arg_count, arg_len, status, i
     integer :: first_file
     logical :: file_exists, strict, test
     real, dimension(:,:), pointer :: z
     integer :: ix
+    integer, external :: process_file, write_stats
 
     curarg = 1
     first_file = 0
@@ -193,13 +218,17 @@
         call f_exit(1)
       endif
       if( option == '-h' .or. option == '--help' ) then
-        print *,'USAGE: '//trim(progname)//' [-h|--help] --strict] [-test] [-q[q]] [-v[v][v]] [--|-f] file_1 ... file_n'
+        print *,'USAGE: '//trim(progname)//' [-h|--help] [-strict] [-novar] [-stddev] [-test] [-q[q]] [-v[v][v]] [--|-f] mean_out var_out in_1 ... in_n'
         call f_exit(0)
       else if( option == '-strict' ) then
         strict = .true.                 ! abort on ERROR 
         verbose = 1
+      else if( option == '-novar' ) then
+        variance = .false.                   ! test mode
       else if( option == '-test' ) then
         test = .true.                   ! test mode
+      else if( option == '-stddev' ) then
+        std_dev = .true.                   ! test mode
       else if( option == '-q' ) then
         if(.not. strict) verbose = 1    ! ERROR 
       else if( option == '-qq' ) then
@@ -230,38 +259,64 @@
     if(test) then
       allocate(z(135,231))
       z = 1.1
-      ix = process_entry(z,135,231,12345,1,"etiket","NOM","TP","Z")
+      ix = process_entry(z,135,231,12345,0,0,1,"etiket","NOM","TP","Z",0,0,0,0)
       print *,'ix=',ix
       deallocate(z)
       allocate(z(231,135))
       z = 1.1
-      ix = process_entry(z,231,135,12345,1,"etiket","NOM","TP","Z")
+      ix = process_entry(z,231,135,12345,0,0,1,"etiket","NOM","TP","Z",0,0,0,0)
       print *,'ix=',ix
       deallocate(z)
       allocate(z(135,231))
       z = 1.1
-      ix = process_entry(z,135,231,12345,1,"etiket","NOM","TP","Z")
+      ix = process_entry(z,135,231,12345,0,0,1,"etiket","NOM","TP","Z",0,0,0,0)
       print *,'ix=',ix
       deallocate(z)
       allocate(z(231,135))
       z = 1.1
-      ix = process_entry(z,231,135,12345,1,"etiket","NOM","TP","Z")
+      ix = process_entry(z,231,135,12345,0,0,1,"etiket","NOM","TP","Z",0,0,0,0)
       print *,'ix=',ix
       deallocate(z)
       allocate(z(231,135))
       z = 1.1
-      ix = process_entry(z,231,135,12345,1,"etiket","NOM2","TP","Z")
+      ix = process_entry(z,231,135,12345,0,0,1,"etiket","NOM2","TP","Z",0,0,0,0)
       print *,'ix=',ix
-      ix = process_entry(z,231,135,12345,1,"etiket","NOM2","TP","Z")
+      ix = process_entry(z,231,135,12345,0,0,1,"etiket","NOM2","TP","Z",0,0,0,0)
       print *,'ix=',ix
-      ix = process_entry(z,231,135,12345,1,"etiket","NOM2","TP","Z")
+      ix = process_entry(z,231,135,12345,0,0,1,"etiket","NOM2","TP","Z",0,0,0,0)
       print *,'ix=',ix
-      ix = process_entry(z,231,135,12345,1,"etiket","NOM2","TP","Z")
+      ix = process_entry(z,231,135,12345,0,0,1,"etiket","NOM2","TP","Z",0,0,0,0)
       print *,'ix=',ix
       deallocate(z)
     endif
 
-    do i = curarg, arg_count
+    if(verbose < 4) call fstopi("MSGLVL",4,.false.)
+
+    call get_command_argument(curarg,meanfile,arg_len,status) ! first file name is mean output file
+    curarg = curarg + 1
+    inquire(FILE=trim(meanfile),EXIST=file_exists)
+    if(file_exists) then
+      if(verbose > 1) print *,"WARNING: mean output file '"//trim(meanfile)//"exists"
+      if(strict) call f_exit(1)
+    else
+      if(verbose > 2) print *,"INFO: mean output file is '"//trim(meanfile)//"'"
+    endif
+
+    call get_command_argument(curarg,varfile,arg_len,status) ! second file name is variance output file
+    curarg = curarg + 1
+    if(variance) then
+      inquire(FILE=trim(varfile),EXIST=file_exists)
+      if(file_exists) then
+        if(verbose > 1) print *,"WARNING: variance output file '"//trim(varfile)//"exists"
+        if(strict) call f_exit(1)
+      else
+        if(verbose > 2) print *,"INFO: variance output file is '"//trim(varfile)//"'"
+      endif
+    endif
+
+    status = write_stats(meanfile,varfile)   ! first call just opens the files
+
+    do i = curarg, arg_count         ! loop over input files
       call get_command_argument(i,filename,arg_len,status)
       inquire(FILE=trim(filename),EXIST=file_exists)
       if(.not. file_exists)then
@@ -269,7 +324,193 @@
         if(strict) call f_exit(1)
       else
         if(verbose > 2) print *,"INFO: processing file '"//trim(filename)//"'"
+        if(.not. test) status = process_file(trim(filename))
       endif
+      firstfile = .false.            ! after first file
     enddo
-    
+    status = write_stats(meanfile,varfile)
   end program
+  function process_file(filename) result(status)
+    use averages_common
+    implicit none
+    character(len=*), intent(IN) :: filename
+    integer :: status
+    integer, external :: fnom, fstouv, fstinf, fstsui, process_record
+    integer :: fstdin
+    integer :: ni, nj, nk, key
+
+    fstdin = 0
+    status = fnom(fstdin,trim(filename),'STD+RND+OLD+R/O',0)
+    if(status <0) return
+    status = fstouv(fstdin,'RND')
+    if(status <0) return
+    if(verbose > 3) print *,"NOTE: opened file '"//trim(filename)//"'"
+    key = fstinf(fstdin,ni,nj,nk,-1,"",-1,-1,-1,"","")
+    do while(key >= 0)
+      if(nk > 1)    cycle
+      status = process_record(key,ni,nj,nk)
+      key = fstsui(fstdin,ni,nj,nk)
+    enddo
+    call fstfrm(fstdin)
+    call fclos(fstdin)
+  end function process_file
+
+  function process_record(key,lni,lnj,lnk) result(status)
+    use averages_common
+    implicit none
+    integer, intent(IN) :: key, lni, lnj, lnk
+    integer :: status
+    integer, external :: fstluk
+    real, dimension(lni,lnj) :: z
+    integer :: ni, nj, nk
+    integer :: nbits,datyp,ip1,ip2,ip3,dateo,deet,npas
+    integer :: datev
+    integer :: ig1,ig2,ig3,ig4,swa,lng,dltf,ubc,extra2,extra3
+    character(len=1) :: grtyp
+    character(len=4) :: nomvar
+    character(len=2) :: typvar
+    character(len=12) :: etiket
+    integer :: dtyp
+    real, dimension(:,:), pointer :: z8
+
+    status = 0
+    call fstprm(key,dateo,deet,npas,ni,nj,nk,nbits,datyp,ip1,ip2,ip3, &
+                typvar,nomvar,etiket,grtyp,ig1,ig2,ig3,ig4, &
+                swa,lng,dltf,ubc,datev,extra2,extra3)
+    if(nomvar == ">>  " .or. nomvar == "^^  " .or. nomvar == "HY  ") then  ! special record
+      if(.not. firstfile) return
+      allocate(z8(ni,nj*2))
+      status = fstluk(z8,key,lni,lnj,nk)         ! read record
+      if(nbits == 64) call fst_data_length(8)    ! 64 bit data
+      call fstecr(z8,z8,-nbits,fstdmean,datev,deet,npas,ni,nj,nk,ip1,ip2,ip3,typvar,nomvar,etiket,grtyp,ig1,ig2,ig3,ig4,datyp,.false.)
+      if(variance) then  ! if there is a variance file, write it there too
+        if(nbits == 64) call fst_data_length(8)    ! 64 bit data
+        call fstecr(z8,z8,-nbits,fstdvar,datev,deet,npas,ni,nj,nk,ip1,ip2,ip3,typvar,nomvar,etiket,grtyp,ig1,ig2,ig3,ig4,datyp,.false.)
+      endif
+      deallocate(z8)
+      return
+    endif
+    if(ni == 1 .or. nj== 1) then
+      if(verbose > 4) print *,'DEBUG:skipping record (1D record)'
+      return
+    endif
+    if(npas == 0) then
+      if(verbose > 4) print *,'DEBUG:skipping record (npas==0)'
+      return
+    endif
+    dtyp = mod(datyp,16)
+    if(dtyp == 0 .or. dtyp == 2 .or. dtyp == 3 .or. &
+       dtyp == 4 .or. dtyp == 7 .or. dtyp == 8) then
+      if(verbose > 4) print *,'DEBUG:skipping record dtyp =', dtyp
+      return  ! datatyp must be one of 1, 5, 6 (float)
+    endif
+    if(lni .ne. ni .or. lnj .ne. nj .or. lnk .ne. nk) then  ! this should NEVER happen
+      if(verbose > 1) print *,'WARNING:skipping record - dimension mismatch (should never happen)'
+      status = -1
+      return
+    endif
+    status = fstluk(z,key,lni,lnj,nk)    ! read record
+    status = process_entry(z,ni,nj,ip1,dateo,deet,npas,etiket,nomvar,typvar,grtyp,ig1,ig2,ig3,ig4)  ! process record
+  end function process_record
+
+  function write_stats(filename,varfile) result(status)
+    use averages_common
+    implicit none
+    character(len=*), intent(IN) :: filename, varfile
+    integer :: status
+    integer, external :: fnom, fstouv
+    integer :: i, ii, jj, slot, pg
+    type(field), pointer :: p
+    real *8 :: avg, var
+    real, dimension(:,:), pointer :: z
+    integer :: deet, npas, ip2, ip3, datev
+    character(len=2) :: vartag
+    real *8 :: hours, hours_min, hours_max, ov_sample
+    integer, dimension(14) :: date_array
+    integer :: new_dateo
+
+    if(fstdmean == 0 .and. fstdvar == 0) then  ! first call just opens the files
+
+      status = fnom(fstdmean,trim(filename),'STD+RND',0)
+      if(status <0) return
+      status = fstouv(fstdmean,'RND')
+      if(status <0) return
+      if(verbose > 2) print *,"INFO: opened mean output file '"//trim(filename)//"'"
+
+      if(variance) then  ! only open variance file if it is required
+        status = fnom(fstdvar,trim(varfile),'STD+RND',0)
+        if(status <0) return
+        status = fstouv(fstdvar,'RND')
+        if(status <0) return
+        if(verbose > 2) print *,"INFO: opened variance output file '"//trim(filename)//"'"
+      endif
+
+      return
+    endif
+    status = 0
+    if(verbose > 2) print *,"INFO:",next," records will be written into mean/variance files"
+
+    vartag = 'VA'
+    if(std_dev) vartag = 'ST'
+    do i = 0 , next -1
+      slot = iand(i,ENTRY_MASK)
+      pg = ishft(i,PAGE_SHIFT)
+      p => ptab(pg)%p(slot)
+      if(verbose > 4) then
+        print 100,"DEBUG: ",p%nsamples,p%nomvar,p%typvar,p%etiket,p%grtyp,p%ip1,associated(p%stats),p%ni,p%nj,p%npas_min,p%npas_max
+100     format(A,I5,A5,A3,A13,A2,I10,L2,2I5,2I8)
+      endif
+      allocate(z(p%ni,p%nj))
+      ov_sample = 1.0
+      ov_sample = ov_sample / p%nsamples
+      do jj = 1 , p%nj
+      do ii = 1 , p%ni
+        avg = p%stats(ii,jj,1) * ov_sample
+        z(ii,jj) = real(avg)
+        if(variance) then
+          var = p%stats(ii,jj,2) * ov_sample - avg * avg
+          var = max(var,0.0*var)
+          if(std_dev) then   ! output standard deviation
+            p%stats(ii,jj,2) = sqrt(var)
+          else               ! output variance (default)
+            p%stats(ii,jj,2) = var
+          endif
+        endif
+      enddo
+      enddo
+
+      hours = p%deet
+      hours = hours / 3600             ! p%deet in hours
+      hours_min = hours * p%npas_min   ! start of period = p%dateo + hours_min
+      call incdatr(new_dateo,p%dateo,hours_min) ! start of period timestamp
+      hours_max = hours * p%npas_max   ! end   of period = p%dateo + hours_max
+      call incdatr(datev,p%dateo,hours_max)  ! datev = p%dateo + hours_max
+!      print *,'DEBUG: p%dateo, hours_max , datev, hours', p%dateo, hours_max , datev, hours
+      hours = (p%npas_max - p%npas_min) * hours   ! span in hours of period
+      deet = 3600                      ! deet of written records forced to 1 hour
+      npas = nint(hours)
+      ip2 = npas                       ! to be adjusted if period does not start at 00Z
+      date_array(14) = new_dateo
+      call datmgp2(date_array)
+      ip2 = ip2 + date_array(5)             ! zulu hour at start of period
+      ip3 = p%nsamples
+      call fstecr(z,z,-32,fstdmean, &
+                  datev,deet,npas,p%ni,p%nj,1,p%ip1,ip2,ip3,"MN",p%nomvar,p%etiket, &
+                  p%grtyp,p%ig1,p%ig2,p%ig3,p%ig4,128+5,.false.)
+      if(variance) then
+        call fst_data_length(8)
+        call fstecr(p%stats(1,1,2),p%stats(1,1,2),-64,fstdvar, &
+                    datev,deet,npas,p%ni,p%nj,1,p%ip1,ip2,ip3,vartag,p%nomvar,p%etiket, &
+                    p%grtyp,p%ig1,p%ig2,p%ig3,p%ig4,5,.false.)
+      endif
+
+      deallocate(z)
+    enddo
+    call fstfrm(fstdmean)
+    call fclos(fstdmean)
+    if(variance) then
+      call fstfrm(fstdvar)
+      call fclos(fstdvar)
+    endif
+    return
+  end function write_stats
