@@ -371,27 +371,33 @@
     integer :: ni, nj, nk
     integer :: nbits,datyp,ip1,ip2,ip3,dateo,deet,npas
     integer :: datev
-    integer :: ig1,ig2,ig3,ig4,swa,lng,dltf,ubc,extra2,extra3
+    integer :: ig1,ig2,ig3,ig4,swa,lng,dltf,ubc,extra1,extra2,extra3
     character(len=1) :: grtyp
     character(len=4) :: nomvar
     character(len=2) :: typvar
     character(len=12) :: etiket
     integer :: dtyp
     real, dimension(:,:), pointer :: z8
+    real*8 :: hours
 
     status = 0
     call fstprm(key,dateo,deet,npas,ni,nj,nk,nbits,datyp,ip1,ip2,ip3, &
                 typvar,nomvar,etiket,grtyp,ig1,ig2,ig3,ig4, &
-                swa,lng,dltf,ubc,datev,extra2,extra3)
+                swa,lng,dltf,ubc,extra1,extra2,extra3)
+    hours = deet
+    hours = hours / 3600.0
+    hours = hours * npas
+    call incdatr(datev,dateo,hours)
     if(nomvar == ">>  " .or. nomvar == "^^  " .or. nomvar == "HY  ") then  ! special record
       if(.not. firstfile) return
       allocate(z8(ni,nj*2))
       status = fstluk(z8,key,lni,lnj,nk)         ! read record
       if(nbits == 64) call fst_data_length(8)    ! 64 bit data
-      call fstecr(z8,z8,-nbits,fstdmean,datev,deet,npas,ni,nj,nk,ip1,ip2,ip3,typvar,nomvar,etiket,grtyp,ig1,ig2,ig3,ig4,datyp,.false.)
+      if(verbose > 4) print *,'DEBUG: special record - dateo, datev datev', dateo, datev, extra1
+      call fstecr(z8,z8,-nbits,fstdmean,dateo,deet,npas,ni,nj,nk,ip1,ip2,ip3,typvar,nomvar,etiket,grtyp,ig1,ig2,ig3,ig4,datyp,.false.)
       if(variance) then  ! if there is a variance file, write it there too
         if(nbits == 64) call fst_data_length(8)    ! 64 bit data
-        call fstecr(z8,z8,-nbits,fstdvar,datev,deet,npas,ni,nj,nk,ip1,ip2,ip3,typvar,nomvar,etiket,grtyp,ig1,ig2,ig3,ig4,datyp,.false.)
+        call fstecr(z8,z8,-nbits,fstdvar,dateo,deet,npas,ni,nj,nk,ip1,ip2,ip3,typvar,nomvar,etiket,grtyp,ig1,ig2,ig3,ig4,datyp,.false.)
       endif
       deallocate(z8)
       return
@@ -491,7 +497,6 @@
       call incdatr(new_dateo,p%dateo,hours_min) ! start of period timestamp
       hours_max = hours * p%npas_max   ! end   of period = p%dateo + hours_max
       call incdatr(datev,p%dateo,hours_max)  ! datev = p%dateo + hours_max
-!      print *,'DEBUG: p%dateo, hours_max , datev, hours', p%dateo, hours_max , datev, hours
       hours = (p%npas_max - p%npas_min) * hours   ! span in hours of period
       deet = 3600                      ! deet of written records forced to 1 hour
       npas = nint(hours)
@@ -500,13 +505,16 @@
       call datmgp2(date_array)
       ip2 = ip2 + date_array(5)             ! zulu hour at start of period
       ip3 = p%nsamples
+!     call fstecr(z8,z8,-nbits,fstdmean, &
+!                datev,deet,npas,ni,nj,nk,ip1,ip2,ip3,typvar,nomvar,etiket, &
+!                grtyp,ig1,ig2,ig3,ig4,datyp,.false.)
       call fstecr(z,z,-32,fstdmean, &
-                  datev,deet,npas,p%ni,p%nj,1,p%ip1,ip2,ip3,"MN",p%nomvar,p%etiket, &
+                  new_dateo,deet,npas,p%ni,p%nj,1,p%ip1,ip2,ip3,"MN",p%nomvar,p%etiket, &
                   p%grtyp,p%ig1,p%ig2,p%ig3,p%ig4,128+5,.false.)
       if(variance) then
         call fst_data_length(8)
         call fstecr(p%stats(1,1,2),p%stats(1,1,2),-64,fstdvar, &
-                    datev,deet,npas,p%ni,p%nj,1,p%ip1,ip2,ip3,vartag,p%nomvar,p%etiket, &
+                    new_dateo,deet,npas,p%ni,p%nj,1,p%ip1,ip2,ip3,vartag,p%nomvar,p%etiket, &
                     p%grtyp,p%ig1,p%ig2,p%ig3,p%ig4,5,.false.)
       endif
 
