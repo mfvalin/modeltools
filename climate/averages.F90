@@ -458,7 +458,7 @@
 
     vartag = 'VA'
     if(std_dev) vartag = 'ST'
-    do i = 0 , next -1
+    do i = 0 , next
       slot = iand(i,ENTRY_MASK)
       pg = ishft(i,PAGE_SHIFT)
       p => ptab(pg)%p(slot)
