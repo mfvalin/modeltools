@@ -51,6 +51,10 @@ static void get_cpu_capabilities()
     if((1 << 8) & regs[1]) ProcessorCapabilities |= FLAG_BMI  ;   /* BMI2  EBX bit 8 needed to set our BMI flag */
 }
 
+#pragma weak Cpu_has_feature__=Cpu_has_feature
+#pragma weak Cpu_has_feature_=Cpu_has_feature
+int Cpu_has_feature__(int flag);
+int Cpu_has_feature_(int flag);
 int Cpu_has_feature(int flag)
 {
   if(ProcessorCapabilities == 0) get_cpu_capabilities();
@@ -67,6 +71,10 @@ int get_cpu_core_thread()  /* Intel CPUs only and even in this case not always r
 }
 #endif
 
+#pragma weak Get_cpu_apicid__=Get_cpu_apicid
+#pragma weak Get_cpu_apicid_=Get_cpu_apicid
+int Get_cpu_apicid__();
+int Get_cpu_apicid_();
 int Get_cpu_apicid()  /* Intel CPUs only */
 {
   uint32_t regs[4];
