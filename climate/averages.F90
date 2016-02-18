@@ -504,6 +504,7 @@
       date_array(14) = new_dateo
       call datmgp2(date_array)
       ip2 = ip2 + date_array(5)             ! zulu hour at start of period
+      ip2 = ip2 + 24 * (date_array(3)-1)    ! force back to first day of month
       ip3 = p%nsamples
 !     call fstecr(z8,z8,-nbits,fstdmean, &
 !                datev,deet,npas,ni,nj,nk,ip1,ip2,ip3,typvar,nomvar,etiket, &
