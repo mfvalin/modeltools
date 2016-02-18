@@ -388,7 +388,7 @@
     hours = hours / 3600.0
     hours = hours * npas
     call incdatr(datev,dateo,hours)
-    if(nomvar == ">>  " .or. nomvar == "^^  " .or. nomvar == "HY  ") then  ! special record
+    if(nomvar == ">>  " .or. nomvar == "^^  " .or. nomvar == "HY  " .or. nomvar == "!!  ") then  ! special record
       if(.not. firstfile) return
       allocate(z8(ni,nj*2))
       status = fstluk(z8,key,lni,lnj,nk)         ! read record
