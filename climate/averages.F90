@@ -1,3 +1,4 @@
+#define VERSION '1.0_rc1'
   module averages_common
     use iso_c_binding
     implicit none
@@ -197,6 +198,12 @@
     end function process_entry
   end module averages_common
 
+  subroutine print_usage(name)
+    implicit none
+    character(len=*) :: name
+    print *,'USAGE: '//trim(name)//' [-h|--help] [-newtags] [-strict] [-novar] [-stddev] [-test] [-q[q]] [-v[v][v]] [--|-f] mean_out var_out in_1 ... in_n'
+    return
+  end
   program averages
     use averages_common
     implicit none
@@ -211,12 +218,17 @@
     integer :: ix, pg, slot, interval, expected
     integer, external :: process_file, write_stats
 
+    print *,"Version "//VERSION
     curarg = 1
     first_file = 0
     strict = .false.                   ! do not abort on error
     test = .false.
     arg_count = command_argument_count()
     call get_command_argument(0,progname,arg_len,status)
+    if(arg_count < 1) then
+      call print_usage(progname)
+      call f_exit(1)
+    endif
     do while(curarg <= arg_count)
       call get_command_argument(curarg,option,arg_len,status)
       if(option(1:1) .ne. '-') exit      ! does not start with -, must be a file name
@@ -226,7 +238,8 @@
         call f_exit(1)
       endif
       if( option == '-h' .or. option == '--help' ) then
-        print *,'USAGE: '//trim(progname)//' [-h|--help] [-newtags] [-strict] [-novar] [-stddev] [-test] [-q[q]] [-v[v][v]] [--|-f] mean_out var_out in_1 ... in_n'
+        call print_usage(progname)
+!        print *,'USAGE: '//trim(progname)//' [-h|--help] [-newtags] [-strict] [-novar] [-stddev] [-test] [-q[q]] [-v[v][v]] [--|-f] mean_out var_out in_1 ... in_n'
         call f_exit(0)
       else if( option == '-strict' ) then
         strict = .true.                 ! abort on ERROR 
