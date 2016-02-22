@@ -204,9 +204,10 @@
     character (len=2048) :: filename, progname, meanfile, varfile
     integer :: arg_count, arg_len, status, i
     integer :: first_file
-    logical :: file_exists, strict, test
+    logical :: file_exists, strict, test, missing
     real, dimension(:,:), pointer :: z
-    integer :: ix
+    type(field), pointer :: p
+    integer :: ix, pg, slot, interval, expected
     integer, external :: process_file, write_stats
 
     curarg = 1
@@ -334,7 +335,33 @@
       endif
       firstfile = .false.            ! after first file
     enddo
-    status = write_stats(meanfile,varfile)
+
+    missing = .false.
+
+    do i = 0 , next
+      slot = iand(i,ENTRY_MASK)
+      pg = ishft(i,PAGE_SHIFT)
+      p => ptab(pg)%p(slot)
+      interval = (p%npas_max - p%npas_min) / (p%nsamples - 1)
+      expected = 1 + (p%npas_max - p%npas_min) / interval
+      if(( p%npas_min + (p%nsamples - 1) * interval) .ne. p%npas_max) then
+        if(verbose > 1) print *,"WARNING:",expected - p%nsamples ," missing sample(s) for variable '"//p%nomvar//"'"
+        missing = .true.
+      endif
+    enddo
+
+    if(.not. (missing .and. strict) ) status = write_stats(meanfile,varfile)
+
+    call fstfrm(fstdmean)
+    call fclos(fstdmean)
+    if(variance) then
+      call fstfrm(fstdvar)
+      call fclos(fstdvar)
+    endif
+    if(missing .and. strict) then
+       print *,"FATAL: missing sample(s) for some variables"
+      call f_exit(1)
+    endif
   end program
   function process_file(filename) result(status)
     use averages_common
@@ -406,6 +433,7 @@
       if(verbose > 4) print *,'DEBUG:skipping record (1D record)'
       return
     endif
+!    if(npas == 0 .or. npas == 2205 .or. npas == 2178) then   ! test code for missign samples
     if(npas == 0) then
       if(verbose > 4) print *,'DEBUG:skipping record (npas==0)'
       return
@@ -459,6 +487,7 @@
 
       return
     endif
+
     status = 0
     if(verbose > 2) print *,"INFO:",next," records will be written into mean/variance files"
 
@@ -521,11 +550,5 @@
 
       deallocate(z)
     enddo
-    call fstfrm(fstdmean)
-    call fclos(fstdmean)
-    if(variance) then
-      call fstfrm(fstdvar)
-      call fclos(fstdvar)
-    endif
     return
   end function write_stats
