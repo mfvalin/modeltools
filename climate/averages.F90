@@ -39,6 +39,7 @@
     integer, save :: fstdmean = 0
     integer, save :: fstdvar = 0
     logical, save :: std_dev = .false.     ! output standard deviation rather than variance
+    logical, save :: newtags = .false.     ! use old ip1/2/3 taggging style by default
 
   contains
 
@@ -225,7 +226,7 @@
         call f_exit(1)
       endif
       if( option == '-h' .or. option == '--help' ) then
-        print *,'USAGE: '//trim(progname)//' [-h|--help] [-strict] [-novar] [-stddev] [-test] [-q[q]] [-v[v][v]] [--|-f] mean_out var_out in_1 ... in_n'
+        print *,'USAGE: '//trim(progname)//' [-h|--help] [-newtags] [-strict] [-novar] [-stddev] [-test] [-q[q]] [-v[v][v]] [--|-f] mean_out var_out in_1 ... in_n'
         call f_exit(0)
       else if( option == '-strict' ) then
         strict = .true.                 ! abort on ERROR 
@@ -234,6 +235,8 @@
         variance = .false.                   ! test mode
       else if( option == '-test' ) then
         test = .true.                   ! test mode
+      else if( option == '-newtags' ) then
+        newtags = .true.                   ! new ip1/2/3 tagging style
       else if( option == '-stddev' ) then
         std_dev = .true.                   ! test mode
       else if( option == '-q' ) then
@@ -463,7 +466,7 @@
     type(field), pointer :: p
     real *8 :: avg, var
     real, dimension(:,:), pointer :: z
-    integer :: deet, npas, ip2, ip3, datev
+    integer :: deet, npas, ip1, ip2, ip3, datev
     character(len=2) :: vartag
     real *8 :: hours, hours_min, hours_max, ov_sample
     integer, dimension(14) :: date_array
@@ -535,16 +538,23 @@
       ip2 = ip2 + date_array(5)             ! zulu hour at start of period
       ip2 = ip2 + 24 * (date_array(3)-1)    ! force back to first day of month
       ip3 = p%nsamples
+      ip1 = p%ip1
+      if(newtags) then ! new tagging style (this code is a placeholder and a NO-OP for now)
+        ip1 = ip1      ! beginning time (related to hours_max)
+        ip2 = ip2      ! ending time    (related to hours_min)
+        ip3 = ip3      ! number of samples
+        new_dateo = new_dateo  ! consistent with ip1 and ip2
+      endif
 !     call fstecr(z8,z8,-nbits,fstdmean, &
 !                datev,deet,npas,ni,nj,nk,ip1,ip2,ip3,typvar,nomvar,etiket, &
 !                grtyp,ig1,ig2,ig3,ig4,datyp,.false.)
       call fstecr(z,z,-32,fstdmean, &
-                  new_dateo,deet,npas,p%ni,p%nj,1,p%ip1,ip2,ip3,"MN",p%nomvar,p%etiket, &
+                  new_dateo,deet,npas,p%ni,p%nj,1,ip1,ip2,ip3,"MN",p%nomvar,p%etiket, &
                   p%grtyp,p%ig1,p%ig2,p%ig3,p%ig4,128+5,.false.)
       if(variance) then
         call fst_data_length(8)
         call fstecr(p%stats(1,1,2),p%stats(1,1,2),-64,fstdvar, &
-                    new_dateo,deet,npas,p%ni,p%nj,1,p%ip1,ip2,ip3,vartag,p%nomvar,p%etiket, &
+                    new_dateo,deet,npas,p%ni,p%nj,1,ip1,ip2,ip3,vartag,p%nomvar,p%etiket, &
                     p%grtyp,p%ig1,p%ig2,p%ig3,p%ig4,5,.false.)
       endif
 
