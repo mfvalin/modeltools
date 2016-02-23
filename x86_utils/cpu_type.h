@@ -13,7 +13,7 @@
     function processor_has_feature(feature) result(status) bind(C,name='Cpu_has_feature')
       import :: C_INT
       integer(C_INT), intent(IN), value :: feature
-      integer :: status
+      integer(C_INT) :: status
     end function processor_has_feature
     function get_processor_apicid() result(id)  bind(C,name='Get_cpu_apicid')
       import :: C_INT
