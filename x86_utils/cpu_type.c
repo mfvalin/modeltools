@@ -1,5 +1,5 @@
-#if defined(SELF_TEST)
-// cc -DSELF_TEST -I. cpu_type.c
+#if defined(SELF_TEST_APICID)
+// cc -DSELF_TEST_APICID -I. cpu_type.c
 #include <stdio.h>
 #endif
 
@@ -82,7 +82,7 @@ int Get_cpu_apicid()  /* Intel CPUs only */
   return( regs[3] );  /* x2APIC id from EDX  */
 }
 
-#if defined(SELF_TEST)
+#if defined(SELF_TEST_APICID)
 
 int main(int argc, char** argv)
 {

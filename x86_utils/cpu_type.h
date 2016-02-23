@@ -8,3 +8,19 @@
 #define FLAG_FMA   64
 #define FLAG_BMI  128
 
+#if defined(IN_FORTRAN_CODE)
+  interface
+    function processor_has_feature(feature) result(status) bind(C,name='Cpu_has_feature')
+      import :: C_INT
+      integer(C_INT), intent(IN) :: feature
+      integer :: status
+    end function processor_has_feature
+    function get_processor_apicid() result(id)  bind(C,name='Get_cpu_apicid')
+      import :: C_INT
+      integer(C_INT) :: id
+    end function get_processor_apicid
+  end interface
+#else
+  int Cpu_has_feature(int feature);
+  int Get_cpu_apicid();
+#endif
