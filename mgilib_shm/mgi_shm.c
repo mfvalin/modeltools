@@ -52,7 +52,7 @@ static char *pname="NoNe";
 
 void usage(){
   fprintf(stderr,"ERROR: bad arguments\n");
-  fprintf(stderr,"usage: %s [-v] shm_size[M] [mgi_channel_name]\n",pname);
+  fprintf(stderr,"usage: %s [-vdelay_ms] shm_size[M] [mgi_channel_name]\n",pname);
   fprintf(stderr,"       %s --stop [mgi_channel_name]\n",pname);
   fprintf(stderr,"          shm_size = shared memory segment size in [K/M]Bytes\n");
   exit(1);
@@ -161,14 +161,14 @@ int monitor=0;
 
 pname = argv[0];
 
-if (argc > 1){
-  if(strcmp(argv[1],"-v") == 0) {    /* -v */
-    monitor = 1;
-    fprintf(stderr,"INFO: full logging will be enabled\n");
-    argc--;
-    argv++;
-  }
-}
+// if (argc > 1){
+//   if(strcmp(argv[1],"-v") == 0) {    /* -v */
+//     monitor = 1;
+//     fprintf(stderr,"INFO: full logging will be enabled\n");
+//     argc--;
+//     argv++;
+//   }
+// }
 
 if (argc > 1){
   if(strcmp(argv[1],"--stop") == 0 || strcmp(argv[1],"--force-stop") == 0 ) {    /* -v */
@@ -186,6 +186,16 @@ if (argc > 1){
 if(argc < 2 || argc >3) {
   usage();
 }
+
+if(strncmp("-v",argv[1],2)==0) {
+  char *duration=argv[1]+2;
+  monitor = 1;
+  if(*duration != '\0') sleep_duration=1000*atoi(duration);
+  fprintf(stderr,"INFO: monitor mode active, delay= %d microseconds\n",sleep_duration);
+  argv++;
+  argc--;
+}
+
 if(*argv[1] == '-' ){
   usage();
 }
@@ -291,7 +301,7 @@ if(monitor){
   }
 }
 while(1){
-  usleep(sleep_duration);            /* 10 milliseconds */
+  usleep(sleep_duration);            /* 10 milliseconds by default */
 /* ----------------------------------------------------------------------------------------------------------------- */
   if(kill(pp,0)) {                   /* original parent no longer exists, time to save leftover data and quit */
     read_att=1 ;

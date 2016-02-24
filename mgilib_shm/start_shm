@@ -1,0 +1,4 @@
+#!/bin/bash
+./mgi_shm.Abs 16M atm2oce
+./mgi_shm.Abs 16M oce2atm
+
