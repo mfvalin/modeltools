@@ -1,4 +1,6 @@
 #!/bin/bash
+[[ "$1" == simple ]] && ./mgi_shm.Abs -v100 16M simple && return
+[[ -n $1 ]] && ./mgi_shm.Abs -v100 16M $1 && return
 ./mgi_shm.Abs -v100 16M atm2oce
 ./mgi_shm.Abs -v100 16M oce2atm
 

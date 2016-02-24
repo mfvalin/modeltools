@@ -169,6 +169,7 @@ pname = argv[0];
 //     argv++;
 //   }
 // }
+if(argc <= 1) usage();
 
 if (argc > 1){
   if(strcmp(argv[1],"--stop") == 0 || strcmp(argv[1],"--force-stop") == 0 ) {    /* -v */
@@ -183,9 +184,6 @@ if (argc > 1){
     }
   }
 }
-if(argc < 2 || argc >3) {
-  usage();
-}
 
 if(strncmp("-v",argv[1],2)==0) {
   char *duration=argv[1]+2;
@@ -194,6 +192,10 @@ if(strncmp("-v",argv[1],2)==0) {
   fprintf(stderr,"INFO: monitor mode active, delay= %d microseconds\n",sleep_duration);
   argv++;
   argc--;
+}
+
+if(argc < 2 || argc >3) {
+  usage();
 }
 
 if(*argv[1] == '-' ){
@@ -315,6 +317,7 @@ while(1){
 /* ----------------------------------------------------------------------------------------------------------------- */
 //  if(read_att==1 && writ_att==1) break;  /* channel has been opened at both ends , we can quit */
   if(read_att==1 && writ_att==1 && shm->read_status==MGI_SHM_IDLE && shm->write_status==MGI_SHM_IDLE){ /* everybody opened, everything is closed */
+    if(monitor)fprintf(LOG,"INFO: closing channel %s\n",argv[2]);
     if(shm->in == shm->out) break; /* buffer is empty, quit */
     fd = open(channel_filename,O_CREAT+O_RDWR,0644);  /* save leftover data */
     if(fd >0) {
