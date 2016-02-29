@@ -30,7 +30,7 @@
     end type
 
     integer, parameter :: MAX_PAGES = 1024   ! 1024 pages at most
-    integer, parameter :: PAGE_SHIFT = -10   ! right shift count to get page number from index
+    integer, parameter :: PAGE_SHIFT = -8   ! right shift count to get page number from index
     type(page), dimension(:), pointer, save :: ptab => NULL()
 
     integer, save :: next = -1
@@ -94,6 +94,7 @@
       else              ! only need sum
         allocate(ptab(pg)%p(slot)%stats(ni,nj,1),STAT=status)
       endif
+
       if(verbose > 4) print *,'DEBUG: allocated stats - slot, ni,nj =',ix,ni,nj
       if(status .ne. 0) then
         print *,"FATAL: entry number",slot,'in page',pg,' cannot be allocated'
@@ -116,7 +117,6 @@
       ptab(pg)%p(slot)%nomvar = ""
       ptab(pg)%p(slot)%typvar = ""
       ptab(pg)%p(slot)%grtyp = ""
-
       return
     end function
 
@@ -164,15 +164,16 @@
         if(verbose > 4) print *,'DEBUG: found entry, previous samples',ix,p%nsamples
         exit
       enddo
+
       if(ix == -1) then
         ix = new_page_entry(ni,nj)
         slot = iand(ix,ENTRY_MASK)
         pg = ishft(ix,PAGE_SHIFT)
         p => ptab(pg)%p(slot)
-        p%etiket = etiket
-        p%nomvar = nomvar
-        p%typvar = typvar
-        p%grtyp = grtyp
+        p%etiket = trim(etiket)
+        p%nomvar = trim(nomvar)
+        p%typvar = trim(typvar)
+        p%grtyp = trim(grtyp)
         p%dateo = dateo
         p%deet = deet
         p%ip1 = ip1
@@ -182,7 +183,6 @@
         p%ig4 = ig4
         p%ni = ni
         p%nj = nj
-        if(verbose > 4) print *,'DEBUG: created entry',ix
       endif
       p%npas_max = max(p%npas_max,npas)
       p%npas_min = min(p%npas_min,npas)
@@ -201,7 +201,8 @@
   subroutine print_usage(name)
     implicit none
     character(len=*) :: name
-    print *,'USAGE: '//trim(name)//' [-h|--help] [-newtags] [-strict] [-novar] [-stddev] [-test] [-q[q]] [-v[v][v]] [--|-f] mean_out var_out in_1 ... in_n'
+    print *,'USAGE: '//trim(name)//' [-h|--help] [-newtags] [-strict] [-novar] [-stddev] [-test] [-q[q]] [-v[v][v]] [--|-f] mean_out [var_out] in_1 ... in_n'
+    print *,'        var_out MUST NOT be present if -novar is specified'
     return
   end
   program averages
@@ -239,7 +240,7 @@
       endif
       if( option == '-h' .or. option == '--help' ) then
         call print_usage(progname)
-!        print *,'USAGE: '//trim(progname)//' [-h|--help] [-newtags] [-strict] [-novar] [-stddev] [-test] [-q[q]] [-v[v][v]] [--|-f] mean_out var_out in_1 ... in_n'
+!        print *,'USAGE: '//trim(progname)//' [-h|--help] [-newtags] [-strict] [-novar] [-stddev] [-test] [-q[q]] [-v[v][v]] [--|-f] mean_out [var_out] in_1 ... in_n'
         call f_exit(0)
       else if( option == '-strict' ) then
         strict = .true.                 ! abort on ERROR 
@@ -325,9 +326,9 @@
       if(verbose > 2) print *,"INFO: mean output file is '"//trim(meanfile)//"'"
     endif
 
-    call get_command_argument(curarg,varfile,arg_len,status) ! second file name is variance output file
-    curarg = curarg + 1
     if(variance) then
+      call get_command_argument(curarg,varfile,arg_len,status) ! second file name is variance output file
+      curarg = curarg + 1
       inquire(FILE=trim(varfile),EXIST=file_exists)
       if(file_exists) then
         if(verbose > 1) print *,"WARNING: variance output file '"//trim(varfile)//"exists"
@@ -353,21 +354,22 @@
     enddo
 
     missing = .false.
-
     do i = 0 , next
       slot = iand(i,ENTRY_MASK)
       pg = ishft(i,PAGE_SHIFT)
       p => ptab(pg)%p(slot)
-      interval = (p%npas_max - p%npas_min) / (p%nsamples - 1)
-      expected = 1 + (p%npas_max - p%npas_min) / interval
-      if(( p%npas_min + (p%nsamples - 1) * interval) .ne. p%npas_max) then
-        if(verbose > 1) print *,"WARNING:",expected - p%nsamples ," missing sample(s) for variable '"//p%nomvar//"'"
-        missing = .true.
+      if(p%nsamples > 1) then
+        interval = (p%npas_max - p%npas_min) / (p%nsamples - 1)
+        expected = 1 + (p%npas_max - p%npas_min) / interval
+!        if(( p%npas_min + (p%nsamples - 1) * interval) .ne. p%npas_max) then
+        if((expected - p%nsamples) .ne.0) then
+          if(verbose > 1) print *,"WARNING:",expected - p%nsamples ," missing sample(s) for variable '"//p%nomvar//"'"
+          missing = .true.
+        endif
       endif
     enddo
 
     if(.not. (missing .and. strict) ) status = write_stats(meanfile,varfile)
-
     call fstfrm(fstdmean)
     call fclos(fstdmean)
     if(variance) then
