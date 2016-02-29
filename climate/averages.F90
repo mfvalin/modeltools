@@ -1,4 +1,4 @@
-#define VERSION '1.0_rc2'
+#define VERSION '1.0_rc3'
   module averages_common
     use iso_c_binding
     implicit none
@@ -201,8 +201,12 @@
   subroutine print_usage(name)
     implicit none
     character(len=*) :: name
-    print *,'USAGE: '//trim(name)//' [-h|--help] [-newtags] [-strict] [-novar] [-stddev] [-test] [-q[q]] [-v[v][v]] [--|-f] mean_out [var_out] in_1 ... in_n'
-    print *,'        var_out MUST NOT be present if -novar is specified'
+    print *,'USAGE: '//trim(name)//' [-h|--help] [-newtags] [-strict] [-novar] [-stddev] \'
+    print *,'           [-mean mean_out] [-var var_out] [-test] [-q[q]] [-v[v][v]] [--|-f] \'
+    print *,'           [mean_out] [var_out] in_1 ... in_n'
+    print *,'        var_out  MUST NOT be present if -novar or -var is used'
+    print *,'        mean_out MUST NOT be present if -mean is used'
+    print *,'        -var -novar are mutually exclusive and may not be used together'
     return
   end
   program averages
@@ -220,6 +224,8 @@
     integer, external :: process_file, write_stats
 
     print *,"Version "//VERSION
+    meanfile = "/dev/null"
+    varfile = "/dev/null"
     curarg = 1
     first_file = 0
     strict = .false.                   ! do not abort on error
@@ -232,6 +238,7 @@
     endif
     do while(curarg <= arg_count)
       call get_command_argument(curarg,option,arg_len,status)
+print *,'DEBUG: option=',option
       if(option(1:1) .ne. '-') exit      ! does not start with -, must be a file name
       curarg = curarg + 1
       if(status .ne. 0) then
@@ -245,8 +252,32 @@
       else if( option == '-strict' ) then
         strict = .true.                 ! abort on ERROR 
         verbose = 1
+      else if( option == '-mean' ) then
+        if(curarg > arg_count) then
+          print *,'FATAL: missing argument after -mean'
+          call print_usage(progname)
+          call f_exit(1)
+        endif
+        call get_command_argument(curarg,meanfile,arg_len,status) ! get filename of means file
+        curarg = curarg + 1
+      else if( option == '-var' ) then
+        if(.not. variance) then  ! -var and -novar are mutually exclusive
+          call print_usage(progname)
+          call f_exit(1)
+        endif
+        if(curarg > arg_count) then
+          print *,'FATAL: missing argument after -var'
+          call print_usage(progname)
+          call f_exit(1)
+        endif
+        call get_command_argument(curarg,varfile,arg_len,status) ! get filename of variances/stddevs file
+        curarg = curarg + 1
       else if( option == '-novar' ) then
         variance = .false.                   ! test mode
+        if(trim(varfile) .ne. "/dev/null") then  ! -var and -novar are mutually exclusive
+          call print_usage(progname)
+          call f_exit(1)
+        endif
       else if( option == '-test' ) then
         test = .true.                   ! test mode
       else if( option == '-newtags' ) then
@@ -315,23 +346,26 @@
     endif
 
     if(verbose < 4) call fstopi("MSGLVL",4,.false.)
-
-    call get_command_argument(curarg,meanfile,arg_len,status) ! first file name is mean output file
-    curarg = curarg + 1
+    if(trim(meanfile) == "/dev/null") then 
+      call get_command_argument(curarg,meanfile,arg_len,status) ! first file name is mean output file
+      curarg = curarg + 1
+    endif
     inquire(FILE=trim(meanfile),EXIST=file_exists)
     if(file_exists) then
-      if(verbose > 1) print *,"WARNING: mean output file '"//trim(meanfile)//"exists"
+      if(verbose > 1) print *,"WARNING: mean output file '"//trim(meanfile)//" exists"
       if(strict) call f_exit(1)
     else
       if(verbose > 2) print *,"INFO: mean output file is '"//trim(meanfile)//"'"
     endif
 
-    if(variance) then
+    if(variance .and. (trim(varfile) == "/dev/null")) then
       call get_command_argument(curarg,varfile,arg_len,status) ! second file name is variance output file
       curarg = curarg + 1
+    endif
+    if(variance .and. (trim(varfile) .ne. "/dev/null")) then
       inquire(FILE=trim(varfile),EXIST=file_exists)
       if(file_exists) then
-        if(verbose > 1) print *,"WARNING: variance output file '"//trim(varfile)//"exists"
+        if(verbose > 1) print *,"WARNING: variance output file '"//trim(varfile)//" exists"
         if(strict) call f_exit(1)
       else
         if(verbose > 2) print *,"INFO: variance output file is '"//trim(varfile)//"'"
