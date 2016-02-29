@@ -1,4 +1,4 @@
-#define VERSION '1.0_rc1'
+#define VERSION '1.0_rc2'
   module averages_common
     use iso_c_binding
     implicit none
