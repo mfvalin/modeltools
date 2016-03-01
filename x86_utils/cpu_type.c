@@ -49,11 +49,6 @@ static void get_cpu_capabilities()
     if((1 << 28) & regs[2]) ProcessorCapabilities |= FLAG_AVX ;   /* AVX    ECX bit 28 */
     if((1 << 25) & regs[3]) ProcessorCapabilities |= FLAG_SSE ;   /* SSE    EDX bit 25 */
     if((1 << 26) & regs[3]) ProcessorCapabilities |= FLAG_SSE2 ;  /* SSE2   EDX bit 26 */
-    if((ProcessorCapabilities & FLAG_FMA) == 0) return ; /* if FMA flag not present, AVX2 will not be */
-
-    X86_cpuid( 7, 0, regs );    /* get more CPU capabilities EAX=7, ECX=0 */
-    if((1 << 5) & regs[1]) ProcessorCapabilities |= FLAG_AVX2 ;   /* AVX2  EBX bit 5 */
-    if((1 << 8) & regs[1]) ProcessorCapabilities |= FLAG_BMI  ;   /* BMI2  EBX bit 8 needed to set our BMI flag */
 
     X86_cpuid( 0x80000002, 0, regs );  /* version string (3 calls) */
     for(j=0 ; j<4 ; j++){
@@ -73,6 +68,12 @@ static void get_cpu_capabilities()
     while(cstring[j] != ' ') j--;
     j++;
     sscanf(cstring+j,"%f",&freq); hz = freq*1000000.0;
+
+    if((ProcessorCapabilities & FLAG_FMA) == 0) return ; /* if FMA flag not present, AVX2 will not be */
+
+    X86_cpuid( 7, 0, regs );    /* get more CPU capabilities EAX=7, ECX=0 */
+    if((1 << 5) & regs[1]) ProcessorCapabilities |= FLAG_AVX2 ;   /* AVX2  EBX bit 5 */
+    if((1 << 8) & regs[1]) ProcessorCapabilities |= FLAG_BMI  ;   /* BMI2  EBX bit 8 needed to set our BMI flag */
 }
 
 #pragma weak Get_cpu_clock__=Get_cpu_clock
