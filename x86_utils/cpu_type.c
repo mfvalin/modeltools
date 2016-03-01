@@ -67,7 +67,7 @@ static void get_cpu_capabilities()
     j = j - 3;
     while(cstring[j] != ' ') j--;
     j++;
-    sscanf(cstring+j,"%f",&freq); hz = freq*1000000.0;
+    sscanf(cstring+j,"%f",&freq); hz = freq*1000000.0 + .5;
 
     if((ProcessorCapabilities & FLAG_FMA) == 0) return ; /* if FMA flag not present, AVX2 will not be */
 
