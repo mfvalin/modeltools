@@ -1,4 +1,4 @@
-#define VERSION '1.0_rc4'
+#define VERSION '1.0_rc5'
   module averages_common   ! tables and table management routines
     use iso_c_binding
     implicit none
@@ -21,6 +21,7 @@
       character(len=4)  :: nomvar                  ! from field's standard file parameters
       character(len=2)  :: typvar                  ! from field's standard file parameters
       character(len=1)  :: grtyp                   ! from field's standard file parameters
+      logical :: special                           ! special record, ignore stats
     end type
 
     integer, parameter :: PAGE_SIZE  = 256   ! 256 fields per page in table (MUST BE A POWER OF 2)
@@ -36,12 +37,13 @@
     integer, save :: next = -1             ! index of las valid record in statistics table
     integer, save :: verbose = 2           ! ERROR + WARNING
     logical, save :: variance = .true.     ! variance or standard deviation required
-    logical, save :: firstfile = .true.    ! first input file is being processed (.false. after)
     integer, save :: fstdmean = 0          ! unit number for standard file into which averages are written
     integer, save :: fstdvar = 0           ! unit number for standard file into which variances/std deviatoins are written
     logical, save :: std_dev = .false.     ! output standard deviation rather than variance
     logical, save :: newtags = .false.     ! use new ip1/2/3 taggging style (not implemented yet)
 
+    character(len=4), dimension(1024), save :: specials
+    integer, save :: nspecials=0
   contains
 
     subroutine create_page(n)  ! create and initialize page n that will contain PAGE_SIZE entries
@@ -120,8 +122,9 @@
       ptab(pg)%p(slot)%nomvar = ""
       ptab(pg)%p(slot)%typvar = ""
       ptab(pg)%p(slot)%grtyp = ""
+      ptab(pg)%p(slot)%special = .false.   ! by default not a special record
       return
-    end function
+    end function create_page_entry
 
     function new_page_entry(ni,nj) result(ix) ! create a new entry in tables
       implicit none
@@ -205,13 +208,17 @@
   subroutine print_usage(name)
     implicit none
     character(len=*) :: name
-    print *,'USAGE: '//trim(name)//' [-h|--help] [-newtags] [-strict] [-novar] [-stddev] \'
+    print *,'USAGE: '//trim(name)//' [-h|--help] [-newtags] [-strict] [-novar] [-stddev] [-tag nomvar] \'
     print *,'           [-mean mean_out] [-var var_out] [-test] [-q[q]] [-v[v][v]] [--|-f] \'
     print *,'           [mean_out] [var_out] in_1 ... in_n'
     print *,'        var_out  MUST NOT be present if -novar or -var is used'
     print *,'        mean_out MUST NOT be present if -mean is used'
     print *,'        -var -novar are mutually exclusive and may not be used together'
     print *,'        options are order independent but -- or -f MUST BE THE LAST ONE'
+    print *,"        default special tag names = '>>  ', '^^  ', '!!  ', 'HY  '"
+    print *,'        the -tag option may be used than once to add to this list'
+    print *,'example :'
+    print *,"  "//trim(name)//" -vv -mean mean.fst -var var.fst -tag HY -tag '>>' my_dir/dm*"
     return
   end
 
@@ -238,6 +245,12 @@
     test = .false.                     ! internal flag for development purposes
     arg_count = command_argument_count()
     call get_command_argument(0,progname,arg_len,status)  ! get program name
+
+    nspecials = 4
+    specials(1) = ">>  "
+    specials(2) = "^^  "
+    specials(3) = "!!  "
+    specials(4) = "HY  "
 
     if(arg_count < 1) then             ! no arguments, OUCH !!
       call print_usage(progname)
@@ -270,6 +283,18 @@
         endif
         call get_command_argument(curarg,meanfile,arg_len,status) ! get filename of averages file
         curarg = curarg + 1
+
+      else if( option == '-tag' ) then     ! -tag
+        if(curarg > arg_count) then
+          print *,'FATAL: missing argument after -tag'
+          call print_usage(progname)
+          call f_exit(1)
+        endif
+        call get_command_argument(curarg,option,arg_len,status) ! get filename of averages file
+        curarg = curarg + 1
+        nspecials = nspecials + 1
+        specials(nspecials) = trim(option)
+        if(verbose > 2) print *,"INFO: adding '"//specials(nspecials)//"' to special variable list"
 
       else if( option == '-var' ) then      ! -var file_for_variances
         if(.not. variance) then  ! -var and -novar are mutually exclusive
@@ -376,7 +401,6 @@
         status = process_file(trim(filename))
         if(status<0 .and. strict) call f_exit(1)   ! strict mode, error is fatal
       endif
-      firstfile = .false.            ! after first file
     enddo
 
     missing = .false.                ! missing samples flag
@@ -384,6 +408,7 @@
       slot = iand(i,ENTRY_MASK)      ! slot from index
       pg = ishft(i,PAGE_SHIFT)       ! page from index
       p => ptab(pg)%p(slot)          ! pointer to entry
+      if(p%special) cycle            ! ignore "special" records
       if(p%nsamples > 1) then        ! what follows is irrelevant if only one sample
         interval = (p%npas_max - p%npas_min) / (p%nsamples - 1)  ! interval asssuming constant interval between samples 
         expected = 1 + (p%npas_max - p%npas_min) / interval      ! expected number of samples given lowes/highest timestep numbers
@@ -396,7 +421,7 @@
     enddo
 
     if(.not. (missing .and. strict) ) status = write_stats(meanfile,varfile)  ! write into statistics file(s)
-
+111 continue
     call fstfrm(fstdmean)    ! close averages file
     call fclos(fstdmean)
     if(variance) then
@@ -451,9 +476,10 @@
     character(len=4) :: nomvar
     character(len=2) :: typvar
     character(len=12) :: etiket
-    integer :: dtyp
+    integer :: dtyp, ix, slot, pg
     real, dimension(:,:), pointer :: z8
     real*8 :: hours
+    type(field), pointer :: p
 
     status = 0
     call fstprm(key,dateo,deet,npas,ni,nj,nk,nbits,datyp,ip1,ip2,ip3, &
@@ -463,10 +489,23 @@
     hours = hours / 3600.0
     hours = hours * npas
     call incdatr(datev,dateo,hours)
-    if(nomvar == ">>  " .or. nomvar == "^^  " .or. nomvar == "HY  " .or. nomvar == "!!  ") then  ! special record
-      if(.not. firstfile) return                                                                 ! from first file only
+
+    if(any(nomvar == specials(1:nspecials))) then  ! special record, copy if first time seen, skip otherwise
+      z = 0.0
+      ix = process_entry(z,ni,nj,ip1,dateo,deet,npas,etiket,nomvar,typvar,grtyp,ig1,ig2,ig3,ig4)  ! process data
+      slot = iand(ix,ENTRY_MASK)  ! slot from index
+      pg = ishft(ix,PAGE_SHIFT)   ! page from index
+      p => ptab(pg)%p(slot)       ! pointer to data
+      p%special = .true.
+      if(p%nsamples > 1) then   ! we have already seen this record
+        if(verbose > 3) print *,"NOTE: skipping non first occurrence of '"//p%nomvar//"'"
+        return
+      endif
+!
+!     first time around, copy to mean (and variance) file(s)
+!
       allocate(z8(ni,nj*2))                      ! in case data uses more than 32 bits
-      status = fstluk(z8,key,lni,lnj,nk)         ! read record data
+      status = fstluk(z8,key,ni,nj,nk)           ! read record data
       if(status == -1) return                    ! ERROR
       if(nbits == 64) call fst_data_length(8)    ! 64 bit data
       if(verbose > 4) print *,'DEBUG: special record - dateo, datev datev', dateo, datev, extra1
@@ -552,13 +591,16 @@
 
     status = 0
     if(verbose > 2) print *,"INFO:",next," records will be written into mean/variance files"
-
     vartag = 'VA'               ! typvar for variance/std deviation file
     if(std_dev) vartag = 'ST'
     do i = 0 , next             ! loop over valid entries
       slot = iand(i,ENTRY_MASK) ! slot from index
       pg = ishft(i,PAGE_SHIFT)  ! page from index
       p => ptab(pg)%p(slot)     ! pointer to data
+      if(p%special) then
+        if(verbose > 2) print *,"INFO: ignoring special record '"//p%nomvar//"'"
+        cycle
+      endif
       if(verbose > 4) then
         print 100,"DEBUG: ",p%nsamples,p%nomvar,p%typvar,p%etiket,p%grtyp,p%ip1,associated(p%stats),p%ni,p%nj,p%npas_min,p%npas_max
 100     format(A,I5,A5,A3,A13,A2,I10,L2,2I5,2I8)
