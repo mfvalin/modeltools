@@ -1,4 +1,4 @@
-#define VERSION '1.0_rc5'
+#define VERSION '1.0_rc6'
   module averages_common   ! tables and table management routines
     use iso_c_binding
     implicit none
@@ -15,7 +15,7 @@
       real *8, dimension(:,:,:), pointer :: stats  ! (:,:,1) = sum, (:,:,2) = sum of squares
       integer :: ni, nj                            ! field dimensions
       integer :: nsamples                          ! number of samples collected
-      integer :: npas_min, npas_max                ! lowest and highest time step collected
+!       integer :: npas_min, npas_max                ! lowest and highest time step collected
       integer :: ip1, dateo, deet                  ! from field's standard file parameters
       integer :: ig1, ig2, ig3, ig4                ! grid
       character(len=12) :: etiket                  ! from field's standard file parameters
@@ -42,6 +42,8 @@
     integer, save :: fstdvar = 0           ! unit number for standard file into which variances/std deviatoins are written
     logical, save :: std_dev = .false.     ! output standard deviation rather than variance
     logical, save :: newtags = .false.     ! use new ip1/2/3 taggging style (not implemented yet)
+    logical, save :: check_dateo = .false. ! check that all samples have the same date of origin (single model run)
+    logical, save :: skip_npas0 = .true.   ! skip record if npas == 0 (default)
 
     character(len=4), dimension(1024), save :: specials
     integer, save :: nspecials=0
@@ -110,8 +112,8 @@
       ptab(pg)%p(slot)%ni = ni       ! dimensions of field
       ptab(pg)%p(slot)%nj = nj
       ptab(pg)%p(slot)%nsamples = 0  ! no samples yet
-      ptab(pg)%p(slot)%npas_min = 999999999
-      ptab(pg)%p(slot)%npas_max = -1
+!       ptab(pg)%p(slot)%npas_min = 999999999
+!       ptab(pg)%p(slot)%npas_max = -1
       ptab(pg)%p(slot)%dateo = -1
       ptab(pg)%p(slot)%date_lo = 0
       ptab(pg)%p(slot)%date_hi = 0
@@ -145,14 +147,57 @@
       endif
       return
     end function new_page_entry
-    subroutine date_stamp_64(date_now,dateo,deet,npas)  ! compute date_now from dateo,deet,npas
-      implicit none
-      integer*8, intent(INOUT) :: date_now
-      integer, intent(IN) :: dateo,deet,npas
 
-!      integer, dimension(2) :: temp  ! used later when implementing this function
-      date_now = dateo
-    end subroutine date_stamp_64
+    function date_stamp_64(date_stamp) result(date_64)  ! compute date_64 from CMC date_stamp
+      implicit none
+      integer, intent(IN) :: date_stamp
+      integer*8 :: date_64  ! in seconds
+
+      integer :: t1, t2 
+      integer year, month, day, hour, minute, second, julian
+
+      call newdate(date_stamp,t1,t2,-3)  ! date stamp to t1(YYYYMMDD), t2(HHMMSShh)
+
+      year = t1 / 10000
+      t1 = t1 - (10000*year)
+      month = t1 / 100
+      day = t1 - (month*100)
+
+      hour = t2 / 1000000
+      t2 = t2 - (1000000*hour)
+      minute = t2 / 10000
+      t2 = t2 - (10000*minute)
+      second = t2 / 100
+
+      call jdatec(julian,year,month,day)
+      date_64 = julian
+      date_64 = (date_64*86400) + (hour*3600) + (minute*60) + second     ! 86400 seconds in a day
+      return
+    end function date_stamp_64
+
+    function date_stamp_32(date_64) result(date_stamp)  ! convert date_64 to CMC datestamp
+      implicit none
+      integer*8, intent(IN) :: date_64  ! in seconds
+      integer :: date_stamp
+
+      integer :: t1, t2, t0  ! used later when implementing this function
+      integer year, month, day, hour, minute, second, hms, ymd
+
+      ymd = date_64 / 86400    ! julian day
+      call datec(ymd,year,month,day)
+      t1 = year*10000 + month*100 + day   ! YYYYMMDD
+
+      hms = date_64 -(ymd*86400)
+      hour = hms / 3600
+      hms = hms - (hour*3600)
+      minute = hms / 60
+      second = hms - (minute*60)
+      t2 = hour*1000000 + minute*10000 + second*100  ! HHMMSS00
+
+      call newdate(t0,t1,t2,3)  ! t1(YYYYMMDD), t2(HHMMSShh) to  date stamp
+      date_stamp = t0
+      return
+    end function date_stamp_32
 !
 !   process record read from one of the input standard files
 !
@@ -169,8 +214,9 @@
       type(field), pointer :: p
 
       ix = -1
-      date_now = -1
-      call date_stamp_64(date_now,dateo,deet,npas)   ! compute 64 bit date_now from dateo,deet,npas
+      date_now = date_stamp_64(dateo)      ! compute 64 bit date_now from dateo
+      date_now = date_now + deet*npas      ! date of validity of sample
+
       do i = 0 , next               ! do we have an entry that matches this record's parameters
         slot = iand(i,ENTRY_MASK)   ! slot from index
         pg = ishft(i,PAGE_SHIFT)    ! page from index
@@ -179,7 +225,7 @@
         if(trim(p%nomvar) .ne. trim(nomvar)) cycle
         if(trim(p%typvar) .ne. trim(typvar)) cycle
         if(trim(p%grtyp) .ne. trim(grtyp)) cycle
-        if(p%dateo .ne. dateo) cycle   ! we may have to ignore that condition
+        if((p%dateo .ne. dateo) .and. check_dateo) cycle   ! dateo verification is optional
         if(p%ip1 .ne. ip1) cycle
         if(p%ni .ne. ni) cycle
         if(p%nj .ne. nj) cycle
@@ -210,9 +256,9 @@
         p%nj = nj
       endif
       p%date_lo = min(p%date_lo , date_now)
-      p%date_hi = min(p%date_hi , date_now)
-      p%npas_max = max(p%npas_max,npas) ! update lowest/highest timestep number
-      p%npas_min = min(p%npas_min,npas)
+      p%date_hi = max(p%date_hi , date_now)
+!       p%npas_max = max(p%npas_max,npas) ! update lowest/highest timestep number
+!       p%npas_min = min(p%npas_min,npas)
       p%nsamples = p%nsamples + 1       ! add 1 to number of samples
       do j = 1 , nj
       do i = 1 , ni
@@ -227,7 +273,7 @@
     implicit none
     character(len=*) :: name
     print *,'USAGE: '//trim(name)//' [-h|--help] [-newtags] [-strict] [-novar] [-stddev] [-tag nomvar] \'
-    print *,'           [-mean mean_out] [-var var_out] [-test] [-q[q]] [-v[v][v]] [--|-f] \'
+    print *,'           [-npas0] [-dateo] [-mean mean_out] [-var var_out] [-test] [-q[q]] [-v[v][v]] [--|-f] \'
     print *,'           [mean_out] [var_out] in_1 ... in_n'
     print *,'        var_out  MUST NOT be present if -novar or -var is used'
     print *,'        mean_out MUST NOT be present if -mean is used'
@@ -286,7 +332,6 @@
 
       if( option == '-h' .or. option == '--help' ) then
         call print_usage(progname)
-!        print *,'USAGE: '//trim(progname)//' [-h|--help] [-newtags] [-strict] [-novar] [-stddev] [-test] [-q[q]] [-v[v][v]] [--|-f] mean_out [var_out] in_1 ... in_n'
         call f_exit(0)
 
       else if( option == '-strict' ) then   ! set strict mode
@@ -333,6 +378,12 @@
           call print_usage(progname)
           call f_exit(1)
         endif
+
+      else if( option == '-dateo' ) then
+        check_dateo = .true.                ! check date of origin
+
+      else if( option == '-npas0' ) then
+        skip_npas0 = .false.                ! do not skip timestep 0
 
       else if( option == '-test' ) then
         test = .true.                   ! test mode (for development use only)
@@ -428,8 +479,10 @@
       p => ptab(pg)%p(slot)          ! pointer to entry
       if(p%special) cycle            ! ignore "special" records
       if(p%nsamples > 1) then        ! what follows is irrelevant if only one sample
-        interval = (p%npas_max - p%npas_min) / (p%nsamples - 1)  ! interval asssuming constant interval between samples 
-        expected = 1 + (p%npas_max - p%npas_min) / interval      ! expected number of samples given lowes/highest timestep numbers
+!         interval = (p%npas_max - p%npas_min) / (p%nsamples - 1)  ! interval asssuming constant interval between samples 
+!         expected = 1 + (p%npas_max - p%npas_min) / interval      ! expected number of samples given lowes/highest timestep numbers
+        interval = (p%date_hi - p%date_lo) / (p%nsamples - 1)
+        expected = 1 + (p%date_hi - p%date_lo) / interval
 !        if(( p%npas_min + (p%nsamples - 1) * interval) .ne. p%npas_max) then
         if((expected - p%nsamples) .ne.0) then
           if(verbose > 1) print *,"WARNING:",expected - p%nsamples ," missing sample(s) for variable '"//p%nomvar//"'"
@@ -546,7 +599,7 @@
       return
     endif
 
-    if(npas == 0) then
+    if((npas == 0) .and. skip_npas0) then
       if(verbose > 3) print *,'NOTE: skipping record (npas==0)'
       return
     endif
@@ -585,8 +638,12 @@
     integer :: deet, npas, ip1, ip2, ip3, datev
     character(len=2) :: vartag
     real *8 :: hours, hours_min, hours_max, ov_sample
+!    real *8 :: hours2
     integer, dimension(14) :: date_array
     integer :: new_dateo
+    character(len=16) :: string
+    real :: r4
+    integer :: my_kind
 
     if(fstdmean == 0 .and. fstdvar == 0) then  ! first call just opens the files
 
@@ -610,7 +667,7 @@
     status = 0
     if(verbose > 2) print *,"INFO:",next," records will be written into mean/variance files"
     vartag = 'VA'               ! typvar for variance/std deviation file
-    if(std_dev) vartag = 'ST'http://meteo.gc.ca/forecast/hourly/qc-147_metric_f.html
+    if(std_dev) vartag = 'ST'
     do i = 0 , next             ! loop over valid entries
       slot = iand(i,ENTRY_MASK) ! slot from index
       pg = ishft(i,PAGE_SHIFT)  ! page from index
@@ -620,9 +677,9 @@
         cycle
       endif
       if(verbose > 4) then
-        print 100,"DEBUG: ",p%nsamples,p%nomvar,p%typvar,p%etiket,p%grtyp,p%ip1,associated(p%stats),p%ni,p%nj,p%npas_min,p%npas_max
+        print 100,"DEBUG: ",p%nsamples,p%nomvar,p%typvar,p%etiket,p%grtyp,p%ip1,associated(p%stats),p%ni,p%nj
 100     format(A,I5,A5,A3,A13,A2,I10,L2,2I5,2I8)
-      endifhttp://meteo.gc.ca/forecast/hourly/qc-147_metric_f.html
+      endif
       allocate(z(p%ni,p%nj))   ! allocate space for averages
       ov_sample = 1.0
       ov_sample = ov_sample / p%nsamples
@@ -644,11 +701,16 @@
 
       hours = p%deet
       hours = hours / 3600             ! p%deet in hours
-      hours_min = hours * p%npas_min   ! start of period = p%dateo + hours_min
-      call incdatr(new_dateo,p%dateo,hours_min) ! start of period timestamp
-      hours_max = hours * p%npas_max   ! end   of period = p%dateo + hours_max
-      call incdatr(datev,p%dateo,hours_max)  ! datev = p%dateo + hours_max
-      hours = (p%npas_max - p%npas_min) * hours   ! span in hours of period
+!       hours_min = hours * p%npas_min   ! start of period = p%dateo + hours_min
+!       call incdatr(new_dateo,p%dateo,hours_min) ! start of period timestamp
+!       hours_max = hours * p%npas_max   ! end   of period = p%dateo + hours_max
+!       call incdatr(datev,p%dateo,hours_max)  ! datev = p%dateo + hours_max
+
+      new_dateo = date_stamp_32(p%date_lo)
+      datev = date_stamp_32(p%date_hi)
+!      hours = (p%npas_max - p%npas_min) * hours   ! span in hours of period
+      hours = (p%date_hi - p%date_lo) / 3600
+!      print *,'DEBUG: HOURS',hours,hours2,hours2-hours,p%date_hi,p%date_lo
       deet = 3600                      ! deet of written records forced to 1 hour
       npas = nint(hours)
       ip2 = npas                       ! to be adjusted if period does not start at 00Z
@@ -659,10 +721,15 @@
       ip3 = p%nsamples ! number of samples
       ip1 = p%ip1
       if(newtags) then ! new tagging style (this code is a placeholder and a NO-OP for now)
-        ip1 = ip1      ! beginning time (related to hours_max)
-        ip2 = ip2      ! ending time    (related to hours_min)
-        ip3 = ip3      ! number of samples
-        new_dateo = new_dateo  ! consistent with ip1 and ip2
+        ip2 = 0   ! for now
+        r4 = ip3
+        call convip_plus( ip3, r4, 15, 2, string, .false. )
+! print *,'DEBUG: ip<-p,kind=',ip3, r4, 15
+!         my_kind = -1
+!         r4 = -1
+!         call convip_plus( ip3, r4, my_kind, -1, string, .false. )
+! print *,'DEBUG: ip->p,kind=',ip3, r4, my_kind
+!        ip3 = ip3 + ishft(15,24) ! ip kind 15,  number of samples
       endif
 !     call fstecr(z8,z8,-nbits,fstdmean, &
 !                datev,deet,npas,ni,nj,nk,ip1,ip2,ip3,typvar,nomvar,etiket, &
