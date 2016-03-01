@@ -11,6 +11,7 @@
     end interface
 
     type :: field
+      integer*8 :: date_lo, date_hi                ! earliest date, latest date collected
       real *8, dimension(:,:,:), pointer :: stats  ! (:,:,1) = sum, (:,:,2) = sum of squares
       integer :: ni, nj                            ! field dimensions
       integer :: nsamples                          ! number of samples collected
@@ -112,6 +113,8 @@
       ptab(pg)%p(slot)%npas_min = 999999999
       ptab(pg)%p(slot)%npas_max = -1
       ptab(pg)%p(slot)%dateo = -1
+      ptab(pg)%p(slot)%date_lo = 0
+      ptab(pg)%p(slot)%date_hi = 0
       ptab(pg)%p(slot)%deet = -1
       ptab(pg)%p(slot)%ip1 = -1
       ptab(pg)%p(slot)%ig1 = -1
@@ -142,6 +145,14 @@
       endif
       return
     end function new_page_entry
+    subroutine date_stamp_64(date_now,dateo,deet,npas)  ! compute date_now from dateo,deet,npas
+      implicit none
+      integer*8, intent(INOUT) :: date_now
+      integer, intent(IN) :: dateo,deet,npas
+
+!      integer, dimension(2) :: temp  ! used later when implementing this function
+      date_now = dateo
+    end subroutine date_stamp_64
 !
 !   process record read from one of the input standard files
 !
@@ -154,9 +165,12 @@
       integer :: ix
 
       integer :: i, j, pg, slot
+      integer*8 :: date_now
       type(field), pointer :: p
 
       ix = -1
+      date_now = -1
+      call date_stamp_64(date_now,dateo,deet,npas)   ! compute 64 bit date_now from dateo,deet,npas
       do i = 0 , next               ! do we have an entry that matches this record's parameters
         slot = iand(i,ENTRY_MASK)   ! slot from index
         pg = ishft(i,PAGE_SHIFT)    ! page from index
@@ -165,7 +179,7 @@
         if(trim(p%nomvar) .ne. trim(nomvar)) cycle
         if(trim(p%typvar) .ne. trim(typvar)) cycle
         if(trim(p%grtyp) .ne. trim(grtyp)) cycle
-        if(p%dateo .ne. dateo) cycle
+        if(p%dateo .ne. dateo) cycle   ! we may have to ignore that condition
         if(p%ip1 .ne. ip1) cycle
         if(p%ni .ne. ni) cycle
         if(p%nj .ne. nj) cycle
@@ -184,6 +198,8 @@
         p%typvar = trim(typvar)
         p%grtyp = trim(grtyp)
         p%dateo = dateo
+        p%date_lo = date_now
+        p%date_hi = date_now
         p%deet = deet
         p%ip1 = ip1
         p%ig1 = ig1
@@ -193,6 +209,8 @@
         p%ni = ni
         p%nj = nj
       endif
+      p%date_lo = min(p%date_lo , date_now)
+      p%date_hi = min(p%date_hi , date_now)
       p%npas_max = max(p%npas_max,npas) ! update lowest/highest timestep number
       p%npas_min = min(p%npas_min,npas)
       p%nsamples = p%nsamples + 1       ! add 1 to number of samples
@@ -592,7 +610,7 @@
     status = 0
     if(verbose > 2) print *,"INFO:",next," records will be written into mean/variance files"
     vartag = 'VA'               ! typvar for variance/std deviation file
-    if(std_dev) vartag = 'ST'
+    if(std_dev) vartag = 'ST'http://meteo.gc.ca/forecast/hourly/qc-147_metric_f.html
     do i = 0 , next             ! loop over valid entries
       slot = iand(i,ENTRY_MASK) ! slot from index
       pg = ishft(i,PAGE_SHIFT)  ! page from index
@@ -604,7 +622,7 @@
       if(verbose > 4) then
         print 100,"DEBUG: ",p%nsamples,p%nomvar,p%typvar,p%etiket,p%grtyp,p%ip1,associated(p%stats),p%ni,p%nj,p%npas_min,p%npas_max
 100     format(A,I5,A5,A3,A13,A2,I10,L2,2I5,2I8)
-      endif
+      endifhttp://meteo.gc.ca/forecast/hourly/qc-147_metric_f.html
       allocate(z(p%ni,p%nj))   ! allocate space for averages
       ov_sample = 1.0
       ov_sample = ov_sample / p%nsamples
