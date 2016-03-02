@@ -20,7 +20,7 @@ uint64_t rdtsc(void) {   // version rapide "out of order"
       : /* clobbers */ "%rcx");
   return (uint64_t)lo | (((uint64_t)hi) << 32);
 }
-#if defined(SELF_TEST)
+#if defined(TEST_RDTSC)
 #include <stdio.h>
 main(){   // X86_64 timing demo:  cc -DSELF_TEST rdtscp.c ; ./a.out
 uint64_t t1;
