@@ -554,7 +554,8 @@ int main_rdtsc(int argc, char** argv){   // X86_64 timing demo:  cc -DSELF_TEST 
   for(i=0;i<5;i++){
     t1=rdtscp();
     t2=rdtscp();
-    ta=t2-t1; ta/=xc;   // conversion en nanosecondes
+    ta=t2-t1;
+    if(xc != 0) ta/=xc;   // conversion en nanosecondes
     t1=rdtscp();
     sleep(1);
     t2=rdtscp();
@@ -562,7 +563,8 @@ int main_rdtsc(int argc, char** argv){   // X86_64 timing demo:  cc -DSELF_TEST 
     tc=t2;
     t1=rdtsc();
     t2=rdtsc();
-    tb=t2-t1; tb/=xc;   // conversion en nanosecondes
+    tb=t2-t1;
+    if(xc != 0) tb/=xc;   // conversion en nanosecondes
     printf("%d ns, %d ns, %d ticks/us, cycles = %lu, sec = %E\n",ta,tb,tc,t2-t1,wall_clock_seconds(t2-t1));
   }
   for(i=0;i<5;i++){
