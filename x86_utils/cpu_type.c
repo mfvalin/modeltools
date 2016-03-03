@@ -81,17 +81,18 @@
  *       printf("rdtscp overhead = %lu %E\n",t2-t1,wall_clock_seconds(t2-t1));
  *       s1 = rdtsc_seconds();
  *       s2 = rdtsc_seconds();
- *       printf("rdtsc_seconds overhead = %E\n",s2-s1);
+ *       printf("rdtsc_seconds overhead = %E\n",s2);
  *       s1 = rdtscp_seconds();
  *       s2 = rdtscp_seconds();
- *       printf("rdtscp_seconds overhead = %E\n",s2-s1);
+ *       printf("rdtscp_seconds overhead = %E\n",s2);
  *       return(0);
  *      }
  *
  *    result of C program execution:
  * 
  *     CPU speed: 3700000000 Hz
- *     FLAGS:  SSE SSE2 SSE3 SSE4 AVX FMA AVX2rdtsc overhead = 36 9.729730E-09
+ *     FLAGS:  SSE SSE2 SSE3 SSE4 AVX FMA AVX2
+ *     rdtsc overhead = 36 9.729730E-09
  *     rdtscp overhead = 124 3.351351E-08
  *     rdtsc_seconds overhead = -4.419891E+05
  *     rdtscp_seconds overhead = -2.312973E-06
