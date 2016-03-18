@@ -44,6 +44,8 @@
     logical, save :: newtags = .false.     ! use new ip1/2/3 taggging style (not implemented yet)
     logical, save :: check_dateo = .false. ! check that all samples have the same date of origin (single model run)
     logical, save :: skip_npas0 = .true.   ! skip record if npas == 0 (default)
+    logical, save :: weight_ip3 = .false.  ! use ip3 as a weight
+    logical, save :: weight_time = .false. ! use time as a weight
 
     character(len=4), dimension(1024), save :: specials
     integer, save :: nspecials=0
@@ -201,9 +203,9 @@
 !
 !   process record read from one of the input standard files
 !
-    function process_entry(z,ni,nj,ip1,dateo,deet,npas,etiket,nomvar,typvar,grtyp,ig1,ig2,ig3,ig4) result(ix)
+    function process_entry(z,ni,nj,ip1,ip3,dateo,deet,npas,etiket,nomvar,typvar,grtyp,ig1,ig2,ig3,ig4) result(ix)
       implicit none
-      integer, intent(IN) :: ni, nj, ip1, npas, dateo, deet
+      integer, intent(IN) :: ni, nj, ip1, ip3, npas, dateo, deet
       integer, intent(IN) :: ig1, ig2, ig3, ig4
       character(len=*), intent(IN) :: etiket, nomvar, typvar, grtyp
       real, dimension(ni,nj), intent(IN) :: z
@@ -212,10 +214,17 @@
       integer :: i, j, pg, slot
       integer*8 :: date_now
       type(field), pointer :: p
+      real :: weight
 
       ix = -1
       date_now = date_stamp_64(dateo)      ! compute 64 bit date_now from dateo
       date_now = date_now + deet*npas      ! date of validity of sample
+      weight = 1.0
+      if(weight_ip3) then
+        i = ip3
+        if(ishft(i,-24) == 15) i = iand(ip3,Z'00FFFFFF')   ! keep lower 24 bits (type 15)
+        weight = i
+      endif
 
       do i = 0 , next               ! do we have an entry that matches this record's parameters
         slot = iand(i,ENTRY_MASK)   ! slot from index
@@ -259,11 +268,11 @@
       p%date_hi = max(p%date_hi , date_now)
 !       p%npas_max = max(p%npas_max,npas) ! update lowest/highest timestep number
 !       p%npas_min = min(p%npas_min,npas)
-      p%nsamples = p%nsamples + 1       ! add 1 to number of samples
+      p%nsamples = p%nsamples + weight ! add weight to number of samples
       do j = 1 , nj
       do i = 1 , ni
-         p%stats(i,j,1) = p%stats(i,j,1) + z(i,j)                      ! update sum
-         if(variance) p%stats(i,j,2) = p%stats(i,j,2) + z(i,j)*z(i,j)  ! update sum of squares if necessary
+         p%stats(i,j,1) = p%stats(i,j,1) + z(i,j)*weight               ! update sum
+         if(variance) p%stats(i,j,2) = p%stats(i,j,2) + z(i,j)*z(i,j)*weight  ! update sum of squares if necessary
       enddo
       enddo
     end function process_entry
@@ -273,7 +282,8 @@
     implicit none
     character(len=*) :: name
     print *,'USAGE: '//trim(name)//' [-h|--help] [-newtags] [-strict] [-novar] [-stddev] [-tag nomvar] \'
-    print *,'           [-npas0] [-dateo] [-mean mean_out] [-var var_out] [-test] [-q[q]] [-v[v][v]] [--|-f] \'
+    print *,'           [-npas0] [-dateo] [-mean mean_out] [-var var_out] [-weight ip3|time] \'
+    print *,'           [-test] [-q[q]] [-v[v][v]] [--|-f] \'
     print *,'           [mean_out] [var_out] in_1 ... in_n'
     print *,'        var_out  MUST NOT be present if -novar or -var is used'
     print *,'        mean_out MUST NOT be present if -mean is used'
@@ -337,6 +347,19 @@
       else if( option == '-strict' ) then   ! set strict mode
         strict = .true.                     ! abort on ERROR 
         verbose = 2                         ! ERROR + WARNING messages
+
+      else if( option == '-weight' ) then     ! -mean file_for_averages
+        if(curarg > arg_count) then
+          print *,'FATAL: missing argument after -weight'
+          call print_usage(progname)
+          call f_exit(1)
+        endif
+        option = "none"
+        call get_command_argument(curarg,option,arg_len,status) ! get weight option (ip3 or time)
+        if(trim(option) == 'ip3') weight_ip3 = .true.
+        if(trim(option) == 'time') weight_time = .true.
+        if(trim(option) .ne. 'none' .and. verbose > 2) print *,"INFO: WEIGHTING active, using '"//trim(option)//"'"
+        curarg = curarg + 1
 
       else if( option == '-mean' ) then     ! -mean file_for_averages
         if(curarg > arg_count) then
@@ -563,7 +586,7 @@
 
     if(any(nomvar == specials(1:nspecials))) then  ! special record, copy if first time seen, skip otherwise
       z = 0.0
-      ix = process_entry(z,ni,nj,ip1,dateo,deet,npas,etiket,nomvar,typvar,grtyp,ig1,ig2,ig3,ig4)  ! process data
+      ix = process_entry(z,ni,nj,ip1,ip3,dateo,deet,npas,etiket,nomvar,typvar,grtyp,ig1,ig2,ig3,ig4)  ! process data
       slot = iand(ix,ENTRY_MASK)  ! slot from index
       pg = ishft(ix,PAGE_SHIFT)   ! page from index
       p => ptab(pg)%p(slot)       ! pointer to data
@@ -620,7 +643,7 @@
     status = fstluk(z,key,ni,nj,nk)            ! read record data
     if(status == -1) return                    ! ERROR
 
-    status = process_entry(z,ni,nj,ip1,dateo,deet,npas,etiket,nomvar,typvar,grtyp,ig1,ig2,ig3,ig4)  ! process data
+    status = process_entry(z,ni,nj,ip1,ip3,dateo,deet,npas,etiket,nomvar,typvar,grtyp,ig1,ig2,ig3,ig4)  ! process data
 
   end function process_record
 
