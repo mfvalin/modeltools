@@ -14,9 +14,9 @@
       integer*8 :: date_lo, date_hi                ! earliest date, latest date collected
       real *8, dimension(:,:,:), pointer :: stats  ! (:,:,1) = sum, (:,:,2) = sum of squares
       integer :: ni, nj                            ! field dimensions
-      integer :: nsamples                          ! number of samples collected
+      integer :: nsamples, sample                  ! number of samples collected, duration of sample
 !       integer :: npas_min, npas_max                ! lowest and highest time step collected
-      integer :: ip1, dateo, deet                  ! from field's standard file parameters
+      integer :: ip1, ip2, ip3, dateo, deet        ! from field's standard file parameters
       integer :: ig1, ig2, ig3, ig4                ! grid
       character(len=12) :: etiket                  ! from field's standard file parameters
       character(len=4)  :: nomvar                  ! from field's standard file parameters
@@ -46,6 +46,7 @@
     logical, save :: skip_npas0 = .true.   ! skip record if npas == 0 (default)
     logical, save :: weight_ip3 = .false.  ! use ip3 as a weight
     logical, save :: weight_time = .false. ! use time as a weight
+    logical, save :: strict = .false.      ! non strict mode by default
 
     character(len=4), dimension(1024), save :: specials
     integer, save :: nspecials=0
@@ -119,8 +120,11 @@
       ptab(pg)%p(slot)%dateo = -1
       ptab(pg)%p(slot)%date_lo = 0
       ptab(pg)%p(slot)%date_hi = 0
+      ptab(pg)%p(slot)%sample = 0
       ptab(pg)%p(slot)%deet = -1
       ptab(pg)%p(slot)%ip1 = -1
+      ptab(pg)%p(slot)%ip2 = -1
+      ptab(pg)%p(slot)%ip3 = -1
       ptab(pg)%p(slot)%ig1 = -1
       ptab(pg)%p(slot)%ig2 = -1
       ptab(pg)%p(slot)%ig3 = -1
@@ -203,47 +207,64 @@
 !
 !   process record read from one of the input standard files
 !
-    function process_entry(z,ni,nj,ip1,ip3,dateo,deet,npas,etiket,nomvar,typvar,grtyp,ig1,ig2,ig3,ig4) result(ix)
+    function process_entry(z,ni,nj,ip1,ip2,ip3,dateo,deet,npas,etiket,nomvar,typvar,grtyp,ig1,ig2,ig3,ig4) result(ix)
       implicit none
-      integer, intent(IN) :: ni, nj, ip1, ip3, npas, dateo, deet
+      integer, intent(IN) :: ni, nj, ip1, ip2, ip3, npas, dateo, deet
       integer, intent(IN) :: ig1, ig2, ig3, ig4
       character(len=*), intent(IN) :: etiket, nomvar, typvar, grtyp
       real, dimension(ni,nj), intent(IN) :: z
       integer :: ix
 
-      integer :: i, j, pg, slot
-      integer*8 :: date_now
+      integer :: i, j, pg, slot, sample
+      integer*8 :: date_lo, date_hi
       type(field), pointer :: p
       real :: weight
+      logical :: is_special
 
       ix = -1
-      date_now = date_stamp_64(dateo)      ! compute 64 bit date_now from dateo
-      date_now = date_now + deet*npas      ! date of validity of sample
+      is_special = any(nomvar == specials(1:nspecials))
       weight = 1.0
-      if(weight_ip3) then
+      if(weight_ip3 .and. (.not. is_special)) then
         i = ip3
         if(ishft(i,-24) == 15) i = iand(ip3,Z'00FFFFFF')   ! keep lower 24 bits (type 15)
-        weight = i
+        weight = max(1,i)
       endif
-
+      sample = 0
+      if(is_special) then
+        date_lo = 0
+        date_hi = 0
+      else
+        date_lo = date_stamp_64(dateo)      ! compute 64 bit date_lo from dateo
+        date_hi = date_lo + deet*npas       ! date of validity of sample
+        if(weight == 1.0) then
+          date_lo = date_hi
+        else
+          sample = nint( (date_hi - date_lo) / (weight-1.0) )
+        endif
+      endif
       do i = 0 , next               ! do we have an entry that matches this record's parameters
         slot = iand(i,ENTRY_MASK)   ! slot from index
         pg = ishft(i,PAGE_SHIFT)    ! page from index
         p => ptab(pg)%p(slot)       ! pointer to data
-        if(trim(p%etiket) .ne. trim(etiket)) cycle
+        if(p%ip1 .ne. ip1) cycle    ! test most probable / cheapest differencing criteria first
+        if(p%ni .ne. ni .or. p%nj .ne. nj) cycle
         if(trim(p%nomvar) .ne. trim(nomvar)) cycle
         if(trim(p%typvar) .ne. trim(typvar)) cycle
         if(trim(p%grtyp) .ne. trim(grtyp)) cycle
+        if(trim(p%etiket) .ne. trim(etiket)) cycle
         if((p%dateo .ne. dateo) .and. check_dateo) cycle   ! dateo verification is optional
-        if(p%ip1 .ne. ip1) cycle
-        if(p%ni .ne. ni) cycle
-        if(p%nj .ne. nj) cycle
+        if(p%ip2 .ne. ip2 .and. is_special) cycle
+        if(p%ip3 .ne. ip3 .and. is_special) cycle
+        if(sample .ne. p%sample) then
+           if(verbose > 1) print *,'WARNING: sample interval mismatch, got',sample,' expected',p%sample
+           if(strict) call f_exit(1)    ! abort if strict mode
+        endif
         ix = i                      ! a matching entry has been found
         if(verbose > 4) print *,'DEBUG: found entry, previous samples',ix,p%nsamples
         exit
       enddo
 
-      if(ix == -1) then              ! not found, get a new entry
+      if(ix == -1) then              ! not found, make a new entry
         ix = new_page_entry(ni,nj)
         slot = iand(ix,ENTRY_MASK)   ! slot from index
         pg = ishft(ix,PAGE_SHIFT)    ! page from index
@@ -253,22 +274,28 @@
         p%typvar = trim(typvar)
         p%grtyp = trim(grtyp)
         p%dateo = dateo
-        p%date_lo = date_now
-        p%date_hi = date_now
+        p%date_lo = date_lo
+        p%date_hi = date_hi
+        p%sample = sample
         p%deet = deet
         p%ip1 = ip1
+        p%ip2 = ip2
+        p%ip3 = ip3
         p%ig1 = ig1
         p%ig2 = ig2
         p%ig3 = ig3
         p%ig4 = ig4
         p%ni = ni
         p%nj = nj
+        p%nsamples = 0
+        p%special = is_special
       endif
-      p%date_lo = min(p%date_lo , date_now)
-      p%date_hi = max(p%date_hi , date_now)
-!       p%npas_max = max(p%npas_max,npas) ! update lowest/highest timestep number
-!       p%npas_min = min(p%npas_min,npas)
       p%nsamples = p%nsamples + weight ! add weight to number of samples
+      if(is_special) return  ! no stats for special records, just add one to sample count
+!       p%npas_max = max(p%npas_max,npas)
+!       p%npas_min = min(p%npas_min,npas)
+      p%date_lo = min(p%date_lo , date_lo) ! update earliest/latest date
+      p%date_hi = max(p%date_hi , date_hi)
       do j = 1 , nj
       do i = 1 , ni
          p%stats(i,j,1) = p%stats(i,j,1) + z(i,j)*weight               ! update sum
@@ -304,7 +331,7 @@
     character (len=2048) :: filename, progname, meanfile, varfile
     integer :: arg_count, arg_len, status, i
     integer :: first_file
-    logical :: file_exists, strict, test, missing
+    logical :: file_exists, test, missing
     real, dimension(:,:), pointer :: z
     type(field), pointer :: p
     integer :: ix, pg, slot, interval, expected
@@ -346,7 +373,6 @@
 
       else if( option == '-strict' ) then   ! set strict mode
         strict = .true.                     ! abort on ERROR 
-        verbose = 2                         ! ERROR + WARNING messages
 
       else if( option == '-weight' ) then     ! -mean file_for_averages
         if(curarg > arg_count) then
@@ -445,6 +471,8 @@
       if(verbose > 3) print *,"NOTE: option = '"//trim(option)//"'"
     enddo
 
+    if(strict)  verbose = max(2 , verbose)          ! ERROR + WARNING messages at least
+
     allocate(ptab(0:MAX_PAGES-1))   ! allocate and initialize page table
     do i = 0 , MAX_PAGES-1          ! nullify all page pointers
       nullify(ptab(i)%p)
@@ -505,6 +533,7 @@
 !         interval = (p%npas_max - p%npas_min) / (p%nsamples - 1)  ! interval asssuming constant interval between samples 
 !         expected = 1 + (p%npas_max - p%npas_min) / interval      ! expected number of samples given lowes/highest timestep numbers
         interval = (p%date_hi - p%date_lo) / (p%nsamples - 1)
+        if(p%sample == 0) p%sample = interval
         expected = 1 + (p%date_hi - p%date_lo) / interval
 !        if(( p%npas_min + (p%nsamples - 1) * interval) .ne. p%npas_max) then
         if((expected - p%nsamples) .ne.0) then
@@ -561,10 +590,9 @@
     integer :: status
 
     integer, external :: fstluk
-    real, dimension(lni,lnj) :: z
+    real, dimension(lni,lnj,2) :: z      ! in case data needs 64 bits
     integer :: ni, nj, nk
     integer :: nbits,datyp,ip1,ip2,ip3,dateo,deet,npas
-    integer :: datev
     integer :: ig1,ig2,ig3,ig4,swa,lng,dltf,ubc,extra1,extra2,extra3
     character(len=1) :: grtyp
     character(len=4) :: nomvar
@@ -572,45 +600,41 @@
     character(len=12) :: etiket
     integer :: dtyp, ix, slot, pg
     real, dimension(:,:), pointer :: z8
-    real*8 :: hours
     type(field), pointer :: p
 
     status = 0
     call fstprm(key,dateo,deet,npas,ni,nj,nk,nbits,datyp,ip1,ip2,ip3, &
                 typvar,nomvar,etiket,grtyp,ig1,ig2,ig3,ig4, &
                 swa,lng,dltf,ubc,extra1,extra2,extra3)
-    hours = deet
-    hours = hours / 3600.0
-    hours = hours * npas
-    call incdatr(datev,dateo,hours)
 
     if(any(nomvar == specials(1:nspecials))) then  ! special record, copy if first time seen, skip otherwise
-      z = 0.0
-      ix = process_entry(z,ni,nj,ip1,ip3,dateo,deet,npas,etiket,nomvar,typvar,grtyp,ig1,ig2,ig3,ig4)  ! process data
+      ix = process_entry(z,ni,nj,ip1,ip2,ip3,dateo,deet,npas,etiket,nomvar,typvar,grtyp,ig1,ig2,ig3,ig4)  ! process data
       slot = iand(ix,ENTRY_MASK)  ! slot from index
       pg = ishft(ix,PAGE_SHIFT)   ! page from index
       p => ptab(pg)%p(slot)       ! pointer to data
-      p%special = .true.
-      if(p%nsamples > 1) then   ! we have already seen this record
+      if(p%nsamples > 1) then     ! we have already seen this record
         if(verbose > 3) print *,"NOTE: skipping non first occurrence of '"//p%nomvar//"'"
         return
       endif
 !
 !     first time around, copy to mean (and variance) file(s)
 !
-      allocate(z8(ni,nj*2))                      ! in case data uses more than 32 bits
-      status = fstluk(z8,key,ni,nj,nk)           ! read record data
+      status = fstluk(z,key,ni,nj,nk)            ! read record data
       if(status == -1) return                    ! ERROR
-      if(nbits == 64) call fst_data_length(8)    ! 64 bit data
-      if(verbose > 4) print *,'DEBUG: special record - dateo, datev datev', dateo, datev, extra1
-      call fstecr(z8,z8,-nbits,fstdmean,dateo,deet,npas,ni,nj,nk,ip1,ip2,ip3,typvar,nomvar,etiket,grtyp,ig1,ig2,ig3,ig4,datyp,.false.)
+      if(nbits == 64) call fst_data_length(8)    ! if 64 bit data
+      if(verbose > 4) print *,'DEBUG: special record - dateo', dateo
+      call fstecr(z,z,-nbits,fstdmean,dateo,deet,npas,ni,nj,nk,ip1,ip2,ip3,typvar,nomvar,etiket,grtyp,ig1,ig2,ig3,ig4,datyp,.false.)
       if(variance) then  ! if there is a variance file, write it there too
         if(nbits == 64) call fst_data_length(8)    ! 64 bit data
-        call fstecr(z8,z8,-nbits,fstdvar,dateo,deet,npas,ni,nj,nk,ip1,ip2,ip3,typvar,nomvar,etiket,grtyp,ig1,ig2,ig3,ig4,datyp,.false.)
+        call fstecr(z,z,-nbits,fstdvar,dateo,deet,npas,ni,nj,nk,ip1,ip2,ip3,typvar,nomvar,etiket,grtyp,ig1,ig2,ig3,ig4,datyp,.false.)
       endif
-      deallocate(z8)
       return
     endif   ! end of if special record
+
+    if(datyp .ne. 5 .and. datyp .ne. 1 .and. datyp .ne. 6 .and. datyp .ne. 133 .and. datyp .ne. 134) then
+      if(verbose > 2) print *,"INFO: skipping record '"//nomvar//"' (not floating point)"
+      return
+    endif
 
     if(nbits > 32) then
       if(verbose > 3) print *,'NOTE: skipping record (nbits > 32)'
@@ -643,7 +667,7 @@
     status = fstluk(z,key,ni,nj,nk)            ! read record data
     if(status == -1) return                    ! ERROR
 
-    status = process_entry(z,ni,nj,ip1,ip3,dateo,deet,npas,etiket,nomvar,typvar,grtyp,ig1,ig2,ig3,ig4)  ! process data
+    status = process_entry(z,ni,nj,ip1,ip2,ip3,dateo,deet,npas,etiket,nomvar,typvar,grtyp,ig1,ig2,ig3,ig4)  ! process data
 
   end function process_record
 
@@ -743,6 +767,7 @@
       ip2 = ip2 + 24 * (date_array(3)-1)    ! force back to first day of month
       ip3 = p%nsamples ! number of samples
       ip1 = p%ip1
+      if(verbose > 2) print *,'INFO: ',p%nsamples,' samples every',p%sample/3600.0,' hours'
       if(newtags) then ! new tagging style (this code is a placeholder and a NO-OP for now)
         ip2 = 0   ! for now
         r4 = ip3
@@ -754,9 +779,6 @@
 ! print *,'DEBUG: ip->p,kind=',ip3, r4, my_kind
 !        ip3 = ip3 + ishft(15,24) ! ip kind 15,  number of samples
       endif
-!     call fstecr(z8,z8,-nbits,fstdmean, &
-!                datev,deet,npas,ni,nj,nk,ip1,ip2,ip3,typvar,nomvar,etiket, &
-!                grtyp,ig1,ig2,ig3,ig4,datyp,.false.)
       call fstecr(z,z,-32,fstdmean, &
                   new_dateo,deet,npas,p%ni,p%nj,1,ip1,ip2,ip3,"MN",p%nomvar,p%etiket, &
                   p%grtyp,p%ig1,p%ig2,p%ig3,p%ig4,128+5,.false.)
