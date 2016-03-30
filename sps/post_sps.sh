@@ -23,12 +23,14 @@ Date2=$(date -d${CurrentDate}GMT0 +%s)
 Date1=$(date -d${FileDate}GMT0 +%s)
 Nhours=$(((Date2-Date1)/3600))     # number of hours for this integration
 #
-# patch together the output file (bemol)
+# post-process the output (u.re_tag_date -z)
 #
 rm -f OUT/${exper}_${FileDate}
-echo bemol -src OUT/*/pm${FileDate}000000-??-??_000000h -dst OUT/${exper}_${FileDate}
+# echo bemol -src OUT/*/pm${FileDate}000000-??-??_000000h -dst OUT/${exper}_${FileDate}
+echo u.re_tag_date OUT/*/pm${FileDate}000000-00-00_000000h OUT/${exper}_${FileDate} -z
 ls -l OUT/*/pm${FileDate}000000-??-??_000000h
-bemol -src OUT/*/pm${FileDate}000000-??-??_000000h -dst OUT/${exper}_${FileDate} >/dev/null
+# bemol -src OUT/*/pm${FileDate}000000-??-??_000000h -dst OUT/${exper}_${FileDate} >/dev/null
+u.re_tag_date OUT/*/pm${FileDate}000000-00-00_000000h OUT/${exper}_${FileDate} -z >/dev/null
 #
 # copy output file to archive after making it read only (background copy)
 #
