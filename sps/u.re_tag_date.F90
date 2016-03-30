@@ -5,17 +5,19 @@ program re_tag_scale
   character(len=1024) :: old_file, new_file, the_new_date
   integer :: i, status
   integer :: fstdin, fstdout
-  integer, external :: fnom, fstouv, fstinf, fstsui, fstluk
+  integer, external :: fnom, fstouv, fstinf, fstsui, fstluk, fstopl, fstopi
   real,    dimension(:,:), allocatable :: array
   integer :: ni, nj, nk, nrec
   integer :: nbits,datyp,ip1,ip2,ip3,dateo,deet,npas
-  integer :: datev, new_datev
+  integer :: new_dateo
   integer :: ig1,ig2,ig3,ig4,swa,lng,dltf,ubc,extra1,extra2,extra3
   character(len=1) :: grtyp
   character(len=4) :: nomvar
   character(len=2) :: typvar
   character(len=12) :: etiket
+  logical z_ify
 
+  z_ify = .false.
   nargs = command_argument_count()
   if(nargs /= 3) call print_usage
   call GET_COMMAND_ARGUMENT(1,old_file)
@@ -23,9 +25,16 @@ program re_tag_scale
   call GET_COMMAND_ARGUMENT(3,the_new_date)
 
   print *,'u.re_tag_scale '//trim(old_file)//' '//trim(new_file)//' '//trim(the_new_date)
-  read(the_new_date,*)new_datev
-
-  print *,'INFO: new date of validity: '//the_new_date,new_datev
+  if(trim(the_new_date) == '-z') then   ! z_ify mode (change grid type # into z)
+    i = fstopl('FASTIO', .true., .false.)
+    i = fstopl('IMAGE', .true., .false.)
+    i = fstopi("MSGLVL",4,.false.)
+    new_dateo = -1
+    print *,'INFO: gridtyp # will be changed to z'
+  else
+    read(the_new_date,*)new_dateo
+    print *,'INFO: new date of validity: '//the_new_date,new_dateo
+  endif
 
   print *,'INFO: opening input file '//trim(old_file)
   fstdin = 0
@@ -53,10 +62,14 @@ program re_tag_scale
     call fstprm(status,dateo,deet,npas,ni,nj,nk,nbits,datyp,ip1,ip2,ip3, &
                 typvar,nomvar,etiket,grtyp,ig1,ig2,ig3,ig4, &
                 swa,lng,dltf,ubc,extra1,extra2,extra3)
-    deet = 0
-    npas = 0
-    datev = new_datev
-    call fstecr(array,array,-nbits,fstdout,datev,deet,npas,ni,nj,nk,ip1,ip2,ip3,typvar,nomvar,etiket,grtyp,ig1,ig2,ig3,ig4,datyp,.false.)
+    if(z_ify) then
+      if(grtyp == '#') grtyp = 'Z'
+    else
+      deet = 0
+      npas = 0
+      if(new_dateo .ne. -1) dateo = new_dateo
+    endif
+    call fstecr(array,array,-nbits,fstdout,dateo,deet,npas,ni,nj,nk,ip1,ip2,ip3,typvar,nomvar,etiket,grtyp,ig1,ig2,ig3,ig4,datyp,.false.)
     status = fstsui(fstdin,ni,nj,nk)
   enddo
   print *,'INFO: number of records read and written =',nrec
@@ -67,6 +80,6 @@ program re_tag_scale
 end program
 subroutine print_usage()
   implicit none
-  print *,'USAGE: u.re_tag_date old_standard_file new_standard_file new_date'
+  print *,'USAGE: u.re_tag_date old_standard_file new_standard_file new_date|-z'
   call qqexit(1)
 end subroutine
