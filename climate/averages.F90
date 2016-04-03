@@ -1,4 +1,4 @@
-#define VERSION '1.0_rc8'
+#define VERSION '1.0_rc9'
   module averages_common   ! tables and table management routines
     use iso_c_binding
     implicit none
@@ -534,7 +534,11 @@
 !         expected = 1 + (p%npas_max - p%npas_min) / interval      ! expected number of samples given lowes/highest timestep numbers
         interval = (p%date_hi - p%date_lo) / (p%nsamples - 1)
         if(p%sample == 0) p%sample = interval
-        expected = 1 + (p%date_hi - p%date_lo) / interval
+        if(interval == 0) then
+	  expected = p%nsamples
+        else
+	  expected = 1 + (p%date_hi - p%date_lo) / interval
+        endif
 !        if(( p%npas_min + (p%nsamples - 1) * interval) .ne. p%npas_max) then
         if((expected - p%nsamples) .ne.0) then
           if(verbose > 1) print *,"WARNING:",expected - p%nsamples ," missing sample(s) for variable '"//p%nomvar//"'"
