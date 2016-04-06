@@ -1,4 +1,4 @@
-#define VERSION '1.0_rc9'
+#define VERSION '1.0_rc10'
   module averages_common   ! tables and table management routines
     use iso_c_binding
     implicit none
@@ -46,6 +46,8 @@
     logical, save :: skip_npas0 = .true.   ! skip record if npas == 0 (default)
     logical, save :: weight_ip3 = .false.  ! use ip3 as a weight
     logical, save :: weight_time = .false. ! use time as a weight
+    logical, save :: weight_abs = .false.  ! use a specific constant weight
+    integer, save :: time_weight = 24      ! weight is in days, set to 1 for weight in hours
     logical, save :: strict = .false.      ! non strict mode by default
 
     character(len=4), dimension(1024), save :: specials
@@ -224,11 +226,15 @@
       ix = -1
       is_special = any(nomvar == specials(1:nspecials))
       weight = 1.0
-      if(weight_ip3 .and. (.not. is_special)) then
+      if(weight_ip3 .and. (.not. is_special)) then         ! weight is IP3 (number of samples)
         i = ip3
         if(ishft(i,-24) == 15) i = iand(ip3,Z'00FFFFFF')   ! keep lower 24 bits (type 15)
         weight = max(1,i)
       endif
+      if(weight_time .and. (.not. is_special)) then                                 ! time weight
+        weight = (deet * npas) / (3600.0 * time_weight)
+      endif
+      if(weight_abs .and. (.not. is_special)) weight = time_weight                  ! explicit wright
       sample = 0
       if(is_special) then
         date_lo = 0
@@ -239,7 +245,8 @@
         if(weight == 1.0) then
           date_lo = date_hi
         else
-          sample = nint( (date_hi - date_lo) / (weight-1.0) )
+          sample = (date_hi - date_lo)      ! seconds
+          if(weight_ip3) sample = nint( (date_hi - date_lo) / (weight-1.0) )
         endif
       endif
       do i = 0 , next               ! do we have an entry that matches this record's parameters
@@ -255,7 +262,7 @@
         if((p%dateo .ne. dateo) .and. check_dateo) cycle   ! dateo verification is optional
         if(p%ip2 .ne. ip2 .and. is_special) cycle
         if(p%ip3 .ne. ip3 .and. is_special) cycle
-        if(sample .ne. p%sample) then
+        if(sample .ne. p%sample .and. weight == 1.0) then
            if(verbose > 1) print *,'WARNING: sample interval mismatch, got',sample,' expected',p%sample
            if(strict) call f_exit(1)    ! abort if strict mode
         endif
@@ -309,7 +316,7 @@
     implicit none
     character(len=*) :: name
     print *,'USAGE: '//trim(name)//' [-h|--help] [-newtags] [-strict] [-novar] [-stddev] [-tag nomvar] \'
-    print *,'           [-npas0] [-dateo] [-mean mean_out] [-var var_out] [-weight ip3|time] \'
+    print *,'           [-npas0] [-dateo] [-mean mean_out] [-var var_out] [-weight ip3|time|hours|days|nnn] \'
     print *,'           [-test] [-q[q]] [-v[v][v]] [--|-f] \'
     print *,'           [mean_out] [var_out] in_1 ... in_n'
     print *,'        var_out  MUST NOT be present if -novar or -var is used'
@@ -361,6 +368,7 @@
     do while(curarg <= arg_count)      ! process options
       call get_command_argument(curarg,option,arg_len,status)
       if(option(1:1) .ne. '-') exit      ! does not start with -, must be a file name (NO MORE OPTIONS)
+      if(verbose > 3) print *,"NOTE: option = '"//trim(option)//"'"
       curarg = curarg + 1
       if(status .ne. 0) then
         print *,"FATAL: option is too long :'"//trim(option)//"..."//"'"
@@ -381,9 +389,22 @@
           call f_exit(1)
         endif
         option = "none"
+        weight_abs = .false.
+        weight_time = .false.
+        weight_ip3 = .false.
         call get_command_argument(curarg,option,arg_len,status) ! get weight option (ip3 or time)
-        if(trim(option) == 'ip3') weight_ip3 = .true.
-        if(trim(option) == 'time') weight_time = .true.
+        if(trim(option) == 'ip3') then
+          weight_ip3 = .true.
+        else if(trim(option) == 'hours') then
+          weight_time = .true.
+          time_weight = 1
+        else if(trim(option) == 'days' .or. trim(option) == 'time') then
+          weight_time = .true.
+          time_weight = 24
+        else if(trim(option) .ne. 'none') then
+          weight_abs = .true.
+          read(option,*) time_weight
+        endif
         if(trim(option) .ne. 'none' .and. verbose > 2) print *,"INFO: WEIGHTING active, using '"//trim(option)//"'"
         curarg = curarg + 1
 
@@ -468,7 +489,6 @@
         if(strict) call f_exit(1)    ! abort if strict mode
         cycle
       endif
-      if(verbose > 3) print *,"NOTE: option = '"//trim(option)//"'"
     enddo
 
     if(strict)  verbose = max(2 , verbose)          ! ERROR + WARNING messages at least
@@ -771,7 +791,8 @@
       ip2 = ip2 + 24 * (date_array(3)-1)    ! force back to first day of month
       ip3 = p%nsamples ! number of samples
       ip1 = p%ip1
-      if(verbose > 2) print *,'INFO: ',p%nsamples,' samples every',p%sample/3600.0,' hours'
+!       if(verbose > 2) print *,'INFO: ',p%nsamples,' '//p%nomvar//' "samples" every',p%sample/3600.0,' hours'
+      if(verbose > 2) print *,'INFO: ',p%nsamples,' '//p%nomvar//' "samples"'
       if(newtags) then ! new tagging style (this code is a placeholder and a NO-OP for now)
         ip2 = 0   ! for now
         r4 = ip3
