@@ -537,6 +537,11 @@ wait_for() {
 # and will be the default value for -nodefile
 #
 MY_NODEFILE=${PARALLEL_NODEFILE:-${GECOSHEP_HOSTS_FILE:-${GECOSHEP_HOSTFILE:-${LOADL_HOSTFILE:-${PBS_NODEFILE:-${HOME}/.PBS_NODEFILE}}}}}
+[[ ! -f "${MY_NODEFILE}" ]] && \
+  [[ -n ${JOB_IMMEDIATE_MODE} ]] && \
+  MY_NODEFILE=${TMPDIR}/JOB_NODE_FILE && \
+  echo localhost  >${MY_NODEFILE} && \
+  echo "INFO: created Node File '${MY_NODEFILE}'"
 #Version="1.0.8 2014/04/30"  # last version with mpich2, safe stack limit, modified return status leftovers
 #Version="1.1.0 2014/05/05"  # multi world with node map fixes + core mapping changes + rank files
 #Version="1.1.1 2014/05/21"  # mapping problem with 1 thread + instances related fixes + geometry work
@@ -569,7 +574,9 @@ MY_NODEFILE=${PARALLEL_NODEFILE:-${GECOSHEP_HOSTS_FILE:-${GECOSHEP_HOSTFILE:-${L
 #Version="1.1.20 2015/08/13" # -jio option added
 #Version="1.1.21 2016/02/04" # patched to work in "soumet immediate mode"
 #Version="1.1.21a 2016/02/18" # fixed patch to work in "soumet immediate mode" (PBS_NODEFILE at end)
-Version="1.1.21b 2016/04/05" # added last resort node file ~/.PBS_NODEFILE
+#Version="1.1.21b 2016/04/05" # added last resort node file ~/.PBS_NODEFILE
+#Version="1.1.21c 2016/04/14" # create node file if env var JOB_IMMEDIATE_MODE is present
+Version="1.1.21d 2016/04/14" # better error message if no node file found
 echo "${0##*/} version $Version avec /bin/ksh93"
 eval `cclargs_lite -D "" $0 \
     -args "" "" "[arguments to the command]" \
@@ -803,7 +810,7 @@ if [[ ! -r ${nodefile} ]] ; then   # no nodefile supplied, make one
 #  nodefile=${MY_NODEFILE}__
 #  cat ${nodefile}
 fi  # no nodefile supplied
-
+[[ ! -f ${nodefile} ]] && echo "ERROR: no node file found, ABORTING" 1>&2 && exit 1
 ((TotalThreads=npe_total*OMP_NUM_THREADS))
 if [[ "${coremap}" == NoNe && "${nodemap}" == NoNe ]] ; then
   nhosts=$(uniq ${nodefile} | wc -l | sed -e 's/ //g')   # number of hosts in node file
