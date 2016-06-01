@@ -4,7 +4,8 @@
 static int I0123[] = {0,1,2,3};
 
 void VGather4x4x4(int *src, int *dst, int ni, int ninj){
-  int *base1, *base2;
+  int *base1;
+  int ni2 = ni+ni;
 #if defined(__AVX2__) && defined(__x86_64__)
   __m128i v128a, v128b;
   __m256i vindx;
@@ -19,30 +20,26 @@ void VGather4x4x4(int *src, int *dst, int ni, int ninj){
   vindx = _mm256_inserti128_si256(vindx,v128b,1);
 
   base1 = src;
-  base2 = src + ni + ni;
-  v1 = _mm256_i32gather_epi32((int const*) base1, vindx, 4);
-  v2 = _mm256_i32gather_epi32((int const*) base2, vindx, 4);
+  v1 = _mm256_i32gather_epi32((int const*) base1    , vindx, 4);
+  v2 = _mm256_i32gather_epi32((int const*) base1+ni2, vindx, 4);
   _mm256_storeu_si256((__m256i *) (dst +  0), v1);
   _mm256_storeu_si256((__m256i *) (dst +  8), v2);
 
   base1 += ninj;
-  base2 += ninj;
-  v3 = _mm256_i32gather_epi32((int const*) base1, vindx, 4);
-  v4 = _mm256_i32gather_epi32((int const*) base2, vindx, 4);
+  v3 = _mm256_i32gather_epi32((int const*) base1    , vindx, 4);
+  v4 = _mm256_i32gather_epi32((int const*) base1+ni2, vindx, 4);
   _mm256_storeu_si256((__m256i *) (dst + 16), v3);
   _mm256_storeu_si256((__m256i *) (dst + 24), v4);
 
   base1 += ninj;
-  base2 += ninj;
-  v5 = _mm256_i32gather_epi32((int const*) base1, vindx, 4);
-  v6 = _mm256_i32gather_epi32((int const*) base2, vindx, 4);
+  v5 = _mm256_i32gather_epi32((int const*) base1    , vindx, 4);
+  v6 = _mm256_i32gather_epi32((int const*) base1+ni2, vindx, 4);
   _mm256_storeu_si256((__m256i *) (dst + 32), v5);
   _mm256_storeu_si256((__m256i *) (dst + 40), v6);
 
   base1 += ninj;
-  base2 += ninj;
-  v7 = _mm256_i32gather_epi32((int const*) base1, vindx, 4);
-  v8 = _mm256_i32gather_epi32((int const*) base2, vindx, 4);
+  v7 = _mm256_i32gather_epi32((int const*) base1    , vindx, 4);
+  v8 = _mm256_i32gather_epi32((int const*) base1+ni2, vindx, 4);
   _mm256_storeu_si256((__m256i *) (dst + 48), v7);
   _mm256_storeu_si256((__m256i *) (dst + 56), v8);
 
