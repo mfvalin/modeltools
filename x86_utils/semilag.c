@@ -49,6 +49,7 @@ float tricub_x86_f(float *src, float *abcd, float x, float y){
   ni2 = ni + ni;
   ni3 = ni2 + ni;
 #endif
+
 #if defined(__AVX2__) && defined(__x86_64__)
 
 // ==== interpolation along Z, vector length is 16 (2 vectors of length 8 per plane) ====
@@ -122,6 +123,10 @@ float tricub_x86_f(float *src, float *abcd, float x, float y){
 
 // ==== interpolation along Y, vector length is 4 (4 rows) ====
 
+//   y0 = cm133*y*(y-one)*(y-two);
+//   y1 = cp5*(y+one)*(y-one)*(y-two);
+//   y2 = cm5*y*(y+one)*(y-two);
+//   y3 = cp133*y*(y+one)*(y-one);
   y0 = cm133*y*(y-one)*(y-two);
   y1 = cp5*(y+one)*(y-one)*(y-two);
   y2 = cm5*y*(y+one)*(y-two);
@@ -161,3 +166,24 @@ float tricub_x86_f(float *src, float *abcd, float x, float y){
 
   return(dst[0]*x0 + dst[1]*x1 + dst[2]*x2 + dst[3]*x3);
 }
+#if defined(SELF_TEST)
+#define NI 30
+#define NJ 20
+#define NK 85
+main(){
+  float array[NI*NJ*NK];
+  float dest[NI*NJ*NK];
+  float a[4];
+  float avg=0.0;
+  int i,j;
+  int nijk = NI*NJ*NK - 5*NI*NJ;
+  for (i=0 ; i<NI*NJ*NK ; i++) array[i] = 1.0;
+  a[0] = 1.0 ; a[1] = 1.1 ; a[2] = 1.2 ; a[3] = 1.3 ;
+  setninj(NI,NI*NJ);
+  for (j=0;j<1000;j++) {
+    for (i=0 ; i<nijk ; i++) dest[i] = tricub_x86_f(&array[i], &a[0], .3, .7);
+  }
+  for (i=0 ; i<nijk ; i++) avg = avg + dest[i];
+  printf("%f %f\n",avg,dest[1]);
+}
+#endif
