@@ -941,9 +941,9 @@ static int shm_write(mgi_shm_buf *shm,void *buf,int nelem,int type,int timeout){
 
   if(shm->write_status != MGI_SHM_ACTIVE) return(WRITE_ERROR) ; /* not properly setup to write */
 
+  time_in = mgi_time();
   if(type == 'C') return ( shm_write_c(shm,buf,nelem,timeout) );                    /* characters */
   if(type != 'I' && type != 'R' && type != 'D') return(WRITE_ERROR) ;       /* unsupported type */
-  time_in = mgi_time();
   ntok = nelem;
   if(type == 'D') ntok = nelem*2 ;                 /* 8 byte tokens */
   bytes_write += ntok*4;
@@ -1039,9 +1039,9 @@ static int shm_read(mgi_shm_buf *shm,void *buf,int nelem,int type, int len,int t
 
   if(shm->read_status != MGI_SHM_ACTIVE) return(READ_ERROR) ; /* not properly setup to read */
 
+  time_in = mgi_time();
   if(type == 'C') return ( shm_read_c(shm,buf,nelem,len,timeout) );        /* characters */
   if(type != 'I' && type != 'R' && type != 'D') return(READ_ERROR) ;       /* unsupported type */
-  time_in = mgi_time();
   ntok = nelem ;
   if(type == 'D') ntok = nelem*2 ;                 /* 8 byte tokens */
   bytes_read += ntok*4;
