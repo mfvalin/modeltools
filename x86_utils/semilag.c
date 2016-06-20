@@ -22,8 +22,8 @@
 
 static int ni=0;
 static int ninj=0;
-static float cp133 = 0.1333333333;
-static float cm133 = -0.1333333333;
+static float cp167 =  0.1666666667;
+static float cm167 = -0.1666666667;
 static float cp5 = .5;
 static float cm5 = -.5;
 static float one = 1.0;
@@ -122,10 +122,10 @@ float tricub_x86_f(float *src, float *abcd, float x, float y){
 
 // ==== interpolation along Y, vector length is 4 (4 rows) ====
 
-  y0 = cm133*y*(y-one)*(y-two);
+  y0 = cm167*y*(y-one)*(y-two);
   y1 = cp5*(y+one)*(y-one)*(y-two);
   y2 = cm5*y*(y+one)*(y-two);
-  y3 = cp133*y*(y+one)*(y-one);
+  y3 = cp167*y*(y+one)*(y-one);
 
   va4 = _mm_broadcast_ss(&y0);      // promote constants to vectors
   vb4 = _mm_broadcast_ss(&y1);
@@ -139,10 +139,10 @@ float tricub_x86_f(float *src, float *abcd, float x, float y){
   
   _mm_storeu_ps(dst,vy0);           // store 4 values along X
 #else
-  y0 = cm133*y*(y-one)*(y-two);
+  y0 = cm167*y*(y-one)*(y-two);
   y1 = cp5*(y+one)*(y-one)*(y-two);
   y2 = cm5*y*(y+one)*(y-two);
-  y3 = cp133*y*(y+one)*(y-one);
+  y3 = cp167*y*(y+one)*(y-one);
   for (i=0 ; i<4 ; i++){
     va4[i] = src[i    ]*abcd[0] + src[i    +ninj]*abcd[1] +  src[i    +ninj2]*abcd[2] + src[i    +ninj3]*abcd[3];
     vb4[i] = src[i+ni ]*abcd[0] + src[i+ni +ninj]*abcd[1] +  src[i+ni +ninj2]*abcd[2] + src[i+ni +ninj3]*abcd[3];
@@ -154,10 +154,10 @@ float tricub_x86_f(float *src, float *abcd, float x, float y){
 
 // ==== interpolation along x, scalar ====
 
-  x0 = cm133*x*(x-one)*(x-two);
+  x0 = cm167*x*(x-one)*(x-two);
   x1 = cp5*(x+one)*(x-one)*(x-two);
   x2 = cm5*x*(x+one)*(x-two);
-  x3 = cp133*x*(x+one)*(x-one);
+  x3 = cp167*x*(x+one)*(x-one);
 
   return(dst[0]*x0 + dst[1]*x1 + dst[2]*x2 + dst[3]*x3);
 }
