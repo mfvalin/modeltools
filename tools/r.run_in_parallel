@@ -59,11 +59,11 @@ node_to_rank() {
   mv ${1}.thinned ${1}
 }
 #################################################################################################################################
-# MPI prelauncher for Linux systems using mpich2 or openmpi. takes care of most OpemMPI/Mpich2 issues
+# MPI prelauncher for Linux systems using mpich2, openmpi or aprun.
 mpiexec_Linux() {
-#  RANK_VAR=$(${mpirun} -n 1 /usr/bin/env | grep RANK | grep -E "OMPI_COMM_WORLD_RANK|PMI_RANK")
-  RANK_VAR=OMPI_COMM_WORLD_RANK
-  which orted >/dev/null || RANK_VAR=PMI_RANK
+  RANK_VAR=PMI_RANK                                        # mpich2
+  which orted >/dev/null && RANK_VAR=OMPI_COMM_WORLD_RANK  # OpenMPI
+  which aprun >/dev/null && RANK_VAR=ALPS_APP_PE           # Cray XC alps
   case "$RANK_VAR" in
     OMPI_COMM_WORLD_RANK*)                                     # OpenMPI
       [[ "$bind" == bind ]] && \
@@ -86,16 +86,21 @@ mpiexec_Linux() {
       return 1
       mpiexec_Linux_launch Mpich2 "${MPICH_PARMS}" "$@"
       ;;
+    ALPS_APP_PE*)                                                 # Cray ALPS
+      echo "ERROR: (${0}) Cray ALPS Linux MPI launcher not implemented yet"
+      return 1
+      aprun_Linux_launch "$@"
+      ;;
     *)
       echo "ERROR: (${0}) RANK_VAR=$RANK_VAR "
-      echo "ERROR: (${0}) Linux MPI launcher other than OpenMPI or mpich2 not implemented yet "
+      echo "ERROR: (${0}) Linux MPI launcher other than OpenMPI not implemented yet "
       return 1
       ;;
   esac
   return
 }
 #################################################################################################################################
-# MPI launcher for Linux systems (
+# MPI launcher for Linux systems (OpenMPI only for now)
 # tested with openmpi interactively and under GridEngine
 #
 mpiexec_Linux_launch() {
@@ -576,9 +581,11 @@ MY_NODEFILE=${PARALLEL_NODEFILE:-${GECOSHEP_HOSTS_FILE:-${GECOSHEP_HOSTFILE:-${L
 #Version="1.1.21a 2016/02/18" # fixed patch to work in "soumet immediate mode" (PBS_NODEFILE at end)
 #Version="1.1.21b 2016/04/05" # added last resort node file ~/.PBS_NODEFILE
 #Version="1.1.21c 2016/04/14" # create node file if env var JOB_IMMEDIATE_MODE is present
-Version="1.1.21d 2016/04/14" # better error message if no node file found
+#Version="1.1.21d 2016/04/14" # better error message if no node file found
+Version="1.1.22 2016/06/22" # start of Cray ALPS update
 echo "${0##*/} version $Version avec /bin/ksh93"
 eval `cclargs_lite -D "" $0 \
+    -alps "" "alps" "[use Cray ALPS]" \
     -args "" "" "[arguments to the command]" \
     -bind "" "bind" "[]" \
     -coremap "NoNe" "NoNe" "[core affinity map]" \
@@ -907,7 +914,7 @@ set -- $pgm @@
 #################################################################################################################################
 if [[ "$3" != "" ]] ; then # complex sequence, SPMD or MPMD, (automatic multiple MPI worlds with @@)
 #  for i in $(seq 0 1 ${npe_total_m1}) ; do ProGrams[$i]="NoNe" ; Directories[$i]="." ; done
-  unset ProGrams Directories
+  unset ProGrams Directories  ProgramIndex ProgramNames DirNames
 #
   while [[ -n "${1}" ]]
   do
@@ -950,9 +957,19 @@ export WORLD_CHILD
 [[ -z "${nosep}" ]] &&
   [[ -n "${processorder}" ]] &&
   /usr/bin/printf "============== stdout W:${MpiCommWorld}:%4.4d M:%4.4d-%4.4d Seq:%s ==============\n" \${RP_WorldChild} \${RP_Member} \${RP_MemberChild} \${MP_SeqNum}
+  PNames=(${ProgramNames[@]})
+  DNames=(${DirNames[@]})
+  PIndex=(${ProgramIndex[@]})
+  Index=\${PIndex[\${MP_CHILD}]}
+  cd \${DNames[\${Index}]}
+  ${preexec} \${PNames[\${Index}]} ${args}
+  Status=\$?
+  ((Status==0)) && $CMD_rm -f ${tmpdir}/fail.\${MP_Tag}.\${MP_SeqNum}
+  echo "END of child \${WORLD_CHILD}, status = \${Status}  \$($CMD_date)"
 EOT
       for i in  $(seq 0 1 $((Instances-1))) ; do
-        cat <<EOT >>${MpiRunScript}.${MpiCommWorld}
+#        cat <<EOT >>${MpiRunScript}.${MpiCommWorld}
+        cat <<EOT >>/dev/null
           if (( MP_CHILD == $((i+InstanceOffset)) ))
           then
             cd ${Directories[$i]}
@@ -972,12 +989,12 @@ EOT
       ((MaxPe=0))
       ((Instances=0))
       ((npe_total=0))   # reset ::ntasks for next world
-      unset NLThreads
+      unset NLThreads ProgramIndex ProgramNames DirNames
       shift
       continue
     fi  #  if "${1}" == "@@"  wrap up a world
 #
-    ((NDomains=NDomains+1))
+#     ((NDomains=NDomains+1))
     Temp="${1}"
     [[  "${1}" == /* ]] || Temp="${SetCurrentDir}/${1}"  # relative path, add "current" directory
     Directory="${SetCurrentDir}"
@@ -1008,6 +1025,8 @@ EOT
 #    RPN_COMM_DIRS="$RPN_COMM_DIRS,'${Directory}'"
     RPN_COMM_DIRS="$RPN_COMM_DIRS,'.'"  # no longer needed, we do the cd ..... in the script, so every directory becomes . :-)
     ((LocalInstances=0))
+    ProgramNames[${NDomains}]=$Program
+    DirNames[${NDomains}]=$Directory
     for i in $(seq ${First} ${Increment} ${Last} )
     do
       ((Instances=Instances+1))
@@ -1020,10 +1039,12 @@ EOT
       else
         ProGrams[$i]="$Program"
         Directories[$i]=$Directory
+        ProgramIndex[$i]=${NDomains}
         ((i>MaxPe)) && ((MaxPe=i))
       fi
     done
     echo "INFO: ${LocalInstances} instances of '$Program' ( $((InstanceOffset+First)) to $((InstanceOffset+Last)) by ${Increment} ) in MPI world ${MpiCommWorld}"
+    ((NDomains=NDomains+1))
   done # while [[ "$1" != "" ]]
 #
   if [[ "$ErRoR" != "0" ]] ; then echo "$ErRoR ERROR(S) detected" ; local_cleanup ; exit 1 ; fi
@@ -1092,7 +1113,7 @@ do
 ulimit -s unlimited
 [[ -n "${debug}" ]] && set -x
 #
-export MP_CHILD=\${MP_CHILD:-\${PMI_RANK:-\${OMPI_COMM_WORLD_RANK}}}  # poe/mpich2/openmpi
+export MP_CHILD=\${MP_CHILD:-\${PMI_RANK:-\${OMPI_COMM_WORLD_RANK:-\${ALPS_APP_PE}}}}  # poe/mpich2/openmpi/CrayALPS
 ((MP_CHILD=MP_CHILD+ChildOffset))   # need to add ChildOffset for this MPI world to MP_CHILD (always 0 for poe)
 export RP_WorldChild
 ((RP_WorldChild=MP_CHILD-${WorldOffset}))   # child ordinal in this world
@@ -1148,8 +1169,9 @@ if [[ ${nompi} == run_with_mpi ]] ; then  # MPI launch (linux or AIX supported)
 #
   SystemPlatform=$(uname -s)
   MpiImplementation=""
-  [[ -n ${openmpi} ]] && MpiImplementation="_openmpi"  # openmpi MPI implementation
-  [[ -n ${mpich2} ]] && MpiImplementation="_mpich2"                         # mpich2 MPI implementation
+  [[ -n ${openmpi} ]] && MpiImplementation="_openmpi"   # openmpi MPI implementation
+  [[ -n ${mpich2} ]]  && MpiImplementation="_mpich2"    # mpich2 MPI implementation
+  [[ -n ${alps} ]]    && MpiImplementation="_alps"      # Cray implementation
   echo "INFO: ${MPI_EXEC:-mpiexec_${SystemPlatform}${MpiImplementation}} ${mpiargs}"
   ${MPI_EXEC:-mpiexec_${SystemPlatform}${MpiImplementation}} ${mpiargs}
 #
