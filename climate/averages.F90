@@ -1,4 +1,4 @@
-#define VERSION '1.0_rc10'
+#define VERSION '1.0_rc11'
   module averages_common   ! tables and table management routines
     use iso_c_binding
     implicit none
@@ -179,7 +179,11 @@
 
       call jdatec(julian,year,month,day)
       date_64 = julian
-      date_64 = (date_64*86400) + (hour*3600) + (minute*60) + second     ! 86400 seconds in a day
+!       date_64 = (date_64*86400) + (hour*3600) + (minute*60) + second     ! 86400 seconds in a day
+      date_64 = date_64*86400
+      date_64 = date_64 + hour*3600
+      date_64 = date_64 + minute*60
+      date_64 = date_64 + second
       return
     end function date_stamp_64
 
@@ -190,18 +194,18 @@
 
       integer :: t1, t2, t0  ! used later when implementing this function
       integer year, month, day, hour, minute, second, hms, ymd
+      integer*8 :: ymd8
 
-      ymd = date_64 / 86400    ! julian day
+      ymd8 = date_64 / 86400    ! julian day
+      ymd = ymd8
       call datec(ymd,year,month,day)
       t1 = year*10000 + month*100 + day   ! YYYYMMDD
-
       hms = date_64 -(ymd*86400)
       hour = hms / 3600
       hms = hms - (hour*3600)
       minute = hms / 60
       second = hms - (minute*60)
       t2 = hour*1000000 + minute*10000 + second*100  ! HHMMSS00
-
       call newdate(t0,t1,t2,3)  ! t1(YYYYMMDD), t2(HHMMSShh) to  date stamp
       date_stamp = t0
       return
@@ -218,12 +222,14 @@
       integer :: ix
 
       integer :: i, j, pg, slot, sample
-      integer*8 :: date_lo, date_hi
+      integer*8 :: date_lo, date_hi, dnp
       type(field), pointer :: p
       real :: weight
       logical :: is_special
 
       ix = -1
+      dnp = npas
+      dnp = dnp * deet
       is_special = any(nomvar == specials(1:nspecials))
       weight = 1.0
       if(weight_ip3 .and. (.not. is_special)) then         ! weight is IP3 (number of samples)
@@ -232,7 +238,7 @@
         weight = max(1,i)
       endif
       if(weight_time .and. (.not. is_special)) then                                 ! time weight
-        weight = (deet * npas) / (3600.0 * time_weight)
+        weight = (dnp) / (3600.0 * time_weight)
       endif
       if(weight_abs .and. (.not. is_special)) weight = time_weight                  ! explicit wright
       sample = 0
@@ -241,7 +247,7 @@
         date_hi = 0
       else
         date_lo = date_stamp_64(dateo)      ! compute 64 bit date_lo from dateo
-        date_hi = date_lo + deet*npas       ! date of validity of sample
+        date_hi = date_lo + dnp             ! date of validity of sample
         if(weight == 1.0) then
           date_lo = date_hi
         else
