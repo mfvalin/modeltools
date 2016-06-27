@@ -1,0 +1,1 @@
+s.f90 -o averages-intel-beluga.Abs -no-wrap-margin -O 2 averages.F90 -lrmn_015.3
