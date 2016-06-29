@@ -62,8 +62,8 @@ node_to_rank() {
 # MPI prelauncher for Linux systems using mpich2, openmpi or aprun.
 mpiexec_Linux() {
   RANK_VAR=PMI_RANK                                        # mpich2
-  which orted >/dev/null && RANK_VAR=OMPI_COMM_WORLD_RANK  # OpenMPI
-  which aprun >/dev/null && RANK_VAR=ALPS_APP_PE           # Cray XC alps
+  which orted 2>/dev/null >/dev/null && RANK_VAR=OMPI_COMM_WORLD_RANK  # OpenMPI
+  [[ -n ${APRUN} ]] && RANK_VAR=ALPS_APP_PE           # Cray XC alps
   case "$RANK_VAR" in
     OMPI_COMM_WORLD_RANK*)                                     # OpenMPI
       [[ "$bind" == bind ]] && \
@@ -87,8 +87,8 @@ mpiexec_Linux() {
       mpiexec_Linux_launch Mpich2 "${MPICH_PARMS}" "$@"
       ;;
     ALPS_APP_PE*)                                                 # Cray ALPS
-      echo "ERROR: (${0}) Cray ALPS Linux MPI launcher not implemented yet"
-      return 1
+#       echo "ERROR: (${0}) Cray ALPS Linux MPI launcher not implemented yet"
+#       return 1
       aprun_Linux_launch "$@"
       ;;
     *)
@@ -98,6 +98,17 @@ mpiexec_Linux() {
       ;;
   esac
   return
+}
+#################################################################################################################################
+# MPI launcher for Cray systems (aprun)
+# primitive launcher for now (one MPI world)
+aprun_Linux_launch() {
+  export MpiCommWorld=0
+  [[ -n ${verbose} ]] && \
+    echo "INFO: OMP_NUM_THREADS=${ThreadsInWorld[${MpiCommWorld}]} aprun -n ${PeInWorld[${MpiCommWorld}]} -d ${ThreadsInWorld[${MpiCommWorld}]} $@ ${ParallelScript}.${MpiCommWorld}"
+  [[ -z ${dryrun} ]] && \
+    OMP_NUM_THREADS=${ThreadsInWorld[${MpiCommWorld}]} \
+      aprun -n ${PeInWorld[${MpiCommWorld}]} -d ${ThreadsInWorld[${MpiCommWorld}]} "$@" ${ParallelScript}.${MpiCommWorld}
 }
 #################################################################################################################################
 # MPI launcher for Linux systems (OpenMPI only for now)
@@ -396,8 +407,8 @@ expand_geometry_map() {
 #          (alternate form : si:npi , npi PEs on host si, equivalent to si,si:npi or si,1,si:npi )
 # example: -nodemap 0:1 5:3 6,2,10:4     (1 PE on host 0, 3PEs on host 5, 4 PEs on hosts 6, 8, 10 )
 expand_node_map() {
-  [[ "$hostos" == Linux ]] || return   # Linux only
-  [[ "${coremap}" == NoNe ]] || return # mutually exclusive options coremap/nodemap
+  [[ "$hostos" == Linux ]]   || return   # Linux only
+  [[ "${coremap}" == NoNe ]] || return   # mutually exclusive options coremap/nodemap
 
   [[ "${nodemap}" == @* ]] && [[ -r "${nodemap#@}" ]] && nodemap="$(cat ${nodemap#@})"   # -nodemap @readable_file
 # expand_node_map (expand a series of number doublets/triplets into a full list)
@@ -421,8 +432,8 @@ expand_node_map() {
 #
 # example: -coremap 0,1,6 12,2,23   ( 0 thru 6 , 12 thru 23 by 2)
 expand_core_map() {
-  [[ "$hostos" == Linux ]] || return   # Linux only
-  [[ "${nodemap}" == NoNe ]] || return # mutually exclusive options coremap/nodemap
+  [[ "$hostos" == Linux ]]   || return   # Linux only
+  [[ "${nodemap}" == NoNe ]] || return   # mutually exclusive options coremap/nodemap
 
   [[ "${coremap}" == @* ]] && [[ -r "${coremap#@}" ]] && coremap="$(cat ${coremap#@})"   # -coremap @readable_file
   coremap=${coremap:-0,${OMP_NUM_THREADS},$((TotalThreads-1))}        # by default, use all threads from all PEs in order
@@ -582,7 +593,8 @@ MY_NODEFILE=${PARALLEL_NODEFILE:-${GECOSHEP_HOSTS_FILE:-${GECOSHEP_HOSTFILE:-${L
 #Version="1.1.21b 2016/04/05" # added last resort node file ~/.PBS_NODEFILE
 #Version="1.1.21c 2016/04/14" # create node file if env var JOB_IMMEDIATE_MODE is present
 #Version="1.1.21d 2016/04/14" # better error message if no node file found
-Version="1.1.22 2016/06/22" # start of Cray ALPS update
+#Version="1.1.22 2016/06/22" # start of Cray ALPS update
+Version="1.1.22a 2016/06/22" # first version with Cray ALPS aprun capability
 echo "${0##*/} version $Version avec /bin/ksh93"
 eval `cclargs_lite -D "" $0 \
     -alps "" "alps" "[use Cray ALPS]" \
@@ -625,6 +637,7 @@ eval `cclargs_lite -D "" $0 \
     -preexec "" "" "[prefix program execution with this (time/gdb/...)]" \
     -processorder "" "yes" "[list out/err of members in order]" \
     -selftest "" "c.f.fail.999999" "[quick selftest]" \
+    -smt "1" "2" "[SMT or hyperthreading]" \
     -spliteo "no" "yes" "[split stderr from stdout]" \
     -tag "child" "full" "[full/child/member/stderr/none/seq]" \
     -timeout "60" "60" "[timeout for multiple instances]" \
@@ -632,6 +645,9 @@ eval `cclargs_lite -D "" $0 \
     -verbose "" "verbose" "[]" \
     -version "" "${Version}" "[version number]" \
     ++ "$@" ${RUN_IN_PARALLEL_EXTRAS}`
+#
+export APRUN="$(which aprun 2>/dev/null)"
+[[ -n ${APRUN} ]]  && hostos=CLE   # Cray linux environment
 #
 [[ -n ${JIO_ENV} ]] && which s.jio-prof 2>/dev/null 1>/dev/null && jio=". s.jio-prof.dot"
 preexec="${jio} ${preexec}"
@@ -644,9 +660,10 @@ if [[ -n $gdb ]] ; then
 fi
 OMP_NUM_THREADS=${OMP_NUM_THREADS:-1}
 #
-CoresOnNode=128
-[[ "$hostos" == AIX ]]&& CoresOnNode=$(($(bindprocessor -q | sed 's/.*[ ]//')+1))
-[[ "$hostos" == Linux ]] && CoresOnNode=$(grep MHz /proc/cpuinfo 2>/dev/null | wc -l)   # Linux only
+export CoresOnNode=128
+[[ "$hostos" == AIX ]]   && CoresOnNode=$(($(bindprocessor -q | sed 's/.*[ ]//')+1))        # AIX
+[[ "$hostos" == Linux ]] && CoresOnNode=$(grep MHz /proc/cpuinfo 2>/dev/null | wc -l)       # straight Linux
+[[ "$hostos" == CLE ]]   && CoresOnNode=$(aprun -n 1 cat /proc/cpuinfo | grep MHz | wc -l) && ((CoresOnNode=CoresOnNode/2*smt)) # Cray XC
 ((CoresOnNode<=0)) && CoresOnNode=1
 ((MaxCores=CoresOnNode))
 [[ -n $maxcores ]] && ((MaxCores=maxcores))
@@ -878,6 +895,7 @@ fi
 # primary and secondary launching scripts
 #################################################################################################################################
 export MpiRunScript=${tmpdir}/MpiRunScript_$$       # secondary script(s), one per "MPI" world
+export MpiRunParms=${tmpdir}/MpiRunParms_$$         # child parameters, one per "MPI" world
 export ParallelScript=${tmpdir}/ParallelScript_$$   # primary script(s), one per "MPI" world, will source secondary script(s)
 touch ${ParallelScript}.0
 [[ ! -r ${ParallelScript}.0 ]] && echo "ERROR: ${tmpdir} not a writable directory" 1>&2 && exit 1
@@ -913,7 +931,6 @@ set -- $pgm @@
 ((TotalThreads=0))
 #################################################################################################################################
 if [[ "$3" != "" ]] ; then # complex sequence, SPMD or MPMD, (automatic multiple MPI worlds with @@)
-#  for i in $(seq 0 1 ${npe_total_m1}) ; do ProGrams[$i]="NoNe" ; Directories[$i]="." ; done
   unset ProGrams Directories  ProgramIndex ProgramNames DirNames
 #
   while [[ -n "${1}" ]]
@@ -946,6 +963,8 @@ if [[ "$3" != "" ]] ; then # complex sequence, SPMD or MPMD, (automatic multiple
       ((Instances != MaxPe+1)) && echo "ERROR: holes found, Instances=${Instances}, MaxPe=${MaxPe}" && ((ErRoR=ErRoR+1))
       ((MaxPe > npe_total)) && echo "ERROR: task number overflow, MaxPe(${MaxPe}) > npe_total(${npe_total})" && ((ErRoR=ErRoR+1))
       rm -f ${MpirunScript}.${MpiCommWorld}
+#============================ instance script, sourced by ParallelScript ============================
+echo "INFO: complex SPMD / MPMD , MPI world ${MpiCommWorld}"
       cat <<EOT >${MpiRunScript}.${MpiCommWorld}
 #!/bin/ksh93
 # SHELL for scripts run under AIX/POE MUST BE /bin/ksh93
@@ -957,29 +976,26 @@ export WORLD_CHILD
 [[ -z "${nosep}" ]] &&
   [[ -n "${processorder}" ]] &&
   /usr/bin/printf "============== stdout W:${MpiCommWorld}:%4.4d M:%4.4d-%4.4d Seq:%s ==============\n" \${RP_WorldChild} \${RP_Member} \${RP_MemberChild} \${MP_SeqNum}
-  PNames=(${ProgramNames[@]})
-  DNames=(${DirNames[@]})
-  PIndex=(${ProgramIndex[@]})
-  Index=\${PIndex[\${MP_CHILD}]}
-  cd \${DNames[\${Index}]}
-  ${preexec} \${PNames[\${Index}]} ${args}
-  Status=\$?
-  ((Status==0)) && $CMD_rm -f ${tmpdir}/fail.\${MP_Tag}.\${MP_SeqNum}
-  echo "END of child \${WORLD_CHILD}, status = \${Status}  \$($CMD_date)"
+source ${MpiRunParms}.${MpiCommWorld}
+PNames=(${ProgramNames[@]})
+DNames=(${DirNames[@]})
+Index=\${PIndex[\${MP_CHILD}]}
+
+cd \${DNames[\${Index}]}
+export OMP_NUM_THREADS=\${NThreads[\${Index}]}
+${preexec} \${PNames[\${Index}]} ${args}
+Status=\$?
+((Status==0)) && $CMD_rm -f ${tmpdir}/fail.\${MP_Tag}.\${MP_SeqNum}
+
+echo "END of child \${WORLD_CHILD}, status = \${Status}  \$($CMD_date)"
 EOT
-      for i in  $(seq 0 1 $((Instances-1))) ; do
-#        cat <<EOT >>${MpiRunScript}.${MpiCommWorld}
-        cat <<EOT >>/dev/null
-          if (( MP_CHILD == $((i+InstanceOffset)) ))
-          then
-            cd ${Directories[$i]}
-            ${preexec} ${ProGrams[$i]} ${args}
-            Status=\$?
-            ((Status==0)) && $CMD_rm -f ${tmpdir}/fail.\${MP_Tag}.\${MP_SeqNum}
-            echo "END of child \${WORLD_CHILD}, status = \${Status}  \$($CMD_date)"
-          fi
+#============================ Parameters file, sourced by MpiRunScript ============================
+      cat <<EOT >${MpiRunParms}.${MpiCommWorld}
+CoresOnNode=${MaxCores}
+MaxChild=${Instances}
+PIndex=(${ProgramIndex[@]})
+NThreads=(${NThreads[@]})
 EOT
-      done
       ((InstanceOffset=TotalInstances))
       [[ -n "${2}" ]] && ((MpiCommWorld=MpiCommWorld+1))   # do not bump world counter if nothing after @@
       ((MpiCommWorlds=MpiCommWorlds+1))
@@ -989,21 +1005,21 @@ EOT
       ((MaxPe=0))
       ((Instances=0))
       ((npe_total=0))   # reset ::ntasks for next world
-      unset NLThreads ProgramIndex ProgramNames DirNames
+      unset NLThreads ProgramIndex ProgramNames DirNames NThreads
       shift
       continue
     fi  #  if "${1}" == "@@"  wrap up a world
 #
-#     ((NDomains=NDomains+1))
     Temp="${1}"
     [[  "${1}" == /* ]] || Temp="${SetCurrentDir}/${1}"  # relative path, add "current" directory
     Directory="${SetCurrentDir}"
     [[ -d "${Temp}" ]] && Directory="${Temp}" && shift   # $1 was pointing to a directory
 #
     Program="$1"
-    [[  "${1}" == /* ]] || Program="${SetCurrentDir}/${1}"  # relative path, add "current" directory
+    [[  "${Program}" == /* ]] || Program="${SetCurrentDir}/${Program}"  # relative path, add "current" directory
+    [[ -x "$Program" ]] || Program="$(which ${1} 2>/dev/null)"
+    if [[ !  -x "$Program" ]] ; then echo "ERROR: program ${Program:-${1}} does not exist or is not executable" ; ((ErRoR=ErRoR+1)) ; fi
     shift
-    if [[ !  -x "$Program" ]] ; then echo program $Program does not exist or is not executable ; ((ErRoR=ErRoR+1)) ; fi
 #
     temp=${1}
     [[ "${temp}" == @@ ]] && temp="+${npe_total}"  # replace @@ with +npe_total
@@ -1027,6 +1043,7 @@ EOT
     ((LocalInstances=0))
     ProgramNames[${NDomains}]=$Program
     DirNames[${NDomains}]=$Directory
+    NThreads[$NDomains]=${NLThreads:-${OMP_NUM_THREADS}}
     for i in $(seq ${First} ${Increment} ${Last} )
     do
       ((Instances=Instances+1))
@@ -1047,13 +1064,16 @@ EOT
     ((NDomains=NDomains+1))
   done # while [[ "$1" != "" ]]
 #
-  if [[ "$ErRoR" != "0" ]] ; then echo "$ErRoR ERROR(S) detected" ; local_cleanup ; exit 1 ; fi
+  if ((ErRoR > 0)) ; then echo "$ErRoR ERROR(S) detected" ; local_cleanup ; exit 1 ; fi
 #
 else #################### simple SPMD case, one MPI world, old style call ##########################
 #
   ((TotalInstances=npe_total))
+  [[  "${pgm}" == /* ]] || pgm="${SetCurrentDir}/${pgm}"  # relative path, add "current" directory
+  [[ -x $pgm ]] || pgm="$(which ${1} 2>/dev/null)"
   if [[ ! -x $pgm ]] ; then                        # same executable for all worlds
-    echo "ERROR: $pgm does not exist or is not executable"
+    echo "ERROR: ${1} does not exist or is not executable"
+    local_cleanup
     exit 1
   fi
   MpiCommWorld=0
@@ -1064,7 +1084,9 @@ else #################### simple SPMD case, one MPI world, old style call ######
   ThreadsInWorld[0]=${OMP_NUM_THREADS}
   MembersInWorld[0]=${npey}
   ((TotalThreads=OMP_NUM_THREADS))
-  cat <<EOT >${MpiRunScript}.${MpiCommWorld}
+#============================ instance script, sourced by ParallelScript ============================
+echo "INFO: simple SPMD"
+  cat <<EOT >${MpiRunScript}.0   # MpiCommWorld is 0 in this case
 #!/bin/ksh93
 # SHELL for scripts run under AIX/POE MUST BE /bin/ksh93
 unset RPN_COMM_DOM
@@ -1074,13 +1096,11 @@ export OMP_NUM_THREADS=${NLThreads:-${OMP_NUM_THREADS}}
 export WORLD_CHILD
 [[ -z "${nosep}" ]] && \
   [[ -n "${processorder}" ]] && \
-  /usr/bin/printf "============== stdout W:${MpiCommWorld}:%4.4d M:%4.4d-%4.4d Seq:%s ==============\n" \${RP_WorldChild} \${RP_Member} \${RP_MemberChild} \${MP_SeqNum}
-EOT
-  cat <<EOT >>${MpiRunScript}.0   # MpiCommWorld is 0 in this case
-    ${preexec} ${pgm} ${args}
-    Status=\$?
-    ((Status==0)) && $CMD_rm -f ${tmpdir}/fail.\${MP_Tag}.\${MP_SeqNum}
-    echo "END of child \${WORLD_CHILD} with status = \${Status}  \$($CMD_date)"
+  /usr/bin/printf "============== stdout W:0:%4.4d M:%4.4d-%4.4d Seq:%s ==============\n" \${RP_WorldChild} \${RP_Member} \${RP_MemberChild} \${MP_SeqNum}
+${preexec} ${pgm} ${args}
+Status=\$?
+((Status==0)) && $CMD_rm -f ${tmpdir}/fail.\${MP_Tag}.\${MP_SeqNum}
+echo "END of child \${WORLD_CHILD} with status = \${Status}  \$($CMD_date)"
 EOT
   echo "INFO: ${npe_total} instances of '$pgm' in MPI world 0"
 #
@@ -1128,7 +1148,7 @@ MP_Tag="\$(/usr/bin/printf '${F_world}${F_member}${F_child}${F_seq}' ${V_world} 
 #
 #[[ -n "${processorder}" ]] &&
 $CMD_touch ${tmpdir}/fail.\${MP_Tag}.\${MP_SeqNum}
-. ${MpiRunScript}.${MpiCommWorld}  ${RedirectStdout} ${RedirectStderr}
+source ${MpiRunScript}.${MpiCommWorld}  ${RedirectStdout} ${RedirectStderr}
 [[ -x ${tmpdir}/null_mpi ]] && ${tmpdir}/null_mpi
 [[ -n "${processorder}" ]] || exit 0     # no listings to process, exit
 lines=0
