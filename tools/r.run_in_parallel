@@ -104,11 +104,17 @@ mpiexec_Linux() {
 # primitive launcher for now (one MPI world)
 aprun_Linux_launch() {
   export MpiCommWorld=0
+  export PMI_NO_FORK=1
+  echo "pernode=$pernode, pernuma=$pernuma"
+  ExtraAprun="-d ${ThreadsInWorld[${MpiCommWorld}]}"
+  ((pernode > 0)) && ExtraAprun="-N $pernode -d $((CoresOnNode/pernode)) -cc none"
+  ((pernuma > 0)) && ExtraAprun="-S $pernuma -cc numa_node"
   [[ -n ${verbose} ]] && \
-    echo "INFO: OMP_NUM_THREADS=${ThreadsInWorld[${MpiCommWorld}]} aprun -n ${PeInWorld[${MpiCommWorld}]} -d ${ThreadsInWorld[${MpiCommWorld}]} $@ ${ParallelScript}.${MpiCommWorld}"
+#    echo "INFO: OMP_NUM_THREADS=${ThreadsInWorld[${MpiCommWorld}]} aprun -n ${PeInWorld[${MpiCommWorld}]} ${ExtraAprun} $@ ${ParallelScript}.${MpiCommWorld}"
+    echo "INFO: OMP_NUM_THREADS=1 aprun -n ${PeInWorld[${MpiCommWorld}]} ${ExtraAprun} $@ ${ParallelScript}.${MpiCommWorld}"
   [[ -z ${dryrun} ]] && \
-    OMP_NUM_THREADS=${ThreadsInWorld[${MpiCommWorld}]} \
-      aprun -n ${PeInWorld[${MpiCommWorld}]} -d ${ThreadsInWorld[${MpiCommWorld}]} "$@" ${ParallelScript}.${MpiCommWorld}
+    OMP_NUM_THREADS=1 \
+      aprun -n ${PeInWorld[${MpiCommWorld}]} ${ExtraAprun} "$@" ${ParallelScript}.${MpiCommWorld}
 }
 #################################################################################################################################
 # MPI launcher for Linux systems (OpenMPI only for now)
@@ -596,6 +602,7 @@ MY_NODEFILE=${PARALLEL_NODEFILE:-${GECOSHEP_HOSTS_FILE:-${GECOSHEP_HOSTFILE:-${L
 #Version="1.1.22 2016/06/22" # start of Cray ALPS update
 Version="1.1.22a 2016/06/22" # first version with Cray ALPS aprun capability
 echo "${0##*/} version $Version avec /bin/ksh93"
+export APRUN="$(which aprun 2>/dev/null)"
 eval `cclargs_lite -D "" $0 \
     -alps "" "alps" "[use Cray ALPS]" \
     -args "" "" "[arguments to the command]" \
@@ -632,6 +639,8 @@ eval `cclargs_lite -D "" $0 \
     -openmpi "" "openmpi" "[use openmpi]" \
     -outp "o" "O" "[stdout prefix in listings]" \
     -packoutput "cat_output" "echo" "[]" \
+    -pernode "0" "9999" "[]" \
+    -pernuma "0" "9999" "[]" \
     -pes "${BATCH_MPI_CPUS:-1}" "${BATCH_MPI_CPUS:-1}" "[number of PEs for ALL instances]" \
     -pgm "Invalid_Command.EXE" "" "[]" \
     -preexec "" "" "[prefix program execution with this (time/gdb/...)]" \
@@ -646,7 +655,6 @@ eval `cclargs_lite -D "" $0 \
     -version "" "${Version}" "[version number]" \
     ++ "$@" ${RUN_IN_PARALLEL_EXTRAS}`
 #
-export APRUN="$(which aprun 2>/dev/null)"
 [[ -n ${APRUN} ]]  && hostos=CLE   # Cray linux environment
 #
 [[ -n ${JIO_ENV} ]] && which s.jio-prof 2>/dev/null 1>/dev/null && jio=". s.jio-prof.dot"
@@ -664,6 +672,8 @@ export CoresOnNode=128
 [[ "$hostos" == AIX ]]   && CoresOnNode=$(($(bindprocessor -q | sed 's/.*[ ]//')+1))        # AIX
 [[ "$hostos" == Linux ]] && CoresOnNode=$(grep MHz /proc/cpuinfo 2>/dev/null | wc -l)       # straight Linux
 [[ "$hostos" == CLE ]]   && CoresOnNode=$(aprun -n 1 cat /proc/cpuinfo | grep MHz | wc -l) && ((CoresOnNode=CoresOnNode/2*smt)) # Cray XC
+[[ "$pernode" == 9999 ]] && ((pernode=CoresOnNode))
+[[ "$pernuma" == 9999 ]] && ((pernuma=CoresOnNode/2))
 ((CoresOnNode<=0)) && CoresOnNode=1
 ((MaxCores=CoresOnNode))
 [[ -n $maxcores ]] && ((MaxCores=maxcores))
@@ -697,6 +707,8 @@ fi
 # number of MPI tasks
 #
 ((npe_total=npex*npey))
+((pernode>npe_total)) && ((pernode=npe_total))
+((pernuma>npe_total)) && ((pernuma=npe_total))
 ((TotalInstances=npe_total))
 ((TotalTasks=npe_total))
 #################################################################################################################################
@@ -932,7 +944,7 @@ set -- $pgm @@
 #################################################################################################################################
 if [[ "$3" != "" ]] ; then # complex sequence, SPMD or MPMD, (automatic multiple MPI worlds with @@)
   unset ProGrams Directories  ProgramIndex ProgramNames DirNames
-#
+#################################################################################################################################
   while [[ -n "${1}" ]]
   do
     [[ "${1}" == "@@" && "${2}" == "@@" ]]          && shift && continue   # two @@ flags back to back, eliminate first one
@@ -951,7 +963,8 @@ if [[ "$3" != "" ]] ; then # complex sequence, SPMD or MPMD, (automatic multiple
       shift
       continue
     fi
-#
+#=================================================================================================================================
+#=================================================================================================================================
     if [[ "${1}" == "@@" ]] ; then  #  wrap up a world
       NLThreads=${NLThreads:-${OMP_NUM_THREADS:-1}}
       PeInWorld[${MpiCommWorld}]=${Instances}
@@ -970,7 +983,7 @@ echo "INFO: complex SPMD / MPMD , MPI world ${MpiCommWorld}"
 # SHELL for scripts run under AIX/POE MUST BE /bin/ksh93
 export RPN_COMM_DOM='${NDomains}${RPN_COMM_DOM}'
 export RPN_COMM_DIRS="${RPN_COMM_DIRS}"        # RPN_COMM_DIRS no longer needed by RPN_COMM_init as cd is now performed by script
-export OMP_NUM_THREADS=${NLThreads}
+#export OMP_NUM_THREADS=${NLThreads}
 ((WORLD_CHILD=MP_CHILD-${InstanceOffset}))
 export WORLD_CHILD
 [[ -z "${nosep}" ]] &&
@@ -992,7 +1005,7 @@ EOT
 #============================ Parameters file, sourced by MpiRunScript ============================
       cat <<EOT >${MpiRunParms}.${MpiCommWorld}
 CoresOnNode=${MaxCores}
-MaxChild=${Instances}
+MaxChild=$((${Instances}-1))
 PIndex=(${ProgramIndex[@]})
 NThreads=(${NThreads[@]})
 EOT
@@ -1009,7 +1022,8 @@ EOT
       shift
       continue
     fi  #  if "${1}" == "@@"  wrap up a world
-#
+#=================================================================================================================================
+#=================================================================================================================================
     Temp="${1}"
     [[  "${1}" == /* ]] || Temp="${SetCurrentDir}/${1}"  # relative path, add "current" directory
     Directory="${SetCurrentDir}"
@@ -1063,7 +1077,7 @@ EOT
     echo "INFO: ${LocalInstances} instances of '$Program' ( $((InstanceOffset+First)) to $((InstanceOffset+Last)) by ${Increment} ) in MPI world ${MpiCommWorld}"
     ((NDomains=NDomains+1))
   done # while [[ "$1" != "" ]]
-#
+#################################################################################################################################
   if ((ErRoR > 0)) ; then echo "$ErRoR ERROR(S) detected" ; local_cleanup ; exit 1 ; fi
 #
 else #################### simple SPMD case, one MPI world, old style call ##########################
