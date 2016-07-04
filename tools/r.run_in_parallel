@@ -123,9 +123,9 @@ aprun_Linux_launch() {
   list_message
   [[ -n ${verbose} ]] && \
     echo "INFO: OMP_NUM_THREADS=$OMP_NUM_THREADS" && \
-    echo "INFO: aprun -n ${PeInWorld[${MpiCommWorld}]} ${ExtraAprun} $@ ${ParallelScript}.${MpiCommWorld}"
+    echo "INFO: aprun -j ${smt} -n ${PeInWorld[${MpiCommWorld}]} ${ExtraAprun} $@ ${ParallelScript}.${MpiCommWorld}"
   [[ -z ${dryrun} ]] && \
-    aprun -n ${PeInWorld[${MpiCommWorld}]} ${ExtraAprun} "$@" ${ParallelScript}.${MpiCommWorld}
+    aprun -j ${smt} -n ${PeInWorld[${MpiCommWorld}]} ${ExtraAprun} "$@" ${ParallelScript}.${MpiCommWorld}
 }
 #################################################################################################################################
 # MPI launcher for Linux systems (OpenMPI only for now)
