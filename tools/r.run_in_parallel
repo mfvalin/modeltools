@@ -87,8 +87,6 @@ mpiexec_Linux() {
       mpiexec_Linux_launch Mpich2 "${MPICH_PARMS}" "$@"
       ;;
     ALPS_APP_PE*)                                                 # Cray ALPS
-#       echo "ERROR: (${0}) Cray ALPS Linux MPI launcher not implemented yet"
-#       return 1
       aprun_Linux_launch "$@"
       ;;
     *)
@@ -101,20 +99,33 @@ mpiexec_Linux() {
 }
 #################################################################################################################################
 # MPI launcher for Cray systems (aprun)
-# primitive launcher for now (one MPI world)
+# basic launcher for now (one MPI world only) (MPMD with non constant threading supported)
 aprun_Linux_launch() {
   export MpiCommWorld=0
   export PMI_NO_FORK=1
-  echo "pernode=$pernode, pernuma=$pernuma"
-  ExtraAprun="-d ${ThreadsInWorld[${MpiCommWorld}]}"
-  ((pernode > 0)) && ExtraAprun="-N $pernode -d $((CoresOnNode/pernode)) -cc none"
-  ((pernuma > 0)) && ExtraAprun="-S $pernuma -cc numa_node"
+  [[ "$map" == map ]] && echo "INFO: rank map requested" && export MPICH_RANK_REORDER_DISPLAY=1     # PE map requested
+  [[ -n ${verbose} ]] && echo "INFO: pernode=$pernode, pernuma=$pernuma"
+  ExtraAprun="-d ${ThreadsInWorld[${MpiCommWorld}]}"             # use number of threads as spacing
+  export OMP_NUM_THREADS=${ThreadsInWorld[${MpiCommWorld}]}
+  if ((pernode > 0)) ; then
+    ExtraAprun="-N $pernode -d $((CoresOnNode/pernode)) -cc none"   # -pernode option, any binding will be done by application
+    ((DefaultNumberOfThreads==0)) && export OMP_NUM_THREADS=1       # to prevent warnings if MPMD with different number of threads per process
+    [[ -n ${verbose} ]] && echo "INFO: ranks per node=$pernode"
+    ((pernuma!=0)) && echo "WARNING: -pernuma option incompatible with -pernode, option will be ignored"
+    pernuma=0    # pernode supercedes pernuma
+  fi
+  if ((pernuma > 0)) ; then
+    ExtraAprun="-S $pernuma -cc numa_node"      # -pernuma option, bind to numa node, further binding will be done by application
+    ((DefaultNumberOfThreads==0)) && export OMP_NUM_THREADS=1       # to prevent warnings if MPMD with different number of threads per process
+    [[ -n ${verbose} ]] && echo "INFO: ranks per socket=$pernuma"
+  fi
+  ((DefaultNumberOfThreads==0)) && echo "INFO: non constant threading detected in MPMD application"
+  list_message
   [[ -n ${verbose} ]] && \
-#    echo "INFO: OMP_NUM_THREADS=${ThreadsInWorld[${MpiCommWorld}]} aprun -n ${PeInWorld[${MpiCommWorld}]} ${ExtraAprun} $@ ${ParallelScript}.${MpiCommWorld}"
-    echo "INFO: OMP_NUM_THREADS=1 aprun -n ${PeInWorld[${MpiCommWorld}]} ${ExtraAprun} $@ ${ParallelScript}.${MpiCommWorld}"
+    echo "INFO: OMP_NUM_THREADS=$OMP_NUM_THREADS" && \
+    echo "INFO: aprun -n ${PeInWorld[${MpiCommWorld}]} ${ExtraAprun} $@ ${ParallelScript}.${MpiCommWorld}"
   [[ -z ${dryrun} ]] && \
-    OMP_NUM_THREADS=1 \
-      aprun -n ${PeInWorld[${MpiCommWorld}]} ${ExtraAprun} "$@" ${ParallelScript}.${MpiCommWorld}
+    aprun -n ${PeInWorld[${MpiCommWorld}]} ${ExtraAprun} "$@" ${ParallelScript}.${MpiCommWorld}
 }
 #################################################################################################################################
 # MPI launcher for Linux systems (OpenMPI only for now)
@@ -600,7 +611,8 @@ MY_NODEFILE=${PARALLEL_NODEFILE:-${GECOSHEP_HOSTS_FILE:-${GECOSHEP_HOSTFILE:-${L
 #Version="1.1.21c 2016/04/14" # create node file if env var JOB_IMMEDIATE_MODE is present
 #Version="1.1.21d 2016/04/14" # better error message if no node file found
 #Version="1.1.22 2016/06/22" # start of Cray ALPS update
-Version="1.1.22a 2016/06/22" # first version with Cray ALPS aprun capability
+#Version="1.1.22a 2016/06/22" # first version with Cray ALPS aprun capability
+Version="1.1.23 2016/07/04" # first release supporting aprun
 echo "${0##*/} version $Version avec /bin/ksh93"
 export APRUN="$(which aprun 2>/dev/null)"
 eval `cclargs_lite -D "" $0 \
@@ -667,6 +679,7 @@ if [[ -n $gdb ]] ; then
   [[ -r $gdb ]] && preexec="$(which gdb) -batch -x $(true_path $gdb)"
 fi
 OMP_NUM_THREADS=${OMP_NUM_THREADS:-1}
+DefaultNumberOfThreads=${OMP_NUM_THREADS}
 #
 export CoresOnNode=128
 [[ "$hostos" == AIX ]]   && CoresOnNode=$(($(bindprocessor -q | sed 's/.*[ ]//')+1))        # AIX
@@ -950,6 +963,8 @@ if [[ "$3" != "" ]] ; then # complex sequence, SPMD or MPMD, (automatic multiple
     [[ "${1}" == "@@" && "${2}" == "@@" ]]          && shift && continue   # two @@ flags back to back, eliminate first one
     [[ "${1}" == /./* ]]  && SetCurrentDir=${1#/./} && shift && continue   # used by master from slave to set slave base work directory
     [[ "${1}" == %%* ]]   && NLThreads=${1#%%}      && shift && continue   # from slave to set number of threads per task
+    NLThreads=${NLThreads:-${OMP_NUM_THREADS:-1}}
+    ((NLThreads!=DefaultNumberOfThreads)) && DefaultNumberOfThreads=0      # used to detect non constant threading in MPMD application
     if [[  "${1}" == ::* ]] ; then  # used by master from slave to set number of tasks for this slave
       npe_total=${1#::}
       if [[ ${npe_total} == *x* ]] ; then
