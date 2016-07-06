@@ -76,6 +76,7 @@ mpiexec_Linux() {
         OPEN_MPI_PARMS="--mca btl tcp,self ${OPEN_MPI_PARMS}"         # do not try to use infiniband
       [[ "$mpirun" == mpirun ]] && [[ -n ${OPAL_PREFIX} ]] && \
         OPEN_MPI_PARMS="--prefix ${OPAL_PREFIX} ${OPEN_MPI_PARMS}"    # if not using rumpirun.openmpi (Dorval EC clusters)
+#       OPEN_MPI_PARMS="--mca shmem mmap ${OPEN_MPI_PARMS}"
       OPEN_MPI_PARMS="--mca shmem posix ${OPEN_MPI_PARMS}"
       echo "=== OPEN_MPI_PARMS=${OPEN_MPI_PARMS} ==="
       mpiexec_Linux_launch OpenMPI ${OPEN_MPI_PARMS} "$@"
