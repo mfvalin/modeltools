@@ -612,7 +612,8 @@ MY_NODEFILE=${PARALLEL_NODEFILE:-${GECOSHEP_HOSTS_FILE:-${GECOSHEP_HOSTFILE:-${L
 #Version="1.1.21d 2016/04/14" # better error message if no node file found
 #Version="1.1.22 2016/06/22" # start of Cray ALPS update
 #Version="1.1.22a 2016/06/22" # first version with Cray ALPS aprun capability
-Version="1.1.23 2016/07/04" # first release supporting aprun
+#Version="1.1.23 2016/07/04" # first release supporting aprun
+Version="1.1.23a 2016/07/21" # fixed for ALPS (nodemap/coremap deactivation)
 echo "${0##*/} version $Version avec /bin/ksh93"
 export APRUN="$(which aprun 2>/dev/null)"
 eval `cclargs_lite -D "" $0 \
@@ -861,7 +862,7 @@ if [[ ! -r ${nodefile} ]] ; then   # no nodefile supplied, make one
 fi  # no nodefile supplied
 [[ ! -f ${nodefile} ]] && echo "ERROR: no node file found, ABORTING" 1>&2 && exit 1
 ((TotalThreads=npe_total*OMP_NUM_THREADS))
-if [[ "${coremap}" == NoNe && "${nodemap}" == NoNe ]] ; then
+if [[ "${coremap}" == NoNe && "${nodemap}" == NoNe && -z ${APRUN} ]] ; then
   nhosts=$(uniq ${nodefile} | wc -l | sed -e 's/ //g')   # number of hosts in node file
   ((loops=(npe_total+nhosts-1)/nhosts))   # number of tasks per host (rounded up)
   if ((loops*OMP_NUM_THREADS > MaxCores)) ; then
@@ -885,16 +886,18 @@ fi
 if [[ "${nodemap}" != NoNe ]] ; then
   expand_node_map
 fi
-ListOfNodes=($(cat ${MY_NODEFILE}))
-NumberOfNodes=${#ListOfNodes[@]}
-#  [[ -n $verbose ]] && echo "INFO: NumberOfHosts = $NumberOfHosts"
-#  [[ -n $verbose ]] && echo "INFO: Host list = ${ListOfHosts[@]}"
-[[ -n $verbose ]] && echo "INFO: Number or processes = $NumberOfNodes"
-[[ -n $verbose ]] && echo "INFO: Node list = ${ListOfNodes[@]}"
-if ((NumberOfNodes!=npe_total)) ; then
-  echo "ERROR: inconsistent number of processes, requested ${npe_total}, mapped ${NumberOfNodes}"
-  rm -rf ${tmpdir}
-  exit 1
+if [[ -z ${APRUN} ]] ; then
+  ListOfNodes=($(cat ${MY_NODEFILE}))
+  NumberOfNodes=${#ListOfNodes[@]}
+  #  [[ -n $verbose ]] && echo "INFO: NumberOfHosts = $NumberOfHosts"
+  #  [[ -n $verbose ]] && echo "INFO: Host list = ${ListOfHosts[@]}"
+  [[ -n $verbose ]] && echo "INFO: Number or processes = $NumberOfNodes"
+  [[ -n $verbose ]] && echo "INFO: Node list = ${ListOfNodes[@]}"
+  if ((NumberOfNodes!=npe_total)) ; then
+    echo "ERROR: inconsistent number of processes, requested ${npe_total}, mapped ${NumberOfNodes}"
+    rm -rf ${tmpdir}
+    exit 1
+  fi
 fi
 #################################################################################################################################
 # create script anc C executable used in self test if needed
