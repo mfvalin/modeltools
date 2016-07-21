@@ -120,12 +120,15 @@ aprun_Linux_launch() {
     [[ -n ${verbose} ]] && echo "INFO: ranks per socket=$pernuma"
   fi
   ((DefaultNumberOfThreads==0)) && echo "INFO: non constant threading detected in MPMD application"
+  [[ -n ${alpspd} ]] && [[ "${alpspd}" != NoName ]] && USE_PDOMAIN=${alpspd} && apmgr pdomain -c ${alpspd} && apstat -P && echo "pdomain ${alpspd} created"
+  [[ -n ${USE_PDOMAIN} ]] && ExtraAprun="${ExtraAprun} -p ${USE_PDOMAIN} "
   list_message
   [[ -n ${verbose} ]] && \
     echo "INFO: OMP_NUM_THREADS=$OMP_NUM_THREADS" && \
     echo "INFO: aprun -j ${smt} -n ${PeInWorld[${MpiCommWorld}]} ${ExtraAprun} $@ ${ParallelScript}.${MpiCommWorld}"
   [[ -z ${dryrun} ]] && \
     aprun -j ${smt} -n ${PeInWorld[${MpiCommWorld}]} ${ExtraAprun} "$@" ${ParallelScript}.${MpiCommWorld}
+  [[ -n ${alpspd} ]] && [[ "${alpspd}" != NoName ]] && apmgr pdomain -r ${alpspd} && echo "pdomain ${alpspd} removed" && apstat -P 
 }
 #################################################################################################################################
 # MPI launcher for Linux systems (OpenMPI only for now)
@@ -613,11 +616,12 @@ MY_NODEFILE=${PARALLEL_NODEFILE:-${GECOSHEP_HOSTS_FILE:-${GECOSHEP_HOSTFILE:-${L
 #Version="1.1.22 2016/06/22" # start of Cray ALPS update
 #Version="1.1.22a 2016/06/22" # first version with Cray ALPS aprun capability
 #Version="1.1.23 2016/07/04" # first release supporting aprun
-Version="1.1.23a 2016/07/21" # fixed for ALPS (nodemap/coremap deactivation)
+#Version="1.1.23a 2016/07/21" # fixed for ALPS (nodemap/coremap deactivation)
+Version="1.1.23b 2016/07/21" # added pdomain use/creation/removal (env var USE_PDOMAIN , -alpspd)
 echo "${0##*/} version $Version avec /bin/ksh93"
 export APRUN="$(which aprun 2>/dev/null)"
 eval `cclargs_lite -D "" $0 \
-    -alps "" "alps" "[use Cray ALPS]" \
+    -alpspd "" "NoName" "[use Cray ALPS]" \
     -args "" "" "[arguments to the command]" \
     -bind "" "bind" "[]" \
     -coremap "NoNe" "NoNe" "[core affinity map]" \
@@ -1223,7 +1227,7 @@ if [[ ${nompi} == run_with_mpi ]] ; then  # MPI launch (linux or AIX supported)
   MpiImplementation=""
   [[ -n ${openmpi} ]] && MpiImplementation="_openmpi"   # openmpi MPI implementation
   [[ -n ${mpich2} ]]  && MpiImplementation="_mpich2"    # mpich2 MPI implementation
-  [[ -n ${alps} ]]    && MpiImplementation="_alps"      # Cray implementation
+  [[ -n ${alpspd} ]]  && MpiImplementation=""           # Cray implementation
   echo "INFO: ${MPI_EXEC:-mpiexec_${SystemPlatform}${MpiImplementation}} ${mpiargs}"
   ${MPI_EXEC:-mpiexec_${SystemPlatform}${MpiImplementation}} ${mpiargs}
 #
