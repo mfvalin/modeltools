@@ -71,9 +71,9 @@ mpiexec_Linux() {
       [[ "$bind" == none ]] && \
         OPEN_MPI_PARMS="-bind-to-none ${OPEN_MPI_PARMS}"
       [[ -n "$ib" ]] && \
-        OPEN_MPI_PARMS="--mca btl openib,tcp,self ${OPEN_MPI_PARMS}"  # force use of infiniband
+        OPEN_MPI_PARMS="--mca btl openib,sm,self ${OPEN_MPI_PARMS}"  # force use of infiniband
       [[ -n "$noib" ]] && \
-        OPEN_MPI_PARMS="--mca btl tcp,self ${OPEN_MPI_PARMS}"         # do not try to use infiniband
+        OPEN_MPI_PARMS="--mca btl sm,self ${OPEN_MPI_PARMS}"         # do not try to use infiniband
       [[ "$mpirun" == mpirun ]] && [[ -n ${OPAL_PREFIX} ]] && \
         OPEN_MPI_PARMS="--prefix ${OPAL_PREFIX} ${OPEN_MPI_PARMS}"    # if not using rumpirun.openmpi (Dorval EC clusters)
 #       OPEN_MPI_PARMS="--mca shmem mmap ${OPEN_MPI_PARMS}"
@@ -618,7 +618,8 @@ MY_NODEFILE=${PARALLEL_NODEFILE:-${GECOSHEP_HOSTS_FILE:-${GECOSHEP_HOSTFILE:-${L
 #Version="1.1.22a 2016/06/22" # first version with Cray ALPS aprun capability
 #Version="1.1.23 2016/07/04" # first release supporting aprun
 #Version="1.1.23a 2016/07/21" # fixed for ALPS (nodemap/coremap deactivation)
-Version="1.1.23b 2016/07/21" # added pdomain use/creation/removal (env var USE_PDOMAIN , -alpspd)
+#Version="1.1.23b 2016/07/21" # added pdomain use/creation/removal (env var USE_PDOMAIN , -alpspd)
+Version="1.1.23c 2016/07/25" # gpsc related mods (from Laurent)
 echo "${0##*/} version $Version avec /bin/ksh93"
 export APRUN="$(which aprun 2>/dev/null)"
 eval `cclargs_lite -D "" $0 \
