@@ -1049,7 +1049,9 @@ Nindex=${#ProgramIndex[@]}
 if [[ "$pemap" != NoNe ]] ; then  # remap ProgramIndex according to PE map
   ProgramIndex=( $(for i in $(expand_pe_map $pemap ) ; do printf "%d " ${ProgramIndex[$i]} ; done) )
   if(( Nindex != ${#ProgramIndex[@]} )) ; then
-    echo "ERROR: expecting ${Nindex} entries in -pemap, got ${#ProgramIndex[@]} instead" 1>&2  && exit 1
+    echo "ERROR: expecting ${Nindex} entries in -pemap, got ${#ProgramIndex[@]} instead" 1>&2 
+    local_cleanup
+    exit 1
   fi
 fi
       cat <<EOT >${MpiRunParms}.${MpiCommWorld}
