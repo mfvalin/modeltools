@@ -76,7 +76,6 @@ mpiexec_Linux() {
         OPEN_MPI_PARMS="--mca btl tcp,self ${OPEN_MPI_PARMS}"         # do not try to use infiniband
       [[ "$mpirun" == mpirun ]] && [[ -n ${OPAL_PREFIX} ]] && \
         OPEN_MPI_PARMS="--prefix ${OPAL_PREFIX} ${OPEN_MPI_PARMS}"    # if not using rumpirun.openmpi (Dorval EC clusters)
-#       OPEN_MPI_PARMS="--mca shmem mmap ${OPEN_MPI_PARMS}"
       OPEN_MPI_PARMS="--mca shmem posix ${OPEN_MPI_PARMS}"
       echo "=== OPEN_MPI_PARMS=${OPEN_MPI_PARMS} ==="
       mpiexec_Linux_launch OpenMPI ${OPEN_MPI_PARMS} "$@"
@@ -121,12 +120,15 @@ aprun_Linux_launch() {
     [[ -n ${verbose} ]] && echo "INFO: ranks per socket=$pernuma"
   fi
   ((DefaultNumberOfThreads==0)) && echo "INFO: non constant threading detected in MPMD application"
+  [[ -n ${alpspd} ]] && [[ "${alpspd}" != NoName ]] && USE_PDOMAIN=${alpspd} && apmgr pdomain -c ${alpspd} && apstat -P && echo "pdomain ${alpspd} created"
+  [[ -n ${USE_PDOMAIN} ]] && ExtraAprun="${ExtraAprun} -p ${USE_PDOMAIN} "
   list_message
   [[ -n ${verbose} ]] && \
     echo "INFO: OMP_NUM_THREADS=$OMP_NUM_THREADS" && \
     echo "INFO: aprun -j ${smt} -n ${PeInWorld[${MpiCommWorld}]} ${ExtraAprun} $@ ${ParallelScript}.${MpiCommWorld}"
   [[ -z ${dryrun} ]] && \
     aprun -j ${smt} -n ${PeInWorld[${MpiCommWorld}]} ${ExtraAprun} "$@" ${ParallelScript}.${MpiCommWorld}
+  [[ -n ${alpspd} ]] && [[ "${alpspd}" != NoName ]] && apmgr pdomain -r ${alpspd} && echo "pdomain ${alpspd} removed" && apstat -P 
 }
 #################################################################################################################################
 # MPI launcher for Linux systems (OpenMPI only for now)
@@ -418,6 +420,22 @@ expand_geometry_map() {
   fi
 }
 #################################################################################################################################
+# process  -pemap option
+#          -pemap @file
+#          -pemap range_or_pe,range_or_pe,.....,range_or_pe
+#                 range = start-end
+#          example : -pemap 0-7,16,17,8-15,18,19
+expand_pe_map() {
+  for i in $(echo "$@" | tr ',' ' ')
+  do
+   if [[ $i == *-* ]] ; then
+     printf "%d " $(seq ${i%-*} ${i#*-})
+   else
+     printf "%d " $i
+   fi
+  done
+}
+#################################################################################################################################
 # process  -nodemap option
 #          -nodemap s1,e1:np1 s2,e2:np2 ... sN,eN:npN
 #          si : first host, ei : last host, npi : number of PEs on node
@@ -613,11 +631,14 @@ MY_NODEFILE=${PARALLEL_NODEFILE:-${GECOSHEP_HOSTS_FILE:-${GECOSHEP_HOSTFILE:-${L
 #Version="1.1.21d 2016/04/14" # better error message if no node file found
 #Version="1.1.22 2016/06/22" # start of Cray ALPS update
 #Version="1.1.22a 2016/06/22" # first version with Cray ALPS aprun capability
-Version="1.1.23 2016/07/04" # first release supporting aprun
+#Version="1.1.23 2016/07/04" # first release supporting aprun
+#Version="1.1.23a 2016/07/21" # fixed for ALPS (nodemap/coremap deactivation)
+#Version="1.1.23b 2016/07/21" # added pdomain use/creation/removal (env var USE_PDOMAIN , -alpspd)
+Version="1.1.23c 2016/08/04" # added PE remapping capability
 echo "${0##*/} version $Version avec /bin/ksh93"
 export APRUN="$(which aprun 2>/dev/null)"
 eval `cclargs_lite -D "" $0 \
-    -alps "" "alps" "[use Cray ALPS]" \
+    -alpspd "" "NoName" "[use Cray ALPS]" \
     -args "" "" "[arguments to the command]" \
     -bind "" "bind" "[]" \
     -coremap "NoNe" "NoNe" "[core affinity map]" \
@@ -652,6 +673,7 @@ eval `cclargs_lite -D "" $0 \
     -openmpi "" "openmpi" "[use openmpi]" \
     -outp "o" "O" "[stdout prefix in listings]" \
     -packoutput "cat_output" "echo" "[]" \
+    -pemap "NoNe" "NoNe" "[process shuffling map]" \
     -pernode "0" "9999" "[]" \
     -pernuma "0" "9999" "[]" \
     -pes "${BATCH_MPI_CPUS:-1}" "${BATCH_MPI_CPUS:-1}" "[number of PEs for ALL instances]" \
@@ -862,7 +884,7 @@ if [[ ! -r ${nodefile} ]] ; then   # no nodefile supplied, make one
 fi  # no nodefile supplied
 [[ ! -f ${nodefile} ]] && echo "ERROR: no node file found, ABORTING" 1>&2 && exit 1
 ((TotalThreads=npe_total*OMP_NUM_THREADS))
-if [[ "${coremap}" == NoNe && "${nodemap}" == NoNe ]] ; then
+if [[ "${coremap}" == NoNe && "${nodemap}" == NoNe && -z ${APRUN} ]] ; then
   nhosts=$(uniq ${nodefile} | wc -l | sed -e 's/ //g')   # number of hosts in node file
   ((loops=(npe_total+nhosts-1)/nhosts))   # number of tasks per host (rounded up)
   if ((loops*OMP_NUM_THREADS > MaxCores)) ; then
@@ -880,22 +902,24 @@ if [[ "${coremap}" != NoNe && "${nodemap}" != NoNe ]] ; then
   echo "ERROR: coremap and nodemap are mutually exclusive options"
   exit 1
 fi
-if [[ "${coremap}" != NoNe ]] ; then
+if [[ "${coremap}" != NoNe && -z ${APRUN} ]] ; then
   expand_core_map
 fi
-if [[ "${nodemap}" != NoNe ]] ; then
+if [[ "${nodemap}" != NoNe && -z ${APRUN} ]] ; then
   expand_node_map
 fi
-ListOfNodes=($(cat ${MY_NODEFILE}))
-NumberOfNodes=${#ListOfNodes[@]}
-#  [[ -n $verbose ]] && echo "INFO: NumberOfHosts = $NumberOfHosts"
-#  [[ -n $verbose ]] && echo "INFO: Host list = ${ListOfHosts[@]}"
-[[ -n $verbose ]] && echo "INFO: Number or processes = $NumberOfNodes"
-[[ -n $verbose ]] && echo "INFO: Node list = ${ListOfNodes[@]}"
-if ((NumberOfNodes!=npe_total)) ; then
-  echo "ERROR: inconsistent number of processes, requested ${npe_total}, mapped ${NumberOfNodes}"
-  rm -rf ${tmpdir}
-  exit 1
+if [[ -z ${APRUN} ]] ; then
+  ListOfNodes=($(cat ${MY_NODEFILE}))
+  NumberOfNodes=${#ListOfNodes[@]}
+  #  [[ -n $verbose ]] && echo "INFO: NumberOfHosts = $NumberOfHosts"
+  #  [[ -n $verbose ]] && echo "INFO: Host list = ${ListOfHosts[@]}"
+  [[ -n $verbose ]] && echo "INFO: Number or processes = $NumberOfNodes"
+  [[ -n $verbose ]] && echo "INFO: Node list = ${ListOfNodes[@]}"
+  if ((NumberOfNodes!=npe_total)) ; then
+    echo "ERROR: inconsistent number of processes, requested ${npe_total}, mapped ${NumberOfNodes}"
+    rm -rf ${tmpdir}
+    exit 1
+  fi
 fi
 #################################################################################################################################
 # create script anc C executable used in self test if needed
@@ -1019,6 +1043,14 @@ Status=\$?
 echo "END of child \${WORLD_CHILD}, status = \${Status}  \$($CMD_date)"
 EOT
 #============================ Parameters file, sourced by MpiRunScript ============================
+[[ "$pemap" == @* ]] && [[ -r ${pemap#@} ]] && pemap="$(cat ${pemap#@})"
+Nindex=${#ProgramIndex[@]}
+if [[ "$pemap" != NoNe ]] ; then  # remap ProgramIndex according to PE map
+  ProgramIndex=( $(for i in $(expand_pe_map $pemap ) ; do printf "%d " ${ProgramIndex[$i]} ; done) )
+  if(( Nindex != ${#ProgramIndex[@]} )) ; then
+    echo "ERROR: expecting ${Nindex} entries in -pemap, got ${#ProgramIndex[@]} instead" 1>&2  && exit 1
+  fi
+fi
       cat <<EOT >${MpiRunParms}.${MpiCommWorld}
 CoresOnNode=${MaxCores}
 MaxChild=$((${Instances}-1))
@@ -1221,7 +1253,7 @@ if [[ ${nompi} == run_with_mpi ]] ; then  # MPI launch (linux or AIX supported)
   MpiImplementation=""
   [[ -n ${openmpi} ]] && MpiImplementation="_openmpi"   # openmpi MPI implementation
   [[ -n ${mpich2} ]]  && MpiImplementation="_mpich2"    # mpich2 MPI implementation
-  [[ -n ${alps} ]]    && MpiImplementation="_alps"      # Cray implementation
+  [[ -n ${alpspd} ]]  && MpiImplementation=""           # Cray implementation
   echo "INFO: ${MPI_EXEC:-mpiexec_${SystemPlatform}${MpiImplementation}} ${mpiargs}"
   ${MPI_EXEC:-mpiexec_${SystemPlatform}${MpiImplementation}} ${mpiargs}
 #
