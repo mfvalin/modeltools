@@ -44,7 +44,7 @@
  *        if(iand(FP_STATUS_UE,status) .ne. 0) print *,"Underflow ON"
  *        if(iand(FP_STATUS_OE,status) .ne. 0) print *,"Overflow ON"
  *        if(iand(FP_STATUS_ZE,status) .ne. 0) print *,"Zero divide ON"
- *        print *,'CPU apicid =',get_cpu_id()
+ *        print *,'CPU number =',get_cpu_number()
  *        s1 = rdtsc_seconds()
  *        s2 = rdtsc_seconds()
  *        print *,'rdtsc_seconds overhead=',s2
@@ -113,8 +113,14 @@
 #include <stdint.h>
 // cc -I. -DTEST_CPUID -DTEST_RDTSC -DDEBUG cpu_type.c
 #include <stdio.h>
+#include <stdlib.h>
 
 #include <cpu_type.h>
+
+#define MAX_APIC 512
+static short *APICids = NULL;
+static int Maxcpus = -1;
+static int Maxapicid = -1;
 
 #define HAS_FLAG(flag,flagword) (flag & flagword)
 #define X86_FLAG(flag) (flag & ProcessorCapabilities)
@@ -127,6 +133,65 @@ static double cycle=0.0;
 static uint64_t last_time=0;
 static int ncores=0;
 static int threadpercore=1;
+
+static void get_cpu_capabilities();
+
+// make apicid table from /proc/cpuinfo and use it to build apicid -> cpu number table
+static int make_apicid_table(void){   
+  char line[4096];
+  short apics[MAX_APIC];
+  char *ptr;
+  int nc;
+  int apicid, napics;
+  int i;
+  int lines = 0;
+  int maxapicid = -1;
+  int cpunumber = -1;
+  FILE *fd;
+
+  if(APICids != NULL){ // already initialized
+#if defined(DEBUG)
+    fprintf(stderr,"make_apicid_table has already been called, returning previous values\n");
+#endif
+    return Maxapicid;
+  }
+  fd=fopen("/proc/cpuinfo","r");
+  for(i=0 ; i<MAX_APIC ; i++) apics[i] = -1;
+  if(fd == NULL) return 0;
+  ptr = fgets(line,sizeof(line),fd);
+  while(ptr != NULL) {
+    lines++;
+    ptr = fgets(line,sizeof(line),fd);
+    if(strncmp(line,"apicid",6) == 0) {
+      cpunumber++;
+      while( *ptr != ':') ptr++; ptr++;
+      apicid = atoi(ptr);
+      maxapicid = (maxapicid < apicid) ? apicid : maxapicid;
+      if(apicid < MAX_APIC) apics[apicid] = cpunumber;   // associate apic id to cpu number
+    }
+  }
+  fclose(fd);
+  napics = maxapicid + 1 ;
+  APICids = (short *)malloc(napics*sizeof(short));
+  for(i=0 ; i<=maxapicid ; i++) APICids[i] = apics[i];
+#if defined(DEBUG)
+  fprintf(stderr,"lines read = %d, number of cpus = %d\n",lines,cpunumber+1);
+  fprintf(stderr,"allocated %d entry table for APIC ids\n",napics);
+#endif
+  Maxcpus = cpunumber+1;
+  Maxapicid = maxapicid;
+  return maxapicid;
+}
+
+static int CPU_from_apicid(int apicid){
+#if defined(__x86_64__)
+  if(ProcessorCapabilities == 0) get_cpu_capabilities();
+  if(apicid < 0 || apicid > Maxapicid) return(-1);
+  return(APICids[apicid]);
+#else
+  return(-1);
+#endif  
+}
 
 static void X86_cpuid(uint32_t eax, uint32_t ecx, uint32_t* regs)  /* interface to x86 cpuid instruction */
 {
@@ -206,6 +271,8 @@ static void get_cpu_capabilities()
   X86_cpuid( 7, 0, regs );    /* get more CPU capabilities EAX=7, ECX=0 */
   if((1 << 5) & regs[1]) ProcessorCapabilities |= FLAG_AVX2 ;   /* AVX2  EBX bit 5 */
   if((1 << 8) & regs[1]) ProcessorCapabilities |= FLAG_BMI  ;   /* BMI2  EBX bit 8 needed to set our BMI flag */
+
+  j = make_apicid_table();
 #else
   cstring = "Unknown processor";
 #endif
@@ -631,19 +698,19 @@ int get_cpu_cores()  /* Intel CPUs only */
   return( ncores );
 }
 
-/****f* X86/get_cpu_id
+/****f* X86/get_cpu_number
  * FUNCTION
- *   get the unique ID of this CPU in the node
+ *   get the processor number of this CPU in the node
  *  SYNOPSIS
    C:
-     int get_cpu_id();
+     int get_cpu_number();
 
    Fortran:
      interface
-       function get_cpu_id() result(id)
+       function get_cpu_number() result(id)
          import C_INT
          integer(C_INT) :: id
-       end function get_cpu_id
+       end function get_cpu_number
      end interface
  * AUTHOR
  *  M.Valin Recherche en Prevision Numerique 2016
@@ -655,15 +722,15 @@ int get_cpu_cores()  /* Intel CPUs only */
  *  to be correlated with /proc/cpuinfo to find actual CPU number
 *****
 */
-#pragma weak get_cpu_id__=get_cpu_id
-#pragma weak get_cpu_id_=get_cpu_id
-int get_cpu_id__();
-int get_cpu_id_();
-int get_cpu_id()  /* Intel CPUs only */
+#pragma weak get_cpu_number__=get_cpu_number
+#pragma weak get_cpu_number_=get_cpu_number
+int get_cpu_number__();
+int get_cpu_number_();
+int get_cpu_number()  /* Intel CPUs only */
 {
   uint32_t regs[4];
   X86_cpuid( 0x0B, 0, regs );
-  return( regs[3] );  /* x2APIC id from EDX  */
+  return( CPU_from_apicid(regs[3]) );  /* x2APIC id from EDX  */
 }
 
 #if defined(TEST_CPUID)
@@ -679,6 +746,7 @@ int main_cpuid(int argc, char** argv)
   printf("FPU status = %8.8x\n",get_fp_status_ctl());
   core_and_thread = get_cpu_core_thread();
   printf("core = %d, thread = %d\n",core_and_thread>>8,core_and_thread&0xFF);
+  printf("process is running on cpu number = %d\n",get_cpu_number());
 #if defined(DEBUG)
 #endif
   printf("CPU speed: %lu Hz\n",get_cpu_freq());
