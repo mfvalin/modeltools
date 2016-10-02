@@ -1,0 +1,138 @@
+#!/bin/bash
+#===============================================================================
+#                    start of section to be adjusted by user                   #
+#===============================================================================
+walltime=600             # wall clock time for container
+cpus=8                   # number of cores needed by container
+QuEuE=""                 # queue to submit to
+name="MyExperiment"      # job name for container
+#===============================================================================
+#                     end of section to be adjusted by user                    #
+#===============================================================================
+#
+unset QUEUE_1CPU
+unset QUEUE_2CPU
+unset QUEUE_3CPU
+unset QUEUE_4CPU
+#
+# example using 8 cores (1 node with 8 cores each)
+# 4  1 way queues (2 threads per process)
+#
+# comment next line for tests
+cat <<\EOJ |  ord_soumet - -t ${walltime} -mpi -cpus ${cpus}x1 -jn STREAM_${name} -shell nologin ${QuEuE} "$@"
+# uncomment next line for tests
+#cat <<\EOJ
+#===============================================================================
+#                    start of section to be adjusted by user                   #
+#===============================================================================
+walltime=600   # repeated because there is no substitution in "here document"
+nodesize=8
+#===============================================================================
+#                     end of section to be adjusted by user                    #
+#===============================================================================
+#
+# get list of processes for which a taskset will have to be applied
+#
+export MyProcesses=""
+for i in $(pgrep -u $USER) ; do kill -s 0 $i && MyProcesses="$MyProcesses $i" ; done
+echo === $MyProcesses ===
+cat $PBS_NODEFILE
+export SAVE_HOSTFILE=$PBS_NODEFILE
+export NODEFILE_PBS=${PBS_NODEFILE}
+export RANKFILE_PBS
+#
+# arguments    noderange:cpurange ... noderange:cpurange
+# noderange    node | firstnode-lastnode               (origin 0)
+# cpurange     cpu  | firstcpu-lastcpu                 (origin 0)
+make_map()   #  build OpenMPI rank file for this instance
+{
+((rank=0))
+incr=${OMP_NUM_THREADS:-1}
+ntiles=${BATCH_MPI_CPUS:-1}
+while [[ -n $1 ]] ; do
+  arg="$1"
+  [[ "$arg" == *:* ]] || arg="$arg:"                     # no cpu range, add trailing :
+  [[ "$arg" == *: ]] && arg="${arg}0-$((nodesize-1))"    # replace missing cpu range by all cpus on a node
+  nodes="${arg%:*}"
+  cpus="${arg#*:}"
+  [[ "$nodes" == *-* ]] || nodes="${nodes}-${nodes}"     # transform node number into node range
+  [[ "$cpus" == *-* ]] || cpus="${cpus}-${cpus}"         # transform cpu number into cpu range
+  shift
+  for n in $(seq $(echo ${nodes}| tr -- '-' " ") ) ; do  # build OpenMPI rank file
+   low=${cpus%-*}
+   high=${cpus#*-}
+   while ((low+incr<=high+1 && rank<ntiles)) ; do
+     ((incr==1)) && echo "rank $rank=+n$n slot=${low}"
+     ((incr>1))  && echo "rank $rank=+n$n slot=${low}-$((low+incr-1))"
+     ((low=low+incr))
+     ((rank=rank+1))
+   done
+  done
+done
+}
+#
+instanciate() # create one sub-container. arguments will be passed verbatim to make_map
+{
+  Arg1="${1}"
+# NODEFILE_PBS=${NodeFileDir}/${name}-${instance}
+  RANKFILE_PBS=${NodeFileDir}/${name}-${instance}
+# rm -f ${NODEFILE_PBS}
+# ((nlocal>0)) && echo ${LocalHost} slots=${nlocal} >>${NODEFILE_PBS}
+# ((first>0)) && cat ${NodeFileDir}/nodes.master | sed "s/$/ slots=$((nodesize/OMP_NUM_THREADS))/" | sed -n ${first},${last}p >>${NODEFILE_PBS}
+  echo "======================================================================================" >>${ListingFile}+${name}-${instance}
+  chmod 644 ${ListingFile}+${name}-${instance}
+# cat ${NODEFILE_PBS} >>${ListingFile}+${name}-${instance}
+  make_map $* >${RANKFILE_PBS}
+  cat ${RANKFILE_PBS} >>${ListingFile}+${name}-${instance}
+  echo "======================================================================================" >>${ListingFile}+${name}-${instance}
+  HostTaskset=0-$((nodesize-1))                                  # default taskset for node 0
+  [[ "${Arg1}" == 0:* ]] && HostTaskset=${Arg1#0:}    # if a taskset has been specified for node 0, use it
+  export HostTaskset
+  for p in ${MyProcesses} ; do taskset -cp $HostTaskset $p ; done   # run only on prescribed taskset (node 0 only)
+  ${HOME}/ECssm/multi/bin/run_work_stream -name ${name}-${instance} -maxidle $maxidle \
+       -queues $queues 2>>${ListingFile}+${name}-${instance} 1>>${ListingFile}+${name}-${instance} &
+  for p in ${MyProcesses} ; do taskset -cp 0-$((nodesize-1)) $p ; done           # run on any cpu
+# NODEFILE_PBS=${SAVE_HOSTFILE}
+  ((instance=instance+1))
+}
+#------------------------------------------------------------------------------------------------------------------------------
+mkdir -p ${HOME}/.job_queues/nodefiledir
+export NodeFileDir="${HOME}/.job_queues/nodefiledir/$(hostname)$(date +%s)"
+export InstanceQuitFile=${NodeFileDir}/InstanceQuitFile      # quit signal from first sub-container that terminates
+mkdir ${NodeFileDir} || exit 1
+touch ${InstanceQuitFile} || exit 1
+export TODO_UPON_EXIT='rm -rf ${NodeFileDir} ; kill -9 $$'
+#
+echo $(hostname) >${NodeFileDir}/nodes.master
+cat ${PBS_NODEFILE} | grep -v "^$(hostname)" | uniq >>${NodeFileDir}/nodes.master
+LocalHost="$(hostname)"
+#
+export instance=0
+export NODEFILE_PBS=${NodeFileDir}/nodes.master
+export FORCE_SETUP=yes
+export name=""
+export queues=""
+#===============================================================================
+#                    start of section to be adjusted by user                   #
+#===============================================================================
+#
+#------------------------------------------------------------------------------------------------------------------------------
+# launch 4 x 1 way queues
+#------------------------------------------------------------------------------------------------------------------------------
+#export maxidle=${walltime}
+export maxidle=60
+name=micro1 ; queues="${name} ${name}-1" ; BATCH_MPI_CPUS=1 ; export OMP_NUM_THREADS=2         # 2 cores per instance = 8 cores
+instanciate 0:0-1           # node 0, cpu 0
+instanciate 0:2-3           # node 0, cpu 2
+instanciate 0:4-5           # node 0, cpu 4
+instanciate 0:6-7           # node 0, cpu 6
+#===============================================================================
+#                     end of section to be adjusted by user                    #
+#===============================================================================
+#------------------------------------------------------------------------------------------------------------------------------
+wait   # wait for backgrounded sub-containers to terminate
+#------------------------------------------------------------------------------------------------------------------------------
+rm -f ${InstanceQuitFile}  # global quit signal file
+rm -f ${NodeFileDir}/*     # remove node files
+rmdir ${NodeFileDir}       # directory should now be empty, remove it
+EOJ

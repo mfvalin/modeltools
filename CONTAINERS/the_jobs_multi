@@ -1,0 +1,13 @@
+#!/bin/bash
+soumet job_model -t 120 -cm 1G -mpi -cpus 12 -q micro12@ -jn job_model1
+soumet job_model -t 120 -cm 1G -mpi -cpus 12 -q micro12@ -jn job_model2
+soumet job_model -t 120 -cm 1G -mpi -cpus 12 -q micro12@ -jn job_model3
+soumet job_model -t 120 -cm 1G -mpi -cpus 12 -q micro12@ -jn job_model4
+soumet job_post -t 120 -cm 1G -cpus 1 -q micro1@ -jn job_post_2
+soumet job_post -t 120 -cm 1G -cpus 1 -q micro1@ -jn job_post_2
+soumet job_post -t 120 -cm 1G -cpus 1 -q micro1@ -jn job_post_2
+soumet job_post -t 120 -cm 1G -cpus 1 -q micro1@ -jn job_post_2
+soumet job_post -t 120 -cm 1G -cpus 1 -q micro2@ -jn job_post_3
+soumet job_post -t 120 -cm 1G -cpus 1 -q micro2@ -jn job_post_3
+soumet job_post -t 120 -cm 1G -cpus 1 -q micro2@ -jn job_post_3
+soumet job_post -t 120 -cm 1G -cpus 1 -q micro2@ -jn job_post_3
