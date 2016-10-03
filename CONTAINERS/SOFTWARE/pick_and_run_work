@@ -1,51 +1,52 @@
 #!/bin/bash
 #set -x
+# get a job and run it from the current queue (if possible given job wall time and number of cores needed)
+#
+# usage: pick_and_run_work [time_left_in_job]
+#
+# this script MUST BE CALLED from the directory containing the jobs
+# environment variables set by caller:
+#             OMP_NUM_THREADS, BATCH_MPI_CPUS : set by soumet
+#             StreamFlagDir, StreamFlagFile   : set by caller (run_work_stream normally)
+#
 TimeLeft=${1:-0}
-((TimeLeft < 60)) && echo LESS than ${TimeLeft} wall clock seconds left, EXITING && exit 1
+((TimeLeft < 60)) && echo "INFO: LESS than ${TimeLeft} wall clock seconds left, EXITING" && exit 1
 JobFile=""
-for i in $(ls -1rt)
+for i in $(ls -1rt)  # loop over candidate jobs
 do
-  mv $i $StreamFlagDir
+  mv $i $StreamFlagDir    # try to capture a job
   Job=${StreamFlagDir}/${i}
-  if [[ -r $Job ]]
+  if [[ -r $Job ]]        # readable ?
   then
     ((StreamCpus=OMP_NUM_THREADS*BATCH_MPI_CPUS))
-# get information from insertion by soumet
+#   get information from batch subsystem independent insertion by soumet
+#   SOUMET_RESOURCE_PROFILE_FOR_JOB MaxNumberOfCores=${MaxNumberOfCores};MaxNumberOfThreads=${OMP_NUM_THREADS};MaxWallTime=${t}
     eval $(grep '^#SOUMET_RESOURCE_PROFILE_FOR_JOB ' ${Job} | sed 's/.* //')
-#   MaxNumberOfCores,MaxNumberOfThreads,MaxWallTime for job now available
-#   JobWall=$(grep walltime= ${Job} | head -1)
-#   JobWall=${JobWall#*walltime=}
     JobWall=${MaxWallTime}
-#   JobCpus=$(grep :ppn= ${Job} | head -1)
-#   JobNodes=${JobCpus#*nodes=}
-#   JobNodes=${JobNodes%:*}
-#   JobCpus=${JobCpus#*:ppn=}
-#   ((JobCpus=JobCpus*JobNodes))
     JobCpus=${MaxNumberOfCores}
-    echo JOB ${Job##*/} scanned: JobCpus=$JobCpus, StreamCpus=$StreamCpus, JobWall=$JobWall, TimeLeft=$TimeLeft 
-    ((TimeLeft-JobWall>60)) && ((JobCpus<=StreamCpus)) && JobFile=${Job} && break
-    echo JOB ${Job##*/} rejected: JobCpus=$JobCpus, StreamCpus=$StreamCpus, JobWall=$JobWall, TimeLeft=$TimeLeft 
-    echo  moving ${Job##*/} back into ${StreamFlagDir%/*}
-    (cd $StreamFlagDir ; mv $Job ..)
+    echo "INFO: JOB ${Job##*/} scanned: JobCpus=$JobCpus, StreamCpus=$StreamCpus, JobWall=$JobWall, TimeLeft=$TimeLeft"
+    ((TimeLeft-JobWall>60)) && ((JobCpus<=StreamCpus)) && JobFile=${Job} && break   # enough time and cores to run this job, exit loop
+    echo "INFO: JOB ${Job##*/} rejected: JobCpus=$JobCpus, StreamCpus=$StreamCpus, JobWall=$JobWall, TimeLeft=$TimeLeft"
+    echo "INFO: moving ${Job##*/} back into ${StreamFlagDir%/*}"
+    (cd $StreamFlagDir ; mv $Job ..)    # move not selected job back into queue
   fi
 done
 [[ -z ${JobFile} ]] && exit 1
-cd ${HOME}
-# safety code below: limit one process to what the "job" requested
-#ulimit -t $((JobWall*OMP_NUM_THREADS)) # previous bad code, we want OMP_NUM_THREADS from job to run, not stream controller
+cd ${HOME}    # run from ${HOME} as a normal job would
+# safety limit below: limit CPU time for each process to what the "job" requested (wall time * number of threads in job processes)
 ulimit -t $((JobWall*MaxNumberOfThreads))  # OMP_NUM_THREADS from job extracted from SOUMET_RESOURCE_PROFILE_FOR_JOB
 ((runs=0))
 ((rerun=1))
 set -x
-export STREAM_STATUS=$StreamFlagFile.status
+export STREAM_STATUS=$StreamFlagFile.status  # environment variable passed to job to signal a rerun request
 while ((runs<rerun))
 do
   ((runs=runs+1))
   ((rerun=1))
   rm -f $STREAM_STATUS
   echo "${runs}:${JobFile}" >> $StreamFlagFile
-  export STREAM_RUN=${runs}
-  bash ${JobFile}
+  export STREAM_RUN=${runs}  # run attempt number, passed to "job"
+  bash ${JobFile}            # run the job using bash
   [[ -r $STREAM_STATUS ]] && grep -q 'rerun=' $STREAM_STATUS && . $STREAM_STATUS
 done
 [[ -r $STREAM_STATUS ]] && grep -q 'rerun=' $STREAM_STATUS && exit 1

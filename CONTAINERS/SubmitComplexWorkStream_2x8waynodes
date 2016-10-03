@@ -18,10 +18,10 @@ unset QUEUE_4CPU
 # example using 8 cores (1 node with 8 cores each)
 # 4  1 way queues (2 threads per process)
 #
-# comment next line for tests
-cat <<\EOJ |  ord_soumet - -t ${walltime} -mpi -cpus ${cpus}x1 -jn ${name} -shell nologin ${QuEuE} "$@"
-# uncomment next line for tests
-#cat <<\EOJ
+export ContainerJob=${TMPDIR}/ContainerJob_$$
+echo "export RunWorkStream=$(which run_work_stream)" >${ContainerJob}
+echo "export PickAndRunWork=$(which pick_and_run_work)" >>${ContainerJob}
+cat <<\EOJ >>${ContainerJob}
 #===============================================================================
 #                    start of section to be adjusted by user                   #
 #===============================================================================
@@ -89,7 +89,7 @@ instanciate() # create one sub-container. arguments will be passed verbatim to m
   [[ "${Arg1}" == 0:* ]] && HostTaskset=${Arg1#0:}    # if a taskset has been specified for node 0, use it
   export HostTaskset
   for p in ${MyProcesses} ; do taskset -cp $HostTaskset $p ; done   # run only on prescribed taskset (node 0 only)
-  ${HOME}/ECssm/multi/bin/run_work_stream -name ${name}-${instance} -maxidle $maxidle \
+  ${RunWorkStream:-${HOME}/ECssm/multi/bin/run_work_stream} -name ${name}-${instance} -maxidle $maxidle \
        -queues $queues 2>>${ListingFile}+${name}-${instance} 1>>${ListingFile}+${name}-${instance} &
   for p in ${MyProcesses} ; do taskset -cp 0-$((nodesize-1)) $p ; done           # run on any cpu
 # NODEFILE_PBS=${SAVE_HOSTFILE}
@@ -141,3 +141,7 @@ rm -f ${InstanceQuitFile}  # global quit signal file
 rm -f ${NodeFileDir}/*     # remove node files
 rmdir ${NodeFileDir}       # directory should now be empty, remove it
 EOJ
+cat ${ContainerJob}
+echo "ord_soumet ${ContainerJob} -t ${walltime} -mpi -cpus ${cpus}x1 -jn ${name} -shell nologin ${QuEuE} $@"
+#ord_soumet ${ContainerJob} -t ${walltime} -mpi -cpus ${cpus}x1 -jn ${name} -shell nologin ${QuEuE} "$@"
+rm -f ${ContainerJob}

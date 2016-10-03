@@ -1,75 +1,74 @@
 #!/bin/bash
-# usage: run_work_stream [-instances number] -name stream_name -maxidle nnn -queues name-1 name-2 ... name-N
+# usage: run_work_stream [-instances number_of_instances] -name stream_name -maxidle nnn -queues name-1 name-2 ... name-N
+# when called with a number of instances greater than 1 this script will call itself for each instance
 #
-#set -x
-if [[ "$1" == -instances ]]
+# environment variable TODO_UPON_EXIT contains a command line to run before exiting
+# environment variable INSTANCE may contain a sub-container instance name tag
+# environment variable InstanceQuitFile contains the file name of the quit signal file (quit if file does not exist)
+# environment variables JobStartTime and JobTimeLimit are expected to have been set in master job by soumet
+#
+# this script expects to find the pick_and_run_work script in the same directory as itself
+#                     or supplied using the PickAndRunWork environment variable
+#
+if [[ "$1" == -instances ]]  # start sub-containers (number of instances)
 then
   [[ -n "$2" ]] || exit 1
-  ((Instances=$2))
-  shift ; shift
-  if ((Instances>1))   # if not more than one instance, act as usual
+  ((Instances=$2))     # number of sub-container instances
+  shift ; shift        # get rid of -instances and associated value
+  if ((Instances>1))   # if more than one instance, recursive call for each instance, otherwise fall through
   then
     ((BATCH_MPI_CPUS>=Instances)) || ((Instances=BATCH_MPI_CPUS))
     ((BATCH_MPI_CPUS=BATCH_MPI_CPUS/Instances))
-    echo INFO: starting ${Instances} instances of ${0##*/}
-    while ((Instances>0))
+    echo "INFO: starting ${Instances} instances of ${0##*/}"
+    while ((Instances>0))   # loop over number of instances
     do
-      echo ${0} -instances 1 "$@"
-      INSTANCE=".${Instances}" ${0} -instances 1 "$@" &
-      ((Instances=Instances-1))
+      echo "INFO: backgrounding ${0} -instances 1 $@"
+      INSTANCE=".${Instances}" ${0} -instances 1 "$@" &    # start instance in background with proper value of env var INSTANCE
+      ((Instances=Instances-1))  # decrement instance counter
     done
-    wait
-    echo INFO: all instances  terminated
+    wait  # wait for backgrounded instances to terminate
+    echo "INFO: all instances  DONE"
     exit 0
   fi
 fi
-[[ "$1" == -name ]] || exit1
-[[ -n "$2" ]] || exit 1
-StreamProcessor="${2}_${JOB_ID}${INSTANCE:-.1}"
+[[ "$1" == -name ]] || exit 1   # the first arguments MUST BE -name some_name
+[[ -n "$2" ]]       || exit 1
+StreamProcessor="${2}_${JOB_ID}${INSTANCE:-.1}"   # default instance is 1, define name for this sub-container control
 unset INSTANCE
-shift ; shift
+shift ; shift                   # get rid of -name and associated value
 #
-[[ "$1" == -maxidle ]] || exit1
-[[ -n "$2" ]] || exit 1
+[[ "$1" == -maxidle ]] || exit 1  # next argument MUST BE -maxidle value
+[[ -n "$2" ]]          || exit 1
 MaxIdle=$2
-shift ; shift
+shift ; shift                     # get rid of -maxidle and associated value
 #
-[[ "$1" == -queues ]] || exit1
-[[ -n "$2" ]] || exit 1
-shift
+[[ "$1" == -queues ]] || exit 1   #  next argument MUST BE -queues name-1 name-2 ... name-N
+[[ -n "$2" ]]         || exit 1
+shift                             # get rid of -queues, all arguments are now fake queue names
 Streams="$*"
-#echo BATCH_MPI_CPUS=$BATCH_MPI_CPUS StreamProcessor=$StreamProcessor MaxIdle=$MaxIdle Streams=$Streams
-#exit 0
 #
-IdleSince=$(date +%s)
+IdleSince=$(date +%s)       # mark idle time start
 export MinCpusInJob=1       # do not pick a job that uses less than this number of cpus
 
-cd ${HOME}/.job_queues                       || exit 1
-printf "${Streams}" >${HOME}/.job_queues/.active_${StreamProcessor}.queues || exit 1
-
-#for Stream in $${Streams}
-#do
-#    [[ -d ${HOME}/.job_queues/${Stream} ]] || continue
-#    touch ${HOME}/.job_queues/${Stream}/.active_${StreamProcessor}     || exit 1
-#    mkdir ${HOME}/.job_queues/${Stream}/.active_${StreamProcessor}.d   || exit 1
-#done
+cd ${HOME}/.job_queues                                                     || exit 1    # queue master directory MUST exist
+printf "${Streams}" >${HOME}/.job_queues/.active_${StreamProcessor}.queues || exit 1    # create queues list file
 
 #
-# launch monitor
+# launch monitor ?
 #
-${0%/*}/u.job-monitor &
-
-TimeNow=$(date +%s)
-((IdleTime=TimeNow-IdleSince))
-while ((IdleTime<MaxIdle))
+#${0%/*}/u.job-monitor &
+export PickAndRunWork=${PickAndRunWork:-${0%/*}/pick_and_run_work}
+TimeNow=$(date +%s)              # get current date
+((IdleTime=TimeNow-IdleSince))   # idle since ?
+while ((IdleTime<MaxIdle))       # while max idle time not reached
 do
     printf "MinCpusInJob=${MinCpusInJob}\nMaxIdle=${MaxIdle}\nTotalIdleTime=${IdleTime}\n" > ${HOME}/.job_queues/.active_${StreamProcessor}
     ((ProcessedJobs=0))
-    for Stream in $(cat ${HOME}/.job_queues/.active_${StreamProcessor}.queues)   # loop over streams
+    for Stream in $(cat ${HOME}/.job_queues/.active_${StreamProcessor}.queues)   # loop over queues associated with this sub-container instance
     do
-	[[ -d ${HOME}/.job_queues/${Stream} ]] || continue
-	cd ${HOME}/.job_queues/${Stream}       || continue
-        touch .active_${StreamProcessor}       || continue
+	[[ -d ${HOME}/.job_queues/${Stream} ]] || continue   # nothing to do if directory associated with sub-container queue does not exist
+	cd ${HOME}/.job_queues/${Stream}       || continue   # or it is not accessible
+        touch .active_${StreamProcessor}       || continue   # mark sub-container as active by creating flag file and job capture directory
         [[ -d .active_${StreamProcessor}.d ]]  || mkdir .active_${StreamProcessor}.d || continue
 
 	export StreamDir=`pwd -P`
@@ -80,40 +79,42 @@ do
 	then
             [[ -r ${HOME}/.job_queues/.active_${StreamProcessor} ]] || break 10  # stop signal from user
 	    TimeNow=$(date +%s)
-	    ((TimeLeft=JobStartTime+JobTimeLimit-TimeNow))
+	    ((TimeLeft=JobStartTime+JobTimeLimit-TimeNow))     # time left in master job
 	    ((TimeLeft<75)) && \
               echo "INFO: less than 75 seconds left, exiting" && \
               break 10   # too little time left, break and cleanup
-	    ${0%/*}/pick_and_run_work  $TimeLeft  && \
+            # environment variables StreamFlagDir, StreamFlagFile passed to ${PickAndRunWork}
+            # job pick will occur from current directory
+	    ${PickAndRunWork}  $TimeLeft  && \
               ((ProcessedJobs=ProcessedJobs+1)) && \
               IdleSince=$(date +%s) && \
-              break  # got a job, try again to pick from highest queue
+              break  # got a job, start again to pick from highest priority queue (first queue in argument list)
 	fi
 
-    done
+    done   # end of loop over queues
 
-    if((ProcessedJobs==0))  # no job found in any stream, run a filler job
+    if((ProcessedJobs==0))  # no job found in any queue, sleep for 10 seconds if enough time left in master job
     then
       TimeNow=$(date +%s)
       ((IdleTime=TimeNow-IdleSince))
-      ((nsleeps==0)) && echo "IDLE=$IdleTime, MAXIDLE=$MaxIdle" 1>&2
-      ((TimeLeft=JobStartTime+JobTimeLimit-TimeNow))
-#      ((TimeLeft>=90))                && time run_simu_opt30_nompi
-      ((TimeLeft>=90))                && sleep 10
-      ((TimeLeft>=15 && TimeLeft<90)) && sleep 10
-      ((nsleeps=(nsleeps+1)%30))
+      ((nsleeps==0)) && echo "IDLE=$IdleTime, MAXIDLE=$MaxIdle" 1>&2   # message every 30 sleep intervals
+      ((TimeLeft=JobStartTime+JobTimeLimit-TimeNow))                   # time left in master job
+      ((TimeLeft>=15))                && sleep 10                      # DO NOT SLEEP if less than 15 seconds left
+      ((nsleeps=(nsleeps+1)%30))      # cyclical counter 0 -> 29
     fi
 
     TimeNow=$(date +%s)
-    ((IdleTime=TimeNow-IdleSince))
+    ((IdleTime=TimeNow-IdleSince))   # compute sub-container intance idle time
 
     [[ -r ${HOME}/.job_queues/.active_${StreamProcessor} ]] || break   # stop signal from user
-    [[ -f ${InstanceQuitFile} ]] || break                              # stop requested by another sub-container
-    . ${HOME}/.job_queues/.active_${StreamProcessor}                   # update MaxIdle, MinCpusInJob in case user changed the value
-    ((TimeLeft<75)) && echo "INFO: less than 75 seconds left, exiting" && break      # too little time left, break and cleanup
-done
+    [[ -f ${InstanceQuitFile} ]]                            || break   # stop requested by another sub-container
+    source ${HOME}/.job_queues/.active_${StreamProcessor}              # update MaxIdle, MinCpusInJob in case user changed the value(s)
+    ((TimeLeft<75)) && echo "INFO: less than 75 seconds left, exiting" && break      # too little time left, exit loop and cleanup
+done  # end of while max idle time not reached
 #
-rm -f ${InstanceQuitFile}                              # signal to other sub-containers
+# we are done, cleanup before exiting
+#
+rm -f ${InstanceQuitFile}                              # signal to other sub-containers that we have been idle for too long
 rm -f ${HOME}/.job_queues/.active_${StreamProcessor}   # cleanup at end of streams
 rm -f ${HOME}/.job_queues/.active_${StreamProcessor}.queues
 for Stream in $Streams
@@ -124,6 +125,6 @@ do
     rm -f ${HOME}/.job_queues/${Stream}/.active_${StreamProcessor}
     rmdir ${HOME}/.job_queues/${Stream}/.active_${StreamProcessor}.d
 done
-if [[ -n "${TODO_UPON_EXIT}" ]] ; then
+if [[ -n "${TODO_UPON_EXIT}" ]] ; then  # caller left things to do before exiting in env variable TODO_UPON_EXIT
   eval "${TODO_UPON_EXIT:-echo nothing to do upon exit}"
 fi
