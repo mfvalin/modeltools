@@ -1,5 +1,8 @@
 . s.ssmuse.dot gemclim_3.3.3.1-dev ovbin
 cd ${HOME}/CONTAINERS
 which r.mpirun2
-r.mpirun2 -pgm ./taskset.sh
-sleep 30
+export FLAGDIR=$(pwd -P)/$(hostname)_$$
+mkdir -p $FLAGDIR
+r.mpirun2 -pgm ./taskset.sh 
+ls $FLAGDIR/FLAG*
+sleep 10
