@@ -1,9 +1,43 @@
 #!/bin/bash
+usage() {
+cat <<EOT
+  usage: ${0##*/} -wall n_seconds -cpus n_cpus -nodesize n_cores [-queue q_name] -name job_name [-submit] -cfg config_file -- [arguments for ord_soumet]
+EOT
+exit 0
+}
+fatal() {
+  echo "missing mandatory argument -${1}, ABORTING"
+  usage
+  exit 1
+}
+[[ "$1" == -h || "$1" == --help ]] && usage
 #
-# all arguments will be passed to ord_soumet
-# called with  
-#    -t ${walltime} -mpi -cpus ${cpus}x1 -jn ${name} -shell nologin ${QuEuE} "$@"
-#    walltime, cpus, name, QuEuE : from user adjusted section
+# process arguments
+#
+walltime=""
+cpus=""
+nodesize=""
+QuEuE=""
+ConfigFile=""
+jobname=""
+SuBmIt=""
+while [[ -n "$1" ]] ; do
+  [[ "$1" == -wall ]]     && walltime="$2"   && shift && shift && continue
+  [[ "$1" == -cpus ]]     && cpus="$2"       && shift && shift && continue
+  [[ "$1" == -nodesize ]] && nodesize="$2"   && shift && shift && continue
+  [[ "$1" == -queue ]]    && QuEuE="$2"      && shift && shift && continue
+  [[ "$1" == -cfg ]]      && ConfigFile="$2" && shift && shift && continue
+  [[ "$1" == -name ]]     && jobname="$2"    && shift && shift && continue
+  [[ "$1" == -submit ]]   && SuBmIt="YES"             && shift && continue
+  [[ "$1" == -- ]]                                    && shift && break
+  echo "FATAL: invalid argument '$1', ABORTING" && exit 1
+done
+[[ -z ${ConfigFile} ]] && fatal cfg
+[[ -z ${walltime} ]]   && fatal wall
+[[ -z ${cpus} ]]       && fatal cpus
+[[ -z ${jobname} ]]    && fatal name
+[[ -z ${nodesize} ]]   && fatal nodesize
+[[ -n ${QuEuE} ]]      && QuEuE="-q ${QuEuE}"
 #
 unset QUEUE_1CPU
 unset QUEUE_2CPU
@@ -23,38 +57,13 @@ if [[ -z ${PickAndRunWork} ]] ; then
   echo "FATAL: pick_and_run_work_${VERSION} not found, ABORTING"
   exit 1
 fi
-#===============================================================================
-#                    START of section to be adjusted by user                   #
-#===============================================================================
-# example using 16 cores (2 nodes with 8 cores each)
 #
-walltime=600             # wall clock time for container
-cpus=16                  # number of cores needed by container
-QuEuE=""                 # queue to submit to
-name="InputAndModel"     # job name for container
-nodesize=8               # number of cores per node
-cat <<\EOJ >${ContainerJob}.user
-#
-#------------------------------------------------------------------------------------------------------------------------------
-# launch 1 x 12 way queue, 1 thread per process
-#------------------------------------------------------------------------------------------------------------------------------
-export maxidle=60
-name=micro12 ; queues="${name}" ; BATCH_MPI_CPUS=12 ; export OMP_NUM_THREADS=1 ;   # 12 processes with 1 thread  = 12 cores
-instanciate 0:4-7 1:0-7      # node 0 cpus 4-7, node 1 cpus 0-7
-#------------------------------------------------------------------------------------------------------------------------------
-# launch 2 x 1 way queues
-#------------------------------------------------------------------------------------------------------------------------------
-export maxidle=${walltime}
-# first queue called micro1
-name=micro1 ; queues="${name} ${name}-1" ; BATCH_MPI_CPUS=1 ; export OMP_NUM_THREADS=2         # 2 cores per instance = 2 cores
-instanciate 0:0-1           # node 0, cpu 0-1
-# second queue called micro2
-name=micro2 ; queues="${name} ${name}-1" ; BATCH_MPI_CPUS=1 ; export OMP_NUM_THREADS=2         # 2 cores per instance = 2 cores
-instanciate 0:2-3           # node 0, cpu 2-3
-EOJ
-#===============================================================================
-#                     END of section to be adjusted by user                    #
-#===============================================================================
+if [[ -r ${ConfigFile} ]] ; then
+  cat ${ConfigFile} >${ContainerJob}.user
+else
+  echo "FATAL: cannot read configuration file '${ConfigFile}', ABORTING"
+  exit 1
+fi
 #
 cat <<EOJ >${ContainerJob}
 export RunWorkStream=${RunWorkStream}
@@ -162,7 +171,7 @@ rm -f ${InstanceQuitFile}  # global quit signal file
 rm -f ${NodeFileDir}/*     # remove node files
 rmdir ${NodeFileDir}       # directory should now be empty, remove it
 EOJ
-cat ${ContainerJob}
-echo "ord_soumet ${ContainerJob} -t ${walltime} -mpi -cpus ${cpus}x1 -jn ${name} -shell nologin ${QuEuE} $@"
-#ord_soumet ${ContainerJob} -t ${walltime} -mpi -cpus ${cpus}x1 -jn ${name} -shell nologin ${QuEuE} "$@"
+[[ -z ${SuBmIt} ]] && cat ${ContainerJob}
+echo "ord_soumet ${ContainerJob} -t ${walltime} -mpi -cpus ${cpus}x1 -jn ${jobname} -shell nologin ${QuEuE} $@"
+[[ "${SuBmIt}" == YES ]] &&  ord_soumet ${ContainerJob} -t ${walltime} -mpi -cpus ${cpus}x1 -jn ${jobname} -shell nologin ${QuEuE} "$@"
 rm -f ${ContainerJob}
