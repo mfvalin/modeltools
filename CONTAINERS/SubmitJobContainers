@@ -1,7 +1,7 @@
 #!/bin/bash
 usage() {
 cat <<EOT
-  usage: ${0##*/} -wall n_seconds -cpus n_cpus -nodesize n_cores [-queue q_name] -name job_name [-submit] -cfg config_file -- [arguments for ord_soumet]
+  usage: ${0##*/} -t n_seconds -cpus n_cpus -nodesize n_cores [-queue q_name] -name job_name [-submit] -cfg config_file -- [arguments for ord_soumet]
 EOT
 exit 0
 }
@@ -22,7 +22,7 @@ ConfigFile=""
 jobname=""
 SuBmIt=""
 while [[ -n "$1" ]] ; do
-  [[ "$1" == -wall ]]     && walltime="$2"   && shift && shift && continue
+  [[ "$1" == -t ]]        && walltime="$2"   && shift && shift && continue
   [[ "$1" == -cpus ]]     && cpus="$2"       && shift && shift && continue
   [[ "$1" == -nodesize ]] && nodesize="$2"   && shift && shift && continue
   [[ "$1" == -queue ]]    && QuEuE="$2"      && shift && shift && continue
@@ -47,12 +47,17 @@ unset QUEUE_4CPU
 export ContainerJob=${TMPDIR}/ContainerJob_$$
 export VERSION=1.0
 #
+Me=$(readlink -e ${0})
+# try using which to locate run_work_stream_${VERSION} and pick_and_run_work_${VERSION}
+# if nothing is found, try from my own directory
 export RunWorkStream=$(readlink -e $(which run_work_stream_${VERSION}) 2>/dev/null)
+[[ -z ${RunWorkStream} ]] && RunWorkStream=${Me%/*}/run_work_stream_${VERSION}
 if [[ -z ${RunWorkStream} ]] ; then
   echo "FATAL: run_work_stream_${VERSION} not found, ABORTING"
   exit 1
 fi
 export PickAndRunWork=$(readlink -e $(which pick_and_run_work_${VERSION}) 2>/dev/null)
+[[ -z ${PickAndRunWork} ]] && PickAndRunWork=${Me%/*}/pick_and_run_work_${VERSION}
 if [[ -z ${PickAndRunWork} ]] ; then
   echo "FATAL: pick_and_run_work_${VERSION} not found, ABORTING"
   exit 1
