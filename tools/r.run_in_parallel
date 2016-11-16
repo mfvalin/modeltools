@@ -76,7 +76,7 @@ mpiexec_Linux() {
         OPEN_MPI_PARMS="--mca btl sm,self ${OPEN_MPI_PARMS}"         # do not try to use infiniband
       [[ "$mpirun" == mpirun ]] && [[ -n ${OPAL_PREFIX} ]] && \
         OPEN_MPI_PARMS="--prefix ${OPAL_PREFIX} ${OPEN_MPI_PARMS}"    # if not using rumpirun.openmpi (Dorval EC clusters)
-      OPEN_MPI_PARMS="--mca shmem posix ${OPEN_MPI_PARMS}"
+      OPEN_MPI_PARMS="--mca shmem mmap ${OPEN_MPI_PARMS}"
       echo "=== OPEN_MPI_PARMS=${OPEN_MPI_PARMS} ==="
       mpiexec_Linux_launch OpenMPI ${OPEN_MPI_PARMS} "$@"
       ;;
@@ -635,13 +635,15 @@ MY_NODEFILE=${PARALLEL_NODEFILE:-${GECOSHEP_HOSTS_FILE:-${GECOSHEP_HOSTFILE:-${L
 #Version="1.1.23a 2016/07/21" # fixed for ALPS (nodemap/coremap deactivation)
 #Version="1.1.23b 2016/07/21" # added pdomain use/creation/removal (env var USE_PDOMAIN , -alpspd)
 #Version="1.1.23c 2016/07/25" # gpsc related mods (from Laurent)
-Version="1.1.23d 2016/08/04" # added PE remapping capability
+#Version="1.1.23d 2016/08/04" # added PE remapping capability
+#Version="1.1.24 2016/09/01" # Added split TMPDIR option and separate tmpdir for openmpi mpirun
+Version="1.1.25 2016/11/16" # Added usage of r.makedirs if available to speed up listing directory creation
 echo "${0##*/} version $Version avec /bin/ksh93"
 export APRUN="$(which aprun 2>/dev/null)"
 eval `cclargs_lite -D "" $0 \
     -alpspd "" "NoName" "[use Cray ALPS]" \
     -args "" "" "[arguments to the command]" \
-    -bind "" "bind" "[]" \
+    -bind "none" "bind" "[]" \
     -coremap "NoNe" "NoNe" "[core affinity map]" \
     -debug "" "5" "[]" \
     -dryrun "" "dryrun" "[]" \
@@ -684,6 +686,7 @@ eval `cclargs_lite -D "" $0 \
     -selftest "" "c.f.fail.999999" "[quick selftest]" \
     -smt "1" "2" "[SMT or hyperthreading]" \
     -spliteo "no" "yes" "[split stderr from stdout]" \
+    -splittmp "" "splittmp" "[Unique TMPDIR for each PE]"\
     -tag "child" "full" "[full/child/member/stderr/none/seq]" \
     -timeout "60" "60" "[timeout for multiple instances]" \
     -tmpdir "$(pwd -P)/tmpdir${TRUE_HOST}$$" "" "[temporary directory visible by all processes]" \
@@ -731,7 +734,6 @@ fi
 mpirun=${openmpi:-${mpich2:-${mpirun:-mpirun}}}   # in case rumpirun.openmpi not found
 #
 echo "INFO: START of ${0##*/} : $(date)"
-#[[ -z ${tmpdir} ]]  && tmpdir="$(pwd -P)/tmpdir${TRUE_HOST}$$"
 [[ -n ${inorder} ]] && processorder="yes"
 if [[ -n ${members} ]] ; then
   if [[ ${members} == *x* ]] ; then
@@ -780,7 +782,7 @@ if [[ -d "${instancedir}" && -n "${instances}" ]] ; then     # we have co-runnin
     set -x
     ${0} -npex ${pes:-${npex}} -npey 1 -processorder "${processorder}" -tmpdir "${tmpdir}" -minstdout ${minstdout} \
          -coremap "${coremap}" -nodemap "${nodemap}" -ib "${ib}" -noib "${noib}" -verbose "${verbose}" \
-         -tag "${tag}" -spliteo "${spliteo}" -debug "${debug}" -nocleanup "${nocleanup}" -geometry "${geometry}" \
+         -tag "${tag}" -spliteo "${spliteo}" -splittmp "${splittmp}" -debug "${debug}" -nocleanup "${nocleanup}" -geometry "${geometry}" \
          -outp "${outp}" -errp "${errp}" -preexec "${preexec}" -packoutput "${packoutput}" -dryrun "${dryrun}" \
          -offset "${offset}" -mpiargs "${mpiargs}" -selftest "${selftest}" \
          -mpirun "${mpirun}" -openmpi "${openmpi}" -mpich2 "${mpich2}" \
@@ -866,17 +868,17 @@ rm -f ${MY_NODEFILE}
 if [[ ! -r ${nodefile} ]] ; then   # no nodefile supplied, make one
   nodefile=${MY_NODEFILE}__
   rm -f ${nodefile}
-  if tty -s ; then
-    echo "INFO: no nodefile found, creating one with $npe_total x $OMP_NUM_THREADS entries"
+  # if tty -s ; then
+    echo "INFO: no nodefile found, creating one with $npe_total entries"
     ((r=0))
-    while ((r < npe_total*OMP_NUM_THREADS)) ; do echo localhost >>${nodefile} ; ((r=r+1)) ; done
-  else
-    if [[ "$hostos" == Linux ]] ; then  # no nodefile expected under AIX in batch mode
-      echo "ERROR: no nodefile found, not an interactive job, Linux OS, aborting"
-      rm -rf ${tmpdir}
-      exit 1
-    fi
-  fi  # tty -s
+    while ((r < npe_total)) ; do echo localhost >>${nodefile} ; ((r=r+1)) ; done
+  # else
+  #  if [[ "$hostos" == Linux ]] ; then  # no nodefile expected under AIX in batch mode
+  #    echo "ERROR: no nodefile found, not an interactive job, Linux OS, aborting"
+  #    rm -rf ${tmpdir}
+  #    exit 1
+  #  fi
+  #fi  # tty -s
 #else
 #  echo "INFO: sorting ${nodefile} into ${MY_NODEFILE}__"
 #  sort  <${nodefile} >${MY_NODEFILE}__
@@ -1037,6 +1039,11 @@ Index=\${PIndex[\${MP_CHILD}]}
 
 cd \${DNames[\${Index}]}
 export OMP_NUM_THREADS=\${NThreads[\${Index}]}
+if [[ "$splittmp" == "splittmp" ]]
+then
+  export TMPDIR=\$TMPDIR/\$HOSTNAME.\$\$
+  mkdir -p \$TMPDIR
+fi
 ${preexec} \${PNames[\${Index}]} ${args}
 Status=\$?
 ((Status==0)) && $CMD_rm -f ${tmpdir}/fail.\${MP_Tag}.\${MP_SeqNum}
@@ -1162,6 +1169,11 @@ export WORLD_CHILD
 [[ -z "${nosep}" ]] && \
   [[ -n "${processorder}" ]] && \
   /usr/bin/printf "============== stdout W:0:%4.4d M:%4.4d-%4.4d Seq:%s ==============\n" \${RP_WorldChild} \${RP_Member} \${RP_MemberChild} \${MP_SeqNum}
+if [[ "$splittmp" == "splittmp" ]]
+then
+  export TMPDIR=\$TMPDIR/\$HOSTNAME.\$\$
+  mkdir -p \$TMPDIR
+fi
 ${preexec} ${pgm} ${args}
 Status=\$?
 ((Status==0)) && $CMD_rm -f ${tmpdir}/fail.\${MP_Tag}.\${MP_SeqNum}
@@ -1239,11 +1251,19 @@ done    # while ((MpiCommWorld<MpiCommWorlds))
 #
 ((npe_total=TotalInstances))
 # create stdout/stderr directories if necessary
-if [[ -n ${processorder} ]] ; then
-  for ISeqNum in $(seq 0 1 $((TotalInstances-1)) )    #  a arranger pour le cas MPMD ====================================
-  do
-    /usr/bin/printf "%s/%4.4d\n" ${tmpdir} ${ISeqNum}
-  done  | xargs -L30 mkdir
+if [[ -n ${processorder} ]] ; then    #  a arranger pour le cas MPMD ====================================
+  if which r.makedirs 2>/dev/null 1>/dev/null ; then 
+    r.makedirs ${tmpdir} ${TotalInstances} 4
+  else 
+    CurrentDIR=$PWD
+    cd ${tmpdir}
+    for ISeqNum in $(seq 0 1 $((TotalInstances-1)) )
+    do
+      /usr/bin/printf "%4.4d\n" ${ISeqNum}
+    done  | xargs -L100 mkdir
+    cd $CurrentDIR
+    unset CurrentDIR
+  fi
 #  echo "INFO: =============================================="
 #  echo "INFO: temporary listings for all members in ${tmpdir}"
 #  echo "INFO: =============================================="
