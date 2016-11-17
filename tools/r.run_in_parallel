@@ -1238,7 +1238,8 @@ cd ${tmpdir}
 for the_file in \${MP_SeqNum%??}[0-9][0-9]/stdout.*
 do
   lines=0
-  [[ -r \${the_file} ]] && lines="\$($CMD_wc -l <\${the_file})" && ((lines<${minstdout})) && $CMD_rm \${the_file} && continue # remove stdout files shorter than minimum
+  [[ -r \${the_file} ]] || continue
+  lines="\$($CMD_wc -l <\${the_file})" && ((lines<${minstdout})) && $CMD_rm \${the_file} && continue # remove stdout files shorter than minimum
   MP_Tag=\${the_file##*.}
   echo "=== processing \${the_file} MP_Tag=\$MP_Tag ==="
   [[ -f \${the_file} ]] && \
