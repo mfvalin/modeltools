@@ -637,7 +637,8 @@ MY_NODEFILE=${PARALLEL_NODEFILE:-${GECOSHEP_HOSTS_FILE:-${GECOSHEP_HOSTFILE:-${L
 #Version="1.1.23c 2016/07/25" # gpsc related mods (from Laurent)
 #Version="1.1.23d 2016/08/04" # added PE remapping capability
 #Version="1.1.24 2016/09/01" # Added split TMPDIR option and separate tmpdir for openmpi mpirun
-Version="1.1.25 2016/11/16" # Added usage of r.makedirs if available to speed up listing directory creation
+#Version="1.1.25 2016/11/16" # Added usage of r.makedirs if available to speed up listing directory creation
+Version="1.1.25a 2016/11/17" # Optimized processing of listings by tasks nn00
 echo "${0##*/} version $Version avec /bin/ksh93"
 export APRUN="$(which aprun 2>/dev/null)"
 eval `cclargs_lite -D "" $0 \
@@ -1226,18 +1227,29 @@ MP_Tag="\$(/usr/bin/printf '${F_world}${F_member}${F_child}${F_seq}' ${V_world} 
 #[[ -n "${processorder}" ]] &&
 $CMD_touch ${tmpdir}/fail.\${MP_Tag}.\${MP_SeqNum}
 source ${MpiRunScript}.${MpiCommWorld}  ${RedirectStdout} ${RedirectStderr}
-[[ -x ${tmpdir}/null_mpi ]] && ${tmpdir}/null_mpi
+[[ -n "${LOADL_STEP_CLASS}" ]] && [[ -x ${tmpdir}/null_mpi ]] && ${tmpdir}/null_mpi   # AIX LoadLeveler only
 [[ -n "${processorder}" ]] || exit 0     # no listings to process, exit
-lines=0
-the_file=${tmpdir}/\${MP_SeqNum}/stdout.\${MP_Tag}
-[[ -r \${the_file} ]] && lines="\$($CMD_wc -l <\${the_file})" && ((lines<${minstdout})) && $CMD_rm \${the_file}  # remove stdout files shorter than minimum
-[[ \${MP_SeqNum} != *00 ]] && $CMD_true && exit
-$CMD_sleep 3
-for the_file in ${tmpdir}/\${MP_SeqNum%??}[0-9][0-9]/stdout.*
+# lines=0
+# the_file=${tmpdir}/\${MP_SeqNum}/stdout.\${MP_Tag}
+# [[ -r \${the_file} ]] && lines="\$($CMD_wc -l <\${the_file})" && ((lines<${minstdout})) && $CMD_rm \${the_file}  # remove stdout files shorter than minimum
+[[ \${MP_SeqNum} != *00 ]] && $CMD_true && exit   # output pre processing by nn00 processes
+$CMD_sleep 3  # give time to flush buffers from other processes
+cd ${tmpdir}
+for the_file in \${MP_SeqNum%??}[0-9][0-9]/stdout.*
 do
+  lines=0
+  [[ -r \${the_file} ]] && lines="\$($CMD_wc -l <\${the_file})" && ((lines<${minstdout})) && $CMD_rm \${the_file} && continue # remove stdout files shorter than minimum
   MP_Tag=\${the_file##*.}
-  [[ -f \${the_file} ]] && { [[ -z "${nosep}" ]] && echo "" ; $CMD_cat \${the_file} | $CMD_sed "s/^/${Prefix2}\${MP_Tag}: /" ;} >>${tmpdir}/\${MP_SeqNum}/stdout
-  [[ -f \${the_file%/*}/stderr ]] && { [[ -z "${nosep}" ]] && echo "" ; [[ -z "${nosep}" ]] && echo "${Prefix3}\${MP_Tag}: ============== stderr \${MP_Tag} ==============" ; $CMD_cat \${the_file%/*}/stderr | $CMD_sed "s/^/${Prefix3}\${MP_Tag}: /" ; } >>${tmpdir}/\${MP_SeqNum}/stdout
+  echo "=== processing \${the_file} MP_Tag=\$MP_Tag ==="
+  [[ -f \${the_file} ]] && \
+    { [[ -z "${nosep}" ]] && echo "" ; \
+      $CMD_cat \${the_file} | $CMD_sed "s/^/${Prefix2}\${MP_Tag}: /" ; \
+    } >>\${MP_SeqNum}/stdout
+  [[ -f \${the_file%/*}/stderr ]] && \
+    { [[ -z "${nosep}" ]] && echo "" ; \
+      [[ -z "${nosep}" ]] && echo "${Prefix3}\${MP_Tag}: ============== stderr \${MP_Tag} ==============" ; \
+      $CMD_cat \${the_file%/*}/stderr | $CMD_sed "s/^/${Prefix3}\${MP_Tag}: /" ; \
+    } >>\${MP_SeqNum}/stdout
 done
 true
 EOT
