@@ -639,7 +639,8 @@ MY_NODEFILE=${PARALLEL_NODEFILE:-${GECOSHEP_HOSTS_FILE:-${GECOSHEP_HOSTFILE:-${L
 #Version="1.1.24 2016/09/01" # Added split TMPDIR option and separate tmpdir for openmpi mpirun
 #Version="1.1.25 2016/11/16" # Added usage of r.makedirs if available to speed up listing directory creation
 #Version="1.1.25a 2016/11/17" # Optimized processing of listings by tasks nn00
-Version="1.1.25b 2016/11/123" # cosmetic mods and comments
+#Version="1.1.25b 2016/11/23" # cosmetic mods and comments
+Version="1.1.25c 2016/11/24" # further path optimizations
 echo "${0##*/} version $Version avec /bin/ksh93"
 export APRUN="$(which aprun 2>/dev/null)"
 eval `cclargs_lite -D "" $0 \
@@ -959,8 +960,8 @@ touch ${ParallelScript}.0
 #################################################################################################################################
 # stdout and stderr redirection
 #################################################################################################################################
-export RedirectStdout="1>${tmpdir}/\${MP_SeqNum}/stdout.\${MP_Tag}"   # will be expanded at run time in ParallelScript
-export RedirectStderr="2>${tmpdir}/\${MP_SeqNum}/stderr"   # will be expanded at run time in ParallelScript
+export RedirectStdout="1>\${MP_SeqNum}/stdout.\${MP_Tag}"   # will be expanded at run time in ParallelScript
+export RedirectStderr="2>\${MP_SeqNum}/stderr"   # will be expanded at run time in ParallelScript
 [[ "${spliteo}" == no ]] && RedirectStderr="2>&1"
 [[ -z ${processorder} ]] && RedirectStderr="" && RedirectStdout=""
 export  Prefix3="${errp}-"
@@ -1038,7 +1039,7 @@ export WORLD_CHILD
 [[ -z "${nosep}" ]] &&
   [[ -n "${processorder}" ]] &&
   /usr/bin/printf "============== stdout W:${MpiCommWorld}:%4.4d M:%4.4d-%4.4d Seq:%s ==============\n" \${RP_WorldChild} \${RP_Member} \${RP_MemberChild} \${MP_SeqNum}
-source ${MpiRunParms}.${MpiCommWorld}
+source ./${MpiRunParms#${tmpdir}/}.${MpiCommWorld}
 PNames=(${ProgramNames[@]})
 DNames=(${DirNames[@]})
 Index=\${PIndex[\${MP_CHILD}]}
@@ -1236,11 +1237,12 @@ export RP_Child="\$((MP_CHILD))"            # global child number, same as MP_CH
 export RP_Member=\$((RP_WorldChild/${npex}+${offset}))      # member number in this world (including offset)
 export RP_MemberChild=\$((RP_WorldChild-RP_WorldChild/${npex}*${npex}))   # child ordinal within this member
 MP_Tag="\$(/usr/bin/printf '${F_world}${F_member}${F_child}${F_seq}' ${V_world} ${V_member} ${V_child} ${V_seq})"
-[[ -n "${debug}" ]] && $CMD_env | $CMD_sort >${tmpdir}/.mpi_env_\$\$_\$($CMD_hostname)
+cd ${tmpdir}
+[[ -n "${debug}" ]] && $CMD_env | $CMD_sort >.mpi_env_\$\$_\$($CMD_hostname)
 #
 #[[ -n "${processorder}" ]] &&
-$CMD_touch ${tmpdir}/fail.\${MP_Tag}.\${MP_SeqNum}
-source ${MpiRunScript}.${MpiCommWorld}  ${RedirectStdout} ${RedirectStderr}
+$CMD_touch fail.\${MP_Tag}.\${MP_SeqNum}
+source ./${MpiRunScript#${tmpdir}/}.${MpiCommWorld}  ${RedirectStdout} ${RedirectStderr}
 [[ -n "${LOADL_STEP_CLASS}" ]] && [[ -x ${tmpdir}/null_mpi ]] && ${tmpdir}/null_mpi   # AIX LoadLeveler only
 [[ -n "${processorder}" ]] || exit 0     # no listings to process, exit
 # lines=0
