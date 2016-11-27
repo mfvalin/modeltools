@@ -1267,7 +1267,7 @@ for dir in \${MP_SeqNum%??}??  ; do
   [ -r \${the_file} ] || continue
   MP_Tag=\${the_file##*.}
   lines="\$($CMD_wc -l <\${the_file})" && \
-    [[ \${MP_Tag} != *00 ]] && \
+    [[ \${MP_Tag} != *00000 ]] && \
     ((lines<${minstdout})) && \
     $CMD_rm \${the_file} && \
     continue                   # remove stdout files shorter than minimum
