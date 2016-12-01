@@ -640,7 +640,7 @@ wait_for() {
 #Version="1.1.25e 2016/11/27"  # message touchups, r.makedirs instead of r.makedir
 #Version="1.1.25f 2016/12/01"  # fixed launch directory in "simple" case
 true
-Version="1.1.25f 2016/12/01"  # fixed launching directory in "simple" case
+Version="1.1.26 2016/12/01"  # "simple" case no longer used
 echo "INFO: ${0##*/} version $Version ( /bin/ksh93 )"
 MY_NODEFILE=${PARALLEL_NODEFILE:-${GECOSHEP_HOSTS_FILE:-${GECOSHEP_HOSTFILE:-${LOADL_HOSTFILE:-${PBS_NODEFILE:-${HOME}/.PBS_NODEFILE}}}}}
 [[ ! -f "${MY_NODEFILE}" ]] && \
@@ -997,7 +997,7 @@ set -- $pgm @@
 ((TotalInstances=0))
 ((TotalThreads=0))
 #################################################################################################################################
-if [[ "$3" != "" ]] ; then # complex sequence, SPMD or MPMD, (automatic multiple MPI worlds with @@)
+# if [[ "$3" != "" ]] ; then # complex sequence, SPMD or MPMD, (automatic multiple MPI worlds with @@)
   unset ProGrams Directories  ProgramIndex ProgramNames DirNames
 #################################################################################################################################
   while [[ -n "${1}" ]]
@@ -1158,54 +1158,54 @@ EOT
 #==================================================================================================
   if ((ErRoR > 0)) ; then echo "$ErRoR ERROR(S) detected" ; local_cleanup ; exit 1 ; fi
 #
-else #################### simple SPMD case, one MPI world, old style call ##########################
-#
-  ((TotalInstances=npe_total))
-  [[  "${pgm}" == /* ]] || pgm="${SetCurrentDir}/${pgm}"  # relative path, add "current" directory
-  [[ -x $pgm ]] || pgm="$(which ${1} 2>/dev/null)"
-  if [[ ! -x $pgm ]] ; then                        # same executable for all worlds
-    echo "ERROR: ${1} does not exist or is not executable"
-    local_cleanup
-    exit 1
-  fi
-  MpiCommWorld=0
-  MpiCommWorlds=1
-  ((NDomains=NDomains+1))
-  RPN_COMM_DOM=",0,1,$((npe_total-1))"
-  PeInWorld[0]=${npe_total}
-  ThreadsInWorld[0]=${OMP_NUM_THREADS}
-  MembersInWorld[0]=${npey}
-  ((TotalThreads=OMP_NUM_THREADS))
-#==================================================================================================
-#=========================== instance script, sourced by ParallelScript ===========================
-#==================================================================================================
-echo "INFO: simple SPMD"
-  cat <<EOT >${MpiRunScript}.0   # MpiCommWorld is 0 in this case
-#!/bin/ksh93
-# SHELL for scripts run under AIX/POE MUST BE /bin/ksh93
-unset RPN_COMM_DOM
-unset RPN_COMM_DIRS
-export OMP_NUM_THREADS=${NLThreads:-${OMP_NUM_THREADS}}
-((WORLD_CHILD=MP_CHILD))
-export WORLD_CHILD
-[[ -z "${nosep}" ]] && \
-  [[ -n "${processorder}" ]] && \
-  /usr/bin/printf "============== stdout W:0:%5.5d M:%5.5d-%5.5d Seq:%s ==============\n" \${RP_WorldChild} \${RP_Member} \${RP_MemberChild} \${MP_SeqNum}
-if [[ "$splittmp" == "splittmp" ]]
-then
-  export TMPDIR=\$TMPDIR/\$HOSTNAME.\$\$
-  mkdir -p \$TMPDIR
-fi
-cd ${SetCurrentDir}
-${preexec} ${pgm} ${args}
-Status=\$?
-((Status==0)) && $CMD_rm -f ${tmpdir}/fail.\${MP_Tag}.\${MP_SeqNum}
-echo "END of child \${WORLD_CHILD} with status = \${Status}  \$($CMD_date)"
-EOT
-#==================================================================================================
-  echo "INFO: ${npe_total} instances of '$pgm' in MPI world 0"
-#
-fi ########################## if complex sequence, possibly MPMD ####################
+# else #################### simple SPMD case, one MPI world, old style call ##########################
+# #
+#   ((TotalInstances=npe_total))
+#   [[  "${pgm}" == /* ]] || pgm="${SetCurrentDir}/${pgm}"  # relative path, add "current" directory
+#   [[ -x $pgm ]] || pgm="$(which ${1} 2>/dev/null)"
+#   if [[ ! -x $pgm ]] ; then                        # same executable for all worlds
+#     echo "ERROR: ${1} does not exist or is not executable"
+#     local_cleanup
+#     exit 1
+#   fi
+#   MpiCommWorld=0
+#   MpiCommWorlds=1
+#   ((NDomains=NDomains+1))
+#   RPN_COMM_DOM=",0,1,$((npe_total-1))"
+#   PeInWorld[0]=${npe_total}
+#   ThreadsInWorld[0]=${OMP_NUM_THREADS}
+#   MembersInWorld[0]=${npey}
+#   ((TotalThreads=OMP_NUM_THREADS))
+# #==================================================================================================
+# #=========================== instance script, sourced by ParallelScript ===========================
+# #==================================================================================================
+# echo "INFO: simple SPMD"
+#   cat <<EOT >${MpiRunScript}.0   # MpiCommWorld is 0 in this case
+# #!/bin/ksh93
+# # SHELL for scripts run under AIX/POE MUST BE /bin/ksh93
+# unset RPN_COMM_DOM
+# unset RPN_COMM_DIRS
+# export OMP_NUM_THREADS=${NLThreads:-${OMP_NUM_THREADS}}
+# ((WORLD_CHILD=MP_CHILD))
+# export WORLD_CHILD
+# [[ -z "${nosep}" ]] && \
+#   [[ -n "${processorder}" ]] && \
+#   /usr/bin/printf "============== stdout W:0:%5.5d M:%5.5d-%5.5d Seq:%s ==============\n" \${RP_WorldChild} \${RP_Member} \${RP_MemberChild} \${MP_SeqNum}
+# if [[ "$splittmp" == "splittmp" ]]
+# then
+#   export TMPDIR=\$TMPDIR/\$HOSTNAME.\$\$
+#   mkdir -p \$TMPDIR
+# fi
+# cd ${SetCurrentDir}
+# ${preexec} ${pgm} ${args}
+# Status=\$?
+# ((Status==0)) && $CMD_rm -f ${tmpdir}/fail.\${MP_Tag}.\${MP_SeqNum}
+# echo "END of child \${WORLD_CHILD} with status = \${Status}  \$($CMD_date)"
+# EOT
+# #==================================================================================================
+#   echo "INFO: ${npe_total} instances of '$pgm' in MPI world 0"
+# #
+# fi ########################## if complex sequence, possibly MPMD ####################
 #==================================================================================================
 #=================== prepare primary launch scripts (one per world) ===============================
 #==================================================================================================
