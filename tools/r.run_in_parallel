@@ -638,8 +638,9 @@ wait_for() {
 #Version="1.1.25c 2016/11/24" # further path optimizations
 #Version="1.1.25d 2016/11/25" # further listing collection optimizations, member numbers bumped from 4 to 5 digits
 #Version="1.1.25e 2016/11/27"  # message touchups, r.makedirs instead of r.makedir
+#Version="1.1.25f 2016/12/01"  # fixed launch directory in "simple" case
 true
-Version="1.1.25e 2016/11/27"  # message touchups, r.makedirs instead of r.makedir
+Version="1.1.25f 2016/12/01"  # fixed launching directory in "simple" case
 echo "INFO: ${0##*/} version $Version ( /bin/ksh93 )"
 MY_NODEFILE=${PARALLEL_NODEFILE:-${GECOSHEP_HOSTS_FILE:-${GECOSHEP_HOSTFILE:-${LOADL_HOSTFILE:-${PBS_NODEFILE:-${HOME}/.PBS_NODEFILE}}}}}
 [[ ! -f "${MY_NODEFILE}" ]] && \
@@ -1195,6 +1196,7 @@ then
   export TMPDIR=\$TMPDIR/\$HOSTNAME.\$\$
   mkdir -p \$TMPDIR
 fi
+cd ${SetCurrentDir}
 ${preexec} ${pgm} ${args}
 Status=\$?
 ((Status==0)) && $CMD_rm -f ${tmpdir}/fail.\${MP_Tag}.\${MP_SeqNum}
