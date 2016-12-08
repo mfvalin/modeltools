@@ -75,6 +75,7 @@ export RunWorkStream=${RunWorkStream}
 export PickAndRunWork=${PickAndRunWork}
 export walltime=${walltime}
 export nodesize=${nodesize}
+export TheJobName=${jobname}
 EOJ
 #
 cat <<\EOJ >>${ContainerJob}
@@ -149,7 +150,12 @@ instanciate() # create one sub-container. arguments will be passed verbatim to m
   ((instance=instance+1))                         # bump instance count
 }
 #------------------------------------------------------------------------------------------------------------------------------
-mkdir -p ${HOME}/.job_queues/nodefiledir
+mkdir -p ${HOME}/.job_queues/nodefiledir           # directory containing control flags
+export TheJobRunFlag=${HOME}/.job_queues/nodefiledir/${TheJobName}  # run flag base name
+rm -f ${TheJobName}*                               # send terminate command to other container(s) with the same name
+export TheJobRunFlag=${TheJobRunFlag}$(date +%s)
+touch ${TheJobRunFlag}                             # quit if this file disappears
+#
 export NodeFileDir="${HOME}/.job_queues/nodefiledir/$(hostname)$(date +%s)"
 export InstanceQuitFile=${NodeFileDir}/InstanceQuitFile      # quit signal from first sub-container that terminates
 mkdir ${NodeFileDir} || exit 1

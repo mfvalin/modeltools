@@ -107,7 +107,8 @@ do
     ((IdleTime=TimeNow-IdleSince))   # compute sub-container intance idle time
 
     [[ -r ${HOME}/.job_queues/.active_${StreamProcessor} ]] || break   # stop signal from user
-    [[ -f ${InstanceQuitFile} ]]                            || break   # stop requested by another sub-container
+    [[ -f ${TheJobRunFlag} ]]                               || break   # stop signal from another master container with same nme
+    [[ -f ${InstanceQuitFile} ]]                            || break   # stop requested by another sub-container (usually because it reached max idle time)
     source ${HOME}/.job_queues/.active_${StreamProcessor}              # update MaxIdle, MinCpusInJob in case user changed the value(s)
     ((TimeLeft<75)) && echo "INFO: less than 75 seconds left, exiting" && break      # too little time left, exit loop and cleanup
 done  # end of while max idle time not reached
