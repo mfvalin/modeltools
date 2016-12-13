@@ -1,4 +1,4 @@
-#define VERSION '1.0_rc11'
+#define VERSION '1.0_rc12'
   module averages_common   ! tables and table management routines
     use iso_c_binding
     implicit none
