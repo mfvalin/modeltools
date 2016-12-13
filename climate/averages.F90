@@ -323,7 +323,7 @@
     character(len=*) :: name
     print *,'USAGE: '//trim(name)//' [-h|--help] [-newtags] [-strict] [-novar] [-stddev] [-tag nomvar] \'
     print *,'           [-npas0] [-dateo] [-mean mean_out] [-var var_out] [-weight ip3|time|hours|days|nnn] \'
-    print *,'           [-test] [-q[q]] [-v[v][v]] [--|-f] \'
+    print *,'           [-status path/to/status/file] [-test] [-q[q]] [-v[v][v]] [--|-f] \'
     print *,'           [mean_out] [var_out] in_1 ... in_n'
     print *,'        var_out  MUST NOT be present if -novar or -var is used'
     print *,'        mean_out MUST NOT be present if -mean is used'
@@ -332,16 +332,32 @@
     print *,"        default special tag names = '>>  ', '^^  ', '!!  ', 'HY  '"
     print *,'        the -tag option may be used than once to add to this list'
     print *,'example :'
-    print *,"  "//trim(name)//" -vv -mean mean.fst -var var.fst -tag HY -tag '>>' my_dir/dm*"
+    print *,"  "//trim(name)//" -status stat.dot -vv -mean mean.fst -var var.fst -tag HY -tag '>>' my_dir/dm*"
     return
   end
+
+  subroutine set_status(filename,message)
+    implicit none
+    character (len=*), intent(IN) :: filename,message
+    integer :: iun, status
+    integer, external :: fnom
+
+    iun = 0
+    status = fnom(iun,trim(filename),'FTN+FMT',0)
+    if(iun > 0) then
+      write(iun,1) trim(message)
+1     format(A)
+      call fclos(iun)
+    endif
+    return
+  end subroutine set_status
 
   program averages
     use averages_common
     implicit none
     integer :: curarg
     character (len=8) :: option
-    character (len=2048) :: filename, progname, meanfile, varfile
+    character (len=2048) :: filename, progname, meanfile, varfile, statusfile
     integer :: arg_count, arg_len, status, i
     integer :: first_file
     logical :: file_exists, test, missing
@@ -351,6 +367,7 @@
     integer, external :: process_file, write_stats
 
     print *,"Version "//VERSION       ! print version number
+    statusfile = "/dev/null"
     meanfile = "/dev/null"
     varfile = "/dev/null"
     curarg = 1                         ! current argument number
@@ -421,6 +438,15 @@
           call f_exit(1)
         endif
         call get_command_argument(curarg,meanfile,arg_len,status) ! get filename of averages file
+        curarg = curarg + 1
+
+      else if( option == '-status' ) then     ! -mean path/to/status/file
+        if(curarg > arg_count) then
+          print *,'FATAL: missing argument after -mean'
+          call print_usage(progname)
+          call f_exit(1)
+        endif
+        call get_command_argument(curarg,statusfile,arg_len,status) ! get filename of averages file
         curarg = curarg + 1
 
       else if( option == '-tag' ) then     ! -tag
@@ -496,6 +522,8 @@
         cycle
       endif
     enddo
+
+    if( trim(statusfile) .ne. '/dev/null' ) call set_status(statusfile,'status="ABORT"')
 
     if(strict)  verbose = max(2 , verbose)          ! ERROR + WARNING messages at least
 
@@ -585,6 +613,7 @@
        print *,"FATAL: missing sample(s) for some variables"
       call f_exit(1)
     endif
+    if( trim(statusfile) .ne. '/dev/null' ) call set_status(statusfile,'status="SUCCESS"')
   end program
 
   function process_file(filename) result(status)   ! process input standard file
