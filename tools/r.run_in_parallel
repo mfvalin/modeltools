@@ -640,8 +640,9 @@ wait_for() {
 #Version="1.1.25e 2016/11/27"  # message touchups, r.makedirs instead of r.makedir
 #Version="1.1.25f 2016/12/01"  # fixed launch directory in "simple" case
 #Version="1.1.26 2016/12/01"  # "simple" case no longer used
+#Version="1.1.27 2016/12/16"  # fixed -jio option on linux
 true
-Version="1.1.26 2016/12/01"  # "simple" case no longer used
+Version="1.1.27 2016/12/16"  # fixed -jio option on linux
 echo "INFO: ${0##*/} version $Version ( /bin/ksh93 )"
 MY_NODEFILE=${PARALLEL_NODEFILE:-${GECOSHEP_HOSTS_FILE:-${GECOSHEP_HOSTFILE:-${LOADL_HOSTFILE:-${PBS_NODEFILE:-${HOME}/.PBS_NODEFILE}}}}}
 [[ ! -f "${MY_NODEFILE}" ]] && \
@@ -667,7 +668,7 @@ eval `cclargs_lite -D "" $0 \
     -inorder "" "yes" "[list out/err of members in process order]" \
     -instancedir "${PARALLEL_INSTANCES_DIR}" "${PARALLEL_INSTANCES_DIR}" "[directory containing instance names]" \
     -instances "${PARALLEL_INSTANCES}" "${PARALLEL_INSTANCES}" "[instance name for member or list of instances for master]" \
-    -jio "" ". s.jio-prof.dot" "[activate jio]" \
+    -jio "" "SUMMARY" "[activate jio]" \
     -map "" "map" "[display processor map]" \
     -maxcores "${MAX_CORES}" "65536" "[]" \
     -members "" "" "[NxM, N members of size M, override npey and npex]" \
@@ -710,13 +711,19 @@ eval `cclargs_lite -D "" $0 \
 export APRUN="$(which aprun 2>/dev/null)"
 [[ -n ${APRUN} ]]  && hostos=CLE   # Cray linux environment
 #
-[[ -n ${JIO_ENV} ]] && which s.jio-prof 2>/dev/null 1>/dev/null && jio=". s.jio-prof.dot"  # automatic activation if JIO_ENV is set
-preexec="${jio} ${preexec}"
+[[ -n $jio ]] && export JIO_ENV=${JIO_ENV:-JIO_${jio}}
+[[ -n ${JIO_ENV} ]] && which s.jio-prof-linux-64.so 2>/dev/null 1>/dev/null && jio="$(which s.jio-prof-linux-64.so 2>/dev/null)"  # automatic activation if JIO_ENV is set
+which s.jio-prof-linux-64.so 2>/dev/null 1>/dev/null || unset jio
+[[ -n "$jio" ]] && jio="$(readlink -e $(which s.jio-prof-linux-64.so 2>/dev/null))" && \
+  echo "INFO: using $JIO_ENV from '$jio'" && \
+  JIO_PRELOAD="LD_PRELOAD=$jio JIO_DIAG=\${JIO_DIAG:-\${TMPDIR}/JIO_DIAG_TEMP} OMP_NUM_THREADS=\${OMP_NUM_THREADS:-1}"
 # is usage of gdb requested ?
 if [[ -n $gdb ]] ; then
   [[ $gdb == Default ]] && preexec="$(which gdb) -batch -ex run -ex where"
   [[ -r $gdb ]] && preexec="$(which gdb) -batch -x $(true_path $gdb)" # a directive file was specified
 fi
+#
+preexec="${JIO_PRELOAD} ${preexec}"
 #
 OMP_NUM_THREADS=${OMP_NUM_THREADS:-1}
 DefaultNumberOfThreads=${OMP_NUM_THREADS}
