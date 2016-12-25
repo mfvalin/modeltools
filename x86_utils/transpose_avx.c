@@ -1,6 +1,7 @@
 #include <immintrin.h>
 
-void transpose_int_by_8(int *a, int la1, int *b, int lb1, int ni, int nj){
+// NOTE: Fortran order assumed for matrices
+void transpose_int_by_8(void *a, int la1, void *b, int lb1, int ni, int nj){
 #if defined(NEVER_TRUE)
   basic block, 8x8 transpose of 32 bit elements within 256 bit AVX/AVX2 registers
   3 pass shuffle, first 2 operations are within 128 bit lane, last one is across 128 bit lanes
@@ -20,6 +21,7 @@ permLL uses _mm256_permute2f128_si256 (a,b, 0x20), bot128 = bot128 from a, top12
 permHH uses _mm256_permute2f128_si256 (a,b, 0x31), bot128 = top128 from a, top128 = top128 from b
 #endif
   int *a00, *a01, *b00, *b01;
+  int *a000, *b000;
   int i, j;
   int la2 = la1 + la1;
   int la3 = la2 + la1;
@@ -27,21 +29,21 @@ permHH uses _mm256_permute2f128_si256 (a,b, 0x31), bot128 = top128 from a, top12
   int lb2 = lb1 + lb1;
   int lb3 = lb2 + lb1;
   int lb4 = lb3 + lb1;
-  int lb5 = lb4 + lb1;
-  int lb6 = lb5 + lb1;
-  int lb7 = lb6 + lb1;
   int ni8 = ni & 0x7FFFFFF8 ;   // lower multiple of 8
   int nj8 = nj & 0x7FFFFFF8 ;   // lower multiple of 8
   __m256i t0, t1, t2, t3, t4, t5, t6, t7;
   __m256i y0, y1, y2, y3, y4, y5, y6, y7;
   __m256i x0, x1, x2, x3, x4, x5, x6, x7;
 // b[j,i] = a[i,j]
+  a000 = (int *)a;
+  b000 = (int *)b;
+// basic block for transpose is 8x8
   for (j=0 ; j<nj8 ; j+= 8){
-    for ( i=0 ; i<ni8 ; i+=8){
-      a00 = &a[i + la1*j];
-      a01 = a00 + la4;
-      b00 = &b[j + lb1*i];
-      b01 = b01 + lb4;
+    a00 = a000;   // base address for row
+    b00 = b000;   // base address for column
+    for ( i=0 ; i<ni8 ; i+=8){     // transpose a[i:i+7,J:j+7] into b[j:j+7,i:i+7]
+      a01 = a00 + la4;   // base of next block of 4x8
+      b01 = b00 + lb4;   // base of next block of 4x8
       y0 = _mm256_loadu_si256 ((__m256i const *) &a00[  0]);
       y1 = _mm256_loadu_si256 ((__m256i const *) &a00[la1]);
       y2 = _mm256_loadu_si256 ((__m256i const *) &a00[la2]);
@@ -70,12 +72,12 @@ permHH uses _mm256_permute2f128_si256 (a,b, 0x31), bot128 = top128 from a, top12
       y7 = _mm256_unpackhi_epi64(t5,t7);
 
       t0 = _mm256_permute2f128_si256 (y0,y4, 0x20);
-      t1 = _mm256_permute2f128_si256 (y0,y4, 0x31);
+      t1 = _mm256_permute2f128_si256 (y1,y5, 0x20);
       t2 = _mm256_permute2f128_si256 (y2,y6, 0x20);
-      t3 = _mm256_permute2f128_si256 (y2,y6, 0x31);
-      t4 = _mm256_permute2f128_si256 (y1,y5, 0x20);
+      t3 = _mm256_permute2f128_si256 (y3,y7, 0x20);
+      t4 = _mm256_permute2f128_si256 (y0,y4, 0x31);
+      t6 = _mm256_permute2f128_si256 (y2,y6, 0x31);
       t5 = _mm256_permute2f128_si256 (y1,y5, 0x31);
-      t6 = _mm256_permute2f128_si256 (y3,y7, 0x20);
       t7 = _mm256_permute2f128_si256 (y3,y7, 0x31);
 
       _mm256_storeu_si256((__m256i *) &b00[  0],t0);
@@ -86,10 +88,14 @@ permHH uses _mm256_permute2f128_si256 (a,b, 0x31), bot128 = top128 from a, top12
       _mm256_storeu_si256((__m256i *) &b01[lb1],t5);
       _mm256_storeu_si256((__m256i *) &b01[lb2],t6);
       _mm256_storeu_si256((__m256i *) &b01[lb3],t7);
-    }
+      a00 = a00 + 8;           // bump by 8 cols
+      b00 = b00 + lb4 + lb4;   // bump by 8 rows
+    } // for i
     for (i = ni8 ; i<ni ; i++){  // leftovers along i , j -> j+7
     }
-  }
+    a000 = a000 + la4 + la4;   // bump by 8 rows
+    b000 = b000 + 8;           // bump by 8 cols
+  }  // for j
 }
 
 void transpose_long_by_8(double *a, int la1, double *b, int lb1, int ni, int nj){
@@ -202,10 +208,14 @@ void transpose_long_by_8(double *a, int la1, double *b, int lb1, int ni, int nj)
 main(){
   double mtx1_4x4[NI*NJ];
   double mtx2_4x4[NI*NJ];
+  float mat1_4x4[NI*NJ];
+  float mat2_4x4[NI*NJ];
   int i, j;
   for (i=0 ; i<NI*NJ ; i++){
     mtx1_4x4[i] = i;
     mtx2_4x4[i] = 999;
+    mat1_4x4[i] = i;
+    mat2_4x4[i] = 999;
   }
   printf("\nInput Matrix\n");
   for(j=NJ-1 ; j>= 0 ; j--){
@@ -218,12 +228,26 @@ main(){
   printf("Col  < ");
   for (i=0 ; i<NI ; i++) printf("%4d",i) ;
   printf(">\n");
+
   transpose_long_by_8(mtx1_4x4, NI, mtx2_4x4, NJ, 8, 8);  // 4 x 4 transpose
-  printf("\nOutput Matrix\n");
+  printf("\nOutput Matrix (double)\n");
   for(j=NI-1 ; j>= 0 ; j--){
     printf("row %2d ",j);
     for (i=0 ; i<NJ ; i++){
       printf("%4.0f",mtx2_4x4[i+NJ*j]);
+    }
+    printf("\n");
+  }
+  printf("Col  < ");
+  for (i=0 ; i<NJ ; i++) printf("%4d",i) ;
+  printf(">\n");
+
+  transpose_int_by_8(mat1_4x4, NI, mat2_4x4, NJ, 8, 8);  // 4 x 4 transpose
+  printf("\nOutput Matrix (float)\n");
+  for(j=NI-1 ; j>= 0 ; j--){
+    printf("row %2d ",j);
+    for (i=0 ; i<NJ ; i++){
+      printf("%4.0f",mat2_4x4[i+NJ*j]);
     }
     printf("\n");
   }
