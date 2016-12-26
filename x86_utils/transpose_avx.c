@@ -22,7 +22,7 @@ permHH uses _mm256_permute2f128_si256 (a,b, 0x31), bot128 = top128 from a, top12
 #endif
   int *a00, *a01, *b00, *b01;
   int *a000, *b000;
-  int i, j, j0;
+  int i, j, j0, ja0, ja00, jb0, jb00;
   int la2 = la1 + la1;
   int la3 = la2 + la1;
   int la4 = la3 + la1;
@@ -108,10 +108,18 @@ permHH uses _mm256_permute2f128_si256 (a,b, 0x31), bot128 = top128 from a, top12
   }  // for j
   a000 = (int *)a;
   b000 = (int *)b;
+  jb00 = j;
+  ja00 = j*la1;
   for (i = 0 ; i<ni ; i++){    // leftovers along j, i = 0 -> nj-1
+    ja0 = ja00;
+    jb0 = jb00;
     for(j0=j ; j0<nj ; j0++){
-      b000[j0+i*lb1] = a000[i+j0*la1];   // b[j,i] = a[i,j]
+      b000[jb0] = a000[ja0];   // b[j,i] = a[i,j]
+      ja0 += la1;
+      jb0++;
     }
+    jb00 += lb1;
+    ja00++;
   }
 }
 
