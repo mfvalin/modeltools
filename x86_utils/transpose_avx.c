@@ -34,6 +34,7 @@ permHH uses _mm256_permute2f128_si256 (a,b, 0x31), bot128 = top128 from a, top12
   __m256i t0, t1, t2, t3, t4, t5, t6, t7;
   __m256i y0, y1, y2, y3, y4, y5, y6, y7;
   __m256i x0, x1, x2, x3, x4, x5, x6, x7;
+
 // b[j,i] = a[i,j]
   a000 = (int *)a;
   b000 = (int *)b;
@@ -131,7 +132,7 @@ void TransposeBy8bytes(void *a, int la1, void *b, int lb1, int ni, int nj){
   int lb2 = lb1 + lb1;
   int lb3 = lb2 + lb1;
   int lb4 = lb3 + lb1;
-  int i, j, ni8, nj8;
+  int i, j, jj, ni8, nj8;
   long long *a000, *a00, *a01, *a10, *a11, *b000, *b00, *b01, *b10, *b11;
   __m256i y0, y1, y2, y3;
   __m256i t0, t1, t2, t3;
@@ -226,20 +227,44 @@ void TransposeBy8bytes(void *a, int la1, void *b, int lb1, int ni, int nj){
       _mm256_storeu_si256((__m256i *)&b11[lb2],x2);
       _mm256_storeu_si256((__m256i *)&b11[lb3],x3);
     }
+    for ( ; i<ni ; i++){
+      for ( jj=j ; jj<j+8 ; jj++){   // b[jj,i] = a[i,jj]
+	b000[jj + lb1*i] = a000[i + jj*la1];
+      }
+    }
+  }
+  for ( ; j<nj ; j++){
+    for (i=0 ; i<ni ; i++){   // b[j,i] = a[i,j]
+      b000[j + lb1*i] = a000[i + j*la1];
+    }
   }
 }
 
 #if defined(SELF_TEST)
 #include <stdio.h>
 #include <stdlib.h>
-#define NI 19
-#define NJ 21
 main(int argc, char **argv){
-  double mtx1_4x4[NI*NJ];
-  double mtx2_4x4[NI*NJ];
-  int mat1_4x4[NI*NJ];
-  int mat2_4x4[NI*NJ];
-  int i, j;
+  double *mtx1_4x4;
+  double *mtx2_4x4;
+  int *mat1_4x4;
+  int *mat2_4x4;
+  int i, j, k;
+  double MPI_Wtime();
+  double t0, t1;
+  double bytes;
+  int NI, NJ;
+  int ni=atoi(argv[1]);
+  int nj=atoi(argv[2]);
+  int nk=atoi(argv[3]);
+  int errors;
+
+  NI = ni+3;
+  NJ = nj+3;
+  mtx1_4x4 = (double *) malloc(sizeof(double)*NI*NJ);
+  mtx2_4x4 = (double *) malloc(sizeof(double)*NI*NJ);
+  mat1_4x4 = (int *) malloc(sizeof(int)*NI*NJ);
+  mat2_4x4 = (int *) malloc(sizeof(int)*NI*NJ);
+  printf("ni = %d, nj = %d, nk= %d\n",ni,nj,nk);
   for (i=0 ; i<NI*NJ ; i++){
     mtx1_4x4[i] = i;
     mtx2_4x4[i] = 999;
@@ -247,41 +272,102 @@ main(int argc, char **argv){
     mat2_4x4[i] = 999;
   }
   printf("\nInput Matrix\n");
-  for(j=NJ-1 ; j>= 0 ; j--){
-    printf("row %2d ",j);
-    for (i=0 ; i<NI ; i++){
-      printf("%4.0f",mtx1_4x4[i+NI*j]);
+  if(ni*nj < 1000) {
+    for(j=NJ-1 ; j>= 0 ; j--){
+      printf("row %2d ",j);
+      for (i=0 ; i<NI ; i++){
+	printf("%4.0f",mtx1_4x4[i+NI*j]);
+      }
+      printf("\n");
     }
-    printf("\n");
+    printf("Col  < ");
+    for (i=0 ; i<NI ; i++) printf("%4d",i) ;
+    printf(">\n");
   }
-  printf("Col  < ");
-  for (i=0 ; i<NI ; i++) printf("%4d",i) ;
-  printf(">\n");
 
-  TransposeBy8bytes(mtx1_4x4, NI, mtx2_4x4, NJ, 16, 16);
-  printf("\nOutput Matrix (double)\n");
-  for(j=NI-1 ; j>= 0 ; j--){
-    printf("row %2d ",j);
-    for (i=0 ; i<NJ ; i++){
-      printf("%4.0f",mtx2_4x4[i+NJ*j]);
+  TransposeBy8bytes(mtx1_4x4, NI, mtx2_4x4, NJ, ni, nj);
+  t0 = MPI_Wtime();
+  bytes = 0;
+  for (k=0 ; k<nk/10 ; k++) {
+    for(j=0 ; j<nj ; j++){
+      for(i=0 ; i<ni ; i++){
+	mat2_4x4[j + i*NJ] = mat1_4x4[i + NI*j] ;
+      }
     }
-    printf("\n");
+    bytes = bytes + ni * nj * 16;
   }
-  printf("Col  < ");
-  for (i=0 ; i<NJ ; i++) printf("%4d",i) ;
-  printf(">\n");
+  t1 = MPI_Wtime() ;
+  printf("\nT8ref = %f, %f GB/s, %f ns/pt, %f us/transpose\n",
+	 (t1-t0),bytes/1000./1000./1000./(t1-t0),(t1-t0)/ni/nj/nk*10*1000*1000*1000,(t1-t0)/nk*10*1000*1000);
+  t0 = MPI_Wtime();
+  bytes = 0;
+  for (k=0 ; k<nk ; k++) {
+    TransposeBy8bytes(mtx1_4x4, NI, mtx2_4x4, NJ, ni, nj);
+    bytes = bytes + ni * nj * 16;
+  }
+  t1 = MPI_Wtime() ;
+  printf("\nT8 = %f, %f GB/s, %f ns/pt, %f us/transpose\n",
+	 (t1-t0),bytes/1000./1000./1000./(t1-t0),(t1-t0)/ni/nj/nk*1000*1000*1000,(t1-t0)/nk*1000*1000);
+  errors = 0;
+  for(j=0 ; j<nj ; j++){
+    for(i=0 ; i<ni ; i++){
+      if( mtx1_4x4[i + NI*j] != mtx2_4x4[j + i*NJ] ) errors++;
+    }
+  }
+  printf("\nOutput Matrix (double), errors = %d\n\n",errors);
+  if(ni*nj < 1000) {
+    for(j=NI-1 ; j>= 0 ; j--){
+      printf("row %2d ",j);
+      for (i=0 ; i<NJ ; i++){
+	printf("%4.0f",mtx2_4x4[i+NJ*j]);
+      }
+      printf("\n");
+    }
+    printf("Col  < ");
+    for (i=0 ; i<NJ ; i++) printf("%4d",i) ;
+    printf(">\n");
+  }
 
-  TransposeBy4bytes(mat1_4x4, NI, mat2_4x4, NJ,atoi(argv[1]), atoi(argv[2]));
-  printf("\nOutput Matrix (float)\n");
-  for(j=NI-1 ; j>= 0 ; j--){
-    printf("row %2d ",j);
-    for (i=0 ; i<NJ ; i++){
-      printf("%4d",mat2_4x4[i+NJ*j]);
+  TransposeBy4bytes(mat1_4x4, NI, mat2_4x4, NJ, ni, nj);
+  t0 = MPI_Wtime();
+  bytes = 0;
+  for (k=0 ; k<nk/10 ; k++) {
+    for(j=0 ; j<nj ; j++){
+      for(i=0 ; i<ni ; i++){
+	mat2_4x4[j + i*NJ] = mat1_4x4[i + NI*j] ;
+      }
     }
-    printf("\n");
+    bytes = bytes + ni * nj * 8;
   }
-  printf("Col  < ");
-  for (i=0 ; i<NJ ; i++) printf("%4d",i) ;
-  printf(">\n");
+  t1 = MPI_Wtime() ;
+  printf("\nT4ref = %f, %f GB/s, %f ns/pt, %f us/transpose\n",
+	 (t1-t0),bytes/1000./1000./1000./(t1-t0),(t1-t0)/ni/nj/nk*10*1000*1000*1000,(t1-t0)/nk*10*1000*1000);
+  t0 = MPI_Wtime();
+  bytes = 0;
+  for (k=0 ; k<nk ; k++) {
+    TransposeBy4bytes(mat1_4x4, NI, mat2_4x4, NJ, ni, nj);
+    bytes = bytes + ni * nj * 8;
+  }
+  t1 = MPI_Wtime() ;
+  errors = 0;
+  for(j=0 ; j<nj ; j++){
+    for(i=0 ; i<ni ; i++){
+      if( mat1_4x4[i + NI*j] != mat2_4x4[j + i*NJ] ) errors++;
+    }
+  }
+  printf("\nOutput Matrix (int), errors = %d\n",errors);
+  printf("T4 = %f, %f GB/s, %f ns/pt, %f us/transpose\n",(t1-t0),bytes/1000./1000./1000./(t1-t0),(t1-t0)/ni/nj/nk*1000*1000*1000,(t1-t0)/nk*1000*1000);
+  if(ni*nj < 1000) {
+    for(j=NI-1 ; j>= 0 ; j--){
+      printf("row %2d ",j);
+      for (i=0 ; i<NJ ; i++){
+	printf("%4d",mat2_4x4[i+NJ*j]);
+      }
+      printf("\n");
+    }
+    printf("Col  < ");
+    for (i=0 ; i<NJ ; i++) printf("%4d",i) ;
+    printf(">\n");
+  }
 }
 #endif
