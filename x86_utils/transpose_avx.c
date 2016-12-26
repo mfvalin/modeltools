@@ -1,7 +1,9 @@
+#include <stdio.h>
+#include <stdlib.h>
 #include <immintrin.h>
 
 // NOTE: Fortran order assumed for matrices
-void TransposeBy4bytes(void *a, int la1, void *b, int lb1, int ni, int nj){
+int TransposeBy4bytes(void *a, int la1, void *b, int lb1, int ni, int nj){
 #if defined(NEVER_TRUE)
   basic block, 8x8 transpose of 32 bit elements within 256 bit AVX/AVX2 registers
   3 pass shuffle, first 2 operations are within 128 bit lane, last one is across 128 bit lanes
@@ -29,12 +31,20 @@ permHH uses _mm256_permute2f128_si256 (a,b, 0x31), bot128 = top128 from a, top12
   int lb2 = lb1 + lb1;
   int lb3 = lb2 + lb1;
   int lb4 = lb3 + lb1;
-  int ni8 = ni & 0x7FFFFFF8 ;   // lower multiple of 8
-  int nj8 = nj & 0x7FFFFFF8 ;   // lower multiple of 8
+  int ni8 ;
+  int nj8 ;
   __m256i t0, t1, t2, t3, t4, t5, t6, t7;
   __m256i y0, y1, y2, y3, y4, y5, y6, y7;
   __m256i x0, x1, x2, x3, x4, x5, x6, x7;
 
+  if (ni <= 0) ni = la1 ;
+  if (nj <= 0) nj = lb1;
+  ni8 = ni & 0x7FFFFFF8 ;   // lower multiple of 8
+  nj8 = nj & 0x7FFFFFF8 ;   // lower multiple of 8
+  if ( (la1 < ni) || (lb1 < nj) ) {
+    fprintf(stderr,"ERROR: TransposeBy4bytes, la1=%d < ni=%d or lb1=%d < nj=%d\n",la1,ni,lb1,nj);
+    return(1);
+  }
 // b[j,i] = a[i,j]
   a000 = (int *)a;
   b000 = (int *)b;
@@ -122,9 +132,10 @@ permHH uses _mm256_permute2f128_si256 (a,b, 0x31), bot128 = top128 from a, top12
     jb00 += lb1;
     ja00++;
   }
+  return(0);
 }
 
-void TransposeBy8bytes(void *a, int la1, void *b, int lb1, int ni, int nj){
+int TransposeBy8bytes(void *a, int la1, void *b, int lb1, int ni, int nj){
   // after transpose, b[j,i] = a[i,j]
   int la2 = la1 + la1;
   int la3 = la2 + la1;
@@ -138,6 +149,13 @@ void TransposeBy8bytes(void *a, int la1, void *b, int lb1, int ni, int nj){
   __m256i t0, t1, t2, t3;
   __m256i x0, x1, x2, x3;
 
+  if (ni <= 0) ni = la1 ;
+  if (nj <= 0) nj = lb1;
+  if ( (la1 < ni) || (lb1 < nj) ) {
+    fprintf(stderr,"ERROR: TransposeBy8bytes, la1=%d < ni=%d or lb1=%d < nj=%d\n",la1,ni,lb1,nj);
+    return(1);
+  }
+//   printf("la1,ni,lb1,nj= %d %d %d %d\n",la1,ni,lb1,nj);
   a000 = (long long *)a;
   b000 = (long long *)b;
   ni8 = ni & 0x7FFFFFF8 ;   // lower multiple of 8
@@ -238,6 +256,7 @@ void TransposeBy8bytes(void *a, int la1, void *b, int lb1, int ni, int nj){
       b000[j + lb1*i] = a000[i + j*la1];
     }
   }
+  return(0);
 }
 
 #if defined(SELF_TEST)
@@ -252,14 +271,18 @@ main(int argc, char **argv){
   double MPI_Wtime();
   double t0, t1;
   double bytes;
-  int NI, NJ;
-  int ni=atoi(argv[1]);
-  int nj=atoi(argv[2]);
-  int nk=atoi(argv[3]);
+  int NI, NJ, ni, nj;
+  int nni=atoi(argv[1]);
+  int nnj=atoi(argv[2]);
+  int nk=atoi(argv[5]);
   int errors;
 
-  NI = ni+3;
-  NJ = nj+3;
+  NI = atoi(argv[3]);
+  NJ = atoi(argv[4]);
+  ni = nni;
+  nj = nnj;
+  if(ni <= 0) ni = NI;
+  if(nj <= 0) nj = NJ;
   mtx1_4x4 = (double *) malloc(sizeof(double)*NI*NJ);
   mtx2_4x4 = (double *) malloc(sizeof(double)*NI*NJ);
   mat1_4x4 = (int *) malloc(sizeof(int)*NI*NJ);
@@ -272,7 +295,7 @@ main(int argc, char **argv){
     mat2_4x4[i] = 999;
   }
   printf("\nInput Matrix\n");
-  if(ni*nj < 1000) {
+  if(NI*NJ < 1000) {
     for(j=NJ-1 ; j>= 0 ; j--){
       printf("row %2d ",j);
       for (i=0 ; i<NI ; i++){
@@ -285,7 +308,7 @@ main(int argc, char **argv){
     printf(">\n");
   }
 
-  TransposeBy8bytes(mtx1_4x4, NI, mtx2_4x4, NJ, ni, nj);
+  if(TransposeBy8bytes(mtx1_4x4, NI, mtx2_4x4, NJ, nni, nnj)) exit(1);
   t0 = MPI_Wtime();
   bytes = 0;
   for (k=0 ; k<nk/10 ; k++) {
@@ -302,7 +325,7 @@ main(int argc, char **argv){
   t0 = MPI_Wtime();
   bytes = 0;
   for (k=0 ; k<nk ; k++) {
-    TransposeBy8bytes(mtx1_4x4, NI, mtx2_4x4, NJ, ni, nj);
+    if(TransposeBy8bytes(mtx1_4x4, NI, mtx2_4x4, NJ, nni, nnj)) exit(1);
     bytes = bytes + ni * nj * 16;
   }
   t1 = MPI_Wtime() ;
@@ -315,7 +338,7 @@ main(int argc, char **argv){
     }
   }
   printf("\nOutput Matrix (double), errors = %d\n\n",errors);
-  if(ni*nj < 1000) {
+  if(NI*NJ < 1000) {
     for(j=NI-1 ; j>= 0 ; j--){
       printf("row %2d ",j);
       for (i=0 ; i<NJ ; i++){
@@ -328,7 +351,7 @@ main(int argc, char **argv){
     printf(">\n");
   }
 
-  TransposeBy4bytes(mat1_4x4, NI, mat2_4x4, NJ, ni, nj);
+  if(TransposeBy4bytes(mat1_4x4, NI, mat2_4x4, NJ, nni, nnj)) exit(1);
   t0 = MPI_Wtime();
   bytes = 0;
   for (k=0 ; k<nk/10 ; k++) {
@@ -345,7 +368,7 @@ main(int argc, char **argv){
   t0 = MPI_Wtime();
   bytes = 0;
   for (k=0 ; k<nk ; k++) {
-    TransposeBy4bytes(mat1_4x4, NI, mat2_4x4, NJ, ni, nj);
+    if(TransposeBy4bytes(mat1_4x4, NI, mat2_4x4, NJ, nni, nnj)) exit(1);
     bytes = bytes + ni * nj * 8;
   }
   t1 = MPI_Wtime() ;
@@ -357,7 +380,7 @@ main(int argc, char **argv){
   }
   printf("\nOutput Matrix (int), errors = %d\n",errors);
   printf("T4 = %f, %f GB/s, %f ns/pt, %f us/transpose\n",(t1-t0),bytes/1000./1000./1000./(t1-t0),(t1-t0)/ni/nj/nk*1000*1000*1000,(t1-t0)/nk*1000*1000);
-  if(ni*nj < 1000) {
+  if(NI*NJ < 1000) {
     for(j=NI-1 ; j>= 0 ; j--){
       printf("row %2d ",j);
       for (i=0 ; i<NJ ; i++){
