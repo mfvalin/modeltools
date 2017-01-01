@@ -140,6 +140,7 @@ int TransposeBy8bytes(void *a, int la1, void *b, int lb1, int ni, int nj){
   int la2 = la1 + la1;
   int la3 = la2 + la1;
   int la4 = la3 + la1;
+  int la8 = la4 + la4;
   int lb2 = lb1 + lb1;
   int lb3 = lb2 + lb1;
   int lb4 = lb3 + lb1;
@@ -148,6 +149,7 @@ int TransposeBy8bytes(void *a, int la1, void *b, int lb1, int ni, int nj){
   __m256i y0, y1, y2, y3;
   __m256i t0, t1, t2, t3;
   __m256i x0, x1, x2, x3;
+  __m128i p0, p1;
 
   if (ni <= 0) ni = la1 ;
   if (nj <= 0) nj = lb1;
@@ -160,30 +162,38 @@ int TransposeBy8bytes(void *a, int la1, void *b, int lb1, int ni, int nj){
   b000 = (long long *)b;
   ni8 = ni & 0x7FFFFFF8 ;   // lower multiple of 8
   nj8 = nj & 0x7FFFFFF8 ;   // lower multiple of 8
-  for (j=0 ; j<nj8 ; j+= 8){
-    for ( i=0 ; i<ni8 ; i+=8){
-      a00 = &a000[i + j*la1] ; a01 = a00 + 4 ; a10 = a00 + la4 ; a11 = a10 + 4;
-      b00 = &b000[j + i*lb1] ; b01 = b00 + 4 ; b10 = b00 + lb4 ; b11 = b10 + 4;
-      // basic 8 x 8 transpose (a00, a01, a10, a11 into b00, b10, b01, b11) ( 4 4x4 sub matrices)
-      y0 = _mm256_loadu_si256((__m256i const *)&a00[  0]);   // fetch 4 x 4 from a00
-      y1 = _mm256_loadu_si256((__m256i const *)&a00[la1]);
-      y2 = _mm256_loadu_si256((__m256i const *)&a00[la2]);
-      y3 = _mm256_loadu_si256((__m256i const *)&a00[la3]);
 
-      t0 = _mm256_unpackhi_epi64(y0,y1);    // shuffle pass 1 on a00 -> b00
-      t1 = _mm256_unpackhi_epi64(y2,y3);
-      t2 = _mm256_unpacklo_epi64(y0,y1);
-      t3 = _mm256_unpacklo_epi64(y2,y3);
+  for ( i=0 ; i<ni8 ; i+=8){
+    a00 = &a000[i] ;
+    b00 = &b000[i*lb1] ;
+    for (j=0 ; j<nj8 ; j+= 8){
+//       a00 = &a000[i + j*la1] ; 
+      a01 = a00 + 4 ; a10 = a00 + la4 ; a11 = a10 + 4; 
+//       b00 = &b000[j + i*lb1] ; 
+      b01 = b00 + 4 ; b10 = b00 + lb4 ; b11 = b10 + 4;
+      // basic 8 x 8 transpose (a00, a01, a10, a11 into b00, b10, b01, b11) ( 4 4x4 sub matrices)
+      // fetch 4 x 4 from a00
+      y0 = _mm256_loadu_si256((__m256i const *)&a00[  0]);   // a0 a1 a2 a3
+      y1 = _mm256_loadu_si256((__m256i const *)&a00[la1]);   // b0 b1 b2 b3
+      y2 = _mm256_loadu_si256((__m256i const *)&a00[la2]);   // c0 c1 c2 c3
+      y3 = _mm256_loadu_si256((__m256i const *)&a00[la3]);   // d0 d1 d2 d3
+
+      // shuffle pass 1 on a00 -> b00
+      t0 = _mm256_unpackhi_epi64(y0,y1);                     // a1 b1 a3 b3
+      t1 = _mm256_unpackhi_epi64(y2,y3);                     // c1 d1 c3 d3
+      t2 = _mm256_unpacklo_epi64(y0,y1);                     // a0 b0 a2 b2
+      t3 = _mm256_unpacklo_epi64(y2,y3);                     // c0 d0 c2 d2
 
       y0 = _mm256_loadu_si256((__m256i const *)&a01[  0]);   // prefetch 4 x 4 from a01
       y1 = _mm256_loadu_si256((__m256i const *)&a01[la1]);
       y2 = _mm256_loadu_si256((__m256i const *)&a01[la2]);
       y3 = _mm256_loadu_si256((__m256i const *)&a01[la3]);
 
-      x0 = _mm256_permute2f128_si256(t2,t3,0x20);    // shuffle pass 2 on a00 -> b00
-      x1 = _mm256_permute2f128_si256(t0,t1,0x20);
-      x2 = _mm256_permute2f128_si256(t2,t3,0x31);
-      x3 = _mm256_permute2f128_si256(t0,t1,0x31);
+      // shuffle pass 2 on a00 -> b00
+      x0 = _mm256_permute2f128_si256(t2,t3,0x20);            // a0 b0 c0 d0
+      x1 = _mm256_permute2f128_si256(t0,t1,0x20);            // a1 b1 c1 d1
+      x2 = _mm256_permute2f128_si256(t2,t3,0x31);            // a2 b2 c2 d2
+      x3 = _mm256_permute2f128_si256(t0,t1,0x31);            // a3 b3 c3 d3
 
       _mm256_storeu_si256((__m256i *)&b00[  0],x0);   // store 4 x 4 into b00 (from a00)
       _mm256_storeu_si256((__m256i *)&b00[lb1],x1);
@@ -244,14 +254,16 @@ int TransposeBy8bytes(void *a, int la1, void *b, int lb1, int ni, int nj){
       _mm256_storeu_si256((__m256i *)&b11[lb1],x1);
       _mm256_storeu_si256((__m256i *)&b11[lb2],x2);
       _mm256_storeu_si256((__m256i *)&b11[lb3],x3);
-    }
-    for ( ; i<ni ; i++){
-      for ( jj=j ; jj<j+8 ; jj++){   // b[jj,i] = a[i,jj]
-	b000[jj + lb1*i] = a000[i + jj*la1];
-      }
+      a00 += la8 ;
+      b00 += 8;
     }
   }
-  for ( ; j<nj ; j++){
+  for (i=ni8 ; i<ni ; i++){
+    for ( jj=0 ; jj<nj ; jj++){   // b[jj,i] = a[i,jj]
+      b000[jj + lb1*i] = a000[i + jj*la1];
+    }
+  }
+  for (j=nj8 ; j<nj ; j++){
     for (i=0 ; i<ni ; i++){   // b[j,i] = a[i,j]
       b000[j + lb1*i] = a000[i + j*la1];
     }
@@ -309,6 +321,7 @@ main(int argc, char **argv){
   }
 
   if(TransposeBy8bytes(mtx1_4x4, NI, mtx2_4x4, NJ, nni, nnj)) exit(1);
+
   t0 = MPI_Wtime();
   bytes = 0;
   for (k=0 ; k<nk/10 ; k++) {
@@ -322,6 +335,7 @@ main(int argc, char **argv){
   t1 = MPI_Wtime() ;
   printf("\nT8ref = %f, %f GB/s, %f ns/pt, %f us/transpose\n",
 	 (t1-t0),bytes/1000./1000./1000./(t1-t0),(t1-t0)/ni/nj/nk*10*1000*1000*1000,(t1-t0)/nk*10*1000*1000);
+
   t0 = MPI_Wtime();
   bytes = 0;
   for (k=0 ; k<nk ; k++) {
@@ -331,6 +345,7 @@ main(int argc, char **argv){
   t1 = MPI_Wtime() ;
   printf("\nT8 = %f, %f GB/s, %f ns/pt, %f us/transpose\n",
 	 (t1-t0),bytes/1000./1000./1000./(t1-t0),(t1-t0)/ni/nj/nk*1000*1000*1000,(t1-t0)/nk*1000*1000);
+
   errors = 0;
   for(j=0 ; j<nj ; j++){
     for(i=0 ; i<ni ; i++){
@@ -352,6 +367,7 @@ main(int argc, char **argv){
   }
 
   if(TransposeBy4bytes(mat1_4x4, NI, mat2_4x4, NJ, nni, nnj)) exit(1);
+
   t0 = MPI_Wtime();
   bytes = 0;
   for (k=0 ; k<nk/10 ; k++) {
@@ -365,6 +381,7 @@ main(int argc, char **argv){
   t1 = MPI_Wtime() ;
   printf("\nT4ref = %f, %f GB/s, %f ns/pt, %f us/transpose\n",
 	 (t1-t0),bytes/1000./1000./1000./(t1-t0),(t1-t0)/ni/nj/nk*10*1000*1000*1000,(t1-t0)/nk*10*1000*1000);
+
   t0 = MPI_Wtime();
   bytes = 0;
   for (k=0 ; k<nk ; k++) {
@@ -372,6 +389,7 @@ main(int argc, char **argv){
     bytes = bytes + ni * nj * 8;
   }
   t1 = MPI_Wtime() ;
+
   errors = 0;
   for(j=0 ; j<nj ; j++){
     for(i=0 ; i<ni ; i++){

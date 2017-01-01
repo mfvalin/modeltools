@@ -457,9 +457,9 @@ void dgemm_shortnk(int ni, int nj, int nk, double *ma, int lda1, double *mb, int
 #include <stdio.h>
 #include <stdlib.h>
 
-#define NI 260
+#define NI 128
 #define NK 32
-#define NJ 201
+#define NJ 200
 int main(int argc, char **argv){
   double c[NI*NJ];
   double r[NI*NJ];   // reference result
@@ -491,7 +491,7 @@ int main(int argc, char **argv){
   flops = NI*NJ*NK*2 ;
   flops = flops * nrep ;
   flops = flops / (t1-t0) * 1.0E-9;
-  fprintf(stdout,"speed = %6.3f GFlops\n",flops);
+  fprintf(stdout,"speed = %6.3f GFlops, T = %6.3fus\n",flops,(t1-t0)/nrep*1000000.0);
 
   for (i=0 ; i<NJ*NI ; i++) {
 //     if(c[i] != NK) errors++;
