@@ -2,6 +2,14 @@
 #include <stdlib.h>
 #include <immintrin.h>
 
+// following 2 macros missing in gcc primitives
+// make 256 bit item (ymm) from 2 x 128 bit items (xmm)
+#define _mm256i_from_2m128i( lo, hi) \
+    _mm256_insertf128_si256(_mm256_castsi128_si256(lo), (hi), 0x1)
+// fetch 2 128 bit items and load them into a 256 bit register (ymm)
+#define _mm256_loadu_lh__m128i( loaddr, hiaddr) \
+    _mm256i_from_2m128i(_mm_loadu_si128(loaddr), _mm_loadu_si128(hiaddr))
+
 // NOTE: Fortran order assumed for matrices
 int TransposeBy4bytes(void *a, int la1, void *b, int lb1, int ni, int nj){
 #if defined(NEVER_TRUE)
@@ -163,6 +171,80 @@ int TransposeBy8bytes(void *a, int la1, void *b, int lb1, int ni, int nj){
   ni8 = ni & 0x7FFFFFF8 ;   // lower multiple of 8
   nj8 = nj & 0x7FFFFFF8 ;   // lower multiple of 8
 
+#if defined(FETCH128)
+// faster if ni * nj <= 2048
+  for ( i=0 ; i<ni8 ; i+=4){
+    a00 = &a000[i] ;
+    b00 = &b000[i*lb1] ;
+    for (j=0 ; j<nj8 ; j+= 4){
+//       a00 = &a000[i + j*la1] ; 
+//       a01 = a00 + 4 ; a10 = a00 + la4 ; a11 = a10 + 4; 
+//       b00 = &b000[j + i*lb1] ; 
+//       b01 = b00 + 4 ; b10 = b00 + lb4 ; b11 = b10 + 4;
+      y0 = _mm256_loadu_lh__m128i( (__m128i const*) &a00[    0] , (__m128i const*) &a00[la2  ] ) ;   // a0 a1 c0 c1
+      y1 = _mm256_loadu_lh__m128i( (__m128i const*) &a00[la1  ] , (__m128i const*) &a00[la3  ] ) ;   // b0 b1 d0 d1
+      y2 = _mm256_loadu_lh__m128i( (__m128i const*) &a00[    2] , (__m128i const*) &a00[la2+2] ) ;   // a2 a3 c2 c3
+      y3 = _mm256_loadu_lh__m128i( (__m128i const*) &a00[la1+2] , (__m128i const*) &a00[la3+2] ) ;   // b2 b3 d2 d3
+
+      x0 = _mm256_unpacklo_epi64(y0,y1);                     // a0 b0 c0 d0
+      x1 = _mm256_unpackhi_epi64(y0,y1);                     // a1 b1 c1 d1
+      x2 = _mm256_unpacklo_epi64(y2,y3);                     // a2 b2 c2 d2
+      x3 = _mm256_unpackhi_epi64(y2,y3);                     // a3 b3 c3 d3
+
+      _mm256_storeu_si256((__m256i *)&b00[  0],x0);   // store 4 x 4 into b00 (from a00)
+      _mm256_storeu_si256((__m256i *)&b00[lb1],x1);
+      _mm256_storeu_si256((__m256i *)&b00[lb2],x2);
+      _mm256_storeu_si256((__m256i *)&b00[lb3],x3);
+
+//       y0 = _mm256_loadu_lh__m128i( (__m128i const*) &a01[    0] , (__m128i const*) &a01[la2  ] ) ;
+//       y1 = _mm256_loadu_lh__m128i( (__m128i const*) &a01[la1  ] , (__m128i const*) &a01[la3  ] ) ;
+//       y2 = _mm256_loadu_lh__m128i( (__m128i const*) &a01[    2] , (__m128i const*) &a01[la2+2] ) ;
+//       y3 = _mm256_loadu_lh__m128i( (__m128i const*) &a01[la1+2] , (__m128i const*) &a01[la3+2] ) ;
+// 
+//       x0 = _mm256_unpacklo_epi64(y0,y1);                     // a0 b0 c0 d0
+//       x1 = _mm256_unpackhi_epi64(y0,y1);                     // a1 b1 c1 d1
+//       x2 = _mm256_unpacklo_epi64(y2,y3);                     // a2 b2 c2 d2
+//       x3 = _mm256_unpackhi_epi64(y2,y3);                     // a3 b3 c3 d3
+// 
+//       _mm256_storeu_si256((__m256i *)&b10[  0],x0);   // store 4 x 4 into b10 (from a01)
+//       _mm256_storeu_si256((__m256i *)&b10[lb1],x1);
+//       _mm256_storeu_si256((__m256i *)&b10[lb2],x2);
+//       _mm256_storeu_si256((__m256i *)&b10[lb3],x3);
+// 
+//       y0 = _mm256_loadu_lh__m128i( (__m128i const*) &a10[    0] , (__m128i const*) &a10[la2  ] ) ;
+//       y1 = _mm256_loadu_lh__m128i( (__m128i const*) &a10[la1  ] , (__m128i const*) &a10[la3  ] ) ;
+//       y2 = _mm256_loadu_lh__m128i( (__m128i const*) &a10[    2] , (__m128i const*) &a10[la2+2] ) ;
+//       y3 = _mm256_loadu_lh__m128i( (__m128i const*) &a10[la1+2] , (__m128i const*) &a10[la3+2] ) ;
+// 
+//       x0 = _mm256_unpacklo_epi64(y0,y1);                     // a0 b0 c0 d0
+//       x1 = _mm256_unpackhi_epi64(y0,y1);                     // a1 b1 c1 d1
+//       x2 = _mm256_unpacklo_epi64(y2,y3);                     // a2 b2 c2 d2
+//       x3 = _mm256_unpackhi_epi64(y2,y3);                     // a3 b3 c3 d3
+// 
+//       _mm256_storeu_si256((__m256i *)&b01[  0],x0);   // store 4 x 4 into b01 (from a10)
+//       _mm256_storeu_si256((__m256i *)&b01[lb1],x1);
+//       _mm256_storeu_si256((__m256i *)&b01[lb2],x2);
+//       _mm256_storeu_si256((__m256i *)&b01[lb3],x3);
+// 
+//       y0 = _mm256_loadu_lh__m128i( (__m128i const*) &a11[    0] , (__m128i const*) &a11[la2  ] ) ;
+//       y1 = _mm256_loadu_lh__m128i( (__m128i const*) &a11[la1  ] , (__m128i const*) &a11[la3  ] ) ;
+//       y2 = _mm256_loadu_lh__m128i( (__m128i const*) &a11[    2] , (__m128i const*) &a11[la2+2] ) ;
+//       y3 = _mm256_loadu_lh__m128i( (__m128i const*) &a11[la1+2] , (__m128i const*) &a11[la3+2] ) ;
+// 
+//       x0 = _mm256_unpacklo_epi64(y0,y1);                     // a0 b0 c0 d0
+//       x1 = _mm256_unpackhi_epi64(y0,y1);                     // a1 b1 c1 d1
+//       x2 = _mm256_unpacklo_epi64(y2,y3);                     // a2 b2 c2 d2
+//       x3 = _mm256_unpackhi_epi64(y2,y3);                     // a3 b3 c3 d3
+// 
+//       _mm256_storeu_si256((__m256i *)&b11[  0],x0);   // store 4 x 4 into b11 (from a11)
+//       _mm256_storeu_si256((__m256i *)&b11[lb1],x1);
+//       _mm256_storeu_si256((__m256i *)&b11[lb2],x2);
+//       _mm256_storeu_si256((__m256i *)&b11[lb3],x3);
+
+      a00 += la4 ;
+      b00 += 4;
+#else
+// faster if ni * nj > 2048
   for ( i=0 ; i<ni8 ; i+=8){
     a00 = &a000[i] ;
     b00 = &b000[i*lb1] ;
@@ -256,6 +338,7 @@ int TransposeBy8bytes(void *a, int la1, void *b, int lb1, int ni, int nj){
       _mm256_storeu_si256((__m256i *)&b11[lb3],x3);
       a00 += la8 ;
       b00 += 8;
+#endif
     }
   }
   for (i=ni8 ; i<ni ; i++){
