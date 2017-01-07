@@ -490,12 +490,12 @@ double  DRanNormalZigFast(void)  // faster, but with some deficiencies
 	int iz, hz;
 	double x, y;
 	const double r = ZIGNOR_R;     /* The start of the right tail */
-	
+
 	for (;;)
 	{
 		hz = (int) IRanU() ;
 		iz = hz & 0x7F ;
-		if (abs(hz)<kn[iz]) return(hz*wn[iz]) ;
+		if (abs(hz)<kn[iz]) { return(hz*wn[iz]) ; }
 		
 		x=hz*wn[iz];      /* iz==0, handles the base strip */
 		if(iz==0) {
@@ -514,11 +514,22 @@ static unsigned char s_auiZigBox[ZIGNOR_STORE];
 static unsigned int *i_adZigRan = &s_auiZigTmp[ZIGNOR_STORE / 4];
 static int s_cZigStored = 0;
 
+static unsigned int zigcalls = 0;
+static unsigned int zigquick = 0;
+static unsigned int zigtails = 0;
+static unsigned int zigwedge = 0;
+static unsigned int zigloops = 0;
+static unsigned int zigcalls2 = 0;
+static unsigned int zigquick2 = 0;
+static unsigned int zigtails2 = 0;
+static unsigned int zigwedge2 = 0;
+static unsigned int zigloops2 = 0;
+
 double  DRanNormalZigVec(void)
 {
-	unsigned int i, j, k;
+	unsigned int i, j, k, direct;
 	double x, u, f0, f1;
-	
+	zigcalls++; ; direct = 1;
 	for (;;)
 	{
 		if (s_cZigStored <= 0)
@@ -548,17 +559,22 @@ double  DRanNormalZigVec(void)
 		u = RANDBLS_32new(i_adZigRan[s_cZigStored]);   // convert from 32 bit int to (-1.0 , 1.0) on the fly
 		i = s_auiZigBox[s_cZigStored];
 		
-		if (fabs(u) < s_adZigR[i])		 /* first try the rectangular boxes */
+		if (fabs(u) < s_adZigR[i]){		 /* first try the rectangular boxes */
+		        zigquick += direct;
 			return u * s_adZigX[i];
+		}
+		direct = 0;
 
-		if (i == 0)						/* bottom box: sample from the tail */
-			return DRanNormalTail(ZIGNOR_R, u < 0);
+		if (i == 0){						/* bottom box: sample from the tail */
+			zigtails++ ; return DRanNormalTail(ZIGNOR_R, u < 0);
+		}
 
+		zigwedge ++;
 		x = u * s_adZigX[i];		   /* is this a sample from the wedges? */
 		f0 = exp(-0.5 * (s_adZigX[i] * s_adZigX[i] - x * x) );
 		f1 = exp(-0.5 * (s_adZigX[i + 1] * s_adZigX[i + 1] - x * x) );
-      		if (f1 + DRanU() * (f0 - f1) < 1.0)
-			return x;
+      		if (f1 + DRanU() * (f0 - f1) < 1.0)  return x;
+		zigloops++;
 	}
 }
 
@@ -567,7 +583,8 @@ double  DRanNormalZigFastVec(void)  // faster, but with some deficiencies
 	int iz, hz;
 	double x, y;
 	const double r = ZIGNOR_R;     /* The start of the right tail */
-	
+	int direct = 1;
+	zigcalls2++;
 	for (;;)
 	{
 		if (s_cZigStored <= 0)
@@ -578,15 +595,19 @@ double  DRanNormalZigFastVec(void)  // faster, but with some deficiencies
 		--s_cZigStored;
 		hz = (int) s_auiZigTmp[s_cZigStored] ;
 		iz = hz & 0x7F ;
-		if (abs(hz)<kn[iz]) return(hz*wn[iz]) ;
+		if (abs(hz)<kn[iz]) { zigquick2+=direct ; return (hz*wn[iz]) ; }
+		direct = 0;
 		
 		x=hz*wn[iz];      /* iz==0, handles the base strip */
 		if(iz==0) {
+		  zigtails2++;
 		  do{ x=-log(DRanU())*0.2904764; y=-log(DRanU());} while(y+y<x*x);	/* .2904764 is 1/r */ 
 		  return (hz>0)? r+x : -r-x;
 		}
 		/* iz>0, handle the wedges of other strips */
+		zigwedge2++;
 		if( fn[iz]+DRanU()*(fn[iz-1]-fn[iz]) < exp(-.5*x*x) ) return x;
+		zigloops2++;
 	}
 }
 
@@ -903,6 +924,24 @@ main(int argc, char **argv){
   }
   t1 = MPI_Wtime();
   printf("time for 1E+6 x 1E+3 random SHR3 double values = %6.3f \n",t1-t0);
+
+  t1 = zigquick ; t0 = zigcalls+1 ; 
+  printf("quick calls in ziggurat = %6.3f%\n",t1 / t0 * 100.0);
+  t1 = zigtails ;
+  printf("tail  calls in ziggurat = %6.3f%\n",t1 / t0 * 100.0);
+  t1 = zigwedge ;
+  printf("wedge calls in ziggurat = %6.3f%\n",t1 / t0 * 100.0);
+  t1 = zigloops ;
+  printf("extra loops in ziggurat = %6.3f%\n",t1 / t0 * 100.0);
+
+  t1 = zigquick2 ; t0 = zigcalls2+1 ; 
+  printf("quick calls in ziggurat = %6.3f%\n",t1 / t0 * 100.0);
+  t1 = zigtails2 ;
+  printf("tail  calls in ziggurat = %6.3f%\n",t1 / t0 * 100.0);
+  t1 = zigwedge2 ;
+  printf("wedge calls in ziggurat = %6.3f%\n",t1 / t0 * 100.0);
+  t1 = zigloops2 ;
+  printf("extra loops in ziggurat = %6.3f%\n",t1 / t0 * 100.0);
 
   MPI_Finalize();
 }
