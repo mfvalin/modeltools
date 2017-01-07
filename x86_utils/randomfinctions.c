@@ -73,10 +73,9 @@ void GetInitialSeeds(unsigned int auiSeed[], int cSeed, unsigned int uiSeed, uns
 /*==========================================================================
  * R250 ans SHR3 generators added, consistent with the MWC8222 code
  *==========================================================================*/
-
 /*------------------------ start of SHR3 addition --------------------------*/
 static unsigned long jsr=123456789;
-#define SHR3 (jz=jsr, jsr^=(jsr<<13), jsr^=(jsr>>17), jsr^=(jsr<<5),jz+jsr)
+// #define SHR3 (jz=jsr, jsr^=(jsr<<13), jsr^=(jsr>>17), jsr^=(jsr<<5),jz+jsr)
 
 void RanSetSeed_SHR3(int *piSeed, int cSeed)
 {
@@ -103,19 +102,31 @@ double DRan_SHR3(void)		/* returns a random double */
 }
 
 void VecIRan_SHR3(unsigned int *ranbuf, int n){
-  int k = 0;
   int i;
   unsigned long jz;
 
-  for(i=0 ; i<n ; i++) ranbuf[k] = SHR3;
+//   for(i=0 ; i<n ; i++) ranbuf[k] = SHR3;
+  for(i=0 ; i<n ; i++) {
+    jz=jsr ;
+    jsr^=(jsr<<13) ;
+    jsr^=(jsr>>17) ;
+    jsr^=(jsr<<5) ;
+    ranbuf[i] = (jz+jsr);
+  };
 }
 
 void VecDRan_SHR3(double *ranbuf, int n){
-  int k = 0;
   int i;
   unsigned long jz;
 
-  for(i=0 ; i<n ; i++) ranbuf[k] = RANDBL_32new(SHR3);
+//   for(i=0 ; i<n ; i++) ranbuf[k] = RANDBL_32new(SHR3);
+  for(i=0 ; i<n ; i++){
+    jz=jsr ;
+    jsr^=(jsr<<13) ;
+    jsr^=(jsr>>17) ;
+    jsr^=(jsr<<5) ;
+    ranbuf[i] = RANDBL_32new(jz+jsr);
+  }
 }
 
 /*------------------------- end of SHR3 addition ---------------------------*/
@@ -198,7 +209,7 @@ void VecIRan_R250(unsigned int *ranbuf, int n){
   if ( n == 0 ) return;
   FillBuffer_R250();     // we get here if buffer is empty before n is satisfied
   while(n >= 250){        // chunks of 250 values
-    for(i=0;i<250;i++) ranbuf[k+i] = r250_buffer[i] ;
+    for(i=0 ; i<250 ; i++) ranbuf[k+i] = r250_buffer[i] ;
     n -= 250 ;
     k += 250 ;
     FillBuffer_R250() ;
@@ -219,7 +230,7 @@ void VecDRan_R250(double *ranbuf, int n){
   if ( n == 0 ) return;
   FillBuffer_R250();     // we get here if buffer is empty
   while(n >= 250){        // chunks of 250 values
-    for(i=0;i<250;i++) ranbuf[k+i] = RANDBL_32new(r250_buffer[i]) ;
+    for(i=0 ; i<250 ; i++) ranbuf[k+i] = RANDBL_32new(r250_buffer[i]) ;
     n -= 250 ;
     k += 250 ;
     FillBuffer_R250() ;
@@ -429,10 +440,9 @@ double  DRanNormalZig(void)
 	
 	for (;;)
 	{
-		u = 2 * DRanU() - 1;
-// 		u = 2 * DRan_R250() - 1;
+// 		u = 2 * DRanU() - 1;
+		u = RANDBLS_32new(IRanU()) ;
 		i = IRanU() & 0x7F;
-// 		i = IRan_R250() & 0x7F;
 		/* first try the rectangular boxes */
 		if (fabs(u) < s_adZigR[i])		 
 			return u * s_adZigX[i];
@@ -444,18 +454,17 @@ double  DRanNormalZig(void)
 		f0 = exp(-0.5 * (s_adZigX[i] * s_adZigX[i] - x * x) );
 		f1 = exp(-0.5 * (s_adZigX[i+1] * s_adZigX[i+1] - x * x) );
       		if (f1 + DRanU() * (f0 - f1) < 1.0)
-//       		if (f1 + DRan_R250() * (f0 - f1) < 1.0)
 			return x;
 	}
 }
 
 #define ZIGNOR_STORE 64 * 4
-static unsigned int s_auiZigTmp[ZIGNOR_STORE / 4 + 4];
-static unsigned int s_auiZigBox[ZIGNOR_STORE + 4];
+static unsigned int s_auiZigTmp[ZIGNOR_STORE + ZIGNOR_STORE / 4];
+static unsigned char s_auiZigBox[ZIGNOR_STORE];
 // static double s_adZigRan[ZIGNOR_STORE + ZIGNOR_STORE / 4];
-static unsigned int i_adZigRan[ZIGNOR_STORE + ZIGNOR_STORE / 4 + 4];
+static unsigned int *i_adZigRan = &s_auiZigTmp[ZIGNOR_STORE / 4];
 static int s_cZigStored = 0;
-//RANDBLS_32new
+
 double  DRanNormalZigVec(void)
 {
 	unsigned int i, j, k;
@@ -465,15 +474,18 @@ double  DRanNormalZigVec(void)
 	{
 		if (s_cZigStored <= 0)
 		{
-			RanVecIntU(s_auiZigTmp, ZIGNOR_STORE / 4);
-			RanVecIntU(i_adZigRan, ZIGNOR_STORE / 4);
+			RanVecIntU(s_auiZigTmp, ZIGNOR_STORE + ZIGNOR_STORE / 4);
 // 			RanVecU(s_adZigRan, ZIGNOR_STORE);
 			for (j = k = 0; j < ZIGNOR_STORE; j += 4, ++k)
 			{
-				i = s_auiZigTmp[k];	s_auiZigBox[j + 0] = i & 0x7F;
-				i >>= 8;			s_auiZigBox[j + 1] = i & 0x7F;
-				i >>= 8;			s_auiZigBox[j + 2] = i & 0x7F;
-				i >>= 8;			s_auiZigBox[j + 3] = i & 0x7F;
+				i = s_auiZigTmp[k];	
+				s_auiZigBox[j + 0] = i & 0x7F;
+				s_auiZigBox[j + 1] = (i>>8) & 0x7F;
+				s_auiZigBox[j + 2] = (i>>16) & 0x7F;
+				s_auiZigBox[j + 3] = (i>>24) & 0x7F;
+// 				i >>= 8;			s_auiZigBox[j + 1] = i & 0x7F;
+// 				i >>= 8;			s_auiZigBox[j + 2] = i & 0x7F;
+// 				i >>= 8;			s_auiZigBox[j + 3] = i & 0x7F;
 // 				s_adZigRan[j + 0] = 2 * s_adZigRan[j + 0] - 1;
 // 				s_adZigRan[j + 1] = 2 * s_adZigRan[j + 1] - 1;
 // 				s_adZigRan[j + 2] = 2 * s_adZigRan[j + 2] - 1;
