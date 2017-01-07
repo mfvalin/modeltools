@@ -98,7 +98,7 @@ double DRan_SHR3(void)		/* returns a random double */
   jsr^=(jsr<<13) ;
   jsr^=(jsr>>17) ;
   jsr^=(jsr<<5) ;
-  return RANDBL_32new(jz+jsr);
+  return RANDBL_32new(jz+jsr);   // convert from 32 bit int to (0.0 , 1.0)
 }
 
 void VecIRan_SHR3(unsigned int *ranbuf, int n){
@@ -125,7 +125,7 @@ void VecDRan_SHR3(double *ranbuf, int n){
     jsr^=(jsr<<13) ;
     jsr^=(jsr>>17) ;
     jsr^=(jsr<<5) ;
-    ranbuf[i] = RANDBL_32new(jz+jsr);
+    ranbuf[i] = RANDBL_32new(jz+jsr);   // convert from 32 bit int to (0.0 , 1.0)
   }
 }
 
@@ -187,7 +187,7 @@ double DRan_R250(void)		/* returns a random double */
   register unsigned int new_rand;
   if ( r250_index > 249 ) FillBuffer_R250();
   new_rand = r250_buffer[r250_index++] ;
-  return RANDBL_32new(new_rand);
+  return RANDBL_32new(new_rand);   // convert from 32 bit int to (0.0 , 1.0)
 }
 
 unsigned int IRan_R250(void)		/* returns a random unsigned integer */
@@ -224,19 +224,19 @@ void VecDRan_R250(double *ranbuf, int n){
   int k = 0;
   int i;
   while( r250_index < 250 && n > 0 ){
-    ranbuf[k++] = RANDBL_32new(r250_buffer[r250_index++]) ;
+    ranbuf[k++] = RANDBL_32new(r250_buffer[r250_index++]) ;   // convert from 32 bit int to (0.0 , 1.0)
     n-- ;
   }
   if ( n == 0 ) return;
   FillBuffer_R250();     // we get here if buffer is empty
   while(n >= 250){        // chunks of 250 values
-    for(i=0 ; i<250 ; i++) ranbuf[k+i] = RANDBL_32new(r250_buffer[i]) ;
+    for(i=0 ; i<250 ; i++) ranbuf[k+i] = RANDBL_32new(r250_buffer[i]) ;   // convert from 32 bit int to (0.0 , 1.0)
     n -= 250 ;
     k += 250 ;
     FillBuffer_R250() ;
   }
   while( n > 0 ){  // n < 250 at this point
-    ranbuf[k++] = RANDBL_32new(r250_buffer[r250_index++]) ;
+    ranbuf[k++] = RANDBL_32new(r250_buffer[r250_index++]) ;   // convert from 32 bit int to (0.0 , 1.0)
     n-- ;
   }
 }
@@ -286,7 +286,7 @@ double DRan_MWC8222(void)
 	t = MWC_A * s_auiStateMWC[s_uiStateMWC] + s_uiCarryMWC;
 	s_uiCarryMWC = (unsigned int)(t >> 32);
 	s_auiStateMWC[s_uiStateMWC] = (unsigned int)t;
-	return RANDBL_32new(t);
+	return RANDBL_32new(t);   // convert from 32 bit int to (0.0 , 1.0)
 }
 void VecIRan_MWC8222(unsigned int *auiRan, int cRan)
 {
@@ -313,7 +313,7 @@ void VecDRan_MWC8222(double *adRan, int cRan)
 		state = (state + 1) & (MWC_R - 1);
 		t = MWC_A * s_auiStateMWC[state] + carry;
 		s_auiStateMWC[state] = (unsigned int)t;
-		*adRan = RANDBL_32new(t);
+		*adRan = RANDBL_32new(t);   // convert from 32 bit int to (0.0 , 1.0)
 		carry = (unsigned int)(t >> 32);
 	}
 	s_uiCarryMWC = carry;
@@ -469,7 +469,7 @@ double  DRanNormalZig(void)
 	for (;;)
 	{
 // 		u = 2 * DRanU() - 1;
-		u = RANDBLS_32new(IRanU()) ;
+		u = RANDBLS_32new(IRanU()) ;   // convert 32 bit int to (-1.0,1.0)
 		i = IRanU() & 0x7F;
 		/* first try the rectangular boxes */
 		if (fabs(u) < s_adZigR[i])		 
@@ -487,26 +487,23 @@ double  DRanNormalZig(void)
 }
 double  DRanNormalZigFast(void)  // faster, but with some deficiencies
 {
-	unsigned int i;
-	double x, u, f0, f1;
+	int iz, hz;
+	double x, y;
+	const double r = ZIGNOR_R;     /* The start of the right tail */
 	
 	for (;;)
 	{
-// 		u = 2 * DRanU() - 1;
-		u = RANDBLS_32new(IRanU()) ;
-		i = IRanU() & 0x7F;
-		/* first try the rectangular boxes */
-		if (fabs(u) < s_adZigR[i])		 
-			return u * s_adZigX[i];
-		/* bottom box: sample from the tail */
-		if (i == 0)						
-			return DRanNormalTail(ZIGNOR_R, u < 0);
-		/* is this a sample from the wedges? */
-		x = u * s_adZigX[i];		   
-		f0 = exp(-0.5 * (s_adZigX[i] * s_adZigX[i] - x * x) );
-		f1 = exp(-0.5 * (s_adZigX[i+1] * s_adZigX[i+1] - x * x) );
-      		if (f1 + DRanU() * (f0 - f1) < 1.0)
-			return x;
+		hz = (int) IRanU() ;
+		iz = hz & 0x7F ;
+		if (abs(hz)<kn[iz]) return(hz*wn[iz]) ;
+		
+		x=hz*wn[iz];      /* iz==0, handles the base strip */
+		if(iz==0) {
+		  do{ x=-log(DRanU())*0.2904764; y=-log(DRanU());} while(y+y<x*x);	/* .2904764 is 1/r */ 
+		  return (hz>0)? r+x : -r-x;
+		}
+		/* iz>0, handle the wedges of other strips */
+		if( fn[iz]+DRanU()*(fn[iz-1]-fn[iz]) < exp(-.5*x*x) ) return x;
 	}
 }
 
@@ -548,7 +545,7 @@ double  DRanNormalZigVec(void)
 		--s_cZigStored;
 
 // 		u = s_adZigRan[s_cZigStored];
-		u = RANDBLS_32new(i_adZigRan[s_cZigStored]);   // convert from unsigned int to -1 < x < 1 on the fly
+		u = RANDBLS_32new(i_adZigRan[s_cZigStored]);   // convert from 32 bit int to (-1.0 , 1.0) on the fly
 		i = s_auiZigBox[s_cZigStored];
 		
 		if (fabs(u) < s_adZigR[i])		 /* first try the rectangular boxes */
