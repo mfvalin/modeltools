@@ -407,6 +407,9 @@ static double DRanUfromIRanU(void)
 /* same area; s_adZigR holds s_adZigX[i + 1] / s_adZigX[i] */
 static double s_adZigX[ZIGNOR_C + 1], s_adZigR[ZIGNOR_C];
 
+static unsigned int kn[128];
+static double wn[128],fn[128];
+
 static double DRanNormalTail(double dMin, int iNegative)
 {
 	double x, y;
@@ -416,6 +419,31 @@ static double DRanNormalTail(double dMin, int iNegative)
 	} while (-2 * y < x * x);
 	return iNegative ? x - dMin : dMin - x;
 }
+static void zigNorFastInit(int iC, double dR, double dV)  // faster, but with some deficiencies
+{  const double m1 = 2147483648.0;
+   double dn=3.442619855899,tn=dn,vn=9.91256303526217e-3, q;
+   int i;
+
+/* Set up tables for RNOR */
+   q=vn/exp(-.5*dn*dn);
+   kn[0]=(dn/q)*m1;
+   kn[1]=0;
+
+   wn[0]=q/m1;
+   wn[127]=dn/m1;
+
+   fn[0]=1.;
+   fn[127]=exp(-.5*dn*dn);
+
+    for(i=126;i>=1;i--)
+    {dn=sqrt(-2.*log(vn/dn+exp(-.5*dn*dn)));
+     kn[i+1]=(dn/tn)*m1;
+     tn=dn;
+     fn[i]=exp(-.5*dn*dn);
+     wn[i]=dn/m1;
+    }
+}
+
 static void zigNorInit(int iC, double dR, double dV)
 {
 	int i;	double f;
@@ -457,8 +485,32 @@ double  DRanNormalZig(void)
 			return x;
 	}
 }
+double  DRanNormalZigFast(void)  // faster, but with some deficiencies
+{
+	unsigned int i;
+	double x, u, f0, f1;
+	
+	for (;;)
+	{
+// 		u = 2 * DRanU() - 1;
+		u = RANDBLS_32new(IRanU()) ;
+		i = IRanU() & 0x7F;
+		/* first try the rectangular boxes */
+		if (fabs(u) < s_adZigR[i])		 
+			return u * s_adZigX[i];
+		/* bottom box: sample from the tail */
+		if (i == 0)						
+			return DRanNormalTail(ZIGNOR_R, u < 0);
+		/* is this a sample from the wedges? */
+		x = u * s_adZigX[i];		   
+		f0 = exp(-0.5 * (s_adZigX[i] * s_adZigX[i] - x * x) );
+		f1 = exp(-0.5 * (s_adZigX[i+1] * s_adZigX[i+1] - x * x) );
+      		if (f1 + DRanU() * (f0 - f1) < 1.0)
+			return x;
+	}
+}
 
-#define ZIGNOR_STORE 64 * 4
+#define ZIGNOR_STORE 256 * 4
 static unsigned int s_auiZigTmp[ZIGNOR_STORE + ZIGNOR_STORE / 4];
 static unsigned char s_auiZigBox[ZIGNOR_STORE];
 // static double s_adZigRan[ZIGNOR_STORE + ZIGNOR_STORE / 4];
@@ -496,7 +548,7 @@ double  DRanNormalZigVec(void)
 		--s_cZigStored;
 
 // 		u = s_adZigRan[s_cZigStored];
-		u = RANDBLS_32new(i_adZigRan[s_cZigStored]);
+		u = RANDBLS_32new(i_adZigRan[s_cZigStored]);   // convert from unsigned int to -1 < x < 1 on the fly
 		i = s_auiZigBox[s_cZigStored];
 		
 		if (fabs(u) < s_adZigR[i])		 /* first try the rectangular boxes */
@@ -513,15 +565,53 @@ double  DRanNormalZigVec(void)
 	}
 }
 
+double  DRanNormalZigFastVec(void)  // faster, but with some deficiencies
+{
+	int iz, hz;
+	double x, y;
+	const double r = ZIGNOR_R;     /* The start of the right tail */
+	
+	for (;;)
+	{
+		if (s_cZigStored <= 0)
+		{
+			RanVecIntU(s_auiZigTmp, ZIGNOR_STORE + ZIGNOR_STORE / 4);
+			s_cZigStored = ZIGNOR_STORE + ZIGNOR_STORE / 4;
+		}
+		--s_cZigStored;
+		hz = (int) s_auiZigTmp[s_cZigStored] ;
+		iz = hz & 0x7F ;
+		if (abs(hz)<kn[iz]) return(hz*wn[iz]) ;
+		
+		x=hz*wn[iz];      /* iz==0, handles the base strip */
+		if(iz==0) {
+		  do{ x=-log(DRanU())*0.2904764; y=-log(DRanU());} while(y+y<x*x);	/* .2904764 is 1/r */ 
+		  return (hz>0)? r+x : -r-x;
+		}
+		/* iz>0, handle the wedges of other strips */
+		if( fn[iz]+DRanU()*(fn[iz-1]-fn[iz]) < exp(-.5*x*x) ) return x;
+	}
+}
+
 void  RanNormalSetSeedZig(int *piSeed, int cSeed)
 {
 	zigNorInit(ZIGNOR_C, ZIGNOR_R, ZIGNOR_V);
+	RanSetSeed(piSeed, cSeed);
+}
+void  RanNormalSetSeedZigFast(int *piSeed, int cSeed)
+{
+	zigNorFastInit(ZIGNOR_C, ZIGNOR_R, ZIGNOR_V);
 	RanSetSeed(piSeed, cSeed);
 }
 void  RanNormalSetSeedZigVec(int *piSeed, int cSeed)
 {
 	s_cZigStored = 0;
 	RanNormalSetSeedZig(piSeed, cSeed);
+}
+void  RanNormalSetSeedZigFastVec(int *piSeed, int cSeed)
+{
+	s_cZigStored = 0;
+	RanNormalSetSeedZigFast(piSeed, cSeed);
 }
 /*--------------------------- END General Ziggurat -------------------------*/
 
@@ -536,6 +626,8 @@ main(int argc, char **argv){
   double ranbuf2[1200000];
   int pos, neg, mask, postot, negtot;
   double dmax, dmin, avg;
+  unsigned long long *idmax, *idmin ;
+  unsigned int maxpos, maxneg;
 
   MPI_Init(&argc,&argv);
   for(i=0 ; i<1200000 ; i++) ranbuf[i] = 0;
@@ -545,9 +637,20 @@ main(int argc, char **argv){
   lr = (unsigned int)mrand48();
   lr = (unsigned int)mrand48();
   lr = (unsigned int)mrand48();
+  maxpos = 0x7FFFFFFF ;
+  maxneg = 0x80000000 ;
+  idmax = (unsigned long long *)&dmax;
+  idmin = (unsigned long long *)&dmin;
+  dmax = RANDBL_32new(maxpos) ;
+  dmin = RANDBL_32new(maxneg) ;
+  printf("maxpos, maxneg transformed with RANDBL_32new  : %22.18f %22.18f , %16.16Lx, %16.16Lx\n",dmax,dmin,*idmax,*idmin);
+  dmax = RANDBLS_32new(maxpos) ;
+  dmin = RANDBLS_32new(maxneg) ;
+  printf("maxpos, maxneg transformed with RANDBLS_32new : %22.18f %22.18f , %16.16Lx, %16.16Lx\n",dmax,dmin,*idmax,*idmin);
 
    RanSetSeed_MWC8222(&lr, 1);
    RanNormalSetSeedZig(r250_buffer, 250);   // initialize to values already there :-)
+   RanNormalSetSeedZigFast(r250_buffer, 250);   // initialize to values already there :-)
 
 //   printf("static unsigned int r250_buffer[250] = {\n");
   for (i=0 ; i<25 ; i++){
@@ -614,7 +717,7 @@ main(int argc, char **argv){
   printf("time for 1E+9 x 1 random DRanU/R250 double value = %6.3f \n",t1-t0);  //  DRanU
 
   dmin = 0.0 ; dmax = 0.0;
-  for( i=0 ; i < 10000000 ; i++) {
+  for( i=0 ; i < 100000000 ; i++) {
     rval = DRanNormalZigVec();
     avg = avg + rval ;
     dmin = (dmin < rval) ? dmin : rval ;
@@ -626,6 +729,20 @@ main(int argc, char **argv){
   for( i=0 ; i < 1000000000 ; i++) rval = DRanNormalZigVec();
   t1 = MPI_Wtime();
   printf("time for 1E+9 x 1 random DRanNormalZigVec/R250 double value = %6.3f \n",t1-t0);  // DRanNormalZigVec
+
+  dmin = 0.0 ; dmax = 0.0;
+  for( i=0 ; i < 100000000 ; i++) {
+    rval = DRanNormalZigFastVec();
+    avg = avg + rval ;
+    dmin = (dmin < rval) ? dmin : rval ;
+    dmax = (dmax > rval) ? dmax : rval ;
+  }
+  printf("dmin = %6.3f, dmax = %6.3f, avg = %10.7f\n",dmin,dmax,avg/i);
+  MPI_Barrier(MPI_COMM_WORLD);
+  t0 = MPI_Wtime();
+  for( i=0 ; i < 1000000000 ; i++) rval = DRanNormalZigFastVec();
+  t1 = MPI_Wtime();
+  printf("time for 1E+9 x 1 random DRanNormalZigFastVec/R250 double value = %6.3f \n",t1-t0);  // DRanNormalZigFastVec
 
   for( i=0 ; i < 1000000 ; i++) rval = DRan_SHR3();
   MPI_Barrier(MPI_COMM_WORLD);
