@@ -1,4 +1,6 @@
 /*==========================================================================
+ *               ORIGINAL Copyright before modifications                    */
+/*==========================================================================
  *  This code is Copyright (C) 2005, Jurgen A. Doornik.
  *  Permission to use this code for non-commercial purposes
  *  is hereby given, provided proper reference is made to:
@@ -10,6 +12,10 @@
  *  This notice should be maintained in modified versions of the code.
  *  No warranty is given regarding the correctness of this code.
  *==========================================================================*/
+
+// macro used to instrument code with counters
+#define INSTRUMENT(A) ;
+
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
@@ -39,16 +45,10 @@
 #define M_RAN_INVM48	3.55271367880050092936e-015			  /* 1.0 / 2^48 */
 #define M_RAN_INVM52	2.22044604925031308085e-016			  /* 1.0 / 2^52 */
 
-#define RANDBL_32new(iRan1)                   \
-    ((int)(iRan1) * M_RAN_INVM32 + (0.5 + M_RAN_INVM32 / 2))
-#define RANDBLS_32new(iRan1)                   \
-    ((int)(iRan1) * M_RAN_INVM31 + (M_RAN_INVM31 / 2))
-#define RANDBL_48new(iRan1, iRan2)            \
-    ((int)(iRan1) * M_RAN_INVM32 + (0.5 + M_RAN_INVM48 / 2) + \
-        (int)((iRan2) & 0x0000FFFF) * M_RAN_INVM48)
-#define RANDBL_52new(iRan1, iRan2)            \
-    ((int)(iRan1) * M_RAN_INVM32 + (0.5 + M_RAN_INVM52 / 2) + \
-        (int)((iRan2) & 0x000FFFFF) * M_RAN_INVM52)
+#define RANDBL_32new(iRan1)          ((int)(iRan1) * M_RAN_INVM32 + (0.5 + M_RAN_INVM32 / 2))
+#define RANDBLS_32new(iRan1)         ((int)(iRan1) * M_RAN_INVM31 + (M_RAN_INVM31 / 2))
+#define RANDBL_48new(iRan1, iRan2)   ((int)(iRan1) * M_RAN_INVM32 + (0.5 + M_RAN_INVM48 / 2) + (int)((iRan2) & 0x0000FFFF) * M_RAN_INVM48)
+#define RANDBL_52new(iRan1, iRan2)   ((int)(iRan1) * M_RAN_INVM32 + (0.5 + M_RAN_INVM52 / 2) + (int)((iRan2) & 0x000FFFFF) * M_RAN_INVM52)
 
 /* plug-in RNG */
 typedef double 		( * DRANFUN)(void);
@@ -71,7 +71,7 @@ void GetInitialSeeds(unsigned int auiSeed[], int cSeed, unsigned int uiSeed, uns
 }
 /*-------------------------- END GetInitialSeeds ---------------------------*/
 /*==========================================================================
- * R250 ans SHR3 generators added, consistent with the MWC8222 code
+ * R250 ans SHR3 generators added, naming is consistent with the MWC8222 code
  *==========================================================================*/
 /*------------------------ start of SHR3 addition --------------------------*/
 static unsigned long jsr=123456789;
@@ -92,13 +92,22 @@ unsigned int IRan_SHR3(void)		/* returns a random unsigned integer */
   return (jz+jsr) ;
 }
 
-double DRan_SHR3(void)		/* returns a random double */
+double DRan_SHR3(void)		/* returns a random double (0.0 , 1.0) */
 {
   unsigned long jz=jsr ; 
   jsr^=(jsr<<13) ;
   jsr^=(jsr>>17) ;
   jsr^=(jsr<<5) ;
   return RANDBL_32new(jz+jsr);   // convert from 32 bit int to (0.0 , 1.0)
+}
+
+double DRanS_SHR3(void)		/* returns a random double (-1.0 , 1.0) */
+{
+  unsigned long jz=jsr ; 
+  jsr^=(jsr<<13) ;
+  jsr^=(jsr>>17) ;
+  jsr^=(jsr<<5) ;
+  return RANDBLS_32new(jz+jsr);   // convert from 32 bit int to (-1.0 , 1.0)
 }
 
 void VecIRan_SHR3(unsigned int *ranbuf, int n){
@@ -181,13 +190,22 @@ void RanSetSeed_R250(int *piSeed, int cSeed)
   }
 }
 
-double DRan_R250(void)		/* returns a random double */
+double DRan_R250(void)		/* returns a random double (0.0 , 1.0) */
 {
   register int	i, j;
   register unsigned int new_rand;
   if ( r250_index > 249 ) FillBuffer_R250();
   new_rand = r250_buffer[r250_index++] ;
   return RANDBL_32new(new_rand);   // convert from 32 bit int to (0.0 , 1.0)
+}
+
+double DRanS_R250(void)		/* returns a random double (-1.0 , 1.0) */
+{
+  register int	i, j;
+  register unsigned int new_rand;
+  if ( r250_index > 249 ) FillBuffer_R250();
+  new_rand = r250_buffer[r250_index++] ;
+  return RANDBLS_32new(new_rand);   // convert from 32 bit int to (0.0 , 1.0)
 }
 
 unsigned int IRan_R250(void)		/* returns a random unsigned integer */
@@ -278,7 +296,7 @@ unsigned int IRan_MWC8222(void)
 	s_auiStateMWC[s_uiStateMWC] = (unsigned int)t;
     return (unsigned int)t;
 }
-double DRan_MWC8222(void)
+double DRan_MWC8222(void)         /* returns a random double (0.0 , 1.0) */
 {
 	UINT64 t;
 
@@ -287,6 +305,16 @@ double DRan_MWC8222(void)
 	s_uiCarryMWC = (unsigned int)(t >> 32);
 	s_auiStateMWC[s_uiStateMWC] = (unsigned int)t;
 	return RANDBL_32new(t);   // convert from 32 bit int to (0.0 , 1.0)
+}
+double DRanS_MWC8222(void)        /* returns a random double (-1.0 , 1.0) */
+{
+	UINT64 t;
+
+	s_uiStateMWC = (s_uiStateMWC + 1) & (MWC_R - 1);
+	t = MWC_A * s_auiStateMWC[s_uiStateMWC] + s_uiCarryMWC;
+	s_uiCarryMWC = (unsigned int)(t >> 32);
+	s_auiStateMWC[s_uiStateMWC] = (unsigned int)t;
+	return RANDBLS_32new(t);   // convert from 32 bit int to (-1.0 , 1.0)
 }
 void VecIRan_MWC8222(unsigned int *auiRan, int cRan)
 {
@@ -325,14 +353,19 @@ void VecDRan_MWC8222(double *adRan, int cRan)
 static int s_cNormalInStore = 0;		     /* > 0 if a normal is in store */
 
 static DRANFUN s_fnDRanu = DRan_R250;
+static DRANFUN s_fnDRanus = DRanS_R250;
 static IRANFUN s_fnIRanu = IRan_R250;
 static IVECRANFUN s_fnVecIRanu = VecIRan_R250;
 static DVECRANFUN s_fnVecDRanu = VecDRan_R250;
 static RANSETSEEDFUN s_fnRanSetSeed = RanSetSeed_R250;
 
-double  DRanU(void)
+double  DRanU(void)     /* returns a random double (0.0 , 1.0) */
 {
     return (*s_fnDRanu)();
+}
+double  DRanUS(void)    /* returns a random double (-1.0 , 1.0) */
+{
+    return (*s_fnDRanus)();
 }
 unsigned int IRanU(void)
 {
@@ -357,6 +390,7 @@ void    RanSetRan(const char *sRan)
 	if (strcmp(sRan, "MWC8222") == 0)
 	{
 		s_fnDRanu = DRan_MWC8222;
+		s_fnDRanus = DRanS_MWC8222;
 		s_fnIRanu = IRan_MWC8222;
 		s_fnVecIRanu = VecIRan_MWC8222;
 		s_fnVecDRanu = VecDRan_MWC8222;
@@ -365,6 +399,7 @@ void    RanSetRan(const char *sRan)
 	else if (strcmp(sRan, "R250") == 0)
 	{
 		s_fnDRanu = DRan_R250;
+		s_fnDRanus = DRanS_R250;
 		s_fnIRanu = IRan_R250;
 		s_fnVecIRanu = VecIRan_R250;
 		s_fnVecDRanu = VecDRan_R250;
@@ -373,6 +408,7 @@ void    RanSetRan(const char *sRan)
 	else if (strcmp(sRan, "SHR3") == 0)
 	{
 		s_fnDRanu = DRan_SHR3;
+		s_fnDRanus = DRanS_SHR3;
 		s_fnIRanu = IRan_SHR3;
 		s_fnVecIRanu = VecIRan_SHR3;
 		s_fnVecDRanu = VecDRan_SHR3;
@@ -381,6 +417,7 @@ void    RanSetRan(const char *sRan)
 	else
 	{
 		s_fnDRanu = NULL;
+		s_fnDRanus = NULL;
 		s_fnIRanu = NULL;
 		s_fnVecIRanu = NULL;
 		s_fnVecDRanu = NULL;
@@ -410,15 +447,56 @@ static double s_adZigX[ZIGNOR_C + 1], s_adZigR[ZIGNOR_C];
 static unsigned int kn[128];
 static double wn[128],fn[128];
 
+static unsigned int zigcalls = 0;
+static unsigned int zigquick = 0;
+static unsigned int zigtails = 0;
+static unsigned int zigwedge = 0;
+static unsigned int zigloops = 0;
+static unsigned int zigused  = 0;
+static unsigned int zigcalls2 = 0;
+static unsigned int zigquick2 = 0;
+static unsigned int zigtails2 = 0;
+static unsigned int zigwedge2 = 0;
+static unsigned int zigloops2 = 0;
+static unsigned int zigused2 = 0;
+
+#define ZIGNOR_STORE 256 * 4
+static unsigned int s_auiZigTmp[ZIGNOR_STORE + ZIGNOR_STORE / 4];
+static unsigned char s_auiZigBox[ZIGNOR_STORE];
+// static double s_adZigRan[ZIGNOR_STORE + ZIGNOR_STORE / 4];
+static unsigned int *i_adZigRan = &s_auiZigTmp[ZIGNOR_STORE / 4];
+static int s_cZigStored = 0;
+
+static int FillBufferZig(){
+  int i, j, k;
+  RanVecIntU(s_auiZigTmp, ZIGNOR_STORE + ZIGNOR_STORE / 4);
+  for (j = k = 0; j < ZIGNOR_STORE; j += 4, ++k) {
+    i = s_auiZigTmp[ZIGNOR_STORE + k];
+    s_auiZigBox[j + 0] = i & 0x7F;
+    s_auiZigBox[j + 1] = (i>>8) & 0x7F;
+    s_auiZigBox[j + 2] = (i>>16) & 0x7F;
+    s_auiZigBox[j + 3] = (i>>24) & 0x7F;
+  }
+  s_cZigStored = j ;
+}
+
 static double DRanNormalTail(double dMin, int iNegative)
 {
-	double x, y;
-	do
-	{	x = log(DRanU()) / dMin;
-		y = log(DRanU());
-	} while (-2 * y < x * x);
-	return iNegative ? x - dMin : dMin - x;
+  double x, y;
+  do
+  {
+    if(s_cZigStored <= 1) FillBufferZig();
+//     x = DRanU();
+    x = RANDBL_32new(i_adZigRan[--s_cZigStored]);
+    x = log(x) / dMin;
+//     y = DRanU();
+    y = RANDBL_32new(i_adZigRan[--s_cZigStored]);
+    y = log(y);
+    zigused += 2;
+  } while (-2 * y < x * x);
+  return iNegative ? x - dMin : dMin - x;
 }
+
 static void zigNorFastInit(int iC, double dR, double dV)  // faster, but with some deficiencies
 {  const double m1 = 2147483648.0;
    double dn=3.442619855899,tn=dn,vn=9.91256303526217e-3, q;
@@ -461,6 +539,7 @@ static void zigNorInit(int iC, double dR, double dV)
 	for (i = 0; i < iC; ++i)
 		s_adZigR[i] = s_adZigX[i + 1] / s_adZigX[i];
 }
+
 double  DRanNormalZig(void)
 {
 	unsigned int i;
@@ -485,6 +564,7 @@ double  DRanNormalZig(void)
 			return x;
 	}
 }
+
 double  DRanNormalZigFast(void)  // faster, but with some deficiencies
 {
 	int iz, hz;
@@ -507,107 +587,91 @@ double  DRanNormalZigFast(void)  // faster, but with some deficiencies
 	}
 }
 
-#define ZIGNOR_STORE 256 * 4
-static unsigned int s_auiZigTmp[ZIGNOR_STORE + ZIGNOR_STORE / 4];
-static unsigned char s_auiZigBox[ZIGNOR_STORE];
-// static double s_adZigRan[ZIGNOR_STORE + ZIGNOR_STORE / 4];
-static unsigned int *i_adZigRan = &s_auiZigTmp[ZIGNOR_STORE / 4];
-static int s_cZigStored = 0;
-
-static unsigned int zigcalls = 0;
-static unsigned int zigquick = 0;
-static unsigned int zigtails = 0;
-static unsigned int zigwedge = 0;
-static unsigned int zigloops = 0;
-static unsigned int zigcalls2 = 0;
-static unsigned int zigquick2 = 0;
-static unsigned int zigtails2 = 0;
-static unsigned int zigwedge2 = 0;
-static unsigned int zigloops2 = 0;
-
 double  DRanNormalZigVec(void)
 {
 	unsigned int i, j, k, direct;
-	double x, u, f0, f1;
-	zigcalls++; ; direct = 1;
+	double x, u, y, f0, f1;
+	INSTRUMENT(zigcalls++; ; direct = 1;)
 	for (;;)
 	{
-		if (s_cZigStored <= 0)
-		{
-			RanVecIntU(s_auiZigTmp, ZIGNOR_STORE + ZIGNOR_STORE / 4);
-// 			RanVecU(s_adZigRan, ZIGNOR_STORE);
-			for (j = k = 0; j < ZIGNOR_STORE; j += 4, ++k)
-			{
-				i = s_auiZigTmp[k];	
-				s_auiZigBox[j + 0] = i & 0x7F;
-				s_auiZigBox[j + 1] = (i>>8) & 0x7F;
-				s_auiZigBox[j + 2] = (i>>16) & 0x7F;
-				s_auiZigBox[j + 3] = (i>>24) & 0x7F;
-// 				i >>= 8;			s_auiZigBox[j + 1] = i & 0x7F;
-// 				i >>= 8;			s_auiZigBox[j + 2] = i & 0x7F;
-// 				i >>= 8;			s_auiZigBox[j + 3] = i & 0x7F;
-// 				s_adZigRan[j + 0] = 2 * s_adZigRan[j + 0] - 1;
-// 				s_adZigRan[j + 1] = 2 * s_adZigRan[j + 1] - 1;
-// 				s_adZigRan[j + 2] = 2 * s_adZigRan[j + 2] - 1;
-// 				s_adZigRan[j + 3] = 2 * s_adZigRan[j + 3] - 1;
-			}
-			s_cZigStored = j;
-		}
+		if (s_cZigStored <= 0) FillBufferZig();
 		--s_cZigStored;
 
-// 		u = s_adZigRan[s_cZigStored];
 		u = RANDBLS_32new(i_adZigRan[s_cZigStored]);   // convert from 32 bit int to (-1.0 , 1.0) on the fly
 		i = s_auiZigBox[s_cZigStored];
+		INSTRUMENT(zigused += 2;)
 		
 		if (fabs(u) < s_adZigR[i]){		 /* first try the rectangular boxes */
-		        zigquick += direct;
+		        INSTRUMENT(zigquick += direct;)
 			return u * s_adZigX[i];
 		}
 		direct = 0;
 
 		if (i == 0){						/* bottom box: sample from the tail */
-			zigtails++ ; return DRanNormalTail(ZIGNOR_R, u < 0);
+			INSTRUMENT(zigtails++ ; )
+// 			return DRanNormalTail(ZIGNOR_R, u < 0);
+			do
+			{
+				if(s_cZigStored <= 1) FillBufferZig();
+				x = RANDBL_32new(i_adZigRan[--s_cZigStored]);
+				x = log(x) / ZIGNOR_R;
+				y = RANDBL_32new(i_adZigRan[--s_cZigStored]);
+				y = log(y);
+				INSTRUMENT(zigused += 2;)
+			} while (-2 * y < x * x);
+			return (u < 0) ? x - ZIGNOR_R : ZIGNOR_R - x;
 		}
 
-		zigwedge ++;
+		INSTRUMENT(zigwedge ++;)
 		x = u * s_adZigX[i];		   /* is this a sample from the wedges? */
 		f0 = exp(-0.5 * (s_adZigX[i] * s_adZigX[i] - x * x) );
 		f1 = exp(-0.5 * (s_adZigX[i + 1] * s_adZigX[i + 1] - x * x) );
-      		if (f1 + DRanU() * (f0 - f1) < 1.0)  return x;
-		zigloops++;
+		INSTRUMENT(zigused++;)
+		if(s_cZigStored <= 0) FillBufferZig();
+		y = RANDBL_32new(i_adZigRan[--s_cZigStored]);
+		if (f1 + y * (f0 - f1) < 1.0)  return x;
+//       		if (f1 + DRanU() * (f0 - f1) < 1.0)  return x;
+		INSTRUMENT(zigloops++;)
 	}
 }
 
+static unsigned int u_auiZigTmp[ZIGNOR_STORE];
+static int u_cZigStored = 0;
 double  DRanNormalZigFastVec(void)  // faster, but with some deficiencies
 {
 	int iz, hz;
 	double x, y;
 	const double r = ZIGNOR_R;     /* The start of the right tail */
-	int direct = 1;
-	zigcalls2++;
+	INSTRUMENT(int direct = 1;)
+	INSTRUMENT(zigcalls2++;)
 	for (;;)
 	{
-		if (s_cZigStored <= 0)
+		if (u_cZigStored <= 0)
 		{
-			RanVecIntU(s_auiZigTmp, ZIGNOR_STORE + ZIGNOR_STORE / 4);
-			s_cZigStored = ZIGNOR_STORE + ZIGNOR_STORE / 4;
+			RanVecIntU(u_auiZigTmp, ZIGNOR_STORE);
+			u_cZigStored = ZIGNOR_STORE;
 		}
-		--s_cZigStored;
-		hz = (int) s_auiZigTmp[s_cZigStored] ;
+		--u_cZigStored;
+		hz = (int) u_auiZigTmp[u_cZigStored] ;
+		INSTRUMENT(zigused2++;)
 		iz = hz & 0x7F ;
-		if (abs(hz)<kn[iz]) { zigquick2+=direct ; return (hz*wn[iz]) ; }
-		direct = 0;
+		if (abs(hz)<kn[iz]) { 
+		  INSTRUMENT(zigquick2+=direct ; )
+		  return (hz*wn[iz]) ; 
+		}
+		INSTRUMENT(direct = 0;)
 		
 		x=hz*wn[iz];      /* iz==0, handles the base strip */
 		if(iz==0) {
-		  zigtails2++;
-		  do{ x=-log(DRanU())*0.2904764; y=-log(DRanU());} while(y+y<x*x);	/* .2904764 is 1/r */ 
+		  INSTRUMENT(zigtails2++;)
+		  do{ x=-log(DRanU())*0.2904764; y=-log(DRanU()); zigused2 += 2;} while(y+y<x*x);	/* .2904764 is 1/r */ 
 		  return (hz>0)? r+x : -r-x;
 		}
 		/* iz>0, handle the wedges of other strips */
-		zigwedge2++;
+		INSTRUMENT(zigwedge2++;)
+		INSTRUMENT(zigused2++;)
 		if( fn[iz]+DRanU()*(fn[iz-1]-fn[iz]) < exp(-.5*x*x) ) return x;
-		zigloops2++;
+		INSTRUMENT(zigloops2++;)
 	}
 }
 
@@ -933,6 +997,8 @@ main(int argc, char **argv){
   printf("wedge calls in ziggurat = %6.3f%\n",t1 / t0 * 100.0);
   t1 = zigloops ;
   printf("extra loops in ziggurat = %6.3f%\n",t1 / t0 * 100.0);
+  t1 = zigused ;
+  printf("random values used in ziggurat = %6.3f%\n",t1 / t0 * 100.0);
 
   t1 = zigquick2 ; t0 = zigcalls2+1 ; 
   printf("quick calls in ziggurat = %6.3f%\n",t1 / t0 * 100.0);
@@ -942,6 +1008,8 @@ main(int argc, char **argv){
   printf("wedge calls in ziggurat = %6.3f%\n",t1 / t0 * 100.0);
   t1 = zigloops2 ;
   printf("extra loops in ziggurat = %6.3f%\n",t1 / t0 * 100.0);
+  t1 = zigused2 ;
+  printf("random values used in ziggurat = %6.3f%\n",t1 / t0 * 100.0);
 
   MPI_Finalize();
 }
