@@ -605,7 +605,7 @@ double  DRanNormalZigVec(void)
 		        INSTRUMENT(zigquick += direct;)
 			return u * s_adZigX[i];
 		}
-		direct = 0;
+		INSTRUMENT(direct = 0;)
 
 		if (i == 0){						/* bottom box: sample from the tail */
 			INSTRUMENT(zigtails++ ; )
@@ -664,7 +664,7 @@ double  DRanNormalZigFastVec(void)  // faster, but with some deficiencies
 		x=hz*wn[iz];      /* iz==0, handles the base strip */
 		if(iz==0) {
 		  INSTRUMENT(zigtails2++;)
-		  do{ x=-log(DRanU())*0.2904764; y=-log(DRanU()); zigused2 += 2;} while(y+y<x*x);	/* .2904764 is 1/r */ 
+		  do{ x=-log(DRanU())*0.2904764; y=-log(DRanU()); INSTRUMENT(zigused2 += 2;) } while(y+y<x*x);	/* .2904764 is 1/r */ 
 		  return (hz>0)? r+x : -r-x;
 		}
 		/* iz>0, handle the wedges of other strips */
@@ -696,6 +696,72 @@ void  RanNormalSetSeedZigFastVec(int *piSeed, int cSeed)
 	RanNormalSetSeedZigFast(piSeed, cSeed);
 }
 /*--------------------------- END General Ziggurat -------------------------*/
+/*---------------  Uniform to gaussian random number conversion ------------*/
+//
+// attempt to produce ngauss normally distributed random 64 bit floats from
+// nuni 32 bit integer uniformly distributed random numberd
+//
+// gaussian [OUT], ngauss[IN/OUT], uniform[IN], nuni [IN]
+// gaussian : output array of normal distribution random 64 bit floats
+// ngauss   : [IN] number of values desired
+//            [OUT] number of values yet to produce if not enough uniform values to do so
+// uniform  : input array of uniform distribution 32 bit random integers
+// nuni     : number of available input numbers
+// the return value is the number of still usable input integers 
+// (<0 if unable to produce the requested number of output numbers)
+// NOTE: nuni should be at least ~ 2.1 times larger than ngauss to ensure success
+int NormalFromUniform(double gaussian[], int *ngauss, int uniform[], int nuni)
+{
+  int nout=*ngauss;
+  int iz, iout;
+  double u, x, y, f0, f1;
+
+  iout = 0;
+  do {
+    for (;;) {                  // produce one normal distribution random number
+      if(nuni < 2) goto ouch ;                 // not enough uniform randoms left
+
+      u = RANDBLS_32new( uniform[--nuni]) ;
+      iz = uniform[--nuni] & 0x7F ;
+
+      if (fabs(u) < s_adZigR[iz]) {            // success
+	gaussian[iout] = u * s_adZigX[iz] ;    // store normal random in output
+	break ;
+      }
+
+      if(iz == 0){                             // bottom box: sample from the tail
+	do{
+	  if(nuni < 2) goto ouch ;             // not enough uniform randoms left
+	  x = RANDBL_32new(uniform[--nuni]);
+	  x = log(x) / ZIGNOR_R;
+	  y = RANDBL_32new(uniform[--nuni]);
+	  y = log(y) ;
+	} while (-2 * y < x * x);
+	gaussian[iout] = (u < 0) ? x - ZIGNOR_R : ZIGNOR_R - x;
+	break ;
+      }
+
+      x = u * s_adZigX[iz];		       // is this a sample from the wedges? */
+      f0 = exp(-0.5 * (s_adZigX[iz    ] * s_adZigX[iz    ] - x * x) );
+      f1 = exp(-0.5 * (s_adZigX[iz + 1] * s_adZigX[iz + 1] - x * x) );
+      if(nuni < 1) goto ouch ;                 // not enough uniform randoms left
+      y = RANDBL_32new(uniform[--nuni]);
+      if (f1 + y * (f0 - f1) < 1.0) {          // inside wedge
+	gaussian[iout] = x ;
+	break ;
+      }
+    }  // for (;;), point is done
+    iout++ ;
+  }while(iout < nout);
+
+  *ngauss -= iout;   // should be zero at this point
+  return (nuni) ;
+
+ouch:
+  *ngauss -= iout;
+  return(-1);
+}
+/*------------------------ END of gaussian conversion ----------------------*/
 
 #if defined(SELF_TEST)
 #include <mpi.h>
