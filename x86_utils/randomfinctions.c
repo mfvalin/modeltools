@@ -934,7 +934,8 @@ main(int argc, char **argv){
   double MPI_Wtime() ;
   unsigned int ranbuf[1200000];
   double ranbuf2[1200000];
-  int pos, neg, mask, postot, negtot;
+  int pos, neg, mask, postot, negtot, ran;
+  long long count, counts ;
   double dmax, dmin, avg;
   unsigned long long *idmax, *idmin ;
   unsigned int maxpos, maxneg;
@@ -963,6 +964,18 @@ main(int argc, char **argv){
    RanNormalSetSeedZig(r250.buffer, 250);   // initialize to values already there :-)
    RanNormalSetSeedZigFast(r250.buffer, 250);   // initialize to values already there :-)
 
+  ran = IRan_R250() ;
+  ran = IRan_R250() ;
+  ran = IRan_R250() ;
+  counts = 0;
+  for(j=0 ; j<1000 ; j++){
+    count = 0;
+    while(ran != IRan_R250()) count ++ ;
+    counts += count;
+    fprintf(stdout,"repeat after %12Ld , running average = %12Ld\n",count,counts / (j+1)) ;
+    fflush(stdout);
+  }
+exit(0);
 //   printf("static unsigned int r250.buffer[250] = {\n");
   for (i=0 ; i<25 ; i++){
     for( j=0 ; j<10 ; j++){
