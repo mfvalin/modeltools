@@ -211,6 +211,17 @@ static void FillBuffer_R250(void){
 //   }
 }
 
+/*   Fortran prototype
+! void RanSetSeed_R250_stream(r250_state *R250_, int *piSeed, int cSeed)                  !InTf!
+ interface
+   subroutine set_r250_seed(stream, seeds, nseeds) bind(C,name='RanSetSeed_R250_stream')  !InTf!
+   import :: C_PTR,C_INT                                                                  !InTf!
+   type(C_PTR), intent(IN) :: stream                                                      !InTf!
+   integer(C_INT), intent(IN), value :: nseeds                                            !InTf!
+   integer(c_INT), dimension(nseeds), intent(IN) :: seeds                                 !InTf!
+   end subroutine set_r250_seed                                                           !InTf!
+ end interface
+ */
 void RanSetSeed_R250_stream(r250_state *R250_, int *piSeed, int cSeed)
 {
   int i;
@@ -237,6 +248,18 @@ void RanSetSeed_R250(int *piSeed, int cSeed)
 //   }
 }
 
+/*   Fortran prototype
+! r250_state *Ran_R250_new_stream(r250_state *clone, int *piSeed, int cSeed)              !InTf!
+ interface
+   function new_r250_stream(clone, seeds, nseeds) result(stream) bind(C,name='Ran_R250_new_stream')  !InTf!
+   import :: C_PTR,C_INT                                                                  !InTf!
+   type(C_PTR), intent(IN) :: clone                                                       !InTf!
+   integer(C_INT), intent(IN), value :: nseeds                                            !InTf!
+   integer(c_INT), dimension(nseeds), intent(IN) :: seeds                                 !InTf!
+   type(C_PTR) :: stream                                                                  !InTf!
+   end function new_r250_stream                                                           !InTf!
+ end interface
+ */
 r250_state *Ran_R250_new_stream(r250_state *clone, int *piSeed, int cSeed)  // create and seed a new stream
 {
   r250_state *source ;
@@ -254,6 +277,16 @@ r250_state *Ran_R250_new_stream(r250_state *clone, int *piSeed, int cSeed)  // c
   return (new_state) ;
 }
 
+/*   Fortran prototype
+! double DRan_R250_stream(r250_state *R250_)                                              !InTf!
+ interface
+   function dran_r250(stream) result(ran) bind(C,name='DRan_R250_stream')                 !InTf!
+   import :: C_DOUBLE,C_PTR                                                               !InTf!
+   type(C_PTR), intent(IN) :: stream                                                      !InTf!
+   real(C_DOUBLE) :: ran                                                                  !InTf!
+   end function dran_r250                                                                 !InTf!
+ end interface
+ */
 double DRan_R250_stream(r250_state *R250_)		/* returns a random double (0.0 , 1.0) */
 {
   register int	i, j;
@@ -274,6 +307,16 @@ double DRan_R250(void)		/* returns a random double (0.0 , 1.0) */
   return RANDBL_32new(new_rand);   // convert from 32 bit int to (0.0 , 1.0)
 }
 
+/*   Fortran prototype
+! double DRanS_R250_stream(r250_state *R250_)                                             !InTf!
+ interface
+   function drans_r250(stream) result(ran) bind(C,name='DRanS_R250_stream')               !InTf!
+   import :: C_DOUBLE,C_PTR                                                               !InTf!
+   type(C_PTR), intent(IN) :: stream                                                      !InTf!
+   real(C_DOUBLE) :: ran                                                                  !InTf!
+   end function drans_r250                                                                !InTf!
+ end interface
+ */
 double DRanS_R250_stream(r250_state *R250_)		/* returns a random double (-1.0 , 1.0) */
 {
   register int	i, j;
@@ -294,6 +337,16 @@ double DRanS_R250(void)		/* returns a random double (-1.0 , 1.0) */
   return RANDBLS_32new(new_rand);   // convert from 32 bit int to (0.0 , 1.0)
 }
 
+/*   Fortran prototype
+! unsigned int IRan_R250_stream(r250_state *R250_)                                        !InTf!
+ interface
+   function iran_r250(stream) result(ran) bind(C,name='IRan_R250_stream')                 !InTf!
+   import :: C_INT,C_PTR                                                                  !InTf!
+   type(C_PTR), intent(IN) :: stream                                                      !InTf!
+   integer(C_INT) :: ran                                                                  !InTf!
+   end function iran_r250                                                                 !InTf!
+ end interface
+ */
 unsigned int IRan_R250_stream(r250_state *R250_)		/* returns a random unsigned integer */
 {
   register int	i, j;
@@ -314,6 +367,17 @@ unsigned int IRan_R250(void)		/* returns a random unsigned integer */
   return new_rand;
 }
 
+/*   Fortran prototype
+! void VecIRan_R250_stream(r250_state *R250_, unsigned int *ranbuf, int n)                !InTf!
+ interface
+   subroutine v_iran_r250(stream, buf, nval) bind(C,name='VecIRan_R250_stream')           !InTf!
+   import :: C_PTR,C_INT                                                                  !InTf!
+   type(C_PTR), intent(IN) :: stream                                                      !InTf!
+   integer(C_INT), intent(IN), value :: nval                                              !InTf!
+   integer(c_INT), dimension(nval), intent(OUT) :: buf                                    !InTf!
+   end subroutine v_iran_r250                                                             !InTf!
+ end interface
+ */
 void VecIRan_R250_stream(r250_state *R250_, unsigned int *ranbuf, int n){
   int k = 0;
   int i;
@@ -365,6 +429,17 @@ void VecIRan_R250(unsigned int *ranbuf, int n){
 //   return ;
 }
 
+/*   Fortran prototype
+! void VecDRan_R250_stream(r250_state *R250_, unsigned int *ranbuf, int n)                !InTf!
+ interface
+   subroutine v_dran_r250(stream, buf, nval) bind(C,name='VecDRan_R250_stream')           !InTf!
+   import :: C_PTR,C_INT                                                                  !InTf!
+   type(C_PTR), intent(IN) :: stream                                                      !InTf!
+   integer(C_INT), intent(IN), value :: nval                                              !InTf!
+   integer(c_INT), dimension(nval), intent(OUT) :: buf                                    !InTf!
+   end subroutine v_dran_r250                                                             !InTf!
+ end interface
+ */
 void VecDRan_R250_stream(r250_state *R250_, double *ranbuf, int n){
   int k = 0;
   int i;
@@ -386,6 +461,42 @@ void VecDRan_R250_stream(r250_state *R250_, double *ranbuf, int n){
   }
   while( n > 0 ){  // n < 250 at this point
     ranbuf[k++] = RANDBL_32new(r250.buffer[R250->index++]) ;   // convert from 32 bit int to (0.0 , 1.0)
+    n-- ;
+  }
+}
+
+/*   Fortran prototype
+! void VecDRans_R250_stream(r250_state *R250_, unsigned int *ranbuf, int n)               !InTf!
+ interface
+   subroutine v_drans_r250(stream, buf, nval) bind(C,name='VecDRanS_R250_stream')         !InTf!
+   import :: C_PTR,C_INT                                                                  !InTf!
+   type(C_PTR), intent(IN) :: stream                                                      !InTf!
+   integer(C_INT), intent(IN), value :: nval                                              !InTf!
+   integer(c_INT), dimension(nval), intent(OUT) :: buf                                    !InTf!
+   end subroutine v_drans_r250                                                            !InTf!
+ end interface
+ */
+void VecDRanS_R250_stream(r250_state *R250_, double *ranbuf, int n){
+  int k = 0;
+  int i;
+  r250_state *R250 = R250_ ? R250_ : &r250 ;   // use default state if NULL state pointer
+  unsigned int *r250_buffer ;
+
+  r250_buffer = R250->buffer ;
+  while( R250->index < 250 && n > 0 ){
+    ranbuf[k++] = RANDBLS_32new(r250.buffer[R250->index++]) ;   // convert from 32 bit int to (0.0 , 1.0)
+    n-- ;
+  }
+  if ( n == 0 ) return;
+  FillBuffer_R250();     // we get here if buffer is empty
+  while(n >= 250){        // chunks of 250 values
+    for(i=0 ; i<250 ; i++) ranbuf[k+i] = RANDBLS_32new(r250.buffer[i]) ;   // convert from 32 bit int to (0.0 , 1.0)
+    n -= 250 ;
+    k += 250 ;
+    FillBuffer_R250() ;
+  }
+  while( n > 0 ){  // n < 250 at this point
+    ranbuf[k++] = RANDBLS_32new(r250.buffer[R250->index++]) ;   // convert from 32 bit int to (0.0 , 1.0)
     n-- ;
   }
 }
