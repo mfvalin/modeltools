@@ -318,15 +318,18 @@ static void FillBuffer_R250_stream(r250_state *R250){
 // }
 
 /*   Fortran prototype
-! void RanSetSeed_R250_stream(r250_state *state, int *piSeed, int cSeed)                  !InTf!
- interface
-   subroutine set_r250_seed(stream, seeds, nseeds) bind(C,name='RanSetSeed_R250_stream')  !InTf!
-   import :: C_PTR,C_INT                                                                  !InTf!
-   type(C_PTR), intent(IN) :: stream                                                      !InTf!
-   integer(C_INT), intent(IN), value :: nseeds                                            !InTf!
-   integer(c_INT), dimension(nseeds), intent(IN) :: seeds                                 !InTf!
-   end subroutine set_r250_seed                                                           !InTf!
- end interface
+  type, bind(C) :: RANDOM_STREAM                                                          !InTf!
+    type(C_PTR) :: p                                                                      !InTf!
+  end type                                                                                !InTf!
+! void RanSetSeed_R250_stream(void *stream, int *piSeed, int cSeed)                       !InTf!
+ interface                                                                                !InTf!
+   subroutine RanSetSeed_R250_stream(stream, piSeed, cSeed) bind(C,name='RanSetSeed_R250_stream')  !InTf!
+   import :: RANDOM_STREAM,C_INT                                                          !InTf!
+   type(RANDOM_STREAM), intent(IN) :: stream                                              !InTf!
+   integer(C_INT), intent(IN), value :: cSeed                                             !InTf!
+   integer(c_INT), dimension(cSeed), intent(IN) :: piSeed                                 !InTf!
+   end subroutine RanSetSeed_R250_stream                                                  !InTf!
+ end interface                                                                            !InTf!
  */
 void RanSetSeed_R250_stream(void *stream, int *piSeed, int cSeed)
 {
@@ -355,15 +358,15 @@ void RanSetSeed_R250_stream(void *stream, int *piSeed, int cSeed)
 
 /*   Fortran prototype
 ! r250_state *Ran_R250_new_stream(r250_state *clone, int *piSeed, int cSeed)              !InTf!
- interface
-   function new_r250_stream(clone, seeds, nseeds) result(stream) bind(C,name='Ran_R250_new_stream')  !InTf!
-   import :: C_PTR,C_INT                                                                  !InTf!
-   type(C_PTR), intent(IN) :: clone                                                       !InTf!
-   integer(C_INT), intent(IN), value :: nseeds                                            !InTf!
-   integer(c_INT), dimension(nseeds), intent(IN) :: seeds                                 !InTf!
-   type(C_PTR) :: stream                                                                  !InTf!
-   end function new_r250_stream                                                           !InTf!
- end interface
+ interface                                                                                !InTf!
+   function Ran_R250_new_stream(clone, piSeed, cSeed) result(stream) bind(C,name='Ran_R250_new_stream')  !InTf!
+   import :: RANDOM_STREAM,C_INT                                                          !InTf!
+   type(RANDOM_STREAM), intent(IN) :: clone                                               !InTf!
+   integer(C_INT), intent(IN), value :: cSeed                                             !InTf!
+   integer(c_INT), dimension(cSeed), intent(IN) :: piSeed                                 !InTf!
+   type(RANDOM_STREAM) :: stream                                                          !InTf!
+   end function Ran_R250_new_stream                                                       !InTf!
+ end interface                                                                            !InTf!
  */
 r250_state *Ran_R250_new_stream(r250_state *clone, int *piSeed, int cSeed)  // create and seed a new stream
 {
@@ -392,14 +395,14 @@ r250_state *Ran_R250_new_stream(r250_state *clone, int *piSeed, int cSeed)  // c
 }
 
 /*   Fortran prototype
-! double DRan_R250_stream(r250_state *state)                                              !InTf!
- interface
-   function dran_r250(stream) result(ran) bind(C,name='DRan_R250_stream')                 !InTf!
-   import :: C_DOUBLE,C_PTR                                                               !InTf!
-   type(C_PTR), intent(IN) :: stream                                                      !InTf!
-   real(C_DOUBLE) :: ran                                                                  !InTf!
-   end function dran_r250                                                                 !InTf!
- end interface
+! double DRan_R250_stream(void *stream)                                              !InTf!
+ interface                                                                           !InTf!
+   function DRan_R250_stream(stream) result(ran) bind(C,name='DRan_R250_stream')     !InTf!
+   import :: C_DOUBLE,RANDOM_STREAM                                                  !InTf!
+   type(RANDOM_STREAM), intent(IN) :: stream                                         !InTf!
+   real(C_DOUBLE) :: ran                                                             !InTf!
+   end function DRan_R250_stream                                                     !InTf!
+ end interface                                                                       !InTf!
  */
 double DRan_R250_stream(void *stream)		/* returns a random double (0.0 , 1.0) */
 {
@@ -422,14 +425,14 @@ double DRan_R250_stream(void *stream)		/* returns a random double (0.0 , 1.0) */
 // }
 
 /*   Fortran prototype
-! double DRanS_R250_stream(r250_state *state)                                             !InTf!
- interface
-   function drans_r250(stream) result(ran) bind(C,name='DRanS_R250_stream')               !InTf!
-   import :: C_DOUBLE,C_PTR                                                               !InTf!
-   type(C_PTR), intent(IN) :: stream                                                      !InTf!
-   real(C_DOUBLE) :: ran                                                                  !InTf!
-   end function drans_r250                                                                !InTf!
- end interface
+! double DRanS_R250_stream(void *stream)                                             !InTf!
+ interface                                                                           !InTf!
+   function DRanS_R250_stream(stream) result(ran) bind(C,name='DRanS_R250_stream')   !InTf!
+   import :: C_DOUBLE,RANDOM_STREAM                                                  !InTf!
+   type(RANDOM_STREAM), intent(IN) :: stream                                         !InTf!
+   real(C_DOUBLE) :: ran                                                             !InTf!
+   end function DRanS_R250_stream                                                    !InTf!
+ end interface                                                                       !InTf!
  */
 double DRanS_R250_stream(void *stream)		/* returns a random double (-1.0 , 1.0) */
 {
@@ -452,14 +455,14 @@ double DRanS_R250_stream(void *stream)		/* returns a random double (-1.0 , 1.0) 
 // }
 
 /*   Fortran prototype
-! unsigned int IRan_R250_stream(r250_state *state)                                        !InTf!
- interface
-   function iran_r250(stream) result(ran) bind(C,name='IRan_R250_stream')                 !InTf!
-   import :: C_INT,C_PTR                                                                  !InTf!
-   type(C_PTR), intent(IN) :: stream                                                      !InTf!
+! unsigned int IRan_R250_stream(void *stream)                                             !InTf!
+ interface                                                                                !InTf!
+   function IRan_R250_stream(stream) result(ran) bind(C,name='IRan_R250_stream')          !InTf!
+   import :: C_INT,RANDOM_STREAM                                                          !InTf!
+   type(RANDOM_STREAM), intent(IN) :: stream                                              !InTf!
    integer(C_INT) :: ran                                                                  !InTf!
-   end function iran_r250                                                                 !InTf!
- end interface
+   end function IRan_R250_stream                                                          !InTf!
+ end interface                                                                            !InTf!
  */
 unsigned int IRan_R250_stream(void *stream)		/* returns a random unsigned integer */
 {
@@ -482,15 +485,15 @@ unsigned int IRan_R250_stream(void *stream)		/* returns a random unsigned intege
 // }
 
 /*   Fortran prototype
-! void VecIRan_R250_stream(r250_state *state, unsigned int *ranbuf, int n)                !InTf!
- interface
-   subroutine v_iran_r250(stream, buf, nval) bind(C,name='VecIRan_R250_stream')           !InTf!
-   import :: C_PTR,C_INT                                                                  !InTf!
-   type(C_PTR), intent(IN) :: stream                                                      !InTf!
-   integer(C_INT), intent(IN), value :: nval                                              !InTf!
-   integer(c_INT), dimension(nval), intent(OUT) :: buf                                    !InTf!
-   end subroutine v_iran_r250                                                             !InTf!
- end interface
+! void VecIRan_R250_stream(void *stream, unsigned int *ranbuf, int n)                     !InTf!
+ interface                                                                                !InTf!
+   subroutine VecIRan_R250_stream(stream, ranbuf, n) bind(C,name='VecIRan_R250_stream')   !InTf!
+   import :: RANDOM_STREAM,C_INT                                                          !InTf!
+   type(RANDOM_STREAM), intent(IN) :: stream                                              !InTf!
+   integer(C_INT), intent(IN), value :: n                                                 !InTf!
+   integer(c_INT), dimension(n), intent(OUT) :: ranbuf                                    !InTf!
+   end subroutine VecIRan_R250_stream                                                     !InTf!
+ end interface                                                                            !InTf!
  */
 void VecIRan_R250_stream(void *stream, unsigned int *ranbuf, int n){
   int k = 0;
@@ -548,15 +551,15 @@ void VecIRan_R250_stream(void *stream, unsigned int *ranbuf, int n){
 // }
 
 /*   Fortran prototype
-! void VecDRan_R250_stream(r250_state *state, unsigned int *ranbuf, int n)                !InTf!
- interface
-   subroutine v_dran_r250(stream, buf, nval) bind(C,name='VecDRan_R250_stream')           !InTf!
-   import :: C_PTR,C_INT                                                                  !InTf!
-   type(C_PTR), intent(IN) :: stream                                                      !InTf!
-   integer(C_INT), intent(IN), value :: nval                                              !InTf!
-   integer(c_INT), dimension(nval), intent(OUT) :: buf                                    !InTf!
-   end subroutine v_dran_r250                                                             !InTf!
- end interface
+! void VecDRan_R250_stream(void *stream, double *ranbuf, int n)                           !InTf!
+ interface                                                                                !InTf!
+   subroutine VecDRan_R250_stream(stream, ranbuf, n) bind(C,name='VecDRan_R250_stream')   !InTf!
+   import :: RANDOM_STREAM,C_INT                                                          !InTf!
+   type(RANDOM_STREAM), intent(IN) :: stream                                              !InTf!
+   integer(C_INT), intent(IN), value :: n                                                 !InTf!
+   integer(c_INT), dimension(n), intent(OUT) :: ranbuf                                    !InTf!
+   end subroutine VecDRan_R250_stream                                                     !InTf!
+ end interface                                                                            !InTf!
  */
 void VecDRan_R250_stream(void *stream, double *ranbuf, int n){
   int k = 0;
@@ -610,15 +613,15 @@ void VecDRan_R250_stream(void *stream, double *ranbuf, int n){
 // }
 
 /*   Fortran prototype
-! void VecDRans_R250_stream(r250_state *state, unsigned int *ranbuf, int n)               !InTf!
- interface
-   subroutine v_drans_r250(stream, buf, nval) bind(C,name='VecDRanS_R250_stream')         !InTf!
-   import :: C_PTR,C_INT                                                                  !InTf!
-   type(C_PTR), intent(IN) :: stream                                                      !InTf!
-   integer(C_INT), intent(IN), value :: nval                                              !InTf!
-   integer(c_INT), dimension(nval), intent(OUT) :: buf                                    !InTf!
-   end subroutine v_drans_r250                                                            !InTf!
- end interface
+! void VecDRanS_R250_stream(void *stream, double *ranbuf, int n)                          !InTf!
+ interface                                                                                !InTf!
+   subroutine VecDRanS_R250_stream(stream, ranbuf, n) bind(C,name='VecDRanS_R250_stream') !InTf!
+   import :: RANDOM_STREAM,C_INT                                                          !InTf!
+   type(RANDOM_STREAM), intent(IN) :: stream                                              !InTf!
+   integer(C_INT), intent(IN), value :: n                                                 !InTf!
+   integer(c_INT), dimension(n), intent(OUT) :: ranbuf                                    !InTf!
+   end subroutine VecDRanS_R250_stream                                                    !InTf!
+ end interface                                                                            !InTf!
  */
 void VecDRanS_R250_stream(void *stream, double *ranbuf, int n){
   int k = 0;
@@ -1006,6 +1009,16 @@ double  DRanNormalZigFast(void)  // faster, but with some deficiencies
 }
 #endif
 #endif
+/*   Fortran prototype
+! double DRanNormalZigVec(void *stream)                                              !InTf!
+ interface                                                                           !InTf!
+   function DRanNormalZigVec(stream) result(ran) bind(C,name='DRanNormalZigVec')     !InTf!
+   import :: C_DOUBLE,RANDOM_STREAM                                                  !InTf!
+   type(RANDOM_STREAM), intent(IN) :: stream                                         !InTf!
+   real(C_DOUBLE) :: ran                                                             !InTf!
+   end function DRanNormalZigVec                                                     !InTf!
+ end interface                                                                       !InTf!
+ */
 double  DRanNormalZigVec(void *stream)
 {
 	unsigned int i, j, k, direct;
@@ -1117,6 +1130,17 @@ double  DRanNormalZigFastVec(void *stream)  // faster, but with some deficiencie
 	}
 }
 #endif
+/*   Fortran prototype
+! void RanNormalSetSeedZig(void *stream, int *piSeed, int cSeed)                          !InTf!
+ interface                                                                                !InTf!
+   subroutine RanNormalSetSeedZig(stream, piSeed, cSeed) bind(C,name='RanNormalSetSeedZig')  !InTf!
+   import :: RANDOM_STREAM,C_INT                                                          !InTf!
+   type(RANDOM_STREAM), intent(IN) :: stream                                              !InTf!
+   integer(C_INT), intent(IN), value :: cSeed                                             !InTf!
+   integer(c_INT), dimension(cSeed), intent(IN) :: piSeed                                 !InTf!
+   end subroutine RanNormalSetSeedZig                                                     !InTf!
+ end interface                                                                            !InTf!
+ */
 void  RanNormalSetSeedZig(void *stream, int *piSeed, int cSeed)
 {
 	zigNorInit(ZIGNOR_C, ZIGNOR_R, ZIGNOR_V);
@@ -1129,6 +1153,17 @@ void  RanNormalSetSeedZigFast(void *stream, int *piSeed, int cSeed)
 	RanSetSeed(stream, piSeed, cSeed);
 }
 #endif
+/*   Fortran prototype
+! void RanNormalSetSeedZigVec(void *stream, int *piSeed, int cSeed)                       !InTf!
+ interface                                                                                !InTf!
+   subroutine RanNormalSetSeedZigVec(stream, piSeed, cSeed) bind(C,name='RanNormalSetSeedZigVec')  !InTf!
+   import :: RANDOM_STREAM,C_INT                                                          !InTf!
+   type(RANDOM_STREAM), intent(IN) :: stream                                              !InTf!
+   integer(C_INT), intent(IN), value :: cSeed                                             !InTf!
+   integer(c_INT), dimension(cSeed), intent(IN) :: piSeed                                 !InTf!
+   end subroutine RanNormalSetSeedZigVec                                                  !InTf!
+ end interface                                                                            !InTf!
+ */
 void  RanNormalSetSeedZigVec(void *stream, int *piSeed, int cSeed)
 {
 // 	s_cZigStored = 0;
