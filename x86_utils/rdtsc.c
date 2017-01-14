@@ -6,6 +6,11 @@ static unsigned char *cstring = (unsigned char *)vstring;  /* pointer to version
 static uint64_t hz=0;
 static double cycle=0.0;
 
+static uint64_t time0=0;  // pseudo origin for calls to Ix86_tsc, Ix86_tscp, Dx86_tsc, Dx86_tscp
+
+static uint64_t rdtsc(void);
+static uint64_t rdtscp(void);
+
 static void X86_cpuid(uint32_t eax, uint32_t ecx, uint32_t* regs)  /* interface to x86 cpuid instruction */
 {
 #if defined(__x86_64__) || defined( __i386__ )
@@ -31,6 +36,7 @@ static void X86_cpuid(uint32_t eax, uint32_t ecx, uint32_t* regs)  /* interface 
 #endif
 }     
 static void init(void){
+#if defined(__x86_64__) || defined( __i386__ )
   uint32_t regs[4];
   int j;
   float freq;
@@ -58,11 +64,12 @@ static void init(void){
   hz = hz * 1000000;      // Hz
   cycle = hz;
   cycle = 1.0 / cycle;    // seconds
+  time0 = rdtsc();
+#endif
 }
 
-#pragma weak rdtscp_=rdtscp
-uint64_t rdtscp_(void);
-uint64_t rdtscp(void) {   // version "in order" avec "serialization"
+static uint64_t rdtscp(void) {   // version "in order" avec "serialization"
+#if defined(__x86_64__) || defined( __i386__ )
   uint32_t lo, hi;
   __asm__ volatile ("rdtscp"
       : /* outputs */ "=a" (lo), "=d" (hi)
@@ -70,37 +77,41 @@ uint64_t rdtscp(void) {   // version "in order" avec "serialization"
       : /* clobbers */ "%rcx");
   __asm__ volatile ("mfence");
   return (uint64_t)lo | (((uint64_t)hi) << 32);
+#else
+  return time0++;
+#endif
 }
-#pragma weak rdtsc_=rdtsc
-uint64_t rdtsc_(void);
-uint64_t rdtsc(void) {   // version rapide "out of order"
+
+static uint64_t rdtsc(void) {   // version rapide "out of order"
+#if defined(__x86_64__) || defined( __i386__ )
   uint32_t lo, hi;
   __asm__ volatile ("rdtsc"
       : /* outputs */ "=a" (lo), "=d" (hi)
       : /* no inputs */
       : /* clobbers */ "%rcx");
   return (uint64_t)lo | (((uint64_t)hi) << 32);
+#else
+  return time0++;
+#endif
 }
 
-static uint64_t time0=0;
-
 uint64_t Ix86_tsc(void) {
-  if(time0 == 0) { init ; time0 = rdtsc(); }
+  if(time0 == 0) { init ; }
   return (rdtsc()-time0);
 }
 
 uint64_t Ix86_tscp(void) {
-  if(time0 == 0) { init ; time0 = rdtscp(); }
+  if(time0 == 0) { init ; }
   return (rdtscp()-time0);
 }
 
 double Dx86_tsc(void) {
-  if(time0 == 0) { init ; time0 = rdtsc(); }
+  if(time0 == 0) { init ; }
   return  ((int64_t)(rdtsc()-time0)) * cycle ;
 }
 
 double Dx86_tscp(void) {
-  if(time0 == 0) { init ; time0 = rdtscp(); }
+  if(time0 == 0) { init ; }
   return ((int64_t)(rdtscp()-time0)) * cycle ;
 }
 
@@ -126,11 +137,11 @@ for(i=0;i<50;i++){
   t1=rdtscp();
   t2=rdtscp();
   ta=t2-t1; ta/=xc;   // conversion en nanosecondes
-  t1=rdtscp();
-  sleep(1);
-  t2=rdtscp();
-  t2=(t2-t1)/1000000;
-  tc=t2;
+//   t1=rdtscp();
+//   sleep(1);
+//   t2=rdtscp();
+//   t2=(t2-t1)/1000000;
+//   tc=t2;
   t1=rdtsc();
   t2=rdtsc();
   tb=t2-t1; tb/=xc;   // conversion en nanosecondes
@@ -143,11 +154,11 @@ for(i=0;i<50;i++){
   tm2=Dx86_tscp();
   tma=tm2-tm1;          // conversion en nanosecondes
   ta = tma*1.0E+9;
-  t1=Ix86_tscp();
-  sleep(1);
-  t2=Ix86_tscp();
-  t2=(t2-t1)/1000000;
-  tc=t2;
+//   t1=Ix86_tscp();
+//   sleep(1);
+//   t2=Ix86_tscp();
+//   t2=(t2-t1)/1000000;
+//   tc=t2;
   tm1=Dx86_tsc();
   tm2=Dx86_tsc();
   tmb=tm2-tm1; 
