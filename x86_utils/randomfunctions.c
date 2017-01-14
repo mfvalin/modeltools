@@ -404,7 +404,7 @@ static void FillBuffer_R250_stream(r250_state *R250){
   R250->index = r250_index;
 }
 
-// static void FillBuffer_R250(void){
+// static void FillBuffer_R250(void){   // non stream based, single thread, max speed version
 //   int i;
 // 
 //   while(r250.index > 249) r250.index -= 250;
@@ -430,7 +430,7 @@ void RanSetSeed_R250_stream(void *stream, int *piSeed, int cSeed)
   }
 }
 
-// void RanSetSeed_R250(int *piSeed, int cSeed)
+// void RanSetSeed_R250(int *piSeed, int cSeed)   // non stream based, single thread, max speed version
 // {
 //   int i;
 // 
@@ -478,7 +478,7 @@ unsigned int IRan_R250_stream(void *stream)		/* returns a random unsigned intege
   return new_rand;
 }
 
-// unsigned int IRan_R250(void)		/* returns a random unsigned integer */
+// unsigned int IRan_R250(void)   // non stream based, single thread, max speed version
 // {
 //   register int	i, j;
 //   register unsigned int new_rand;
@@ -498,7 +498,7 @@ double DRan_R250_stream(void *stream)		/* returns a random double (0.0 , 1.0) */
   return RANDBL_32new(new_rand);   // convert from 32 bit int to (0.0 , 1.0)
 }
 
-// double DRan_R250(void)		/* returns a random double (0.0 , 1.0) */
+// double DRan_R250(void)   // non stream based, single thread, max speed version
 // {
 //   register int	i, j;
 //   register unsigned int new_rand;
@@ -518,7 +518,7 @@ double DRanS_R250_stream(void *stream)		/* returns a random double (-1.0 , 1.0) 
   return RANDBLS_32new(new_rand);   // convert from 32 bit int to (0.0 , 1.0)
 }
 
-// double DRanS_R250(void)		/* returns a random double (-1.0 , 1.0) */
+// double DRanS_R250(void)   // non stream based, single thread, max speed version
 // {
 //   register int	i, j;
 //   register unsigned int new_rand;
@@ -557,25 +557,24 @@ void VecIRan_R250_stream(void *stream, unsigned int *ranbuf, int n){
   R250->index = r250_index;
 }
 
-// void VecIRan_R250(unsigned int *ranbuf, int n){
+// void VecIRan_R250(unsigned int *ranbuf, int n){   // non stream based, single thread, max speed version
 //   int k = 0;
 //   int i;
-//   unsigned int *r250_buffer = r250.buffer ;
 // 
 //   while( r250.index < 250 && n > 0 ){
-//     ranbuf[k++] = r250_buffer[r250.index++] ;
+//     ranbuf[k++] = r250.buffer[r250.index++] ;
 //     n-- ;
 //   }
 //   if ( n == 0 ) goto exit;
 //   FillBuffer_R250();     // we get here if buffer is empty before n is satisfied
 //   while(n >= 250){        // chunks of 250 values
-//     for(i=0 ; i<250 ; i++) ranbuf[k+i] = r250_buffer[i] ;
+//     for(i=0 ; i<250 ; i++) ranbuf[k+i] = r250.buffer[i] ;
 //     n -= 250 ;
 //     k += 250 ;
 //     FillBuffer_R250() ;
 //   }
 //   while( n > 0 ){  // n < 250 at this point
-//     ranbuf[k++] = r250_buffer[r250.index++] ;
+//     ranbuf[k++] = r250.buffer[r250.index++] ;
 //     n-- ;
 //   }
 // exit:
@@ -612,7 +611,7 @@ void VecDRan_R250_stream(void *stream, double *ranbuf, int n){
   R250->index = r250_index;
 }
 
-// void VecDRan_R250(double *ranbuf, int n){
+// void VecDRan_R250(double *ranbuf, int n){   // non stream based, single thread, max speed version
 //   int k = 0;
 //   int i;
 //   while( r250.index < 250 && n > 0 ){
@@ -663,9 +662,10 @@ void VecDRanS_R250_stream(void *stream, double *ranbuf, int n){
   R250->index = r250_index;
 }
 
-// void VecDRanS_R250(double *ranbuf, int n){
+// void VecDRanS_R250(double *ranbuf, int n){   // non stream based, single thread, max speed version
 //   int k = 0;
 //   int i;
+// 
 //   while( r250.index < 250 && n > 0 ){
 //     ranbuf[k++] = RANDBLS_32new(r250.buffer[r250.index++]) ;   // convert from 32 bit int to (0.0 , 1.0)
 //     n-- ;
@@ -1294,19 +1294,20 @@ main(int argc, char **argv){
 #if defined(USE_UNSAFE_CODE)
    RanNormalSetSeedZigFast(R250,r250.buffer, 250);   // initialize to values already there :-)
 #endif
-
-//   ran = IRan_R250(R250) ;
-//   ran = IRan_R250(R250) ;
-//   ran = IRan_R250(R250) ;
-//   counts = 0;
-//   for(j=0 ; j<10 ; j++){
-//     count = 0;
-//     while(ran != IRan_R250(R250)) count ++ ;
-//     counts += count;
-//     fprintf(stdout,"repeat after %12Ld , running average = %12Ld\n",count,counts / (j+1)) ;
-//     fflush(stdout);
-//   }
-// exit(0);
+#if defined(CYCLIC_TEST)
+  ran = IRan_R250_stream(R250) ;
+  ran = IRan_R250_stream(R250) ;
+  ran = IRan_R250_stream(R250) ;
+  counts = 0;
+  for(j=0 ; j<1000 ; j++){
+    count = 0;
+    while(ran != IRan_R250_stream(R250)) count ++ ;
+    counts += count;
+    fprintf(stdout,"%5d-repeat after %12Ld , running average = %12Ld\n",j+1,count,counts / (j+1)) ;
+    fflush(stdout);
+  }
+exit(0);
+#endif
 //   printf("static unsigned int r250.buffer[250] = {\n");
   for (i=0 ; i<25 ; i++){
     for( j=0 ; j<10 ; j++){
@@ -1336,6 +1337,7 @@ main(int argc, char **argv){
   MPI_Barrier(MPI_COMM_WORLD);
   t0 = MPI_Wtime();
   for( i=0 ; i < 1000000000 ; i++) lr = IRan_R250_stream(R250);  // IRan_R250();
+//   for( i=0 ; i < 1000000000 ; i++) lr = IRan_R250();  // IRan_R250();
   t1 = MPI_Wtime();
   printf("time for 1E+9 x 1 random R250 integer value = %6.3f \n",t1-t0);
 
@@ -1529,6 +1531,7 @@ main(int argc, char **argv){
   t0 = MPI_Wtime();
   for( i=0 ; i < 1000000 ; i++){
     VecIRan_R250_stream(R250, &ranbuf[i], 1000) ;
+//     VecIRan_R250(&ranbuf[i], 1000) ;
   }
   t1 = MPI_Wtime();
   printf("time for 1E+6 x 1E+3 random R250 integer values = %6.3f \n",t1-t0);
@@ -1557,6 +1560,7 @@ main(int argc, char **argv){
   t0 = MPI_Wtime();
   for( i=0 ; i < 1000000 ; i++){
     VecDRan_R250_stream(R250, &ranbuf2[i], 1000) ;
+//     VecDRan_R250(&ranbuf2[i], 1000) ;
   }
   t1 = MPI_Wtime();
   printf("time for 1E+6 x 1E+3 random R250 double values = %6.3f \n",t1-t0);
