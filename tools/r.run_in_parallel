@@ -103,6 +103,8 @@ mpiexec_Linux() {
 aprun_Linux_launch() {
   export MpiCommWorld=0
   export PMI_NO_FORK=1
+  [[  ${nompi} == pseudo_mpi ]] && export PMI_NO_PREINITIALIZE=1  # workaround when MPI library is not used
+
   [[ "$map" == map ]] && echo "INFO: rank map requested" && export MPICH_RANK_REORDER_DISPLAY=1     # PE map requested
   [[ -n ${verbose} ]] && echo "INFO: pernode=$pernode, pernuma=$pernuma"
   ExtraAprun="-d ${ThreadsInWorld[${MpiCommWorld}]}"             # use number of threads as spacing
@@ -641,8 +643,9 @@ wait_for() {
 #Version="1.1.25f 2016/12/01"  # fixed launch directory in "simple" case
 #Version="1.1.26 2016/12/01"  # "simple" case no longer used
 #Version="1.1.27 2016/12/16"  # fixed -jio option on linux
+#Version="1.1.28 2017/01/23"  # introduced PMI_NO_INITIALIZE workaroud for aprun
 true
-Version="1.1.27 2016/12/16"  # fixed -jio option on linux
+Version="1.1.28 2017/01/23"  # introduced PMI_NO_INITIALIZE workaroud for aprun
 echo "INFO: ${0##*/} version $Version ( /bin/ksh93 )"
 MY_NODEFILE=${PARALLEL_NODEFILE:-${GECOSHEP_HOSTS_FILE:-${GECOSHEP_HOSTFILE:-${LOADL_HOSTFILE:-${PBS_NODEFILE:-${HOME}/.PBS_NODEFILE}}}}}
 [[ ! -f "${MY_NODEFILE}" ]] && \
@@ -1323,7 +1326,7 @@ if [[ -n ${processorder} ]] ; then    #  a arranger pour le cas MPMD ===========
 fi
 echo "INFO: START of parallel execution : $(date)"
 #
-if [[ ${nompi} == run_with_mpi ]] ; then  # MPI launch (linux or AIX supported)
+if [[ ${nompi} == run_with_mpi || ${nompi} == pseudo_mpi ]] ; then  # MPI launch (linux or AIX supported)
 #
   SystemPlatform=$(uname -s)
   MpiImplementation=""
