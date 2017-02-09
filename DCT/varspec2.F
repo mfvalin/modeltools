@@ -1,4 +1,8 @@
+      program test
+      call varspec2
+      end
  	SUBROUTINE varspec2
+#if ! defined(VARSPEC2_CODE)
 *
 *     CALL SEQUENCE...
 *      varspec  IN SP2OUT SP1OUT XOUT INPUT OUTPUT [ -a VAL1 -b VAL2 \
@@ -180,24 +184,28 @@
       LOGICAL       LDCT,LDFT
       LOGICAL       DO_DETREND,DO_AVG1D,WEST_EAST
       LOGICAL       LAST_WAVENUMBER
-      REAL*8        A,B,R1,R2,R3,VARIANCE,SPECTRE,DX
+      REAL*8        DX
 
       INTEGER       NI,NJ,IJ,IJT,NID,NJD,NFACT,MMAX,NMAX
-      INTEGER       IBUF,JBUF,KBUF(HEAD),MAXW,LEN,KPAK,NFF
+      INTEGER       KBUF(HEAD),MAXW,LEN,KPAK,NFF
       INTEGER       NIP,NJP,NIT,NJT,IWAY,IAXE,NX,NY,I,J,L
       INTEGER       NCOEF,NWAVE,NRECS,IO,MAXI,MAXL,IER
       INTEGER       NWDS,CAS,LOGV,CLUST,DET,AVG1D
 
 
       REAL*8        AX(500*500),AY(500*500)
+      REAL*8        U1(1), U2(1), U3(1)   ! dummies to pass as unused arguments to TRANS1D
 
-      POINTER     ( PA,         A(1) ),( PB,   B(1) )
-      POINTER     ( PR1,       R1(1) ),( PR2, R2(1) )
-      POINTER     ( PR3,       R3(1) )
-      POINTER     ( PVA, VARIANCE(1) )
-      POINTER     ( PSP,  SPECTRE(1) )
-      POINTER     ( PIB,     IBUF(8) )
-      POINTER     ( PJB,     JBUF(8) )
+!       POINTER     ( PA,         A(1) ),( PB,   B(1) )
+!       POINTER     ( PR1,       R1(1) ),( PR2, R2(1) )
+!       POINTER     ( PR3,       R3(1) )
+!       POINTER     ( PB,         B(1) )
+!       POINTER     ( PVA, VARIANCE(1) )
+!       POINTER     ( PSP,  SPECTRE(1) )
+!       POINTER     ( PIB,     IBUF(8) )
+!       POINTER     ( PJB,     JBUF(8) )
+      REAL*8,  dimension(:), pointer :: A,B,VARIANCE,SPECTRE
+      integer, dimension(:), pointer :: IBUF,JBUF
 
       CHARACTER     NOMPRG*256
       COMMON       /PROGNAM/ NOMPRG
@@ -206,7 +214,7 @@
       LOGICAL       RPBLOC,SETIO64
       EXTERNAL      RPBLOC,JCLPNT,GETLIGN,BURNF,XIT
       EXTERNAL      GETFLD2,NGFFT,TRANS1D,SPECT1,SPECT2
-      EXTERNAL      PUTFLD2,GETSIZ,HPALLOC,SETIO64
+      EXTERNAL      PUTFLD2,GETSIZ,SETIO64
       EXTERNAL      CMPLBL
 
       DATA          ZONL /'ZONL'/
@@ -409,18 +417,20 @@
       MAXI = MAX( NI+2 , NJ+2 )
       MAXL =     (NI+2)*(NJ+2)
 
-      print*,'JFC: HPALLOC 1 start'
-      CALL HPALLOC( PA, MAXL*7+LEN*2+MAXI, IER, 8 )
-      print*,'JFC: HPALLOC 1 end'
-      PB  = LOC(        A(MAXL+1) )
-      PR1 = LOC(        B(MAXL+1) )
-      PR2 = LOC(       R1(MAXL+1) )
-      PR3 = LOC(       R2(MAXL+1) )
-      PVA = LOC(       R3(MAXL+1) )
-      PSP = LOC( VARIANCE(MAXL+1) )
-      PIB = LOC(  SPECTRE(MAXI+1) )
-      PJB = LOC(     IBUF(LEN +1) )
-
+!       print*,'JFC: HPALLOC 1 start'
+!       CALL HPALLOC( PA, MAXL*7+LEN*2+MAXI, IER, 8 )
+!       print*,'JFC: HPALLOC 1 end'
+!       PB  = LOC(        A(MAXL+1) )
+!       PR1 = LOC(        B(MAXL+1) )
+!       PR2 = LOC(       R1(MAXL+1) )
+!       PR3 = LOC(       R2(MAXL+1) )
+!       PVA = LOC(       R3(MAXL+1) )
+!       PSP = LOC( VARIANCE(MAXL+1) )
+!       PIB = LOC(  SPECTRE(MAXI+1) )
+!       PJB = LOC(     IBUF(LEN +1) )
+      allocate(        A(MAXL+1),       B(MAXL+1))
+      allocate( VARIANCE(MAXL+1), SPECTRE(MAXI+1))
+      allocate(     IBUF(LEN +1),    JBUF(LEN +1))
 *BD<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
 *BD<< A MODIFIER MEMOIRE   ---> FIN <---
 *BD<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
@@ -739,10 +749,10 @@
 
       IF(DO_AVG1D) THEN
          IF (WEST_EAST) THEN
-            CALL TRANS1D( AX,R1,R2,R3,MAXL,NX,NY,CAS,IAXE,IWAY)
+            CALL TRANS1D( AX,U1,U2,U3,MAXL,NX,NY,CAS,IAXE,IWAY)
          ENDIF
       ELSE                      ! THIS ONE IS FOR THE FULL 2D CASE 
-         CALL TRANS1D( A,R1,R2,R3,MAXL,NX,NY,CAS,IAXE,IWAY )
+         CALL TRANS1D( A,U1,U2,U3,MAXL,NX,NY,CAS,IAXE,IWAY )
       ENDIF
       
 ***    SECOND PASS => ALONG INDEX "J"
@@ -761,11 +771,11 @@
 
       IF(DO_AVG1D) THEN
          IF (.NOT.WEST_EAST) THEN ! DO THE SOUTH-NORTH CASE
-            CALL TRANS1D( AY,R1,R2,R3,MAXL,NX,NY,CAS,IAXE,IWAY )
+            CALL TRANS1D( AY,U1,U2,U3,MAXL,NX,NY,CAS,IAXE,IWAY )
          ENDIF
          
       ELSE ! THIS ONE IS FOR THE FULL 2D CASE
-         CALL TRANS1D( A,R1,R2,R3,MAXL,NX,NY,CAS,IAXE,IWAY )
+         CALL TRANS1D( A,U1,U2,U3,MAXL,NX,NY,CAS,IAXE,IWAY )
       ENDIF
       
 
@@ -1160,8 +1170,8 @@ C             ****************************************
  6140 FORMAT(' N = NJ = ', I4,' THE NEAREST FACTORIZABLE N = ',I4)
  6160 FORMAT(' PROBLEM READING INPUT PARAMETRES: IOSTAT=',I5)
 
+#endif
       END
-
       SUBROUTINE DETREND(B, NI,NJ,IX,IY)
 
 *PURPOSE  - REMOVE LINEAR TENDENCY OF A 2-D FIELD USING THE METHODOLOGY
@@ -2077,7 +2087,7 @@ c     Fin   - addition JFC
       
       END
 
-      SUBROUTINE TRANS1D(AR,R1,R2,R3,MAXSIZE,N,NLOT,ICAS,IAXE,IWAY)
+      SUBROUTINE TRANS1D(AR,U1,U2,U3,MAXSIZE,N,NLOT,ICAS,IAXE,IWAY)
 
       IMPLICIT NONE
 
@@ -2090,8 +2100,10 @@ C                 1 => DCT (COS SHIFTED)
 C                 2 => DFT (REGULAR SIN & COS).
 C
       INTEGER MAXSIZE,N,NLOT,ICAS,IAXE,IWAY
-      REAL*8 AR(MAXSIZE), R1(MAXSIZE),R2(MAXSIZE),R3(MAXSIZE)
+      REAL*8, dimension(*) :: U1,U2,U3     ! no longer used
+      REAL*8 AR(MAXSIZE)
 
+      REAL*8 R1(MAXSIZE)                   ! automatic array
       INTEGER NX,NY, NN, LOT, NIC
 
       REAL*8 CNORM, FAC
@@ -2108,9 +2120,10 @@ C
       LOGICAL LPRINT,  LDCT, LDFT
       INTEGER I, J, K, INC, JUMP
       INTEGER INCR, JUMPR, NFACT, LOTR
-      INTEGER NDX, NDR
+!       INTEGER NDX, NDR
+      INTEGER NDR
 
-      NDX(I,J) =  1 + ( J - 1 ) * JUMP + I * INC
+!       NDX(I,J) =  1 + ( J - 1 ) * JUMP + I * INC
       NDR(I,J) =  1 + ( J - 1 ) * JUMPR + I * INCR
 
       LPRINT  = .FALSE.
@@ -2270,6 +2283,12 @@ C------------------------------------------------------------------
       RETURN 
       END
 
+      module COMFFT8_MOD
+      INTEGER, save :: N, M, NSTORE
+      REAL*8, dimension(:), POINTER, save ::  SSIN, CCOS, QSIN
+      logical, save :: is_allocated = .false.
+      end module COMFFT8_MOD
+
 C     $LOG: TRANS1D.FTN,V $
 C     REVISION 3.1  2003/10/24 21:05:48  DUGAS
 C     IMPLEMENTER DU CODE COMPATIBLE RS6000
@@ -2298,17 +2317,18 @@ CC
 C
       SUBROUTINE SETSCQR( NF, CASE )
 
+      use COMFFT8_MOD
       IMPLICIT NONE
 
       INTEGER NF
       CHARACTER*(*) CASE
 
-      INTEGER N, M, NSTORE
-      REAL*8  SSIN, CCOS, QSIN
-      POINTER ( PTSS,SSIN(N-M-1) ), ( PTCC,CCOS(N-M-1) )
-      POINTER ( PTQS,QSIN(0:M-1) )
-
-      COMMON    / COMFFT8X / PTSS, PTCC, PTQS, N, M, NSTORE
+!       INTEGER N, M, NSTORE
+!       REAL*8  SSIN, CCOS, QSIN
+!       POINTER ( PTSS,SSIN(N-M-1) ), ( PTCC,CCOS(N-M-1) )
+!       POINTER ( PTQS,QSIN(0:M-1) )
+! 
+!       COMMON    / COMFFT8X / PTSS, PTCC, PTQS, N, M, NSTORE
 C
       INTEGER    I, IER
       REAL *8    DEL, ANGLE
@@ -2321,12 +2341,16 @@ C
       PARAMETER( TWO   = 2.0 )
       PARAMETER( FOUR  = 4.0 )
 C
-      DATA ALLOUE/'PAS ENCORE ALLOUE'/
+!       DATA ALLOUE/'PAS ENCORE ALLOUE'/
 
-      IF (ALLOUE.NE.'PAS ENCORE ALLOUE') CALL HPDEALLC( PTSS,IER,0 )
-      IF (ALLOUE.NE.'PAS ENCORE ALLOUE') CALL HPDEALLC( PTCC,IER,0 )
-      IF (ALLOUE.NE.'PAS ENCORE ALLOUE') CALL HPDEALLC( PTQS,IER,0 )
-      IF (ALLOUE.NE.'PAS ENCORE ALLOUE') ALLOUE = 'DEJA ALLOUE'
+!       IF (ALLOUE.NE.'PAS ENCORE ALLOUE') CALL HPDEALLC( PTSS,IER,0 )
+!       IF (ALLOUE.NE.'PAS ENCORE ALLOUE') CALL HPDEALLC( PTCC,IER,0 )
+!       IF (ALLOUE.NE.'PAS ENCORE ALLOUE') CALL HPDEALLC( PTQS,IER,0 )
+!       IF (ALLOUE.NE.'PAS ENCORE ALLOUE') ALLOUE = 'DEJA ALLOUE'
+      if(is_allocated) then
+        deallocate(SSIN,QSIN,CCOS)
+        is_allocated = .false.
+      endif
 
 C     N  =  LENGTH OF AUXILIARY REAL PERIODIC FOURIER TRANSFORM (FFFT8)
 
@@ -2346,9 +2370,8 @@ C     N  =  LENGTH OF AUXILIARY REAL PERIODIC FOURIER TRANSFORM (FFFT8)
       M      = N/2
       NSTORE = N + 2
 
-      CALL HPALLOC( PTSS, N-M-1, IER, 8 )
-      CALL HPALLOC( PTCC, N-M-1, IER, 8 )
-      CALL HPALLOC( PTQS,     M, IER, 8 )
+      allocate(SSIN(N-M-1),QSIN(0:M-1),CCOS(N-M-1))
+      is_allocated = .true.
 
       DEL = ACOS( - ONE )/N
 
@@ -2409,6 +2432,7 @@ C-----------------------------------------------------------------------
 C
       SUBROUTINE CFFT8( A, INC, JUMP, LOT )
 
+      use COMFFT8_MOD
       IMPLICIT NONE
 
       INTEGER INC, JUMP, LOT
@@ -2417,21 +2441,10 @@ C
       REAL*8  AI, AS, YA, YS, XNOR
       INTEGER I, J, K, IS
 
-      INTEGER N, M, NSTORE
-      REAL*8  SSIN, CCOS, QSIN
-      POINTER ( PTSS,SSIN(N-M-1) ), ( PTCC,CCOS(N-M-1) )
-      POINTER ( PTQS,QSIN(0:M-1) )
-
-      COMMON    / COMFFT8X / PTSS, PTCC, PTQS, N, M, NSTORE
-
-      INTEGER IWRD
-
-      EXTERNAL STKMEMW, UNSTAKW
-
       INTEGER J0, JLOT
 
-      REAL*8         W
-      POINTER  ( PW, W(511*NSTORE) )
+      integer, parameter :: MAXLOT=511
+      REAL*8         W(MAXLOT*NSTORE)
 
       REAL*8 PDWRD(2)
       REAL   PRWRD(2)
@@ -2443,20 +2456,15 @@ C
       PARAMETER( TWO  = 2.0 )
       PARAMETER( FOUR = 4.0 )
 
+!     statement functions used for indexing
       INTEGER IJA, IJW
       IJA(I,J) = 1 + (J0+J-1)*JUMP + I*INC 
-      IJW(I,J) = J + I*511 
-C 
-C     ALLOCATE W WORK ARRAY
-C
-      IWRD = ( LOC( PDWRD(2) ) - LOC( PDWRD(1) ) )/
-     %       ( LOC( PRWRD(2) ) - LOC( PRWRD(1) ) )
-      CALL STKMEMW( IWRD*511*NSTORE , PW )
+      IJW(I,J) = J + I*MAXLOT 
 
       XNOR = SQRT( HALF * N )
 
-      DO 100 J0=0,LOT-1,511
-      JLOT  = MIN( 511, LOT - J0 )
+      DO 100 J0=0,LOT-1,MAXLOT
+      JLOT  = MIN( MAXLOT, LOT - J0 )
 
       I  = 1
       IS = N - I
@@ -2502,7 +2510,7 @@ C
          ENDDO
       ENDIF
 
-      CALL FFFT8( W, 511, 1, JLOT, -1 )
+      CALL FFFT8( W, MAXLOT, 1, JLOT, -1 )
 
       DO J=1,JLOT
          A( IJA(0,J) ) = W( IJW(0,J) )
@@ -2571,6 +2579,7 @@ C-----------------------------------------------------------------------
 C
       SUBROUTINE QCFFT8( A, INC, JUMP, LOT, ISIGN )
 
+      use COMFFT8_MOD
       IMPLICIT NONE
 
       INTEGER INC, JUMP, LOT, ISIGN
@@ -2579,21 +2588,10 @@ C
       REAL*8  AI, AS, YA, YS, C, S, RR
       INTEGER I, J, K, IS, K1, KK
 
-      INTEGER N, M, NSTORE
-      REAL*8  SSIN, CCOS, QSIN
-      POINTER ( PTSS,SSIN(N-M-1) ), ( PTCC,CCOS(N-M-1) )
-      POINTER ( PTQS,QSIN(0:M-1) )
-
-      COMMON    / COMFFT8X / PTSS, PTCC, PTQS, N, M, NSTORE
-
-      INTEGER IWRD
-
-      EXTERNAL STKMEMW, UNSTAKW
-
       INTEGER J0, JLOT
 
-      REAL*8         W
-      POINTER  ( PW, W(511*NSTORE) )
+      integer, parameter :: MAXLOT=511
+      REAL*8         W(MAXLOT*NSTORE)
 
       REAL*8 PDWRD(2)
       REAL   PRWRD(2)
@@ -2605,18 +2603,13 @@ C
       PARAMETER( TWO  = 2.0 )
       PARAMETER( FOUR = 4.0 )
 
+!     statement functions used for indexing
       INTEGER IJA, IJW
       IJA(I,J) = 1 + (J0+J-1)*JUMP + I*INC
-      IJW(I,J) = J + I*511
-C
-C     ALLOCATE W WORK ARRAY
-C
-      IWRD = ( LOC( PDWRD(2) ) - LOC( PDWRD(1) ) )/
-     %       ( LOC( PRWRD(2) ) - LOC( PRWRD(1) ) )
-      CALL STKMEMW( IWRD*511*NSTORE , PW )
+      IJW(I,J) = J + I*MAXLOT
 
-      DO 100 J0=0,LOT-1,511
-      JLOT  = MIN( 511, LOT - J0 )
+      DO 100 J0=0,LOT-1,MAXLOT
+      JLOT  = MIN( MAXLOT, LOT - J0 )
 
       IF ( ISIGN .EQ. -1 ) THEN
 C
@@ -2643,7 +2636,7 @@ C
             ENDDO
          ENDIF
 
-         CALL FFFT8( W, 511, 1, JLOT, -1 )
+         CALL FFFT8( W, MAXLOT, 1, JLOT, -1 )
 
          DO J=1,JLOT
             A( IJA(0,J) ) = W( IJW(0,J) ) * HALF
@@ -2728,7 +2721,7 @@ C
 
          ENDDO
 
-         CALL FFFT8( W, 511, 1, JLOT, +1 )
+         CALL FFFT8( W, MAXLOT, 1, JLOT, +1 )
 
          DO I = 0 , M-1
 
@@ -2753,10 +2746,6 @@ C
       ENDIF
 
   100 CONTINUE
-C
-C     DEALLOCATE W WORK ARRAY
-C
-      CALL UNSTAKW( PW )
       RETURN
       END
 CCCS/R NGFFT - CALCUL DU PROCHAIN ENTIER DANS LA SUITE 4, 6, 8
