@@ -1,8 +1,5 @@
-      program test
-      call varspec2
-      end
+#if defined(VARSPEC2_CODE)
  	SUBROUTINE varspec2
-#if ! defined(VARSPEC2_CODE)
 *
 *     CALL SEQUENCE...
 *      varspec  IN SP2OUT SP1OUT XOUT INPUT OUTPUT [ -a VAL1 -b VAL2 \
@@ -1170,8 +1167,8 @@ C             ****************************************
  6140 FORMAT(' N = NJ = ', I4,' THE NEAREST FACTORIZABLE N = ',I4)
  6160 FORMAT(' PROBLEM READING INPUT PARAMETRES: IOSTAT=',I5)
 
-#endif
       END
+#endif
       SUBROUTINE DETREND(B, NI,NJ,IX,IY)
 
 *PURPOSE  - REMOVE LINEAR TENDENCY OF A 2-D FIELD USING THE METHODOLOGY
