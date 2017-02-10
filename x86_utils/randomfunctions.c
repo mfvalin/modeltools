@@ -821,27 +821,27 @@ static IVECRANFUN s_fnVecIRanu = VecIRan_R250_stream;
 static DVECRANFUN s_fnVecDRanu = VecDRan_R250_stream;
 static RANSETSEEDFUN s_fnRanSetSeed = RanSetSeed_R250_stream;
 
-double  DRanU(void *STREAM)     /* returns a random double (0.0 , 1.0) */
+static double  DRanU(void *STREAM)     /* returns a random double (0.0 , 1.0) */
 {
     return (*s_fnDRanu)(STREAM);
 }
-double  DRanUS(void *STREAM)    /* returns a random double (-1.0 , 1.0) */
+static double  DRanUS(void *STREAM)    /* returns a random double (-1.0 , 1.0) */
 {
     return (*s_fnDRanus)(STREAM);
 }
-unsigned int IRanU(void *STREAM)
+static unsigned int IRanU(void *STREAM)
 {
     return (*s_fnIRanu)(STREAM);
 }
-void RanVecIntU(void *STREAM, unsigned int *auiRan, int cRan)
+static void RanVecIntU(void *STREAM, unsigned int *auiRan, int cRan)
 {
     (*s_fnVecIRanu)(STREAM, auiRan, cRan);
 }
-void RanVecU(void *STREAM, double *adRan, int cRan)
+static void RanVecU(void *STREAM, double *adRan, int cRan)
 {
     (*s_fnVecDRanu)(STREAM, adRan, cRan);
 }
-void    RanSetSeed(void *STREAM, int *piSeed, int cSeed)
+static void    RanSetSeed(void *STREAM, int *piSeed, int cSeed)
 {
    	s_cNormalInStore = 0;
 	(*s_fnRanSetSeed)(STREAM, piSeed, cSeed);
