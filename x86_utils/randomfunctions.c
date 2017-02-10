@@ -1,5 +1,5 @@
 #if defined(COMPILING_FORTRAN)
-subroutine fortran_test
+subroutine fortran_test   ! test or Fortran interfaces really
   use ISO_C_BINDING
   implicit none
 
@@ -201,7 +201,7 @@ void Ran_SetInitialSeeds(unsigned int auiSeed[], int cSeed, unsigned int uiSeed,
 }
 /*-------------------------- END Ran_SetInitialSeeds ---------------------------*/
 /*==========================================================================
- * R250 ans SHR3 generators added, naming is consistent with the MWC8222 code
+ * R250 ans SHR3 generators added, naming consistent with the MWC8222 code
  *==========================================================================*/
 /*------------------------ stream control structures --------------------------*/
 typedef struct{
@@ -266,7 +266,7 @@ typedef struct{
 
 static void FillBuffer_stream(void *stream){             // refill the buffer stream of a uniform generator
   generic_state *Stream = (generic_state *)stream ;
-  if(Stream == NULL) return;                             // null stream, nothng to do
+  if(Stream == NULL) return;                             // null stream, nothing to do
   if(Stream->refill) Stream->refill( (void *)Stream ) ;  // some generators do not have a buffer filler
 }
 
@@ -434,18 +434,6 @@ static void FillBuffer_R250_stream(r250_state *R250){
   R250->index = r250_index;
 }
 
-// static void FillBuffer_R250(void){   // non stream based, single thread, max speed version
-//   int i;
-// 
-//   while(r250.index > 249) r250.index -= 250;
-//   for (i=0 ; i< 147 ; i++) {
-//     r250.buffer[ i ] = r250.buffer[ i ] ^ r250.buffer[ i + 103 ];
-//   }
-//   for (i=147 ; i<250 ; i++) {
-//     r250.buffer[ i ] = r250.buffer[ i ] ^ r250.buffer[ i - 147 ];
-//   }
-// }
-
 void RanSetSeed_R250_stream(void *stream, int *piSeed, int cSeed)  // !InTc!
 {
   int i;
@@ -460,23 +448,12 @@ void RanSetSeed_R250_stream(void *stream, int *piSeed, int cSeed)  // !InTc!
   }
 }
 
-// void RanSetSeed_R250(int *piSeed, int cSeed)   // non stream based, single thread, max speed version
-// {
-//   int i;
-// 
-//   if (cSeed == 250 && piSeed != NULL) {
-//     for(i=0 ; i<250; i++) r250.buffer[ i ] = piSeed[ i ] ;
-//   }else{
-//     Ran_SetInitialSeeds(r250.buffer, 250, piSeed && cSeed ? piSeed[0] : 0, 0);
-//   }
-// }
-
 void *Ran_R250_new_stream(void *clone_in, int *piSeed, int cSeed)   // !InTc! // create and seed a new stream
 {
   r250_state *source ;
   r250_state *clone = (r250_state *)clone_in;
   int i;
-//   r250_state *new_state = (r250_state *)malloc(sizeof(r250_state)) ;
+
   r250_state *new_state = (r250_state *) memalign(64,sizeof(r250_state)) ;
 
   if(cSeed < 0 && piSeed==NULL){  // clone a stream (mostly used for testing)
@@ -495,7 +472,7 @@ void *Ran_R250_new_stream(void *clone_in, int *piSeed, int cSeed)   // !InTc! //
     new_state->refill = (REFILLBUFFUN) FillBuffer_R250_stream;
     RanSetSeed_R250_stream(new_state, piSeed, cSeed);  // seed the new stream
   }
-//   printf("new_state = %16.16p %d\n",new_state,new_state->buffer[0]);
+
   return ( (void *) new_state) ;
 }
 
@@ -510,15 +487,6 @@ unsigned int IRan_R250_stream(void *stream)	  // !InTc!	/* returns a random unsi
   return new_rand;
 }
 
-// unsigned int IRan_R250(void)   // non stream based, single thread, max speed version
-// {
-//   register int	i, j;
-//   register unsigned int new_rand;
-//   if ( r250.index > 249 ) FillBuffer_R250_stream(&r250);
-//   new_rand = r250.buffer[r250.index++];
-//   return new_rand;
-// }
-
 double DRan_R250_stream(void *stream)	  // !InTc!	/* returns a random double (0.0 , 1.0) */
 {
   register int	i, j;
@@ -530,15 +498,6 @@ double DRan_R250_stream(void *stream)	  // !InTc!	/* returns a random double (0.
   return RANDBL_32new(new_rand);   // convert from 32 bit int to (0.0 , 1.0)
 }
 
-// double DRan_R250(void)   // non stream based, single thread, max speed version
-// {
-//   register int	i, j;
-//   register unsigned int new_rand;
-//   if ( r250.index > 249 ) FillBuffer_R250();
-//   new_rand = r250.buffer[r250.index++] ;
-//   return RANDBL_32new(new_rand);   // convert from 32 bit int to (0.0 , 1.0)
-// }
-
 double DRanS_R250_stream(void *stream)	  // !InTc!	/* returns a random double (-1.0 , 1.0) */
 {
   register int	i, j;
@@ -549,15 +508,6 @@ double DRanS_R250_stream(void *stream)	  // !InTc!	/* returns a random double (-
   new_rand = R250->buffer[R250->index++] ;
   return RANDBLS_32new(new_rand);   // convert from 32 bit int to (0.0 , 1.0)
 }
-
-// double DRanS_R250(void)   // non stream based, single thread, max speed version
-// {
-//   register int	i, j;
-//   register unsigned int new_rand;
-//   if ( r250.index > 249 ) FillBuffer_R250_stream(&r250);
-//   new_rand = r250.buffer[r250.index++] ;
-//   return RANDBLS_32new(new_rand);   // convert from 32 bit int to (0.0 , 1.0)
-// }
 
 void VecIRan_R250_stream(void *stream, unsigned int *ranbuf, int n)  // !InTc!
 {
@@ -590,30 +540,6 @@ void VecIRan_R250_stream(void *stream, unsigned int *ranbuf, int n)  // !InTc!
   R250->index = r250_index;
 }
 
-// void VecIRan_R250(unsigned int *ranbuf, int n){   // non stream based, single thread, max speed version
-//   int k = 0;
-//   int i;
-// 
-//   while( r250.index < 250 && n > 0 ){
-//     ranbuf[k++] = r250.buffer[r250.index++] ;
-//     n-- ;
-//   }
-//   if ( n == 0 ) goto exit;
-//   FillBuffer_R250();     // we get here if buffer is empty before n is satisfied
-//   while(n >= 250){        // chunks of 250 values
-//     for(i=0 ; i<250 ; i++) ranbuf[k+i] = r250.buffer[i] ;
-//     n -= 250 ;
-//     k += 250 ;
-//     FillBuffer_R250() ;
-//   }
-//   while( n > 0 ){  // n < 250 at this point
-//     ranbuf[k++] = r250.buffer[r250.index++] ;
-//     n-- ;
-//   }
-// exit:
-//   return ;
-// }
-
 void VecDRan_R250_stream(void *stream, double *ranbuf, int n)  // !InTc!
 {
   int k = 0;
@@ -644,27 +570,6 @@ void VecDRan_R250_stream(void *stream, double *ranbuf, int n)  // !InTc!
   }
   R250->index = r250_index;
 }
-
-// void VecDRan_R250(double *ranbuf, int n){   // non stream based, single thread, max speed version
-//   int k = 0;
-//   int i;
-//   while( r250.index < 250 && n > 0 ){
-//     ranbuf[k++] = RANDBL_32new(r250.buffer[r250.index++]) ;   // convert from 32 bit int to (0.0 , 1.0)
-//     n-- ;
-//   }
-//   if ( n == 0 ) return;
-//   FillBuffer_R250();     // we get here if buffer is empty
-//   while(n >= 250){        // chunks of 250 values
-//     for(i=0 ; i<250 ; i++) ranbuf[k+i] = RANDBL_32new(r250.buffer[i]) ;   // convert from 32 bit int to (0.0 , 1.0)
-//     n -= 250 ;
-//     k += 250 ;
-//     FillBuffer_R250() ;
-//   }
-//   while( n > 0 ){  // n < 250 at this point
-//     ranbuf[k++] = RANDBL_32new(r250.buffer[r250.index++]) ;   // convert from 32 bit int to (0.0 , 1.0)
-//     n-- ;
-//   }
-// }
 
 void VecDRanS_R250_stream(void *stream, double *ranbuf, int n)  // !InTc!
 {
@@ -697,27 +602,6 @@ void VecDRanS_R250_stream(void *stream, double *ranbuf, int n)  // !InTc!
   R250->index = r250_index;
 }
 
-// void VecDRanS_R250(double *ranbuf, int n){   // non stream based, single thread, max speed version
-//   int k = 0;
-//   int i;
-// 
-//   while( r250.index < 250 && n > 0 ){
-//     ranbuf[k++] = RANDBLS_32new(r250.buffer[r250.index++]) ;   // convert from 32 bit int to (0.0 , 1.0)
-//     n-- ;
-//   }
-//   if ( n == 0 ) return;
-//   FillBuffer_R250();     // we get here if buffer is empty
-//   while(n >= 250){        // chunks of 250 values
-//     for(i=0 ; i<250 ; i++) ranbuf[k+i] = RANDBLS_32new(r250.buffer[i]) ;   // convert from 32 bit int to (0.0 , 1.0)
-//     n -= 250 ;
-//     k += 250 ;
-//     FillBuffer_R250() ;
-//   }
-//   while( n > 0 ){  // n < 250 at this point
-//     ranbuf[k++] = RANDBLS_32new(r250.buffer[r250.index++]) ;   // convert from 32 bit int to (0.0 , 1.0)
-//     n-- ;
-//   }
-// }
 /*------------------------- end of R250 routines ---------------------------*/
 /*------------------------ George Marsaglia MWC ----------------------------*/
 #define MWC_A  LIT_UINT64(809430660)
@@ -886,14 +770,6 @@ void    RanSetRan(void *STREAM, const char *sRan)
 		s_fnRanSetSeed = NULL;
 	}
 }
-// static unsigned int IRanUfromDRanU(void)
-// {
-//     return (unsigned int)(UINT_MAX * (*s_fnDRanu)());
-// }
-// static double DRanUfromIRanU(void)
-// {
-//     return RANDBL_32new( (*s_fnIRanu)() );
-// }
 /*----------------- end normal random number generators --------------------*/
 
 /*------------------------------ General Ziggurat --------------------------*/
@@ -923,25 +799,6 @@ INSTRUMENT(static unsigned int zigloops2 = 0;)
 INSTRUMENT(static unsigned int zigused2 = 0;)
 
 #define ZIGNOR_STORE 256 * 4
-// static unsigned int   s_auiZigTmp[ZIGNOR_STORE + ZIGNOR_STORE / 4];
-// // static unsigned int  *s_auiZigRan = &s_auiZigTmp[ZIGNOR_STORE / 4];    // should really be  &s_auiZigTmp[0]
-// static unsigned int  *s_auiZigRan = s_auiZigTmp;
-// static unsigned char *s_auiZigBox = (unsigned char *) &s_auiZigTmp[ZIGNOR_STORE] ;
-// static int s_cZigStored = 0;
-
-// static int FillBufferZig(void *stream){
-//   int i, j, k;
-//   RanVecIntU(stream, s_auiZigTmp, ZIGNOR_STORE + ZIGNOR_STORE / 4);
-//   for (j = k = 0; j < ZIGNOR_STORE; j += 4, ++k) {
-//     i = s_auiZigTmp[ZIGNOR_STORE + k];
-//     s_auiZigBox[j + 0] = i & 0x7F;
-//     s_auiZigBox[j + 1] = (i>>8) & 0x7F;
-//     s_auiZigBox[j + 2] = (i>>16) & 0x7F;
-//     s_auiZigBox[j + 3] = (i>>24) & 0x7F;
-//   }
-//   s_cZigStored = j ;
-//   s_cZigStored = ZIGNOR_STORE ;
-// }
 
 #if defined(SCALAR_CODE)
 static double DRanNormalTail(double dMin, int iNegative)
@@ -950,10 +807,8 @@ static double DRanNormalTail(double dMin, int iNegative)
   do
   {
     if(s_cZigStored <= 1) FillBufferZig();
-//     x = DRanU();
     x = RANDBL_32new(i_adZigRan[--s_cZigStored]);
     x = log(x) / dMin;
-//     y = DRanU();
     y = RANDBL_32new(i_adZigRan[--s_cZigStored]);
     y = log(y);
     INSTRUMENT(zigused += 2;)
@@ -1062,10 +917,6 @@ double  DRanNormalZigVec(void *stream)  // !InTc!
 	unsigned int *s_auiZigTmp, *s_auiZigRan;
 	int s_cZigStored;
 	unsigned char *s_auiZigBox;
-// static unsigned int   s_auiZigTmp[ZIGNOR_STORE + ZIGNOR_STORE / 4];
-// static unsigned int  *s_auiZigRan = s_auiZigTmp;
-// static unsigned char *s_auiZigBox = (unsigned char *) &s_auiZigTmp[ZIGNOR_STORE] ;
-// static int s_cZigStored = 0;
 
 	if(zig->gauss == NULL) {
 	  zig->gauss = (unsigned int *) memalign(64,(ZIGNOR_STORE + ZIGNOR_STORE / 4)*sizeof(unsigned int));
@@ -1080,7 +931,9 @@ double  DRanNormalZigVec(void *stream)  // !InTc!
 	INSTRUMENT(zigcalls++; ; direct = 1;)
 	for (;;)
 	{
-		if (s_cZigStored <= 0) { RanVecIntU(stream, s_auiZigTmp, ZIGNOR_STORE + ZIGNOR_STORE / 4); s_cZigStored = ZIGNOR_STORE ; } // FillBufferZig(stream);
+		if (s_cZigStored <= 0) { 
+		  RanVecIntU(stream, s_auiZigTmp, ZIGNOR_STORE + ZIGNOR_STORE / 4); s_cZigStored = ZIGNOR_STORE ; 
+		} // FillBufferZig(stream);
 		--s_cZigStored;
 
 		u = RANDBLS_32new(s_auiZigRan[s_cZigStored]);   // convert from 32 bit int to (-1.0 , 1.0) on the fly
@@ -1119,7 +972,6 @@ double  DRanNormalZigVec(void *stream)  // !InTc!
 		y = RANDBL_32new(s_auiZigRan[--s_cZigStored]);
 		zig->ngauss = s_cZigStored;
 		if (f1 + y * (f0 - f1) < 1.0)  return x;
-//       		if (f1 + DRanU() * (f0 - f1) < 1.0)  return x;
 		INSTRUMENT(zigloops++;)
 	}
 }
