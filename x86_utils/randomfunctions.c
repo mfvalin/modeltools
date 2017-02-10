@@ -188,7 +188,7 @@ void Print_Stream(void *stream){
   printf("stream = %16.16p\n",stream);
 }
 /*---------------------------- Ran_SetInitialSeeds -----------------------------*/
-void Ran_SetInitialSeeds(unsigned int auiSeed[], int cSeed, unsigned int uiSeed, unsigned int uiMin)
+void Ran_SetInitialSeeds(unsigned int auiSeed[], int cSeed, unsigned int uiSeed, unsigned int uiMin)  // !InTc!
 {
   int i;
   unsigned int s = uiSeed;     /* may be 0 */
@@ -276,14 +276,14 @@ static shr3_state shr3 = { NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL,
 
 // #define SHR3 (jz=jsr, jsr^=(jsr<<13), jsr^=(jsr>>17), jsr^=(jsr<<5),jz+jsr)
 
-void RanSetSeed_SHR3(void *SHR3, int *piSeed, int cSeed)
+void RanSetSeed_SHR3(void *SHR3, int *piSeed, int cSeed)  // !InTc!
 {
   shr3_state *state = (shr3_state *) SHR3 ;
   if(piSeed == NULL || cSeed == 0) return ; // null call, nothing to do
   state->jsr = (unsigned) *piSeed ;
 }
 
-unsigned int IRan_SHR3(void *SHR3)		/* returns a random unsigned integer */
+unsigned int IRan_SHR3(void *SHR3)	  // !InTc!	/* returns a random unsigned integer */
 {
   shr3_state *state = (shr3_state *) SHR3 ;
   unsigned long jz;
@@ -298,7 +298,7 @@ unsigned int IRan_SHR3(void *SHR3)		/* returns a random unsigned integer */
   return (jz+jsr) ;
 }
 
-double DRan_SHR3(void *SHR3)		/* returns a random double (0.0 , 1.0) */
+double DRan_SHR3(void *SHR3)	  // !InTc!	/* returns a random double (0.0 , 1.0) */
 {
   shr3_state *state = (shr3_state *) SHR3 ;
   unsigned long jz;
@@ -313,7 +313,7 @@ double DRan_SHR3(void *SHR3)		/* returns a random double (0.0 , 1.0) */
   return RANDBL_32new(jz+jsr);   // convert from 32 bit int to (0.0 , 1.0)
 }
 
-double DRanS_SHR3(void *SHR3)		/* returns a random double (-1.0 , 1.0) */
+double DRanS_SHR3(void *SHR3)	  // !InTc!	/* returns a random double (-1.0 , 1.0) */
 {
   shr3_state *state = (shr3_state *) SHR3 ;
   unsigned long jz;
@@ -328,7 +328,8 @@ double DRanS_SHR3(void *SHR3)		/* returns a random double (-1.0 , 1.0) */
   return RANDBLS_32new(jz+jsr);   // convert from 32 bit int to (-1.0 , 1.0)
 }
 
-void VecIRan_SHR3(void *SHR3, unsigned int *ranbuf, int n){
+void VecIRan_SHR3(void *SHR3, unsigned int *ranbuf, int n)  // !InTc!
+{
   int i;
   shr3_state *state = (shr3_state *) SHR3 ;
   unsigned long jz;
@@ -345,7 +346,8 @@ void VecIRan_SHR3(void *SHR3, unsigned int *ranbuf, int n){
   state->jsr=jsr;
 }
 
-void VecDRan_SHR3(void *SHR3, double *ranbuf, int n){
+void VecDRan_SHR3(void *SHR3, double *ranbuf, int n)  // !InTc!
+{
   int i;
   shr3_state *state = (shr3_state *) SHR3 ;
   unsigned long jz;
@@ -362,7 +364,8 @@ void VecDRan_SHR3(void *SHR3, double *ranbuf, int n){
   state->jsr=jsr;
 }
 
-void VecDRanS_SHR3(void *SHR3, double *ranbuf, int n){
+void VecDRanS_SHR3(void *SHR3, double *ranbuf, int n)  // !InTc!
+{
   int i;
   shr3_state *state = (shr3_state *) SHR3 ;
   unsigned long jz;
@@ -443,7 +446,7 @@ static void FillBuffer_R250_stream(r250_state *R250){
 //   }
 // }
 
-void RanSetSeed_R250_stream(void *stream, int *piSeed, int cSeed)
+void RanSetSeed_R250_stream(void *stream, int *piSeed, int cSeed)  // !InTc!
 {
   int i;
   r250_state *R250 = stream ; //? (r250_state *) stream : &r250 ;   // use default stream if NULL stream pointer
@@ -468,9 +471,10 @@ void RanSetSeed_R250_stream(void *stream, int *piSeed, int cSeed)
 //   }
 // }
 
-r250_state *Ran_R250_new_stream(r250_state *clone, int *piSeed, int cSeed)  // create and seed a new stream
+void *Ran_R250_new_stream(void *clone_in, int *piSeed, int cSeed)   // !InTc! // create and seed a new stream
 {
   r250_state *source ;
+  r250_state *clone = (r250_state *)clone_in;
   int i;
 //   r250_state *new_state = (r250_state *)malloc(sizeof(r250_state)) ;
   r250_state *new_state = (r250_state *) memalign(64,sizeof(r250_state)) ;
@@ -492,10 +496,10 @@ r250_state *Ran_R250_new_stream(r250_state *clone, int *piSeed, int cSeed)  // c
     RanSetSeed_R250_stream(new_state, piSeed, cSeed);  // seed the new stream
   }
 //   printf("new_state = %16.16p %d\n",new_state,new_state->buffer[0]);
-  return (new_state) ;
+  return ( (void *) new_state) ;
 }
 
-unsigned int IRan_R250_stream(void *stream)		/* returns a random unsigned integer */
+unsigned int IRan_R250_stream(void *stream)	  // !InTc!	/* returns a random unsigned integer */
 {
   register int	i, j;
   register unsigned int new_rand;
@@ -515,7 +519,7 @@ unsigned int IRan_R250_stream(void *stream)		/* returns a random unsigned intege
 //   return new_rand;
 // }
 
-double DRan_R250_stream(void *stream)		/* returns a random double (0.0 , 1.0) */
+double DRan_R250_stream(void *stream)	  // !InTc!	/* returns a random double (0.0 , 1.0) */
 {
   register int	i, j;
   register unsigned int new_rand;
@@ -535,7 +539,7 @@ double DRan_R250_stream(void *stream)		/* returns a random double (0.0 , 1.0) */
 //   return RANDBL_32new(new_rand);   // convert from 32 bit int to (0.0 , 1.0)
 // }
 
-double DRanS_R250_stream(void *stream)		/* returns a random double (-1.0 , 1.0) */
+double DRanS_R250_stream(void *stream)	  // !InTc!	/* returns a random double (-1.0 , 1.0) */
 {
   register int	i, j;
   register unsigned int new_rand;
@@ -555,7 +559,8 @@ double DRanS_R250_stream(void *stream)		/* returns a random double (-1.0 , 1.0) 
 //   return RANDBLS_32new(new_rand);   // convert from 32 bit int to (0.0 , 1.0)
 // }
 
-void VecIRan_R250_stream(void *stream, unsigned int *ranbuf, int n){
+void VecIRan_R250_stream(void *stream, unsigned int *ranbuf, int n)  // !InTc!
+{
   int k = 0;
   int i;
   r250_state *R250 = stream ; //? (r250_state *) stream : &r250 ;   // use default stream if NULL stream pointer
@@ -609,7 +614,8 @@ void VecIRan_R250_stream(void *stream, unsigned int *ranbuf, int n){
 //   return ;
 // }
 
-void VecDRan_R250_stream(void *stream, double *ranbuf, int n){
+void VecDRan_R250_stream(void *stream, double *ranbuf, int n)  // !InTc!
+{
   int k = 0;
   int i;
   r250_state *R250 = stream ; //? (r250_state *) stream : &r250 ;   // use default stream if NULL stream pointer
@@ -660,7 +666,8 @@ void VecDRan_R250_stream(void *stream, double *ranbuf, int n){
 //   }
 // }
 
-void VecDRanS_R250_stream(void *stream, double *ranbuf, int n){
+void VecDRanS_R250_stream(void *stream, double *ranbuf, int n)  // !InTc!
+{
   int k = 0;
   int i;
   r250_state *R250 = stream ; //? (r250_state *) stream : &r250 ;   // use default stream if NULL stream pointer
@@ -723,7 +730,7 @@ static mwc_state mwc = {NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, 0,
 // static unsigned int s_uiCarryMWC = MWC_C;
 // static unsigned int s_auiStateMWC[MWC_R];
 
-void RanSetSeed_MWC8222(void *MWC8222, int *piSeed, int cSeed)
+void RanSetSeed_MWC8222(void *MWC8222, int *piSeed, int cSeed)  // !InTc!
 {
 	mwc.uiState = MWC_R - 1;
 	mwc.uiCarry = MWC_C;
@@ -741,7 +748,7 @@ void RanSetSeed_MWC8222(void *MWC8222, int *piSeed, int cSeed)
 		Ran_SetInitialSeeds(mwc.auiState, MWC_R, piSeed && cSeed ? piSeed[0] : 0, 0);
 	}
 }
-unsigned int IRan_MWC8222(void *MWC8222)
+unsigned int IRan_MWC8222(void *MWC8222)  // !InTc!
 {
 	UINT64 t;
 
@@ -751,7 +758,7 @@ unsigned int IRan_MWC8222(void *MWC8222)
 	mwc.auiState[mwc.uiState] = (unsigned int)t;
     return (unsigned int)t;
 }
-double DRan_MWC8222(void *MWC8222)         /* returns a random double (0.0 , 1.0) */
+double DRan_MWC8222(void *MWC8222)         // !InTc!  /* returns a random double (0.0 , 1.0) */
 {
 	UINT64 t;
 
@@ -761,7 +768,7 @@ double DRan_MWC8222(void *MWC8222)         /* returns a random double (0.0 , 1.0
 	mwc.auiState[mwc.uiState] = (unsigned int)t;
 	return RANDBL_32new(t);   // convert from 32 bit int to (0.0 , 1.0)
 }
-double DRanS_MWC8222(void *MWC8222)        /* returns a random double (-1.0 , 1.0) */
+double DRanS_MWC8222(void *MWC8222)        // !InTc!  /* returns a random double (-1.0 , 1.0) */
 {
 	UINT64 t;
 
@@ -771,7 +778,7 @@ double DRanS_MWC8222(void *MWC8222)        /* returns a random double (-1.0 , 1.
 	mwc.auiState[mwc.uiState] = (unsigned int)t;
 	return RANDBLS_32new(t);   // convert from 32 bit int to (-1.0 , 1.0)
 }
-void VecIRan_MWC8222(void *MWC8222, unsigned int *auiRan, int cRan)
+void VecIRan_MWC8222(void *MWC8222, unsigned int *auiRan, int cRan)  // !InTc!
 {
 	UINT64 t;
 	unsigned int carry = mwc.uiCarry, state = mwc.uiState;
@@ -786,7 +793,7 @@ void VecIRan_MWC8222(void *MWC8222, unsigned int *auiRan, int cRan)
 	mwc.uiCarry = carry;
 	mwc.uiState = state;
 }
-void VecDRan_MWC8222(void *MWC8222, double *adRan, int cRan)
+void VecDRan_MWC8222(void *MWC8222, double *adRan, int cRan)  // !InTc!
 {
 	UINT64 t;
 	unsigned int carry = mwc.uiCarry, state = mwc.uiState;
@@ -1047,7 +1054,7 @@ double  DRanNormalZigFast(void)  // faster, but with some deficiencies
 }
 #endif
 #endif
-double  DRanNormalZigVec(void *stream)
+double  DRanNormalZigVec(void *stream)  // !InTc!
 {
 	unsigned int i, j, k, direct;
 	double x, u, y, f0, f1;
@@ -1158,7 +1165,7 @@ double  DRanNormalZigFastVec(void *stream)  // faster, but with some deficiencie
 	}
 }
 #endif
-void  RanNormalSetSeedZig(void *stream, int *piSeed, int cSeed)
+void  RanNormalSetSeedZig(void *stream, int *piSeed, int cSeed)  // !InTc!
 {
 	zigNorInit(ZIGNOR_C, ZIGNOR_R, ZIGNOR_V);
 	RanSetSeed(stream, piSeed, cSeed);
@@ -1170,7 +1177,7 @@ void  RanNormalSetSeedZigFast(void *stream, int *piSeed, int cSeed)
 	RanSetSeed(stream, piSeed, cSeed);
 }
 #endif
-void  RanNormalSetSeedZigVec(void *stream, int *piSeed, int cSeed)
+void  RanNormalSetSeedZigVec(void *stream, int *piSeed, int cSeed)  // !InTc!
 {
 // 	s_cZigStored = 0;
 	RanNormalSetSeedZig(stream, piSeed, cSeed);
@@ -1197,7 +1204,7 @@ void  RanNormalSetSeedZigFastVec(void *stream, int *piSeed, int cSeed)
 // the return value is the number of still usable input integers 
 // (<0 if unable to produce the requested number of output numbers)
 // NOTE: nuni should be at least ~ 2.1 times larger than ngauss to ensure success
-int NormalFromUniform(double gaussian[], int *ngauss, int uniform[], int nuni)
+int NormalFromUniform(double gaussian[], int *ngauss, int uniform[], int nuni)  // !InTc!
 {
   int nout=*ngauss;
   int iz, iout;
