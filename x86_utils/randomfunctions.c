@@ -781,6 +781,7 @@ void    RanSetRan(void *STREAM, const char *sRan)
 /* s_adZigX holds coordinates, such that each rectangle has*/
 /* same area; s_adZigR holds s_adZigX[i + 1] / s_adZigX[i] */
 static double s_adZigX[ZIGNOR_C + 1], s_adZigR[ZIGNOR_C];
+static int Zig_initialized = 0;
 
 static unsigned int kn[128];
 static double wn[128],fn[128];
@@ -845,7 +846,8 @@ static void zigNorFastInit(int iC, double dR, double dV)  // faster, but with so
 static void zigNorInit(int iC, double dR, double dV)
 {
 	int i;	double f;
-	
+
+	if(Zig_initialized) return ;
 	f = exp(-0.5 * dR * dR);
 	s_adZigX[0] = dV / f; /* [0] is bottom block: V / f(R) */
 	s_adZigX[1] = dR;
@@ -858,6 +860,7 @@ static void zigNorInit(int iC, double dR, double dV)
 	}
 	for (i = 0; i < iC; ++i)
 		s_adZigR[i] = s_adZigX[i + 1] / s_adZigX[i];
+	Zig_initialized = 1;
 }
 
 #if defined(SCALAR_CODE)
@@ -921,7 +924,10 @@ double  DRanNormalZigVec(void *stream)  // !InTc!
 	if(zig->gauss == NULL) {
 	  zig->gauss = (unsigned int *) memalign(64,(ZIGNOR_STORE + ZIGNOR_STORE / 4)*sizeof(unsigned int));
 	  zig->ngauss = 0;
-	  printf("allocating buffer in gaussian stream, size=%d uints\n",ZIGNOR_STORE + ZIGNOR_STORE / 4);
+// 	  printf("allocating buffer in gaussian stream, size=%d uints\n",ZIGNOR_STORE + ZIGNOR_STORE / 4);
+	}
+	if(Zig_initialized == 0) {  // initialize ziggurat internal tables if not already done
+	  zigNorInit(ZIGNOR_C, ZIGNOR_R, ZIGNOR_V);
 	}
 	s_cZigStored = zig->ngauss ;
 	s_auiZigTmp = zig->gauss ;
