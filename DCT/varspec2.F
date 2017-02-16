@@ -191,7 +191,7 @@
 
 
       REAL*8        AX(500*500),AY(500*500)
-      REAL*8        U1(1), U2(1), U3(1)   ! dummies to pass as unused arguments to TRANS1D
+      REAL*8        U1(1), U2(1), U3(1)   ! dummies to pass as unused arguments to TRANS_1D
 
 !       POINTER     ( PA,         A(1) ),( PB,   B(1) )
 !       POINTER     ( PR1,       R1(1) ),( PR2, R2(1) )
@@ -210,7 +210,7 @@
       INTEGER       GETSIZ
       LOGICAL       RPBLOC,SETIO64
       EXTERNAL      RPBLOC,JCLPNT,GETLIGN,BURNF,XIT
-      EXTERNAL      GETFLD2,NGFFT,TRANS1D,SPECT1,SPECT2
+      EXTERNAL      GETFLD2,NGFFT,TRANS_1D,SPECT1,SPECT2
       EXTERNAL      PUTFLD2,GETSIZ,SETIO64
       EXTERNAL      CMPLBL
 
@@ -746,10 +746,10 @@
 
       IF(DO_AVG1D) THEN
          IF (WEST_EAST) THEN
-            CALL TRANS1D( AX,U1,U2,U3,MAXL,NX,NY,CAS,IAXE,IWAY)
+            CALL TRANS_1D( AX,MAXL,NX,NY,CAS,IAXE,IWAY)
          ENDIF
       ELSE                      ! THIS ONE IS FOR THE FULL 2D CASE 
-         CALL TRANS1D( A,U1,U2,U3,MAXL,NX,NY,CAS,IAXE,IWAY )
+         CALL TRANS_1D( A,MAXL,NX,NY,CAS,IAXE,IWAY )
       ENDIF
       
 ***    SECOND PASS => ALONG INDEX "J"
@@ -768,11 +768,11 @@
 
       IF(DO_AVG1D) THEN
          IF (.NOT.WEST_EAST) THEN ! DO THE SOUTH-NORTH CASE
-            CALL TRANS1D( AY,U1,U2,U3,MAXL,NX,NY,CAS,IAXE,IWAY )
+            CALL TRANS_1D( AY,MAXL,NX,NY,CAS,IAXE,IWAY )
          ENDIF
          
       ELSE ! THIS ONE IS FOR THE FULL 2D CASE
-         CALL TRANS1D( A,U1,U2,U3,MAXL,NX,NY,CAS,IAXE,IWAY )
+         CALL TRANS_1D( A,MAXL,NX,NY,CAS,IAXE,IWAY )
       ENDIF
       
 
@@ -1194,7 +1194,7 @@ C             ****************************************
      %                    sp,size(sp),var,size(var),s)
       print *,'status =',s
 !       print 101,(i,sp(i),i=min(ni-1,nj-1),size(sp)-1)
-       write(1,101)(i,sp(i),2.0*sp(i),i=0,min(ni-1,nj-1))
+       write(1,101)(i,sp(i),4.0*sp(i),i=0,min(ni-1,nj-1))
 100   format(8E12.5)
 101   format(i6,2E12.5)
       end program
@@ -1245,7 +1245,6 @@ C             ****************************************
       integer :: nid, njd, nfact, mmax, nmax, nip, njp, maxl, maxi
       integer :: nit, njt, ij, ijt, i, j, nx, ny, iaxe, iway, cas
       real*8, dimension((ni+2)*(nj+2)) :: a
-      REAL*8, dimension(1) :: U1, U2, U3   ! dummies to pass as unused arguments to TRANS1D
 
       status = -1   ! precondition to fail
       if(nspec < max(ni+2,nj+2)) then
@@ -1268,10 +1267,8 @@ C             ****************************************
 *           ---------------------------------------------
 ***         * STANDARD PERIODIC FOURIER TRANSFORM CASE. *
 *           ---------------------------------------------
-      IF (LDFT)                                                THEN
-         
-        IF (MOD( NI,2 ).EQ.0 .OR.
-     +         MOD( NJ,2 ).EQ.0 )                               THEN
+      IF (LDFT)  THEN
+        IF (MOD( NI,2 ).EQ.0 .OR. MOD( NJ,2 ).EQ.0 )  THEN
                
 	  WRITE(6,*)'**************************************************'
 	  WRITE(6,*)'PROBLEM WITH NI= ', NI, ' AND/OR NJ=' ,NJ
@@ -1318,9 +1315,7 @@ C             ****************************************
 	MMAX = NID/2
 	NMAX = NJD/2
 	cas = 2
-
 ***    FOR THIS STANDARD FFT WE NEED TO PADD THE ARRAYS SUCH THIS:
-
 *                       --------------------
 *                       |O O O O O O O O O |
 *                       |O O O O O O O O O |
@@ -1329,16 +1324,13 @@ C             ****************************************
 *                       |X X X X X X X O O |
 *                       |X X X X X X X O O |
 *                       --------------------
-
 	NIP = 2 ! EXTRA SPACES NEEDED BY THE FFT
 	NJP = 2
-
       END IF
 *               -------------------------------------
 ***             * DISCRETE COSINE TRANSFORM CASE.*
 *               -------------------------------------
       IF (LDCT)                                               THEN
-	
 	NIP  = 0
 	NJP  = 0
 	NID  = NI
@@ -1346,7 +1338,6 @@ C             ****************************************
 	MMAX = NID/2
 	NMAX = NJD/2
 	cas = 1
-
 ***    STOP IF THE DIMENSIONS ARE NOT EVEN 
 	IF (MOD( NID,2 ).NE.0 .OR. MOD( NJD,2 ).NE.0 )        THEN
 
@@ -1358,7 +1349,6 @@ C             ****************************************
 !               CALL                                 XIT(' VARSPEC',-9 )
          ENDIF
 
-         
 ***    ISSUE A WARNING IF A FAST TRANSFORM CANNOT BE USED.
 
 	NFACT = NID
@@ -1378,10 +1368,8 @@ C             ****************************************
 	END IF
 
       END IF
-
 ***    BUILD THE ARRAY "A" FOR THE TRANSFORMS.
 ***    THIS DOUBLE LOOP IS COMMON TO ALL CASES.
-
       NIT = NID+NIP
       NJT = NJD+NJP
 
@@ -1390,71 +1378,48 @@ C             ****************************************
 
       DO  J=1,NJT
           DO  I=1,NIT
-            
               IJT = IJT+1
-
               IF (I.GT.NID .OR. 
      +            J.GT.NJD )                                   THEN
                   A(IJT) = 0.0
               ELSE
-
 !BD<< * BUGFIX FOR THE MAPPING OF THE INPUT ARRAY IN THE CASE OF DFT
 !BD     WHICH HAS ONE ADDITIONAL COLUMN THAN FOR THE DCT CASE.            
-
                   IF ( LDFT.and. I.EQ.1) IJ=IJ+1
 !BD>>
                   IJ     = IJ+1
-
                   A(IJT) = B(IJ)
               END IF
-
           END DO
       END DO
 ***    DO THE TRANSFORMS IN TWO 1-D PASSES.
 *      ======================================
-
 ***    FIRST PASS ==> ALONG INDEX "I"
 *      ----------
-
-      IWAY = -1                   ! REVERSE  TRANSFORM (GRIDPOINT TO FOURIER)
-      IAXE = 0                    ! TRANSFORM FOLLOWING X
-      IF (IAXE.EQ.0)                                           THEN
-          NX = NID                ! TRANSFORM FOLLOWING X
-          NY = NJD
-      ELSE 
-          NX = NJD                ! TRANSFORM FOLLOWING Y
-          NY = NID
-      END IF
-      CALL TRANS1D( A,U1,U2,U3,MAXL,NX,NY,CAS,IAXE,IWAY )
-      
+      IWAY = -1               ! REVERSE  TRANSFORM (GRIDPOINT TO FOURIER)
+      IAXE = 0                ! TRANSFORM ALONG X
+      NX = NID
+      NY = NJD
+      CALL TRANS_1D( A,MAXL,NX,NY,CAS,IAXE,IWAY )
 ***    SECOND PASS => ALONG INDEX "J"
 *      -----------
-
-      IAXE = 1                    ! TRANSFORM FOLLOWING Y
-      IF (IAXE.EQ.0)                                           THEN
-          NX = NID                ! TRANSFORM FOLLOWING X
-          NY = NJD                ! TRANSFORM FOLLOWING X
-      ELSE 
-          NX = NJD                ! TRANSFORM FOLLOWING Y
-          NY = NID                ! TRANSFORM FOLLOWING X
-      END IF
-      CALL TRANS1D( A,U1,U2,U3,MAXL,NX,NY,CAS,IAXE,IWAY )
+      IAXE = 1                ! TRANSFORM ALONG Y
+      NX = NJD
+      NY = NID
+      CALL TRANS_1D( A,MAXL,NX,NY,CAS,IAXE,IWAY )
 ***    COMPUTE THE SPECTRA (2D AND 1D, RESPECTIVELY)
 *      ====================
-
 ***    SPECT1/SPECT2 COMPUTE THE VARIANCE FROM ARRAY OF 
 ***    COEFFICIENT "A". THE OUTPUT IS THE 2D VARIANCE ARRAY "VARIANCE"
 ***    AND THE 1-D POWER SPECTRUM "SPECTRE. 
-
-      IF (LDFT)                                                THEN
-            CALL SPECT_DFT2D( SPECTRE,VARIANCE,A,
-     +                        MMAX,NMAX,NIT,NJT,MAXI )
-      ELSE IF (LDCT)                                           THEN
-            CALL SPECT_DCT2D( SPECTRE,VARIANCE,A,
-     +                        NIT,NJT,MAXI,.false.,.false.,.false.)
+      IF (LDFT) THEN
+        CALL SPECT_DFT2D( SPECTRE,VARIANCE,A,MMAX,NMAX,NIT,NJT,MAXI)
+      ELSE IF (LDCT)  THEN
+        CALL SPECT_DCT2D( SPECTRE,VARIANCE,A,NIT,NJT,MAXI,
+     +                    .false.,.false.,.false.)
       END IF
 *
-*     spectre(0:maxi-1) is what we are interested in
+*     spectre(0:maxi-1) is what we are mostly interested in
 *
       status = 0    ! O.K.
       return
@@ -2379,7 +2344,7 @@ c     Fin   - addition JFC
       
       END
 
-      SUBROUTINE TRANS1D(AR,U1,U2,U3,MAXSIZE,N,NLOT,ICAS,IAXE,IWAY)
+      SUBROUTINE TRANS_1D(AR,MAXSIZE,N,NLOT,ICAS,IAXE,IWAY)
 
       IMPLICIT NONE
 
@@ -2392,7 +2357,6 @@ C                 1 => DCT (COS SHIFTED)
 C                 2 => DFT (REGULAR SIN & COS).
 C
       INTEGER MAXSIZE,N,NLOT,ICAS,IAXE,IWAY
-      REAL*8, dimension(*) :: U1,U2,U3     ! no longer used
       REAL*8 AR(MAXSIZE)
 
       REAL*8 R1(MAXSIZE)                   ! automatic array
@@ -2469,8 +2433,8 @@ C     * BASED ON FACTORIZATION.
 
 C     * ON VEUT PAR EXEMPLE:
 
-C     APPEL DE TRANS1D    LISTE D'ARGUMENTS  APPEL POUR
-C     DANS MAIN           DE TRANS1D         ROUTINE FFT
+C     APPEL DE TRANS_1D    LISTE D'ARGUMENTS  APPEL POUR
+C     DANS MAIN           DE TRANS_1D         ROUTINE FFT
 C     =================   =================  ===========
 C
 C     NX=NID    -->        N      -->        N=JUMP=N=NID
@@ -2483,8 +2447,8 @@ C                                            INC=1
             JUMPR = N + 2
          ELSE
 
-C     APPEL DE TRANS1D    LISTE D'ARGUMENTS  APPEL POUR
-C     DANS MAIN           DE TRANS1D         ROUTINE FFT
+C     APPEL DE TRANS_1D    LISTE D'ARGUMENTS  APPEL POUR
+C     DANS MAIN           DE TRANS_1D         ROUTINE FFT
 C     =================   =================  ===========
 C
 C     NX=NJD    -->        N      -->           N=NJD
@@ -2581,7 +2545,7 @@ C------------------------------------------------------------------
       logical, save :: is_allocated = .false.
       end module COMFFT8_MOD
 
-C     $LOG: TRANS1D.FTN,V $
+C     $LOG: TRANS_1D.FTN,V $
 C     REVISION 3.1  2003/10/24 21:05:48  DUGAS
 C     IMPLEMENTER DU CODE COMPATIBLE RS6000
 C
