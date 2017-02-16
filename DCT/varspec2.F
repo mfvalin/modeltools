@@ -1200,13 +1200,29 @@ C             ****************************************
       end program
 #endif
       SUBROUTINE POWER_SPECTRUM(b, ni, nj, period, spectre, nspec,
-     %                       variance, nvar, status)
+     %                          variance, nvar, status)
       IMPLICIT  NONE
       integer, intent(IN) :: ni, nj, period, nspec, nvar
       real*8, dimension(ni*nj), intent(IN) :: b
       real*8, dimension(nspec), intent(OUT) :: spectre
       real*8, dimension(nvar), intent(OUT) :: variance
       integer, intent(OUT) :: status
+*     DESCRIPTION...
+*      FROM ORIGINAL ROUTINE VARSPEC - COMPUTE SPECTRUM FROM GRID VALUES
+*
+*     AUTHOR - B.Denis/J.Cote,  May 2002
+*        REV - B.Denis/B.Dugas, Feb 2004
+*        REV - B.Denis/B.Dugas, Jun 2005
+*        REV - B.Denis          Dec. 2005 : 1-detrend routine modified to allow 1D detrending
+*                                           2-bugfix for the input array maping for the DFT case. 
+*                                           3-REAL*8 consistency in SPECT_* routine
+*        REV - M.Valin          Feb 2017 new routine POWER_SPECTRUM, fortran callable
+*                                        elimination of no longer used arguments in 1D transform
+*     
+*     CONTACT: BERTRAND DENIS, PH.D.
+*              METEOROLOGICAL SERVICE OF CANADA
+*              EMAIL:bertrand.denis@ec.gc.ca
+*              TEL:514-421-7264
 *
 *     b   : 2D input array, dimension(ni,nj)
 *
@@ -2350,6 +2366,9 @@ c     Fin   - addition JFC
 
 C     * THIS ROUTINE DOES THE SPECTRAL TRANSFORMS (FORWARD AND INVERSE)
 C     * IT WORKS ON MULTIPLE ROW OR COLUMN AT A TIME.
+*       REV - M.Valin   Feb 2017 elimination of no longer used arguments in 1D transform
+*                       automatic arrays used instead
+*                                        
 
 C     * IT CAN DO TWO KINDS OF TRANSFORM:
 
@@ -2404,7 +2423,7 @@ C     * BASED ON FACTORIZATION.
       IF(NFACT.EQ.N) THEN 
          FAST_FT=.TRUE.
          IF ( LDCT ) CALL SETSCQR( N  , 'QCOS' )
-         IF ( LDFT  ) CALL SETSCQR( N  , 'REAL' )
+         IF ( LDFT ) CALL SETSCQR( N  , 'REAL' )
          
          IF (IAXE.EQ.0) THEN
             WRITE (6,*) ' '
