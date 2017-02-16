@@ -1,4 +1,4 @@
-#if defined(VARSPEC2_CODE)
+#if defined(VARSPEC2_AS_PROGRAM)
  	SUBROUTINE varspec2
 *
 *     CALL SEQUENCE...
@@ -1168,6 +1168,301 @@ C             ****************************************
  6160 FORMAT(' PROBLEM READING INPUT PARAMETRES: IOSTAT=',I5)
 
       END
+#else
+#if defined(SELF_TEST)
+      program test_psd
+      implicit none
+      integer, parameter :: NI = 120
+      integer, parameter :: NJ = 160
+      real*8, dimension(NI,NJ) :: b
+      real*8, dimension(NI+2,NJ+2) :: var
+      real*8, dimension(0:NI+NJ+1) :: sp
+      integer :: s, i, j
+
+      b = 12.0
+      do j=1,NJ
+      do i=1,NI
+        b(i,j) = sin(i*3.14159*.5) + sin(j*.25*3.14159) 
+     %           + mod(i,16) - mod(j,32) + 100.0
+!         b(i,j) = mod(i,2) + mod(j,3)
+      enddo
+      enddo
+      sp = 999.0
+      var = 888.0
+
+      call POWER_SPECTRUM(b, ni, nj, mod(NI,2), 
+     %                    sp,size(sp),var,size(var),s)
+      print *,'status =',s
+!       print 101,(i,sp(i),i=min(ni-1,nj-1),size(sp)-1)
+       write(1,101)(i,sp(i),2.0*sp(i),i=0,min(ni-1,nj-1))
+100   format(8E12.5)
+101   format(i6,2E12.5)
+      end program
+#endif
+      SUBROUTINE POWER_SPECTRUM(b, ni, nj, period, spectre, nspec,
+     %                       variance, nvar, status)
+      IMPLICIT  NONE
+      integer, intent(IN) :: ni, nj, period, nspec, nvar
+      real*8, dimension(ni*nj), intent(IN) :: b
+      real*8, dimension(nspec), intent(OUT) :: spectre
+      real*8, dimension(nvar), intent(OUT) :: variance
+      integer, intent(OUT) :: status
+*
+*     b   : 2D input array, dimension(ni,nj)
+*
+*     period : TYPE OF TRANSFORM.            
+*
+*       0 => DCT: RECOMMENDED FOR NON-PERIODIC DATA. THIS IS THE
+*                 SO-CALLED DISCRETE COSINE TRANSFORM.
+*
+*   .ne.0 => DFT: STANDARD PERIODIC DISCRETE FOURIER TRANSFORM
+*                 NOT RECOMMENDED FOR NON-PERIODIC DATA: 
+*                 USE period=0 INSTEAD.
+*
+* NB: 
+*    ( period .eq.0 ) THE DIMENSIONS OF THE INPUT DATA MUST BE *EVEN*
+*
+*    ( period .ne.0 ) THE DIMENSIONS OF THE INPUT DATA MUST BE
+*                     *ODD* AND THE FIELD WILL BE CONSIDERED PERIODIC,
+*                     I.E. B(1,J) = B(NI+1,J) AND B(I,1) = B(I,NJ+1).
+*
+*     spectre  : 1D output array, dimension( max(ni+2,nj+2) )
+*     variance : 2D output array, dimension( ni+2 , nj+2)
+*     status   : 
+*       0 NO PROBLEMS
+*      -1 improper dimension(s)
+*       1 PROBLEM WITH CAS VALUE
+*       2 PROBLEM WITH LOGV VALUE
+*       3 PROBLEM WITH CLUST VALUE
+*       4 PROBLEM WITH DET VALUE
+*       5 PROBLEM WITH DET VALUE
+*       6 UNABLE TO READ FIRST FIELD
+*       7 MORE THAN ONE ARRAY SIZE IN INPUT FILE
+*       8 EVEN DIMENSIONS WITH STANDARD PERIODIC FFTs
+*       9 ODD DIMENSIONS WITH DISCRETE COSINE TRANSFORMS
+*       10 UNABLE TO READ INPUT DIRECTIVES
+      logical :: ldft, ldct
+      integer :: nid, njd, nfact, mmax, nmax, nip, njp, maxl, maxi
+      integer :: nit, njt, ij, ijt, i, j, nx, ny, iaxe, iway, cas
+      real*8, dimension((ni+2)*(nj+2)) :: a
+      REAL*8, dimension(1) :: U1, U2, U3   ! dummies to pass as unused arguments to TRANS1D
+
+      status = -1   ! precondition to fail
+      if(nspec < max(ni+2,nj+2)) then
+        print *,'ERROR: nspec must be >= max(ni+2,nj+2)'
+        return
+      endif
+      if(nvar <  (ni+2)*(nj+2) ) then
+        print *,'ERROR: nvar must be >= (ni+2)*(nj+2)'
+        return
+      endif
+      ldct = period .eq. 0
+      ldft = period .ne. 0
+      maxl = (ni+2)*(nj+2)
+      maxi = max(ni+2,nj+2)
+      print *,'maxi=',maxi,' maxl=',maxl
+
+***    PREPARATION OF THE INPUT ARRAY FOR THE SELECTED TRANSFORM
+*      ===========================================================
+
+*           ---------------------------------------------
+***         * STANDARD PERIODIC FOURIER TRANSFORM CASE. *
+*           ---------------------------------------------
+      IF (LDFT)                                                THEN
+         
+        IF (MOD( NI,2 ).EQ.0 .OR.
+     +         MOD( NJ,2 ).EQ.0 )                               THEN
+               
+	  WRITE(6,*)'**************************************************'
+	  WRITE(6,*)'PROBLEM WITH NI= ', NI, ' AND/OR NJ=' ,NJ
+	  WRITE(6,*)'-------'
+	  WRITE(6,*)'STANDARD PERIODIC FOURIER TRANSFORMS (DFT) REQUIRE'
+	  WRITE(6,*)'THAT INPUT FIELD DIMENSIONS BE ODD. THE DFT WORKS'
+	  WRITE(6,*)'ON EVEN DIMENSIONS OF ROWS (COLUMNS)  MADE OF '
+	  WRITE(6,*)'DICTINCT  ELEMENTS. THE LAST ELEMENT OF THE INPUT'
+	  WRITE(6,*)'ROWS (COLUMNS) ARE ASSUMED TO BE A REPETITION OF'
+	  WRITE(6,*)'THE FIRST ELEMENT BY PERIODICITY.'
+	  WRITE(6,*)'**************************************************'
+! 	  CALL                                 XIT(' VARSPEC',-8 )
+	ENDIF
+
+***    AT THIS POINT THE INPUT GRID IS ASSUMED TO BE PERIODIC SO 
+***    THAT THE LAST COLUMN AND LAST ROWS HAVE TO BE REMOVED 
+***    BEFORE PASSING IT TO THE  TRANSFORMS WHICH WORKS ON VECTOR 
+***    CONTANING DISTINCT DATA. SINCE THE INPUT FIELDS WHERE REQUIRED 
+***    TO BE ODD, THEY WILL BECOME EVEN NOW.
+         
+	NID = NI - 1            ! NUMBER OF DISTINCT POSITION IN X.
+	NJD = NJ - 1            ! NUMBER OF DISTINCT POSITION IN X.
+
+***    ISSUE A WARNING IF A FAST TRANSFORM CANNOT BE USED.
+
+	NFACT = NID
+	CALL NGFFT( NFACT )
+         
+	IF (NFACT.NE.NID)                                    THEN 
+	  WRITE(6,*) 'WARNING: A FAST TRANSFORM CANNOT BE USED IN X:'
+	  WRITE(6,6110) NID,NFACT
+	END IF
+
+	NFACT = NJD
+	CALL NGFFT( NFACT )
+	
+	IF (NFACT.NE.NJD)                                    THEN 
+	  WRITE(6,*) 'WARNING: A FAST TRANSFORM CANNOT BE USED IN Y:'
+	  WRITE(6,6120) NJD,NFACT
+	END IF
+
+***    SET THE MAXIMUM OF INTEGER WAVENUMBERS SUPPORTED BY THE GRID.
+      
+	MMAX = NID/2
+	NMAX = NJD/2
+	cas = 2
+
+***    FOR THIS STANDARD FFT WE NEED TO PADD THE ARRAYS SUCH THIS:
+
+*                       --------------------
+*                       |O O O O O O O O O |
+*                       |O O O O O O O O O |
+*                       |X X X X X X X O O |
+*                       |X X X X X X X O O |
+*                       |X X X X X X X O O |
+*                       |X X X X X X X O O |
+*                       --------------------
+
+	NIP = 2 ! EXTRA SPACES NEEDED BY THE FFT
+	NJP = 2
+
+      END IF
+*               -------------------------------------
+***             * DISCRETE COSINE TRANSFORM CASE.*
+*               -------------------------------------
+      IF (LDCT)                                               THEN
+	
+	NIP  = 0
+	NJP  = 0
+	NID  = NI
+	NJD  = NJ
+	MMAX = NID/2
+	NMAX = NJD/2
+	cas = 1
+
+***    STOP IF THE DIMENSIONS ARE NOT EVEN 
+	IF (MOD( NID,2 ).NE.0 .OR. MOD( NJD,2 ).NE.0 )        THEN
+
+          WRITE(6,*)'**************************************************'
+          WRITE(6,*)'PROBLEM WITH NI= ', NI, ' AND/OR NJ=' ,NJ
+          WRITE(6,*)'-------'
+          WRITE(6,*) ' DISCRETE COSINE TRANSFORMS REQUIRE THAT '
+          WRITE(6,*) ' DIMENSIONS BE EVEN '
+!               CALL                                 XIT(' VARSPEC',-9 )
+         ENDIF
+
+         
+***    ISSUE A WARNING IF A FAST TRANSFORM CANNOT BE USED.
+
+	NFACT = NID
+	CALL NGFFT( NFACT )
+	
+	IF (NFACT.NE.NID)                                    THEN 
+	  WRITE(6,*) 'WARNING: A FAST TRANSFORM CANNOT BE USED IN X:'
+	  WRITE(6,6130) NID,NFACT
+	END IF
+
+	NFACT = NJD
+	CALL NGFFT( NFACT )
+	
+	IF (NFACT.NE.NJD) THEN 
+	  WRITE(6,*) 'WARNING: A FAST TRANSFORM CANNOT BE USED IN Y:'
+	  WRITE(6,6140) NJD,NFACT
+	END IF
+
+      END IF
+
+***    BUILD THE ARRAY "A" FOR THE TRANSFORMS.
+***    THIS DOUBLE LOOP IS COMMON TO ALL CASES.
+
+      NIT = NID+NIP
+      NJT = NJD+NJP
+
+      IJ  = 0
+      IJT = 0
+
+      DO  J=1,NJT
+          DO  I=1,NIT
+            
+              IJT = IJT+1
+
+              IF (I.GT.NID .OR. 
+     +            J.GT.NJD )                                   THEN
+                  A(IJT) = 0.0
+              ELSE
+
+!BD<< * BUGFIX FOR THE MAPPING OF THE INPUT ARRAY IN THE CASE OF DFT
+!BD     WHICH HAS ONE ADDITIONAL COLUMN THAN FOR THE DCT CASE.            
+
+                  IF ( LDFT.and. I.EQ.1) IJ=IJ+1
+!BD>>
+                  IJ     = IJ+1
+
+                  A(IJT) = B(IJ)
+              END IF
+
+          END DO
+      END DO
+***    DO THE TRANSFORMS IN TWO 1-D PASSES.
+*      ======================================
+
+***    FIRST PASS ==> ALONG INDEX "I"
+*      ----------
+
+      IWAY = -1                   ! REVERSE  TRANSFORM (GRIDPOINT TO FOURIER)
+      IAXE = 0                    ! TRANSFORM FOLLOWING X
+      IF (IAXE.EQ.0)                                           THEN
+          NX = NID                ! TRANSFORM FOLLOWING X
+          NY = NJD
+      ELSE 
+          NX = NJD                ! TRANSFORM FOLLOWING Y
+          NY = NID
+      END IF
+      CALL TRANS1D( A,U1,U2,U3,MAXL,NX,NY,CAS,IAXE,IWAY )
+      
+***    SECOND PASS => ALONG INDEX "J"
+*      -----------
+
+      IAXE = 1                    ! TRANSFORM FOLLOWING Y
+      IF (IAXE.EQ.0)                                           THEN
+          NX = NID                ! TRANSFORM FOLLOWING X
+          NY = NJD                ! TRANSFORM FOLLOWING X
+      ELSE 
+          NX = NJD                ! TRANSFORM FOLLOWING Y
+          NY = NID                ! TRANSFORM FOLLOWING X
+      END IF
+      CALL TRANS1D( A,U1,U2,U3,MAXL,NX,NY,CAS,IAXE,IWAY )
+***    COMPUTE THE SPECTRA (2D AND 1D, RESPECTIVELY)
+*      ====================
+
+***    SPECT1/SPECT2 COMPUTE THE VARIANCE FROM ARRAY OF 
+***    COEFFICIENT "A". THE OUTPUT IS THE 2D VARIANCE ARRAY "VARIANCE"
+***    AND THE 1-D POWER SPECTRUM "SPECTRE. 
+
+      IF (LDFT)                                                THEN
+            CALL SPECT_DFT2D( SPECTRE,VARIANCE,A,
+     +                        MMAX,NMAX,NIT,NJT,MAXI )
+      ELSE IF (LDCT)                                           THEN
+            CALL SPECT_DCT2D( SPECTRE,VARIANCE,A,
+     +                        NIT,NJT,MAXI,.false.,.false.,.false.)
+      END IF
+*
+*     spectre(0:maxi-1) is what we are interested in
+*
+      status = 0    ! O.K.
+      return
+ 6110 FORMAT(' N = NI-1  =  ', I4,' THE NEAREST FACTORIZABLE N = ',I4)
+ 6120 FORMAT(' N = NJ-1  =  ', I4,' THE NEAREST FACTORIZABLE N = ',I4)
+ 6130 FORMAT(' N = NI = ', I4,' THE NEAREST FACTORIZABLE N = ',I4)
+ 6140 FORMAT(' N = NJ = ', I4,' THE NEAREST FACTORIZABLE N = ',I4)
+      END SUBROUTINE POWER_SPECTRUM
 #endif
       SUBROUTINE DETREND(B, NI,NJ,IX,IY)
 
