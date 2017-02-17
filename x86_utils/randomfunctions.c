@@ -1026,6 +1026,8 @@ double  DRanNormalZigFastVec(void *stream)  // faster, but with some deficiencie
 void  RanNormalSetSeedZig(void *stream, int *piSeed, int cSeed)  // !InTc!
 {
 	generic_state *zig = stream ;
+	double scrap;
+
 	zigNorInit(ZIGNOR_C, ZIGNOR_R, ZIGNOR_V);
 	RanSetSeed(stream, piSeed, cSeed);
 	if(zig->gauss == NULL) {
@@ -1033,6 +1035,7 @@ void  RanNormalSetSeedZig(void *stream, int *piSeed, int cSeed)  // !InTc!
 	  zig->ngauss = 0;
 // 	  printf("allocating buffer in gaussian stream, size=%d uints\n",ZIGNOR_STORE + ZIGNOR_STORE / 4);
 	}
+	scrap = DRanNormalZigFastVec(stream);
 }
 #if defined(USE_UNSAFE_CODE)
 void  RanNormalSetSeedZigFast(void *stream, int *piSeed, int cSeed)
