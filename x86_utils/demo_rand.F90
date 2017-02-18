@@ -3,11 +3,11 @@ program demo
   implicit none
   include 'randomfunctions.inc'
 
-  interface
-    integer(C_LONG) function time() bind(C,name='time')
-    import :: C_LONG
-    end function time
-  end interface
+!   interface
+!     integer(C_LONG) function time() bind(C,name='time')
+!     import :: C_LONG
+!     end function time
+!   end interface
 
   integer, parameter :: LSTREAMS = 22000000
   integer, parameter :: NSTREAMS = 8
@@ -30,7 +30,7 @@ program demo
   enddo
 
   dist = 0
-  t0 = time()
+!   t0 = time()
 !$OMP PARALLEL private(i,j,indx) shared(stream,g,dist)
 !$OMP DO
   do j = 1,NSTREAMS
@@ -48,8 +48,8 @@ program demo
   print *,'-------------------- uniform distribution test  -------------------'
   print *,'expecting',LSTREAMS/11*NREP,' samples per interval'
   print 101,(dist(:,j),j=1,NSTREAMS)
-  t1 = time()
-  print *, 'time =',t1-t0
+!   t1 = time()
+!   print *, 'time =',t1-t0
   print *,'-------------------- gaussian distribution test -------------------'
 
   dist = 0
@@ -67,8 +67,8 @@ program demo
 !$OMP END DO
 !$OMP END PARALLEL
   print 101,(dist(:,j),j=1,NSTREAMS)
-  t2 = time()
-  print *, 'time =',t2-t1
+!   t2 = time()
+!   print *, 'time =',t2-t1
 101 format(11I10)
   stop
 end
