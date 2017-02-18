@@ -9,9 +9,9 @@ program demo
     end function time
   end interface
 
-  integer, parameter :: LSTREAMS = 220000000
+  integer, parameter :: LSTREAMS = 22000000
   integer, parameter :: NSTREAMS = 8
-  integer, parameter :: NREP = 10
+  integer, parameter :: NREP = 1
   type(RANDOM_STREAM), dimension(NSTREAMS) :: stream
   real(C_DOUBLE), dimension(LSTREAMS,NSTREAMS) :: g
   type(RANDOM_STREAM) :: null_stream
@@ -25,8 +25,8 @@ program demo
   do i = 1, NSTREAMS
     cSeed = 1
     piSeed = 123456 + mod(i,2)
-    stream(i) = Ran_R250_new_stream(null_stream, [ piSeed ], cSeed)
-!     call RanNormalSetSeedZigVec(stream(i), [ piSeed ], cSeed)
+    call Ran_R250_new_stream( stream(i),null_stream, [ piSeed ], cSeed)
+    call RanNormalSetSeedZigVec(stream(i), [ piSeed ], cSeed)
   enddo
 
   dist = 0
