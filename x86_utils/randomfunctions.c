@@ -204,9 +204,10 @@ void Ran_SetInitialSeeds(unsigned int auiSeed[], int cSeed, unsigned int uiSeed,
  * R250 ans SHR3 generators added, naming consistent with the MWC8222 code
  *==========================================================================*/
 /*------------------------ stream control structures --------------------------*/
-typedef struct{
+typedef struct{                // mimic Fortran derived type (wrapped pointer to type it)
   void *p;
-} streamptr;
+} statep;
+
 typedef struct{
   REFILLBUFFUN  refill;
   RANSETSEEDFUN seed;
@@ -454,6 +455,10 @@ void RanSetSeed_R250_stream(void *stream, unsigned int *piSeed, int cSeed)  // !
     Ran_SetInitialSeeds(r250_buffer, 250, piSeed && (cSeed > 0) ? piSeed[0] : 0, 0);
   }
 }
+void f_RanSetSeed_R250_stream(statep *s, unsigned int *piSeed, int cSeed)  // Fortran entry point
+{
+  RanSetSeed_R250_stream( (*s).p, piSeed, cSeed);
+}
 
 void *Ran_R250_new_stream(void *clone_in, unsigned int *piSeed, int cSeed)   // !InTc! // create and seed a new stream
 {
@@ -481,6 +486,10 @@ void *Ran_R250_new_stream(void *clone_in, unsigned int *piSeed, int cSeed)   // 
   }
 
   return ( (void *) new_state) ;
+}
+void f_Ran_R250_new_stream(statep *s, statep *c, unsigned int *piSeed, int cSeed)
+{
+  (*s).p = Ran_R250_new_stream( (*c).p, piSeed, cSeed);
 }
 
 unsigned int IRan_R250_stream(void *stream)	  // !InTc!	/* returns a random unsigned integer */
