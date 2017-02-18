@@ -181,11 +181,11 @@ typedef unsigned int	( * IRANFUN)(void *);
 typedef void   		( * IVECRANFUN)(void *, unsigned int *, int);
 typedef void            ( * DVECRANFUN)(void *, double *, int);
 typedef void            ( * DVECSRANFUN)(void *, double *, int);
-typedef void            ( * RANSETSEEDFUN)(void *, int *, int);
+typedef void            ( * RANSETSEEDFUN)(void *, unsigned int *, int);
 typedef void            ( * REFILLBUFFUN)(void *);
 
 void Print_Stream(void *stream){
-  printf("stream = %16.16p\n",stream);
+  printf("stream = %p\n",stream);
 }
 /*---------------------------- Ran_SetInitialSeeds -----------------------------*/
 void Ran_SetInitialSeeds(unsigned int auiSeed[], int cSeed, unsigned int uiSeed, unsigned int uiMin)  // !InTc!
@@ -204,6 +204,9 @@ void Ran_SetInitialSeeds(unsigned int auiSeed[], int cSeed, unsigned int uiSeed,
  * R250 ans SHR3 generators added, naming consistent with the MWC8222 code
  *==========================================================================*/
 /*------------------------ stream control structures --------------------------*/
+typedef struct{
+  void *p;
+} streamptr;
 typedef struct{
   REFILLBUFFUN  refill;
   RANSETSEEDFUN seed;
@@ -264,19 +267,23 @@ typedef struct{
   unsigned int auiState[MWC_R];
 } mwc_state ;                  // MWC8222 generator stream control structure
 
+#if defined(SELF_TEST)
 static void FillBuffer_stream(void *stream){             // refill the buffer stream of a uniform generator
   generic_state *Stream = (generic_state *)stream ;
   if(Stream == NULL) return;                             // null stream, nothing to do
   if(Stream->refill) Stream->refill( (void *)Stream ) ;  // some generators do not have a buffer filler
 }
+#endif
 
 /*------------------------ start of SHR3 routines --------------------------*/
 
+#if defined(SELF_TEST)
 static shr3_state shr3 = { NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, 0, 123456789 } ;
+#endif
 
 // #define SHR3 (jz=jsr, jsr^=(jsr<<13), jsr^=(jsr>>17), jsr^=(jsr<<5),jz+jsr)
 
-void RanSetSeed_SHR3(void *SHR3, int *piSeed, int cSeed)  // !InTc!
+void RanSetSeed_SHR3(void *SHR3, unsigned int *piSeed, int cSeed)  // !InTc!
 {
   shr3_state *state = (shr3_state *) SHR3 ;
   if(piSeed == NULL || cSeed == 0) return ; // null call, nothing to do
@@ -434,7 +441,7 @@ static void FillBuffer_R250_stream(r250_state *R250){
   R250->index = r250_index;
 }
 
-void RanSetSeed_R250_stream(void *stream, int *piSeed, int cSeed)  // !InTc!
+void RanSetSeed_R250_stream(void *stream, unsigned int *piSeed, int cSeed)  // !InTc!
 {
   int i;
   r250_state *R250 = stream ; //? (r250_state *) stream : &r250 ;   // use default stream if NULL stream pointer
@@ -448,7 +455,7 @@ void RanSetSeed_R250_stream(void *stream, int *piSeed, int cSeed)  // !InTc!
   }
 }
 
-void *Ran_R250_new_stream(void *clone_in, int *piSeed, int cSeed)   // !InTc! // create and seed a new stream
+void *Ran_R250_new_stream(void *clone_in, unsigned int *piSeed, int cSeed)   // !InTc! // create and seed a new stream
 {
   r250_state *source ;
   r250_state *clone = (r250_state *)clone_in;
@@ -478,7 +485,6 @@ void *Ran_R250_new_stream(void *clone_in, int *piSeed, int cSeed)   // !InTc! //
 
 unsigned int IRan_R250_stream(void *stream)	  // !InTc!	/* returns a random unsigned integer */
 {
-  register int	i, j;
   register unsigned int new_rand;
   r250_state *R250 = stream ; //? (r250_state *) stream : &r250 ;   // use default stream if NULL stream pointer
 
@@ -489,7 +495,6 @@ unsigned int IRan_R250_stream(void *stream)	  // !InTc!	/* returns a random unsi
 
 double DRan_R250_stream(void *stream)	  // !InTc!	/* returns a random double (0.0 , 1.0) */
 {
-  register int	i, j;
   register unsigned int new_rand;
   r250_state *R250 = stream ; //? (r250_state *) stream : &r250 ;   // use default stream if NULL stream pointer
 
@@ -500,7 +505,6 @@ double DRan_R250_stream(void *stream)	  // !InTc!	/* returns a random double (0.
 
 double DRanS_R250_stream(void *stream)	  // !InTc!	/* returns a random double (-1.0 , 1.0) */
 {
-  register int	i, j;
   register unsigned int new_rand;
   r250_state *R250 = stream ; //? (r250_state *) stream : &r250 ;   // use default stream if NULL stream pointer
 
@@ -614,7 +618,7 @@ static mwc_state mwc = {NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, 0,
 // static unsigned int s_uiCarryMWC = MWC_C;
 // static unsigned int s_auiStateMWC[MWC_R];
 
-void RanSetSeed_MWC8222(void *MWC8222, int *piSeed, int cSeed)  // !InTc!
+void RanSetSeed_MWC8222(void *MWC8222, unsigned int *piSeed, int cSeed)  // !InTc!
 {
 	mwc.uiState = MWC_R - 1;
 	mwc.uiCarry = MWC_C;
@@ -705,27 +709,31 @@ static IVECRANFUN s_fnVecIRanu = VecIRan_R250_stream;
 static DVECRANFUN s_fnVecDRanu = VecDRan_R250_stream;
 static RANSETSEEDFUN s_fnRanSetSeed = RanSetSeed_R250_stream;
 
+#if defined(SELF_TEST)
 static double  DRanU(void *STREAM)     /* returns a random double (0.0 , 1.0) */
 {
     return (*s_fnDRanu)(STREAM);
 }
-static double  DRanUS(void *STREAM)    /* returns a random double (-1.0 , 1.0) */
-{
-    return (*s_fnDRanus)(STREAM);
-}
+#endif
+// static double  DRanUS(void *STREAM)    /* returns a random double (-1.0 , 1.0) */
+// {
+//     return (*s_fnDRanus)(STREAM);
+// }
+#if defined(SELF_TEST)
 static unsigned int IRanU(void *STREAM)
 {
     return (*s_fnIRanu)(STREAM);
 }
+#endif
 static void RanVecIntU(void *STREAM, unsigned int *auiRan, int cRan)
 {
     (*s_fnVecIRanu)(STREAM, auiRan, cRan);
 }
-static void RanVecU(void *STREAM, double *adRan, int cRan)
-{
-    (*s_fnVecDRanu)(STREAM, adRan, cRan);
-}
-static void    RanSetSeed(void *STREAM, int *piSeed, int cSeed)
+// static void RanVecU(void *STREAM, double *adRan, int cRan)
+// {
+//     (*s_fnVecDRanu)(STREAM, adRan, cRan);
+// }
+static void    RanSetSeed(void *STREAM, unsigned int *piSeed, int cSeed)
 {
    	s_cNormalInStore = 0;
 	(*s_fnRanSetSeed)(STREAM, piSeed, cSeed);
@@ -783,8 +791,8 @@ void    RanSetRan(void *STREAM, const char *sRan)
 static double s_adZigX[ZIGNOR_C + 1], s_adZigR[ZIGNOR_C];
 static int Zig_initialized = 0;
 
-static unsigned int kn[128];
-static double wn[128],fn[128];
+// static unsigned int kn[128];
+// static double wn[128],fn[128];
 
 INSTRUMENT(static unsigned int zigcalls = 0;)
 INSTRUMENT(static unsigned int zigquick = 0;)
@@ -914,7 +922,7 @@ double  DRanNormalZigFast(void)  // faster, but with some deficiencies
 #endif
 double  DRanNormalZigVec(void *stream)  // !InTc!
 {
-	unsigned int i, j, k, direct;
+	unsigned int i;
 	double x, u, y, f0, f1;
 	generic_state *zig = stream ;
 	unsigned int *s_auiZigTmp, *s_auiZigRan;
@@ -1023,10 +1031,9 @@ double  DRanNormalZigFastVec(void *stream)  // faster, but with some deficiencie
 	}
 }
 #endif
-void  RanNormalSetSeedZig(void *stream, int *piSeed, int cSeed)  // !InTc!
+void  RanNormalSetSeedZig(void *stream, unsigned int *piSeed, int cSeed)  // !InTc!
 {
 	generic_state *zig = stream ;
-	double scrap;
 
 	zigNorInit(ZIGNOR_C, ZIGNOR_R, ZIGNOR_V);
 	RanSetSeed(stream, piSeed, cSeed);
@@ -1035,7 +1042,7 @@ void  RanNormalSetSeedZig(void *stream, int *piSeed, int cSeed)  // !InTc!
 	  zig->ngauss = 0;
 // 	  printf("allocating buffer in gaussian stream, size=%d uints\n",ZIGNOR_STORE + ZIGNOR_STORE / 4);
 	}
-	scrap = DRanNormalZigVec(stream);
+	DRanNormalZigVec(stream);
 }
 #if defined(USE_UNSAFE_CODE)
 void  RanNormalSetSeedZigFast(void *stream, int *piSeed, int cSeed)
@@ -1044,7 +1051,7 @@ void  RanNormalSetSeedZigFast(void *stream, int *piSeed, int cSeed)
 	RanSetSeed(stream, piSeed, cSeed);
 }
 #endif
-void  RanNormalSetSeedZigVec(void *stream, int *piSeed, int cSeed)  // !InTc!
+void  RanNormalSetSeedZigVec(void *stream, unsigned int *piSeed, int cSeed)  // !InTc!
 {
 // 	s_cZigStored = 0;
 	RanNormalSetSeedZig(stream, piSeed, cSeed);
@@ -1126,15 +1133,18 @@ ouch:
 
 #if defined(SELF_TEST)
 #include <mpi.h>
-main(int argc, char **argv){
+int main(int argc, char **argv){
   unsigned int lr;
   int i, j;
   double t0, t1, rval;
   double MPI_Wtime() ;
   unsigned int ranbuf[1200000];
   double ranbuf2[1200000];
-  int pos, neg, mask, postot, negtot, ran;
+  int pos, neg, mask, postot, negtot ;
+#if defined(CYCLIC_TEST)
+  int ran;
   long long count, counts ;
+#endif
   double dmax, dmin, avg;
   unsigned long long *idmax, *idmin ;
   unsigned int maxpos, maxneg;
@@ -1476,6 +1486,7 @@ exit(0);
   INSTRUMENT(printf("random values used in ziggurat = %6.3f%\n",t1 / t0 * 100.0);)
 
   MPI_Finalize();
+  return(0);
 }
 #endif
 #endif
