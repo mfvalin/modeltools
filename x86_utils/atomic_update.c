@@ -5,7 +5,7 @@ atomic_add(int *what,int n) {
       "   lock       ;\n"
       "   addl %1,%0 ;\n"
       : "=m" (*what)
-      : "ir" (n), "m" (what)
+      : "ir" (n), "m" (*what)
       :
       );
 }
@@ -15,7 +15,7 @@ atomic_and(int *what,int n) {
       "   lock       ;\n"
       "   andl %1,%0 ;\n"
       : "=m" (*what)
-      : "ir" (n), "m" (what)
+      : "ir" (n), "m" (*what)
       :
       );
 }
@@ -25,7 +25,7 @@ atomic_or(int *what,int n) {
       "   lock       ;\n"
       "   orl %1,%0 ;\n"
       : "=m" (*what)
-      : "ir" (n), "m" (what)
+      : "ir" (n), "m" (*what)
       :
       );
 }
@@ -35,7 +35,7 @@ atomic_xor(int *what,int n) {
       "   lock       ;\n"
       "   xorl %1,%0 ;\n"
       : "=m" (*what)
-      : "ir" (n), "m" (what)
+      : "ir" (n), "m" (*what)
       :
       );
 }
