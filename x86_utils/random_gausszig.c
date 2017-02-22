@@ -44,7 +44,7 @@ subroutine fortran_test   ! test or Fortran interfaces really
 end
 #endif
 /*==========================================================================
- *               ORIGINAL Copyright before modifications                    */
+ *               ORIGINAL Copyright before code modifications              *
 /*==========================================================================
  *  This code is Copyright (C) 2005, Jurgen A. Doornik.
  *  Permission to use this code for non-commercial purposes
@@ -56,15 +56,152 @@ end
  *  This reference is still required when using modified versions of the code.
  *  This notice should be maintained in modified versions of the code.
  *  No warranty is given regarding the correctness of this code.
+ * Amendment 2017-02-22
+ * Jurgen A Doornik gives permission to any branch of the government of Canada 
+ * to use his random number and ziggurat code and any derivatives for
+ * any purpose, whether commercial or not.
  *==========================================================================*/
+/*==========================================================================
+ * code modifications and refactoring done by
+ * M.Valin, Feb 2017
+ * Recherche en Prevision Numerique
+ * Environnement Canada
+ *==========================================================================*/
+// the following #if is definitely not expected to be true, 
+// is is there to keep the original code as a reference for the algorithm
+#if defined(COMPILE_ORIGINAL_CODE)
+/*------------------------------ General Ziggurat --------------------------*/
+static double DRanNormalTail(double dMin, int iNegative)
+{
+	double x, y;
+	do
+	{	x = log(DRanU()) / dMin;
+		y = log(DRanU());
+	} while (-2 * y < x * x);
+	return iNegative ? x - dMin : dMin - x;
+}
 
-// macro used to instrument code with counters
+#define ZIGNOR_C 128			       /* number of blocks */
+#define ZIGNOR_R 3.442619855899	/* start of the right tail */
+				   /* (R * phi(R) + Pr(X>=R)) * sqrt(2\pi) */
+#define ZIGNOR_V 9.91256303526217e-3
+
+/* s_adZigX holds coordinates, such that each rectangle has*/
+/* same area; s_adZigR holds s_adZigX[i + 1] / s_adZigX[i] */
+static double s_adZigX[ZIGNOR_C + 1], s_adZigR[ZIGNOR_C];
+
+static void zigNorInit(int iC, double dR, double dV)
+{
+	int i;	double f;
+	
+	f = exp(-0.5 * dR * dR);
+	s_adZigX[0] = dV / f; /* [0] is bottom block: V / f(R) */
+	s_adZigX[1] = dR;
+	s_adZigX[iC] = 0;
+
+	for (i = 2; i < iC; ++i)
+	{
+		s_adZigX[i] = sqrt(-2 * log(dV / s_adZigX[i - 1] + f));
+		f = exp(-0.5 * s_adZigX[i] * s_adZigX[i]);
+	}
+	for (i = 0; i < iC; ++i)
+		s_adZigR[i] = s_adZigX[i + 1] / s_adZigX[i];
+}
+double  DRanNormalZig(void)
+{
+	unsigned int i;
+	double x, u, f0, f1;
+	
+	for (;;)
+	{
+		u = 2 * DRanU() - 1;
+		i = IRanU() & 0x7F;
+		/* first try the rectangular boxes */
+		if (fabs(u) < s_adZigR[i])		 
+			return u * s_adZigX[i];
+		/* bottom box: sample from the tail */
+		if (i == 0)						
+			return DRanNormalTail(ZIGNOR_R, u < 0);
+		/* is this a sample from the wedges? */
+		x = u * s_adZigX[i];		   
+		f0 = exp(-0.5 * (s_adZigX[i] * s_adZigX[i] - x * x) );
+		f1 = exp(-0.5 * (s_adZigX[i+1] * s_adZigX[i+1] - x * x) );
+      	if (f1 + DRanU() * (f0 - f1) < 1.0)
+			return x;
+	}
+}
+
+#define ZIGNOR_STORE 64 * 4
+static unsigned int s_auiZigTmp[ZIGNOR_STORE / 4];
+static unsigned int s_auiZigBox[ZIGNOR_STORE];
+static double s_adZigRan[ZIGNOR_STORE + ZIGNOR_STORE / 4];
+static int s_cZigStored = 0;
+
+double  DRanNormalZigVec(void)
+{
+	unsigned int i, j, k;
+	double x, u, f0, f1;
+	
+	for (;;)
+	{
+		if (s_cZigStored == 0)
+		{
+			RanVecIntU(s_auiZigTmp, ZIGNOR_STORE / 4);
+			RanVecU(s_adZigRan, ZIGNOR_STORE);
+			for (j = k = 0; j < ZIGNOR_STORE; j += 4, ++k)
+			{
+				i = s_auiZigTmp[k];	s_auiZigBox[j + 0] = i & 0x7F;
+				i >>= 8;			s_auiZigBox[j + 1] = i & 0x7F;
+				i >>= 8;			s_auiZigBox[j + 2] = i & 0x7F;
+				i >>= 8;			s_auiZigBox[j + 3] = i & 0x7F;
+				s_adZigRan[j + 0] = 2 * s_adZigRan[j + 0] - 1;
+				s_adZigRan[j + 1] = 2 * s_adZigRan[j + 1] - 1;
+				s_adZigRan[j + 2] = 2 * s_adZigRan[j + 2] - 1;
+				s_adZigRan[j + 3] = 2 * s_adZigRan[j + 3] - 1;
+			}
+			s_cZigStored = j;
+		}
+		--s_cZigStored;
+
+		u = s_adZigRan[s_cZigStored];
+		i = s_auiZigBox[s_cZigStored];
+		
+		if (fabs(u) < s_adZigR[i])		 /* first try the rectangular boxes */
+			return u * s_adZigX[i];
+
+		if (i == 0)						/* bottom box: sample from the tail */
+			return DRanNormalTail(ZIGNOR_R, u < 0);
+
+		x = u * s_adZigX[i];		   /* is this a sample from the wedges? */
+		f0 = exp(-0.5 * (s_adZigX[i] * s_adZigX[i] - x * x) );
+		f1 = exp(-0.5 * (s_adZigX[i + 1] * s_adZigX[i + 1] - x * x) );
+      	if (f1 + DRanU() * (f0 - f1) < 1.0)
+			return x;
+	}
+}
+
+void  RanNormalSetSeedZig(int *piSeed, int cSeed)
+{
+	zigNorInit(ZIGNOR_C, ZIGNOR_R, ZIGNOR_V);
+	RanSetSeed(piSeed, cSeed);
+}
+void  RanNormalSetSeedZigVec(int *piSeed, int cSeed)
+{
+	s_cZigStored = 0;
+	RanNormalSetSeedZig(piSeed, cSeed);
+}
+/*--------------------------- END General Ziggurat -------------------------*/
+#endif
+
+// to instrument the Ziggurat code with counters, set  #define INSTRUMENT(A) A
 #define INSTRUMENT(A) ;
 
 #include <randomgeneric.h>
 
 static int s_cNormalInStore = 0;		     /* > 0 if a normal is in store */
 
+// for now the R250 generator is used, in the future the generator attached to 
+// the stream will be used
 static void RanVecIntU(void *STREAM, unsigned int *auiRan, int cRan)
 {
 // (*s_fnVecIRanu)(STREAM, auiRan, cRan);
@@ -77,10 +214,10 @@ static void RanSetSeed(void *STREAM, unsigned int *piSeed, int cSeed)
   RanSetSeed_R250_stream(STREAM, piSeed, cSeed);
 }
 
-/*------------------------------ General Ziggurat --------------------------*/
-#define ZIGNOR_C 128			       /* number of blocks */
-#define ZIGNOR_R 3.442619855899	/* start of the right tail */
-				   /* (R * phi(R) + Pr(X>=R)) * sqrt(2\pi) */
+/*------- gaussian distribution generator using the revised Ziggurat method ------*/
+#define ZIGNOR_C 128                  /* number of blocks */
+#define ZIGNOR_R 3.442619855899       /* start of the right tail */
+                                      /* (R * phi(R) + Pr(X>=R)) * sqrt(2\pi) */
 #define ZIGNOR_V 9.91256303526217e-3
 #define ZIGNOR_STORE 256 * 4
 
@@ -102,18 +239,17 @@ INSTRUMENT(static unsigned int zigwedge2 = 0;)
 INSTRUMENT(static unsigned int zigloops2 = 0;)
 INSTRUMENT(static unsigned int zigused2 = 0;)
 
-static void zigNorInit(int iC, double dR, double dV)
+static void zigNorInit(int iC, double dR, double dV)  // initialize Ziggurat method needed tables
 {
   int i;	double f;
 
-  if(Zig_initialized) return ;
+  if(Zig_initialized) return ;   // already done ?
   f = exp(-0.5 * dR * dR);
   s_adZigX[0] = dV / f; /* [0] is bottom block: V / f(R) */
   s_adZigX[1] = dR;
   s_adZigX[iC] = 0;
 
-  for (i = 2; i < iC; ++i)
-  {
+  for (i = 2; i < iC; ++i) {
     s_adZigX[i] = sqrt(-2 * log(dV / s_adZigX[i - 1] + f));
     f = exp(-0.5 * s_adZigX[i] * s_adZigX[i]);
   }
@@ -122,6 +258,8 @@ static void zigNorInit(int iC, double dR, double dV)
   Zig_initialized = 1;
 }
 
+// this call is thread safe if stream is owned exclusively by the calling thread
+// and the stream generators are thread safe
 double  DRanNormalZigVec(void *stream)  // !InTc!
 {
   unsigned int i;
@@ -131,7 +269,7 @@ double  DRanNormalZigVec(void *stream)  // !InTc!
   int s_cZigStored;
   unsigned char *s_auiZigBox;
 
-  if(zig->gauss == NULL) {
+  if(zig->gauss == NULL) {   // allocate stream buffer for uniform numbers if not already done
     zig->gauss = (unsigned int *) memalign(64,(ZIGNOR_STORE + ZIGNOR_STORE / 4)*sizeof(unsigned int));
     zig->ngauss = 0;
 //     printf("allocating buffer in gaussian stream, size=%d uints\n",ZIGNOR_STORE + ZIGNOR_STORE / 4);
@@ -147,27 +285,28 @@ double  DRanNormalZigVec(void *stream)  // !InTc!
   INSTRUMENT(zigcalls++; ; direct = 1;)
   for (;;)
   {
-    if (s_cZigStored <= 0) { 
-      RanVecIntU(stream, s_auiZigTmp, ZIGNOR_STORE + ZIGNOR_STORE / 4); s_cZigStored = ZIGNOR_STORE ; 
+    if (s_cZigStored <= 0) {    // uniform values reservoir empty, fill it
+      RanVecIntU(stream, s_auiZigTmp, ZIGNOR_STORE + ZIGNOR_STORE / 4); 
+      s_cZigStored = ZIGNOR_STORE ; 
     } // FillBufferZig(stream);
     --s_cZigStored;
 
     u = RANDBLS_32new(s_auiZigRan[s_cZigStored]);   // convert from 32 bit int to (-1.0 , 1.0) on the fly
     i = s_auiZigBox[s_cZigStored] & 0x7F;
     INSTRUMENT(zigused += 2;)
-    
-    if (fabs(u) < s_adZigR[i]){		 /* first try the rectangular boxes */
+    if (fabs(u) < s_adZigR[i]){                     /* first try the rectangular boxes */
       INSTRUMENT(zigquick += direct;)
       zig->ngauss = s_cZigStored;
       return u * s_adZigX[i];
     }
     INSTRUMENT(direct = 0;)
-
-    if (i == 0){						/* bottom box: sample from the tail */
+    if (i == 0){                                   /* bottom box: sample from the tail */
       INSTRUMENT(zigtails++ ; )
-      do                   //   return DRanNormalTail(ZIGNOR_R, u < 0);
-      {
-	if(s_cZigStored <= 1) { RanVecIntU(stream, s_auiZigTmp, ZIGNOR_STORE + ZIGNOR_STORE / 4); s_cZigStored = ZIGNOR_STORE ; }
+      do {                  //   return DRanNormalTail(ZIGNOR_R, u < 0);
+	if(s_cZigStored <= 1) {     // uniform values reservoir empty, fill it
+	  RanVecIntU(stream, s_auiZigTmp, ZIGNOR_STORE + ZIGNOR_STORE / 4); 
+	  s_cZigStored = ZIGNOR_STORE ; 
+	}
 	x = RANDBL_32new(s_auiZigRan[--s_cZigStored]);
 	x = log(x) / ZIGNOR_R;
 	y = RANDBL_32new(s_auiZigRan[--s_cZigStored]);
@@ -177,38 +316,47 @@ double  DRanNormalZigVec(void *stream)  // !InTc!
       zig->ngauss = s_cZigStored;
       return (u < 0) ? x - ZIGNOR_R : ZIGNOR_R - x;
     }
-
     INSTRUMENT(zigwedge ++;)
-    x = u * s_adZigX[i];		   /* is this a sample from the wedges? */
+    x = u * s_adZigX[i];                           /* is this a sample from the wedges? */
     f0 = exp(-0.5 * (s_adZigX[i] * s_adZigX[i] - x * x) );
     f1 = exp(-0.5 * (s_adZigX[i + 1] * s_adZigX[i + 1] - x * x) );
     INSTRUMENT(zigused++;)
-    if(s_cZigStored <= 0) { RanVecIntU(stream, s_auiZigTmp, ZIGNOR_STORE + ZIGNOR_STORE / 4); s_cZigStored = ZIGNOR_STORE ; }
+    if(s_cZigStored <= 0) {      // uniform values reservoir empty, fill it
+      RanVecIntU(stream, s_auiZigTmp, ZIGNOR_STORE + ZIGNOR_STORE / 4); 
+      s_cZigStored = ZIGNOR_STORE ; 
+    }
     y = RANDBL_32new(s_auiZigRan[--s_cZigStored]);
     zig->ngauss = s_cZigStored;
     if (f1 + y * (f0 - f1) < 1.0)  return x;
     INSTRUMENT(zigloops++;)
   }
 }
-double  F_DRanNormalZigVec(statep *s)
+// this call is thread safe if stream is owned exclusively by the calling thread
+// and the stream generators are thread safe
+double  F_DRanNormalZigVec(statep *s)  // entry point for Fortran using derived type
 {
   return (DRanNormalZigVec(s->p)) ;
 }
 
+// the seeding calls are NOT guaranteed to be thread safe
+// the first call is definitely NOT, as it initializes static tables
+// the subsequent calls should be thread safe, if stream is owned exclusively by the calling thread
+// and the stream initializer is thread safe (the R250 initializer should be)
 void  RanNormalSetSeedZig(void *stream, unsigned int *piSeed, int cSeed)  // !InTc!
 {
   generic_state *zig = stream ;
 
-  zigNorInit(ZIGNOR_C, ZIGNOR_R, ZIGNOR_V);
+  if( !Zig_initialized) zigNorInit(ZIGNOR_C, ZIGNOR_R, ZIGNOR_V);
+
   RanSetSeed(stream, piSeed, cSeed);
-  if(zig->gauss == NULL) {
+  if(zig->gauss == NULL) {   // allocate stream buffer for uniform numbers if not already done
     zig->gauss = (unsigned int *) memalign(64,(ZIGNOR_STORE + ZIGNOR_STORE / 4)*sizeof(unsigned int));
     zig->ngauss = 0;
   }
-  DRanNormalZigVec(stream);
+  DRanNormalZigVec(stream);   // get one number to make sure that initialization gets done properly
 }
 
-void F_RanNormalSetSeedZig(statep *s, unsigned int *piSeed, int cSeed)  // !InTc!
+void F_RanNormalSetSeedZig(statep *s, unsigned int *piSeed, int cSeed)  // entry point for Fortran using derived type
 {
   RanNormalSetSeedZig(s->p, piSeed, cSeed);
 }
@@ -218,11 +366,11 @@ void  RanNormalSetSeedZigVec(void *stream, unsigned int *piSeed, int cSeed)  // 
   RanNormalSetSeedZig(stream, piSeed, cSeed);
 }
 
-void  F_RanNormalSetSeedZigVec(statep *s, unsigned int *piSeed, int cSeed)
+void  F_RanNormalSetSeedZigVec(statep *s, unsigned int *piSeed, int cSeed)  // entry point for Fortran using derived type
 {
   RanNormalSetSeedZigVec(s->p, piSeed, cSeed);
 }
-/*--------------------------- END General Ziggurat -------------------------*/
+/*--------------------------- END of Ziggurat method code ------------------*/
 /*---------------  Uniform to gaussian random number conversion ------------*/
 //
 // attempt to produce ngauss normally distributed random 64 bit floats from
@@ -237,6 +385,8 @@ void  F_RanNormalSetSeedZigVec(statep *s, unsigned int *piSeed, int cSeed)
 // the return value is the number of still usable input integers 
 // (<0 if unable to produce the requested number of output numbers)
 // NOTE: nuni should be at least ~ 2.1 times larger than ngauss to ensure success
+// NOTE: experimental barely tested code
+// this routine will be thread safe if thread is exclusive owner of ALL arguments
 int NormalFromUniform(double gaussian[], int *ngauss, int uniform[], int nuni)  // !InTc!
 {
   int nout=*ngauss;
@@ -278,13 +428,13 @@ int NormalFromUniform(double gaussian[], int *ngauss, int uniform[], int nuni)  
 	break ;
       }
     }  // for (;;), point is done
-    iout++ ;
+    iout++ ;   // bump counter for gaussian values done
   }while(iout < nout);
 
   *ngauss -= iout;   // should be zero at this point
-  return (nuni) ;
+  return (nuni) ;    // number of usable uniform values left in uniform buffer
 
-ouch:
+ouch:   // OOPS, not enough uniform values to satisfy request
   *ngauss -= iout;
   return(-1);
 }
@@ -304,6 +454,7 @@ int main(int argc, char **argv){
   unsigned long long *idmax, *idmin ;
   unsigned int maxpos, maxneg;
   int gaussdist[10];
+  int biggaussdist[2001];
   int index;
   generic_state *stream;
   int myseed = 123456;
@@ -330,17 +481,23 @@ int main(int argc, char **argv){
 
   dmin = 0.0 ; dmax = 0.0;
   for( i=0 ; i < 10 ; i++) gaussdist[i] = 0;
+  for( i=0 ; i < 2001 ; i++) biggaussdist[i] = 0;
   for( i=0 ; i < 100000000 ; i++) {
     rval = DRanNormalZigVec(stream);
     avg = avg + rval ;
     dmin = (dmin < rval) ? dmin : rval ;
     dmax = (dmax > rval) ? dmax : rval ;
-    rval = rval > 0 ? rval : -rval ;
-    index = rval;
-    gaussdist[index] ++;
+    if(rval > 10.0) rval = 10.0;
+    if(rval < -10.0) rval = -10.0;
+    index = 1001 + rval * 100;
+    biggaussdist[index] ++;
+//     rval = rval > 0 ? rval : -rval ;
+//     index = rval;
+//     gaussdist[index] ++;
   }
   printf("dmin = %6.3f, dmax = %6.3f, avg = %10.7f\n",dmin,dmax,avg/i);
-  for( i=0 ; i < 10 ; i++) printf("%9d ",gaussdist[i]);
+//   for( i=0 ; i < 10 ; i++) printf("%9d ",gaussdist[i]);
+  for( i=0 ; i < 2000 ; i++) printf("%9d %9d\n",i,biggaussdist[i]);
   printf("\n");
   MPI_Barrier(MPI_COMM_WORLD);
   t0 = MPI_Wtime();

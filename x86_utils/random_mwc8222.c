@@ -7,7 +7,28 @@
 #include <randomgeneric.h>
 
 /*==========================================================================
- * MWC8222 generators
+ *               ORIGINAL Copyright before code modifications              *
+/*==========================================================================
+ *  This code is Copyright (C) 2005, Jurgen A. Doornik.
+ *  Permission to use this code for non-commercial purposes
+ *  is hereby given, provided proper reference is made to:
+ *  Doornik, J.A. (2005), "An Improved Ziggurat Method to Generate Normal
+ *      Random Samples", mimeo, Nuffield College, University of Oxford,
+ *      and www.doornik.com/research.
+ *   or the published version when available.
+ *  This reference is still required when using modified versions of the code.
+ *  This notice should be maintained in modified versions of the code.
+ *  No warranty is given regarding the correctness of this code.
+ * Amendment 2017-02-22
+ * Jurgen A Doornik gives permission to any branch of the government of Canada 
+ * to use his random number and ziggurat code and any derivatives for
+ * any purpose, whether commercial or not.
+ *==========================================================================*/
+/*==========================================================================
+ * code modifications and refactoring done by
+ * M.Valin, Feb 2017
+ * Recherche en Prevision Numerique
+ * Environnement Canada
  *==========================================================================*/
 static uint64_t MWC_A  = 809430660 ;
 #define MWC_AI 809430660
