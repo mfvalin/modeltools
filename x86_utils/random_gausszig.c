@@ -305,6 +305,11 @@ int main(int argc, char **argv){
   unsigned int maxpos, maxneg;
   int gaussdist[10];
   int index;
+  generic_state *stream;
+  int myseed = 123456;
+  
+//   void  RanNormalSetSeedZigVec(void *stream, int *piSeed, int cSeed)  ;
+  void *Ran_R250_new_stream(void *clone_in, int *piSeed, int cSeed)   ;
 
   MPI_Init(&argc,&argv);
   for(i=0 ; i<1200000 ; i++) ranbuf[i] = 0;
@@ -320,12 +325,13 @@ int main(int argc, char **argv){
   dmin = RANDBLS_32new(maxneg) ;
   printf("maxpos, maxneg transformed with RANDBLS_32new : %22.18f %22.18f , %16.16Lx, %16.16Lx\n",dmax,dmin,*idmax,*idmin);
 
-   RanNormalSetSeedZig(R250,r250.buffer, 250);   // initialize to values already there :-)
+  stream = Ran_R250_new_stream(NULL, &myseed , 1);
+  RanNormalSetSeedZigVec(stream, &myseed, 1);
 
   dmin = 0.0 ; dmax = 0.0;
   for( i=0 ; i < 10 ; i++) gaussdist[i] = 0;
   for( i=0 ; i < 100000000 ; i++) {
-    rval = DRanNormalZigVec(R250);
+    rval = DRanNormalZigVec(stream);
     avg = avg + rval ;
     dmin = (dmin < rval) ? dmin : rval ;
     dmax = (dmax > rval) ? dmax : rval ;
@@ -338,7 +344,7 @@ int main(int argc, char **argv){
   printf("\n");
   MPI_Barrier(MPI_COMM_WORLD);
   t0 = MPI_Wtime();
-  for( i=0 ; i < 1000000000 ; i++) rval = DRanNormalZigVec(R250);
+  for( i=0 ; i < 1000000000 ; i++) rval = DRanNormalZigVec(stream);
   t1 = MPI_Wtime();
   printf("time for 1E+9 x 1 random DRanNormalZigVec/R250 double value = %6.3f \n",t1-t0);  // DRanNormalZigVec
 
