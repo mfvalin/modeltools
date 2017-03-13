@@ -107,8 +107,8 @@ static void InitZigguratMethodTables(double *redge, double *gauss, int nboxes, d
   }
 }
 
-// default version is 256 boxes (~ 15% faster)
-// to generate 128 box version (smaller tables), add -DUSE128 when compiling
+// default version uses 256 boxes (~ 15% faster)
+// to generate 128 box version (2 x smaller tables), add -DUSE128 when compiling
 #if ! defined(USE128)
 #define USE256
 #endif
