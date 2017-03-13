@@ -152,7 +152,7 @@ double DRanNormalFun(void *stream){
   double g, x, y, f0, f1, f2;
   int navail;
   zigbuf *buffer; 
-  int i;
+  unsigned int i;
   INSTRUMENT(int direct ;)
 
   INSTRUMENT(funcalls++; ; direct = 1;)
@@ -163,7 +163,7 @@ double DRanNormalFun(void *stream){
   for(;;){
     CHECKBUF(1);                               // need 1 uniform value
     g = CVTDBLS_32(buffer->ir[--navail]);      // convert from 32 bit int to (-1.0 , 1.0) on the fly
-    i = (buffer->box[navail]) & 0xFF ;
+    i = (buffer->box[navail]) ;
     INSTRUMENT(funused += 2;)
     g = g * redge1[i];
     if (fabs(g) < redge1[i+1] ) {              // first try the rectangular boxes
@@ -237,7 +237,7 @@ double DRanNormalFun(void *stream){
   double g, x, y, f0, f1, f2;
   int navail;
   zigbuf *buffer; 
-  int i;
+  unsigned int i;
   INSTRUMENT(int direct ;)
 
   INSTRUMENT(funcalls++; ; direct = 1;)
