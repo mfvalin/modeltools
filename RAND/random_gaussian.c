@@ -161,8 +161,8 @@ double DRanNormalFun(void *stream){
   navail = zig->ngauss ;
   buffer = (zigbuf *) zig->gauss ;
   for(;;){
-    CHECKBUF(1);
-    g = CVTDBLS_32(buffer->ir[--navail]);   // convert from 32 bit int to (-1.0 , 1.0) on the fly
+    CHECKBUF(1);                               // need 1 uniform value
+    g = CVTDBLS_32(buffer->ir[--navail]);      // convert from 32 bit int to (-1.0 , 1.0) on the fly
     i = (buffer->box[navail]) & 0xFF ;
     INSTRUMENT(funused += 2;)
     g = g * redge1[i];
@@ -179,7 +179,7 @@ double DRanNormalFun(void *stream){
 	y = CVTDBL_32(buffer->ir[--navail]);
 	y = log(y);
 	INSTRUMENT(funused += 2;)
-      } while (-2 * y < x * x);
+      } while (x * x + y + y > 0);
       g = (g < 0) ? x - TAIL1 : TAIL1 - x;
       break ;                                  // done
     }
@@ -188,7 +188,7 @@ double DRanNormalFun(void *stream){
     f1 = f0 * gauss1[i] ;     // f1 = exp(-0.5 * (redge1[i] * redge1[i] - x * x) );
     f2 = f0 * gauss1[i+1] ;   // f2 = exp(-0.5 * (redge1[i + 1] * redge1[i + 1] - x * x) );
     INSTRUMENT(funused++;)
-    CHECKBUF(1);
+    CHECKBUF(1);                               // need 1 uniform value
     y = CVTDBL_32(buffer->ir[--navail]);
     if (f2 + y * (f1 - f2) < 1.0)  break;
     INSTRUMENT(funloops++;)
@@ -246,8 +246,8 @@ double DRanNormalFun(void *stream){
   navail = zig->ngauss ;
   buffer = (zigbuf *) zig->gauss ;
   for(;;){
-    CHECKBUF(1);
-    g = CVTDBLS_32(buffer->ir[--navail]);   // convert from 32 bit int to (-1.0 , 1.0) on the fly
+    CHECKBUF(1);                               // need 1 uniform value
+    g = CVTDBLS_32(buffer->ir[--navail]);      // convert from 32 bit int to (-1.0 , 1.0) on the fly
     i = (buffer->box[navail]) & 0x7F ;
     INSTRUMENT(funused += 2;)
     g = g * redge0[i];
@@ -264,7 +264,7 @@ double DRanNormalFun(void *stream){
 	y = CVTDBL_32(buffer->ir[--navail]);
 	y = log(y);
 	INSTRUMENT(funused += 2;)
-      } while (-2 * y < x * x);
+      } while (x * x + y + y > 0);
       g = (g < 0) ? x - TAIL0 : TAIL0 - x;
       break ;                                  // done
     }
@@ -273,7 +273,7 @@ double DRanNormalFun(void *stream){
     f1 = f0 * gauss0[i] ;     // f1 = exp(-0.5 * (redge1[i] * redge1[i] - x * x) );
     f2 = f0 * gauss0[i+1] ;   // f2 = exp(-0.5 * (redge1[i + 1] * redge1[i + 1] - x * x) );
     INSTRUMENT(funused++;)
-    CHECKBUF(1);
+    CHECKBUF(1);                               // need 1 uniform value
     y = CVTDBL_32(buffer->ir[--navail]);
     if (f2 + y * (f1 - f2) < 1.0)  break;
     INSTRUMENT(funloops++;)
