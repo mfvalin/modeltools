@@ -23,23 +23,23 @@
     type(C_PTR) :: p                                                                      !InTf!
   end type                                                                                !InTf!
 
-! double F_DRanNormalFun(statep *s   )                                                    !InTf!
+! double F_DRan_NormalZig_stream(statep *s   )                                            !InTf!
  interface                                                                                !InTf!
-   function DRanNormalZigVec(stream) result(ran) bind(C,name='F_DRanNormalFun')           !InTf!
+   function DRan_Normal_stream(stream) result(ran) bind(C,name='F_DRan_NormalZig_stream') !InTf!
    import :: C_DOUBLE,RANDOM_STREAM                                                       !InTf!
    type(RANDOM_STREAM), intent(IN) :: stream                                              !InTf!
    real(C_DOUBLE) :: ran                                                                  !InTf!
-   end function DRanNormalZigVec                                                          !InTf!
+   end function DRan_Normal_stream                                                        !InTf!
  end interface                                                                            !InTf!
 
-! void F_RanNormalFunSetSeed(statep *s   , int *piSeed, int cSeed)                        !InTf!
+! void F_RanNormalZigSetSeed(statep *s   , int *piSeed, int cSeed)                        !InTf!
  interface                                                                                !InTf!
-   subroutine RanNormalSetSeedZig(stream, piSeed, cSeed) bind(C,name='F_RanNormalFunSetSeed') !InTf!
+   subroutine RanNormalZigSetSeed(stream, piSeed, cSeed) bind(C,name='F_RanNormalZigSetSeed') !InTf!
    import :: RANDOM_STREAM,C_INT                                                          !InTf!
    type(RANDOM_STREAM), intent(IN) :: stream                                              !InTf!
    integer(C_INT), intent(IN), value :: cSeed                                             !InTf!
    integer(c_INT), dimension(cSeed), intent(IN) :: piSeed                                 !InTf!
-   end subroutine RanNormalSetSeedZig                                                     !InTf!
+   end subroutine RanNormalZigSetSeed                                                     !InTf!
  end interface                                                                            !InTf!
 
 #endif
@@ -132,8 +132,8 @@ static void InitZigguratMethodTables256(void){
   InitZigguratMethodTables(redge1,gauss1,NBOXES1,TAIL1,BOXAREA1);
 }
 
-// this function MUST be called at least once BEFORE calling DRanNormalFun
-void RanNormalFunSetSeed(void *stream, void *values, int nvalues){
+// this function MUST be called at least once BEFORE calling DRan_NormalZig_stream
+void RanNormalZigSetSeed(void *stream, void *values, int nvalues){
   generic_state *zig = stream ;
 
   InitZigguratMethodTables256() ;
@@ -145,9 +145,9 @@ void RanNormalFunSetSeed(void *stream, void *values, int nvalues){
 }
 
 // get a gaussian distributed random number (only 32 significant bits in mantissa)
-// this function will FAIL if RanNormalFunSetSeed has not been called to initialize the 
+// this function will FAIL if RanNormalZigSetSeed has not been called to initialize the 
 // stream and the base tables
-double DRanNormalFun(void *stream){
+double DRan_NormalZig_stream(void *stream){
   generic_state *zig = stream ;
   double g, x, y, f0, f1, f2;
   int navail;
@@ -218,8 +218,8 @@ static void InitZigguratMethodTables128(void){
   InitZigguratMethodTables(redge0,gauss0,NBOXES0,TAIL0,BOXAREA0);
 }
 
-// this function MUST be called at least once BEFORE calling DRanNormalFun
-void RanNormalFunSetSeed(void *stream, void *values, int nvalues){
+// this function MUST be called at least once BEFORE calling DRan_NormalZig_stream
+void RanNormalZigSetSeed(void *stream, void *values, int nvalues){
   generic_state *zig = stream ;
   InitZigguratMethodTables128() ;
   if(zig->gauss == NULL) {   // allocate stream buffer for uniform numbers if not already done
@@ -230,9 +230,9 @@ void RanNormalFunSetSeed(void *stream, void *values, int nvalues){
 }
 
 // get a gaussian distributed random number (only 32 significant bits in mantissa)
-// this function will FAIL if RanNormalFunSetSeed has not been called to initialize the 
+// this function will FAIL if RanNormalZigSetSeed has not been called to initialize the 
 // stream and the base tables
-double DRanNormalFun(void *stream){
+double DRan_NormalZig_stream(void *stream){
   generic_state *zig = stream ;
   double g, x, y, f0, f1, f2;
   int navail;
@@ -285,17 +285,17 @@ double DRanNormalFun(void *stream){
 #endif
 // get a gaussian distributed random number (full 52 bit mantissa) (deferred inplementation)
 double D64RanNormalFun(void *stream){
-  return(DRanNormalFun(stream));
+  return(DRan_NormalZig_stream(stream));
 }
 
 // Fortran entry point for initialization
-void F_RanNormalFunSetSeed(void **stream, void *values, int nvalues){
-  RanNormalFunSetSeed(*stream, values, nvalues);
+void F_RanNormalZigSetSeed(void **stream, void *values, int nvalues){
+  RanNormalZigSetSeed(*stream, values, nvalues);
 }
 
 // Fortran entry point using the Fortran derived type, passed by reference
-double F_DRanNormalFun(void **stream){
-  return(DRanNormalFun(*stream));
+double F_DRan_NormalZig_stream(void **stream){
+  return(DRan_NormalZig_stream(*stream));
 }
 
 /*------------------------ END of gaussian generators ----------------------*/
@@ -332,7 +332,7 @@ int main(int argc, char **argv){
   v.d = INVM63 ; printf("%5i %16.16lx %24.20g\n",63,v.l,v.d);
   v.d = INVM64 ; printf("%5i %16.16lx %24.20g\n",64,v.l,v.d);
   v.d = INVM65 ; printf("%5i %16.16lx %24.20g\n",65,v.l,v.d);
-//   void  RanNormalFunSetSeed(void *stream, int *piSeed, int cSeed)  ;
+//   void  RanNormalZigSetSeed(void *stream, int *piSeed, int cSeed)  ;
   void *Ran_R250_new_stream(void *clone_in, int *piSeed, int cSeed)   ;
 #if defined(FULL_TEST)
   MPI_Init(&argc,&argv);
@@ -350,16 +350,16 @@ int main(int argc, char **argv){
   printf("maxpos, maxneg transformed with CVTDBLS_32 : %22.18f %22.18f , %16.16Lx, %16.16Lx\n",dmax,dmin,*idmax,*idmin);
 
   stream = Ran_R250_new_stream(NULL, &myseed , 1);
-  RanNormalFunSetSeed(stream, &myseed, 1);
-//   RanNormalFunSetSeed128(stream, &myseed, 1);
-//   RanNormalFunSetSeed256(stream, &myseed, 1);
+  RanNormalZigSetSeed(stream, &myseed, 1);
+//   RanNormalZigSetSeed128(stream, &myseed, 1);
+//   RanNormalZigSetSeed256(stream, &myseed, 1);
 
   dmin = 0.0 ; dmax = 0.0;
   for( i=0 ; i < 10 ; i++) gaussdist[i] = 0;
   for( i=0 ; i < 2001 ; i++) biggaussdist[i] = 0;
   for(j=0; j<10 ; j++) ;
   for( i=0 ; i < 1000000000 ; i++) {
-    rval = DRanNormalFun(stream);      // use C entry point
+    rval = DRan_NormalZig_stream(stream);      // use C entry point
     avg = avg + rval ;
     dmin = (dmin < rval) ? dmin : rval ;
     dmax = (dmax > rval) ? dmax : rval ;
@@ -387,9 +387,9 @@ int main(int argc, char **argv){
   printf("\n");
   MPI_Barrier(MPI_COMM_WORLD);
   t0 = MPI_Wtime();
-  for( i=0 ; i < 1000000000 ; i++) rval = F_DRanNormalFun((void **) &stream);  // tiem Fortran entry point (costlier)
+  for( i=0 ; i < 1000000000 ; i++) rval = F_DRan_NormalZig_stream((void **) &stream);  // tiem Fortran entry point (costlier)
   t1 = MPI_Wtime();
-  printf("time for 1E+9 x 1 random DRanNormalFun/R250 double value = %6.3f \n",t1-t0);  // DRanNormalFun256
+  printf("time for 1E+9 x 1 random DRan_NormalZig_stream/R250 double value = %6.3f \n",t1-t0);  // DRan_NormalZig_stream256
 
   t1 = 0 ; t0 = 1 ; 
   INSTRUMENT(t1 = funquick ; t0 = funcalls+1 ; )
