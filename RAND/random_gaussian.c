@@ -182,16 +182,17 @@ double DRan_NormalZig_stream(void *stream){
       } while (x * x + y + y > 0);
       g = (g < 0) ? x - TAIL1 : TAIL1 - x;
       break ;                                  // done
+    } else {                                   // is this from the wedges?
+      INSTRUMENT(funwedge ++;)
+      f0 = exp(0.5 * g * g) ;
+      f1 = f0 * gauss1[i] ;     // f1 = exp(-0.5 * (redge1[i] * redge1[i] - x * x) );
+      f2 = f0 * gauss1[i+1] ;   // f2 = exp(-0.5 * (redge1[i + 1] * redge1[i + 1] - x * x) );
+      INSTRUMENT(funused++;)
+      CHECKBUF(1);                               // need 1 uniform value
+      y = CVTDBL_32(buffer->ir[--navail]);
+      if (f2 + y * (f1 - f2) < 1.0)  break;
+      INSTRUMENT(funloops++;)
     }
-    INSTRUMENT(funwedge ++;)
-    f0 = exp(0.5 * g * g) ;   // is this from the wedges?
-    f1 = f0 * gauss1[i] ;     // f1 = exp(-0.5 * (redge1[i] * redge1[i] - x * x) );
-    f2 = f0 * gauss1[i+1] ;   // f2 = exp(-0.5 * (redge1[i + 1] * redge1[i + 1] - x * x) );
-    INSTRUMENT(funused++;)
-    CHECKBUF(1);                               // need 1 uniform value
-    y = CVTDBL_32(buffer->ir[--navail]);
-    if (f2 + y * (f1 - f2) < 1.0)  break;
-    INSTRUMENT(funloops++;)
   }   // for(;;) { }
   zig->ngauss = navail ;
   return(g) ;
