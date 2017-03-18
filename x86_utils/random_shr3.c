@@ -64,7 +64,7 @@ double DRan_SHR3(void *SHR3)	  // !InTc!	/* returns a random double (0.0 , 1.0) 
   jsr^=(jsr>>17) ;
   jsr^=(jsr<<5) ;
   state->jsr=jsr;
-  return RANDBL_32new(jz+jsr);   // convert from 32 bit int to (0.0 , 1.0)
+  return CVTDBL_32new(jz+jsr);   // convert from 32 bit int to (0.0 , 1.0)
 }
 
 double DRanS_SHR3(void *SHR3)	  // !InTc!	/* returns a random double (-1.0 , 1.0) */
@@ -79,7 +79,7 @@ double DRanS_SHR3(void *SHR3)	  // !InTc!	/* returns a random double (-1.0 , 1.0
   jsr^=(jsr>>17) ;
   jsr^=(jsr<<5) ;
   state->jsr=jsr;
-  return RANDBLS_32new(jz+jsr);   // convert from 32 bit int to (-1.0 , 1.0)
+  return CVTDBLS_32new(jz+jsr);   // convert from 32 bit int to (-1.0 , 1.0)
 }
 
 void VecIRan_SHR3(void *SHR3, unsigned int *ranbuf, int n)  // !InTc!
@@ -113,7 +113,7 @@ void VecDRan_SHR3(void *SHR3, double *ranbuf, int n)  // !InTc!
     jsr^=(jsr<<13) ;
     jsr^=(jsr>>17) ;
     jsr^=(jsr<<5) ;
-    ranbuf[i] = RANDBL_32new(jz+jsr);   // convert from 32 bit int to (0.0 , 1.0)
+    ranbuf[i] = CVTDBL_32new(jz+jsr);   // convert from 32 bit int to (0.0 , 1.0)
   }
   state->jsr=jsr;
 }
@@ -131,7 +131,7 @@ void VecDRanS_SHR3(void *SHR3, double *ranbuf, int n)  // !InTc!
     jsr^=(jsr<<13) ;
     jsr^=(jsr>>17) ;
     jsr^=(jsr<<5) ;
-    ranbuf[i] = RANDBLS_32new(jz+jsr);   // convert from 32 bit int to (0.0 , 1.0)
+    ranbuf[i] = CVTDBLS_32new(jz+jsr);   // convert from 32 bit int to (0.0 , 1.0)
   }
   state->jsr=jsr;
 }
@@ -161,12 +161,12 @@ int main(int argc, char **argv){
   maxneg = 0x80000000 ;
   idmax = (unsigned long long *)&dmax;
   idmin = (unsigned long long *)&dmin;
-  dmax = RANDBL_32new(maxpos) ;
-  dmin = RANDBL_32new(maxneg) ;
-  printf("maxpos, maxneg transformed with RANDBL_32new  : %22.18f %22.18f , %16.16Lx, %16.16Lx\n",dmax,dmin,*idmax,*idmin);
-  dmax = RANDBLS_32new(maxpos) ;
-  dmin = RANDBLS_32new(maxneg) ;
-  printf("maxpos, maxneg transformed with RANDBLS_32new : %22.18f %22.18f , %16.16Lx, %16.16Lx\n",dmax,dmin,*idmax,*idmin);
+  dmax = CVTDBL_32new(maxpos) ;
+  dmin = CVTDBL_32new(maxneg) ;
+  printf("maxpos, maxneg transformed with CVTDBL_32new  : %22.18f %22.18f , %16.16Lx, %16.16Lx\n",dmax,dmin,*idmax,*idmin);
+  dmax = CVTDBLS_32new(maxpos) ;
+  dmin = CVTDBLS_32new(maxneg) ;
+  printf("maxpos, maxneg transformed with CVTDBLS_32new : %22.18f %22.18f , %16.16Lx, %16.16Lx\n",dmax,dmin,*idmax,*idmin);
 
   for( i=0 ; i < 1000000 ; i++) lr = IRan_SHR3(&shr3);
   MPI_Barrier(MPI_COMM_WORLD);

@@ -87,7 +87,10 @@ typedef struct{
 } zigbuf;
 
 // check that internal buffer contains at least N items. if not, refill it using stream vector integer function
-#define CHECKBUF(N) { if (navail < N) { (*zig->vec_iran)(stream,(void *)buffer,ZIGBUFSIZE2) ; navail = ZIGBUFSIZE ; } }
+#define CHECKBUF(N) { if (navail-- < N) { (*zig->vec_iran)(stream,(void *)buffer,ZIGBUFSIZE2 ) ; navail = ZIGBUFSIZE-1 ; } }
+#define CHECKBUF1   { if (--navail < 0) { (*zig->vec_iran)(stream,(void *)buffer,ZIGBUFSIZE2 ) ; navail = ZIGBUFSIZE-1 ; } }
+#define CHECKB64(N) { if (navail-- < N) { (*zig->vec_iran)(stream,(void *)buffer,ZIGBUFSIZE2 ) ; navail = ZIGBUFSIZE2/2-1 ; } }
+#define CHECKB641   { if (--navail < 0) { (*zig->vec_iran)(stream,(void *)buffer,ZIGBUFSIZE2 ) ; navail = ZIGBUFSIZE2/2-1 ; } }
 
 // initialize ziggurat algorithm tables
 static void InitZigguratMethodTables(double *redge, double *gauss, int nboxes, double tail, double boxarea){
@@ -161,8 +164,10 @@ double DRan_NormalZig_stream(void *stream){
   navail = zig->ngauss ;
   buffer = (zigbuf *) zig->gauss ;
   for(;;){
-    CHECKBUF(1);                               // need 1 uniform value
-    g = CVTDBLS_32(buffer->ir[--navail]);      // convert from 32 bit int to (-1.0 , 1.0) on the fly
+//     CHECKBUF(1);                               // need 1 uniform value
+//     g = CVTDBLS_32(buffer->ir[--navail]);      // convert from 32 bit int to (-1.0 , 1.0) on the fly
+    CHECKBUF1;                               // need 1 uniform value
+    g = CVTDBLS_32(buffer->ir[navail]);      // convert from 32 bit int to (-1.0 , 1.0) on the fly
     i = (buffer->box[navail]) ;
     INSTRUMENT(funused += 2;)
     g = g * redge1[i];
@@ -174,9 +179,10 @@ double DRan_NormalZig_stream(void *stream){
       INSTRUMENT(funtails++ ; )
       do {
 	CHECKBUF(2) ;                          // need 2 uniform values
-	x = CVTDBL_32(buffer->ir[--navail]);
+	x = CVTDBL_32(buffer->ir[navail]);
+	navail--;
 	x = log(x) * TAILINV1 ;                //    / TAIL;
-	y = CVTDBL_32(buffer->ir[--navail]);
+	y = CVTDBL_32(buffer->ir[navail]);
 	y = log(y);
 	INSTRUMENT(funused += 2;)
       } while (x * x + y + y > 0);
@@ -188,8 +194,65 @@ double DRan_NormalZig_stream(void *stream){
       f1 = f0 * gauss1[i] ;     // f1 = exp(-0.5 * (redge1[i] * redge1[i] - x * x) );
       f2 = f0 * gauss1[i+1] ;   // f2 = exp(-0.5 * (redge1[i + 1] * redge1[i + 1] - x * x) );
       INSTRUMENT(funused++;)
-      CHECKBUF(1);                               // need 1 uniform value
-      y = CVTDBL_32(buffer->ir[--navail]);
+//       CHECKBUF(1);                               // need 1 uniform value
+//       y = CVTDBL_32(buffer->ir[--navail]);
+      CHECKBUF1;                               // need 1 uniform value
+      y = CVTDBL_32(buffer->ir[navail]);
+      if (f2 + y * (f1 - f2) < 1.0)  break;
+      INSTRUMENT(funloops++;)
+    }
+  }   // for(;;) { }
+  zig->ngauss = navail ;
+  return(g) ;
+}
+
+// get a gaussian distributed random number (52 significant bits in mantissa)
+// this function will FAIL if RanNormalZigSetSeed has not been called to initialize the 
+// stream and the base tables
+double D64Ran_NormalZig_stream(void *stream){
+  generic_state *zig = stream ;
+  double g, x, y, f0, f1, f2;
+  int navail;
+  uint64_t *buffer; 
+  int i;
+  INSTRUMENT(int direct ;)
+
+  INSTRUMENT(funcalls++; ; direct = 1;)
+  if(init1 == 0) { exit(1) ; return(g = -1.0e+38) ; } // miserable failure, initialization not done properly
+
+  navail = zig->ngauss ;
+  buffer = (uint64_t *) zig->gauss ;
+  for(;;){
+    CHECKB641;                               // need 1 uniform value
+    g = CVTDBLS_64(buffer[navail]);      // convert from 32 bit int to (-1.0 , 1.0) on the fly
+    i = buffer[navail] & 0xFF ;
+    INSTRUMENT(funused += 1;)
+    g = g * redge1[i];
+    if (fabs(g) < redge1[i+1] ) {              // first try the rectangular boxes
+      INSTRUMENT(funquick += direct;)
+      break ;                                  // done
+    }
+    if (i == 0) {                              // bottom box: sample from the TAIL
+      INSTRUMENT(funtails++ ; )
+      do {
+	CHECKB64(2) ;                          // need 2 uniform values
+	x = CVTDBL_64(buffer[navail]);
+	navail--;
+	x = log(x) * TAILINV1 ;                //    / TAIL;
+	y = CVTDBL_64(buffer[navail]);
+	y = log(y);
+	INSTRUMENT(funused += 2;)
+      } while (x * x + y + y > 0);
+      g = (g < 0) ? x - TAIL1 : TAIL1 - x;
+      break ;                                  // done
+    } else {                                   // is this from the wedges?
+      INSTRUMENT(funwedge ++;)
+      f0 = exp(0.5 * g * g) ;
+      f1 = f0 * gauss1[i] ;     // f1 = exp(-0.5 * (redge1[i] * redge1[i] - x * x) );
+      f2 = f0 * gauss1[i+1] ;   // f2 = exp(-0.5 * (redge1[i + 1] * redge1[i + 1] - x * x) );
+      INSTRUMENT(funused++;)
+      CHECKB641;                               // need 1 uniform value
+      y = CVTDBL_64(buffer[navail]);
       if (f2 + y * (f1 - f2) < 1.0)  break;
       INSTRUMENT(funloops++;)
     }
@@ -247,8 +310,8 @@ double DRan_NormalZig_stream(void *stream){
   navail = zig->ngauss ;
   buffer = (zigbuf *) zig->gauss ;
   for(;;){
-    CHECKBUF(1);                               // need 1 uniform value
-    g = CVTDBLS_32(buffer->ir[--navail]);      // convert from 32 bit int to (-1.0 , 1.0) on the fly
+    CHECKBUF1;                               // need 1 uniform value
+    g = CVTDBLS_32(buffer->ir[navail]);      // convert from 32 bit int to (-1.0 , 1.0) on the fly
     i = (buffer->box[navail]) & 0x7F ;
     INSTRUMENT(funused += 2;)
     g = g * redge0[i];
@@ -260,9 +323,10 @@ double DRan_NormalZig_stream(void *stream){
       INSTRUMENT(funtails++ ; )
       do {
 	CHECKBUF(2) ;                          // need 2 uniform values
-	x = CVTDBL_32(buffer->ir[--navail]);
+	x = CVTDBL_32(buffer->ir[navail]);
+	navail--;
 	x = log(x) * TAILINV0 ;                //    / TAIL;
-	y = CVTDBL_32(buffer->ir[--navail]);
+	y = CVTDBL_32(buffer->ir[navail]);
 	y = log(y);
 	INSTRUMENT(funused += 2;)
       } while (x * x + y + y > 0);
@@ -274,10 +338,65 @@ double DRan_NormalZig_stream(void *stream){
     f1 = f0 * gauss0[i] ;     // f1 = exp(-0.5 * (redge1[i] * redge1[i] - x * x) );
     f2 = f0 * gauss0[i+1] ;   // f2 = exp(-0.5 * (redge1[i + 1] * redge1[i + 1] - x * x) );
     INSTRUMENT(funused++;)
-    CHECKBUF(1);                               // need 1 uniform value
-    y = CVTDBL_32(buffer->ir[--navail]);
+    CHECKBUF1;                               // need 1 uniform value
+    y = CVTDBL_32(buffer->ir[navail]);
     if (f2 + y * (f1 - f2) < 1.0)  break;
     INSTRUMENT(funloops++;)
+  }   // for(;;) { }
+  zig->ngauss = navail ;
+  return(g) ;
+}
+
+// get a gaussian distributed random number (52 significant bits in mantissa)
+// this function will FAIL if RanNormalZigSetSeed has not been called to initialize the 
+// stream and the base tables
+double D64Ran_NormalZig_stream(void *stream){
+  generic_state *zig = stream ;
+  double g, x, y, f0, f1, f2;
+  int navail;
+  uint64_t *buffer; 
+  unsigned int i;
+  INSTRUMENT(int direct ;)
+
+  INSTRUMENT(funcalls++; ; direct = 1;)
+  if(init0 == 0) { exit(1) ; return(g = -1.0e+38) ; } // miserable failure, initialization not done properly
+
+  navail = zig->ngauss ;
+  buffer = (uint64_t *) zig->gauss ;
+  for(;;){
+    CHECKB641;                               // need 1 uniform value
+    g = CVTDBLS_64(buffer[navail]);      // convert from 32 bit int to (-1.0 , 1.0) on the fly
+    i = buffer[navail] & 0x7F ;
+    INSTRUMENT(funused += 1;)
+    g = g * redge0[i];
+    if (fabs(g) < redge0[i+1] ) {              // first try the rectangular boxes
+      INSTRUMENT(funquick += direct;)
+      break ;                                  // done
+    }
+    if (i == 0) {                              // bottom box: sample from the TAIL
+      INSTRUMENT(funtails++ ; )
+      do {
+	CHECKB64(2) ;                          // need 2 uniform values
+	x = CVTDBL_64(buffer[navail]);
+	navail--;
+	x = log(x) * TAILINV0 ;                //    / TAIL;
+	y = CVTDBL_64(buffer[navail]);
+	y = log(y);
+	INSTRUMENT(funused += 2;)
+      } while (x * x + y + y > 0);
+      g = (g < 0) ? x - TAIL0 : TAIL0 - x;
+      break ;                                  // done
+    } else {                                   // is this from the wedges?
+      INSTRUMENT(funwedge ++;)
+      f0 = exp(0.5 * g * g) ;
+      f1 = f0 * gauss0[i] ;     // f1 = exp(-0.5 * (redge1[i] * redge1[i] - x * x) );
+      f2 = f0 * gauss0[i+1] ;   // f2 = exp(-0.5 * (redge1[i + 1] * redge1[i + 1] - x * x) );
+      INSTRUMENT(funused++;)
+      CHECKB641;                               // need 1 uniform value
+      y = CVTDBL_64(buffer[navail]);
+      if (f2 + y * (f1 - f2) < 1.0)  break;
+      INSTRUMENT(funloops++;)
+    }
   }   // for(;;) { }
   zig->ngauss = navail ;
   return(g) ;
@@ -286,7 +405,7 @@ double DRan_NormalZig_stream(void *stream){
 #endif
 // get a gaussian distributed random number (full 52 bit mantissa) (deferred inplementation)
 double D64RanNormalFun(void *stream){
-  return(DRan_NormalZig_stream(stream));
+  return(D64Ran_NormalZig_stream(stream));
 }
 
 // Fortran entry point for initialization
@@ -297,6 +416,11 @@ void F_RanNormalZigSetSeed(void **stream, void *values, int nvalues){
 // Fortran entry point using the Fortran derived type, passed by reference
 double F_DRan_NormalZig_stream(void **stream){
   return(DRan_NormalZig_stream(*stream));
+}
+
+// Fortran entry point using the Fortran derived type, passed by reference
+double F_D64Ran_NormalZig_stream(void **stream){
+  return(D64Ran_NormalZig_stream(*stream));
 }
 
 /*------------------------ END of gaussian generators ----------------------*/
@@ -360,7 +484,11 @@ int main(int argc, char **argv){
   for( i=0 ; i < 2001 ; i++) biggaussdist[i] = 0;
   for(j=0; j<10 ; j++) ;
   for( i=0 ; i < 1000000000 ; i++) {
+#if defined(TEST64)
+    rval = D64Ran_NormalZig_stream(stream);      // use C entry point
+#else
     rval = DRan_NormalZig_stream(stream);      // use C entry point
+#endif
     avg = avg + rval ;
     dmin = (dmin < rval) ? dmin : rval ;
     dmax = (dmax > rval) ? dmax : rval ;
@@ -378,7 +506,7 @@ int main(int argc, char **argv){
     p2 =  exp(-0.5 * x * x) * .01 ;
     prob = .5 * (p1 + p2);
     ptot += prob ;
-    p1 = 1000000000 * prob / 2.50663;
+    p1 = 1000000000 * prob / 2.5066283;  // sqrt(2 * pi)
     est[i] = p1 * 1;
   }
   printf("ptot = %g\n",ptot);
@@ -388,7 +516,12 @@ int main(int argc, char **argv){
   printf("\n");
   MPI_Barrier(MPI_COMM_WORLD);
   t0 = MPI_Wtime();
-  for( i=0 ; i < 1000000000 ; i++) rval = F_DRan_NormalZig_stream((void **) &stream);  // tiem Fortran entry point (costlier)
+  for( i=0 ; i < 1000000000 ; i++) 
+#if defined(TEST64)
+    rval = F_D64Ran_NormalZig_stream((void **) &stream);  // tiem Fortran entry point (costlier)
+#else
+    rval = F_DRan_NormalZig_stream((void **) &stream);  // tiem Fortran entry point (costlier)
+#endif
   t1 = MPI_Wtime();
   printf("time for 1E+9 x 1 random DRan_NormalZig_stream/R250 double value = %6.3f \n",t1-t0);  // DRan_NormalZig_stream256
 

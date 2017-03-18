@@ -6,34 +6,9 @@
 
 #include <randomgeneric.h>
 
-/*==========================================================================
- *               ORIGINAL Copyright before code modifications              *
-/*==========================================================================
- *  This code is Copyright (C) 2005, Jurgen A. Doornik.
- *  Permission to use this code for non-commercial purposes
- *  is hereby given, provided proper reference is made to:
- *  Doornik, J.A. (2005), "An Improved Ziggurat Method to Generate Normal
- *      Random Samples", mimeo, Nuffield College, University of Oxford,
- *      and www.doornik.com/research.
- *   or the published version when available.
- *  This reference is still required when using modified versions of the code.
- *  This notice should be maintained in modified versions of the code.
- *  No warranty is given regarding the correctness of this code.
- * Amendment 2017-02-22
- * Jurgen A Doornik gives permission to any branch of the government of Canada 
- * to use his random number and ziggurat code and any derivatives for
- * any purpose, whether commercial or not.
- *==========================================================================*/
-/*==========================================================================
- * code modifications and refactoring done by
- * M.Valin, Feb 2017
- * Recherche en Prevision Numerique
- * Environnement Canada
- *==========================================================================*/
-static uint64_t MWC_A  = 809430660 ;
-#define MWC_AI 809430660
-#define MWC_C  362436
-#define MWC_R  256
+static uint64_t FACTOR  = 809430660 ;
+#define CARRY  362436
+#define NSTATE  256
 
 typedef struct{
   REFILLBUFFUN  refill;
@@ -46,34 +21,30 @@ typedef struct{
   DVECSRANFUN   vec_drans;
   unsigned int *gauss;
   int ngauss;
-  unsigned int uiState ;
-  unsigned int uiCarry ;
-  unsigned int auiState[MWC_R];
+  unsigned int i ;
+  unsigned int c ;
+  unsigned int state[NSTATE];
 } mwc_state ;                  // MWC8222 generator stream control structure
 
-static mwc_state mwc = {NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, 0, MWC_R - 1, MWC_C };
+static mwc_state mwc = {NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, 0, NSTATE - 1, CARRY };
 
-// static unsigned int s_uiStateMWC = MWC_R - 1;
-// static unsigned int s_uiCarryMWC = MWC_C;
-// static unsigned int s_auiStateMWC[MWC_R];
-
-void RanSetSeed_MWC8222(void *MWC8222, unsigned int *piSeed, int cSeed)  // !InTc!
+void RanSetSeed_MWC8222(void *MWC8222, unsigned int *Seed, int nSeed)  // !InTc!
 {
   unsigned int seed ;
   int i;
 
-  mwc.uiState = MWC_R - 1;
-  mwc.uiCarry = MWC_C;
+  mwc.i = NSTATE - 1;
+  mwc.c = CARRY;
 
-  if (cSeed == MWC_R)
+  if (nSeed == NSTATE)
   {
-    for (i = 0; i < MWC_R; ++i) mwc.auiState[i] = (unsigned int)piSeed[i];
+    for (i = 0; i < NSTATE; ++i) mwc.state[i] = (unsigned int)Seed[i];
   }else{
-    seed = piSeed && (cSeed > 0) ? piSeed[0] : 0 ;
-    for (i = 0 ; i < MWC_R ; ) {   /* see Knuth p.106, Table 1(16) and Numerical Recipes p.284 (ranqd1)*/
+    seed = (Seed && (nSeed > 0)) ? Seed[0] : 0 ;
+    for (i = 0 ; i < NSTATE ; ) {   /* see Knuth p.106, Table 1(16) and Numerical Recipes p.284 (ranqd1)*/
       seed = 1664525 * seed + 1013904223 ;
       if (seed <= 0) continue ;
-      mwc.auiState[i++] = seed ;
+      mwc.state[i++] = seed ;
     }
   }
 }
@@ -82,10 +53,10 @@ unsigned int IRan_MWC8222(void *MWC8222)  // !InTc!
 {
   uint64_t t;
 
-  mwc.uiState = (mwc.uiState + 1) & (MWC_R - 1);
-  t = MWC_A * mwc.auiState[mwc.uiState] + mwc.uiCarry;
-  mwc.uiCarry = (unsigned int)(t >> 32);
-  mwc.auiState[mwc.uiState] = (unsigned int)t;
+  mwc.i = (mwc.i + 1) & (NSTATE - 1);
+  t = FACTOR * mwc.state[mwc.i] + mwc.c;
+  mwc.c = (unsigned int)(t >> 32);
+  mwc.state[mwc.i] = (unsigned int)t;
   return (unsigned int)t;
 }
 
@@ -93,55 +64,72 @@ double DRan_MWC8222(void *MWC8222)         // !InTc!  /* returns a random double
 {
   uint64_t t;
 
-  mwc.uiState = (mwc.uiState + 1) & (MWC_R - 1);
-  t = MWC_A * mwc.auiState[mwc.uiState] + mwc.uiCarry;
-  mwc.uiCarry = (unsigned int)(t >> 32);
-  mwc.auiState[mwc.uiState] = (unsigned int)t;
-  return RANDBL_32new(t);   // convert from 32 bit int to (0.0 , 1.0)
+  mwc.i = (mwc.i + 1) & (NSTATE - 1);
+  t = FACTOR * mwc.state[mwc.i] + mwc.c;
+  mwc.c = (unsigned int)(t >> 32);
+  mwc.state[mwc.i] = (unsigned int)t;
+  return CVTDBL_32(t);   // convert from 32 bit int to (0.0 , 1.0)
 }
 
 double DRanS_MWC8222(void *MWC8222)        // !InTc!  /* returns a random double (-1.0 , 1.0) */
 {
   uint64_t t;
 
-  mwc.uiState = (mwc.uiState + 1) & (MWC_R - 1);
-  t = MWC_A * mwc.auiState[mwc.uiState] + mwc.uiCarry;
-  mwc.uiCarry = (unsigned int)(t >> 32);
-  mwc.auiState[mwc.uiState] = (unsigned int)t;
-  return RANDBLS_32new(t);   // convert from 32 bit int to (-1.0 , 1.0)
+  mwc.i = (mwc.i + 1) & (NSTATE - 1);
+  t = FACTOR * mwc.state[mwc.i] + mwc.c;
+  mwc.c = (unsigned int)(t >> 32);
+  mwc.state[mwc.i] = (unsigned int)t;
+  return CVTDBLS_32(t);   // convert from 32 bit int to (-1.0 , 1.0)
 }
 
-void VecIRan_MWC8222(void *MWC8222, unsigned int *auiRan, int cRan)  // !InTc!
+void VecIRan_MWC8222(void *MWC8222, unsigned int *ran, int npts)  // !InTc!
 {
   uint64_t t;
-  unsigned int carry = mwc.uiCarry, state = mwc.uiState;
+  unsigned int carry = mwc.c, index = mwc.i;
   
-  for (; cRan > 0; --cRan, ++auiRan)
+  for (; npts > 0; --npts, ++ran)
   {
-    state = (state + 1) & (MWC_R - 1);
-    t = MWC_A * mwc.auiState[state] + carry;
-    *auiRan = mwc.auiState[state] = (unsigned int)t;
+    index = (index + 1) & (NSTATE - 1);
+    t = FACTOR * mwc.state[index] + carry;
+    *ran = mwc.state[index] = (unsigned int)t;
     carry = (unsigned int)(t >> 32);
   }
-  mwc.uiCarry = carry;
-  mwc.uiState = state;
+  mwc.c = carry;
+  mwc.i = index;
 }
 
-void VecDRan_MWC8222(void *MWC8222, double *adRan, int cRan)  // !InTc!
+void VecDRan_MWC8222(void *MWC8222, double *ran, int npts)  // !InTc!
 {
   uint64_t t;
-  unsigned int carry = mwc.uiCarry, state = mwc.uiState;
+  unsigned int carry = mwc.c, index = mwc.i;
   
-  for (; cRan > 0; --cRan, ++adRan)
+  for (; npts > 0; --npts, ++ran)
   {
-    state = (state + 1) & (MWC_R - 1);
-    t = MWC_A * mwc.auiState[state] + carry;
-    mwc.auiState[state] = (unsigned int)t;
-    *adRan = RANDBL_32new(t);   // convert from 32 bit int to (0.0 , 1.0)
+    index = (index + 1) & (NSTATE - 1);
+    t = FACTOR * mwc.state[index] + carry;
+    mwc.state[index] = (unsigned int)t;
+    *ran = CVTDBL_32(t);   // convert from 32 bit int to (0.0 , 1.0)
     carry = (unsigned int)(t >> 32);
   }
-  mwc.uiCarry = carry;
-  mwc.uiState = state;
+  mwc.c = carry;
+  mwc.i = index;
+}
+
+void VecDRanS_MWC8222(void *MWC8222, double *ran, int npts)  // !InTc!
+{
+  uint64_t t;
+  unsigned int carry = mwc.c, index = mwc.i;
+  
+  for (; npts > 0; --npts, ++ran)
+  {
+    index = (index + 1) & (NSTATE - 1);
+    t = FACTOR * mwc.state[index] + carry;
+    mwc.state[index] = (unsigned int)t;
+    *ran = CVTDBLS_32(t);   // convert from 32 bit int to (-1.0 , 1.0)
+    carry = (unsigned int)(t >> 32);
+  }
+  mwc.c = carry;
+  mwc.i = index;
 }
 /*----------------------- END George Marsaglia MWC -------------------------*/
 
@@ -174,12 +162,12 @@ int main(int argc, char **argv){
   maxneg = 0x80000000 ;
   idmax = (unsigned long long *)&dmax;
   idmin = (unsigned long long *)&dmin;
-  dmax = RANDBL_32new(maxpos) ;
-  dmin = RANDBL_32new(maxneg) ;
-  printf("maxpos, maxneg transformed with RANDBL_32new  : %22.18f %22.18f , %16.16Lx, %16.16Lx\n",dmax,dmin,*idmax,*idmin);
-  dmax = RANDBLS_32new(maxpos) ;
-  dmin = RANDBLS_32new(maxneg) ;
-  printf("maxpos, maxneg transformed with RANDBLS_32new : %22.18f %22.18f , %16.16Lx, %16.16Lx\n",dmax,dmin,*idmax,*idmin);
+  dmax = CVTDBL_32(maxpos) ;
+  dmin = CVTDBL_32(maxneg) ;
+  printf("maxpos, maxneg transformed with CVTDBL_32new  : %22.18f %22.18f , %16.16Lx, %16.16Lx\n",dmax,dmin,*idmax,*idmin);
+  dmax = CVTDBLS_32(maxpos) ;
+  dmin = CVTDBLS_32(maxneg) ;
+  printf("maxpos, maxneg transformed with CVTDBLS_32new : %22.18f %22.18f , %16.16Lx, %16.16Lx\n",dmax,dmin,*idmax,*idmin);
 
   for( i=0 ; i < 1000000 ; i++) lr = IRan_MWC8222(&mwc);
   MPI_Barrier(MPI_COMM_WORLD);
