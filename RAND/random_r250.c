@@ -169,6 +169,79 @@ static r250_state r250 = {
   }
 };
 
+void FillBuffer_R250_static(){
+  int i;
+  unsigned int *r250_buffer = r250.buffer ;
+  int r250_index = r250.index;
+
+  while(r250_index > 249) r250_index -= 250;
+  for (i=0 ; i< 147 ; i++) {
+    r250_buffer[ i ] = r250_buffer[ i ] ^ r250_buffer[ i + 103 ];
+  }
+  for (i=147 ; i<250 ; i++) {
+    r250_buffer[ i ] = r250_buffer[ i ] ^ r250_buffer[ i - 147 ];
+  }
+  r250.index = r250_index;
+}
+
+void RanSetSeed_R250_static(unsigned int *piSeed, int cSeed)  // !InTc!
+{
+  int i;
+  unsigned int *r250_buffer ;
+  unsigned int seed ;
+
+  r250_buffer = r250.buffer ;
+  if (cSeed == 250 && piSeed != NULL) {
+    for(i=0 ; i<250; i++) r250_buffer[ i ] = piSeed[ i ] ;
+  }else{
+    seed = piSeed && (cSeed > 0) ? piSeed[0] : 0 ;
+    for (i = 0 ; i < 250 ; ) {   /* see Knuth p.106, Table 1(16) and Numerical Recipes p.284 (ranqd1)*/
+      seed = 1664525 * seed + 1013904223 ;
+      if (seed <= 0) continue ;
+      r250_buffer[i++] = seed ;
+    }
+  }
+}
+
+unsigned int IRan_R250_static()	  // !InTc!	/* returns a random unsigned integer */
+{
+  register unsigned int new_rand;
+
+  if ( r250.index > 249 ) FillBuffer_R250_static();
+  new_rand = r250.buffer[r250.index++];
+  return new_rand;
+}
+
+void VecIRan_R250_static(unsigned int *ranbuf, int n)  // !InTc!
+{
+  int k = 0;
+  int i;
+  unsigned int *r250_buffer ;
+  int r250_index;
+
+  r250_buffer = r250.buffer ;
+  r250_index = r250.index;
+  while( r250_index < 250 && n > 0 ){
+    ranbuf[k++] = r250_buffer[r250_index++] ;
+    n-- ;
+  }
+  r250.index = r250_index;
+  if ( n == 0 ) return;
+  FillBuffer_R250_static();     // we get here if buffer is empty before n is satisfied
+  while(n >= 250){        // chunks of 250 values
+    for(i=0 ; i<250 ; i++) ranbuf[k+i] = r250_buffer[i] ;
+    n -= 250 ;
+    k += 250 ;
+    FillBuffer_R250_static() ;
+  }
+  r250_index = r250.index;
+  while( n > 0 ){  // n < 250 at this point
+    ranbuf[k++] = r250_buffer[r250_index++] ;
+    n-- ;
+  }
+  r250.index = r250_index;
+}
+
 static void FillBuffer_R250_stream(r250_state *R250){
   int i;
   unsigned int *r250_buffer = R250->buffer ;
@@ -455,6 +528,13 @@ exit(0);
   t1 = MPI_Wtime();
   printf("time for 1E+9 x 1 random R250 integer value = %6.3f \n",t1-t0);
 
+  for( i=0 ; i < 1000000 ; i++) lr = IRan_R250_static();  // IRan_R250();
+  MPI_Barrier(MPI_COMM_WORLD);
+  t0 = MPI_Wtime();
+  for( i=0 ; i < 1000000000 ; i++) lr = IRan_R250_static();  // IRan_R250();
+  t1 = MPI_Wtime();
+  printf("time for 1E+9 x 1 static random R250 integer value = %6.3f \n",t1-t0);
+
   for( i=0 ; i < 1000000 ; i++) rval = DRan_R250_stream(R250);  // DRan_R250();
   MPI_Barrier(MPI_COMM_WORLD);
   t0 = MPI_Wtime();
@@ -506,6 +586,16 @@ exit(0);
   }
   t1 = MPI_Wtime();
   printf("time for 1E+6 x 1E+3 random R250 integer values = %6.3f \n",t1-t0);
+
+  for( i=0 ; i < 1000 ; i++) VecIRan_R250_static(&ranbuf[i], 1000) ;
+  MPI_Barrier(MPI_COMM_WORLD);
+  t0 = MPI_Wtime();
+  for( i=0 ; i < 1000000 ; i++){
+    VecIRan_R250_static(&ranbuf[i], 1000) ;
+//     VecIRan_R250(&ranbuf[i], 1000) ;
+  }
+  t1 = MPI_Wtime();
+  printf("time for 1E+6 x 1E+3 static random R250 integer values = %6.3f \n",t1-t0);
 
   for( i=0 ; i < 1000 ; i++) VecDRan_R250_stream(R250, &ranbuf2[i], 1000) ;
   MPI_Barrier(MPI_COMM_WORLD);
