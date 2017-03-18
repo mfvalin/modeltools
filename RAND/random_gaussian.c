@@ -19,9 +19,9 @@
 
 // Fortran interface, ready to be extracted
 #if defined(NEVER_TRUE)
-  type, bind(C) :: RANDOM_STREAM                                                          !InTf!
-    type(C_PTR) :: p                                                                      !InTf!
-  end type                                                                                !InTf!
+! type, bind(C) :: RANDOM_STREAM                                                          !InTf!
+!   type(C_PTR) :: p                                                                      !InTf!
+! end type                                                                                !InTf!
 
 ! double F_DRan_NormalZig_stream(statep *s   )                                            !InTf!
  interface                                                                                !InTf!
@@ -30,6 +30,15 @@
    type(RANDOM_STREAM), intent(IN) :: stream                                              !InTf!
    real(C_DOUBLE) :: ran                                                                  !InTf!
    end function DRan_Normal_stream                                                        !InTf!
+ end interface                                                                            !InTf!
+
+! double F_D64Ran_NormalZig_stream(statep *s   )                                          !InTf!
+ interface                                                                                !InTf!
+   function D64Ran_Normal_stream(stream) result(ran) bind(C,name='F_D64Ran_NormalZig_stream') !InTf!
+   import :: C_DOUBLE,RANDOM_STREAM                                                       !InTf!
+   type(RANDOM_STREAM), intent(IN) :: stream                                              !InTf!
+   real(C_DOUBLE) :: ran                                                                  !InTf!
+   end function D64Ran_Normal_stream                                                      !InTf!
  end interface                                                                            !InTf!
 
 ! void F_RanNormalZigSetSeed(statep *s   , int *piSeed, int cSeed)                        !InTf!
