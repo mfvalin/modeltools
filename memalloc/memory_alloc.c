@@ -132,7 +132,7 @@ int IsmmgrCheck(void *iap, int dump){
     sz = IsmmgrBlockGood(ap,p);
     if(dump) {
       msg = (p[-1] == 0xCAFEDECA) ? "USED" : "FREE" ;
-      if(sz == 0) msg = "INV " ;
+      if(sz == 0) msg = "INVALID" ;
       printf("[%10d] sz=%10d (%s)\n",i0,sz,msg);    // block index, block length, block status
     }
     if(sz == 0) break ;
@@ -141,6 +141,21 @@ int IsmmgrCheck(void *iap, int dump){
 
   if(i0 < sza) printf("ERROR: premature end of block chain\n");
   return((i0 < sza) ? -1 : 0);
+}
+
+// set block status to used
+static int IsmmgrSetUsed(void *iap, void *ip){
+  ITEM *ap = (ITEM *)iap ;
+  ITEM *p = (ITEM *)ip ;
+  int sz;
+
+  if(IsmmgrBlockValid(ap,p) <= 0) return(-1);   // bad block
+  if(p[-1] == 0xCAFEDECA) return(-1) ;          // block already used
+
+  sz = p[-2] ;
+  p[-1] = 0xCAFEDECA ;
+  p[sz] = 0xCAFEDECA ;
+  return(0);
 }
 
 // get block size (negative if free block, 0 if invalid block)
@@ -257,13 +272,19 @@ main(int argc,char**argv){
 
   p1 = &ap[2] ;
   printf("p1 = ap[%ld], size=%d\n",p1-ap,IsmmgrBlockSize(ap,p1)) ;
+  printf("=============== split p1 ===============\n");
   p2 = IsmmgrSplit(ap, p1, 512) ;
+  printf("p1 = ap[%ld], size=%d\n",p1-ap,IsmmgrBlockSize(ap,p1)) ;
   printf("p2 = ap[%ld], size=%d\n",p2-ap,IsmmgrBlockSize(ap,p2)) ;
   printf("p2 does %s follow p1\n",(p2 == IsmmgrNextBlock(ap,p1)) ? "" : "not");
+  printf("=============== split p2 ===============\n");
   p3 = IsmmgrSplit(ap, p2, -128) ;
+  printf("p1 = ap[%ld], size=%d\n",p1-ap,IsmmgrBlockSize(ap,p1)) ;
+  printf("p2 = ap[%ld], size=%d\n",p2-ap,IsmmgrBlockSize(ap,p2)) ;
   printf("p3 = ap[%ld], size=%d\n",p3-ap,IsmmgrBlockSize(ap,p3)) ;
   printf("p2 does %s precede p3\n",( p2 == IsmmgrPrevBlock(ap,p3) ) ? "" : "not");
 
+  printf("IsmmgrSetUsed(ap,p2) = %d\n",IsmmgrSetUsed(ap,p2));
   status = IsmmgrCheck(ap,1);
   printf("status IsmmgrCheck = %d\n",status);
 
