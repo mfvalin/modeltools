@@ -256,12 +256,12 @@ main(int argc,char**argv){
   printf("status IsmmgrCheck = %d\n",status);
 
   p1 = &ap[2] ;
-  printf("p1 = ap[%ld]\n",p1-ap) ;
+  printf("p1 = ap[%ld], size=%d\n",p1-ap,IsmmgrBlockSize(ap,p1)) ;
   p2 = IsmmgrSplit(ap, p1, 512) ;
-  printf("p2 = ap[%ld]\n",p2-ap) ;
+  printf("p2 = ap[%ld], size=%d\n",p2-ap,IsmmgrBlockSize(ap,p2)) ;
   printf("p2 does %s follow p1\n",(p2 == IsmmgrNextBlock(ap,p1)) ? "" : "not");
   p3 = IsmmgrSplit(ap, p2, -128) ;
-  printf("p3 = ap[%ld]\n",p3-ap) ;
+  printf("p3 = ap[%ld], size=%d\n",p3-ap,IsmmgrBlockSize(ap,p3)) ;
   printf("p2 does %s precede p3\n",( p2 == IsmmgrPrevBlock(ap,p3) ) ? "" : "not");
 
   status = IsmmgrCheck(ap,1);
