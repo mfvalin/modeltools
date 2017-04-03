@@ -241,6 +241,49 @@ static ITEM *IsmmgrPrevBlock(void *iap, void *ip){
   return( (sz > 0) ? p : NULL);   // return NULL if next block has size 0
 }
 
+// fuse adjacent data blocks if free (fuse next then previous)
+static int IsmmgrFuse(void *iap, void *ip){
+  ITEM *ap = (ITEM *)iap ;
+  ITEM *p1 = (ITEM *)ip ;
+  ITEM *p2 ;
+  int s1, s2 ;
+
+  s1 = IsmmgrBlockValid(ap,p1);   // get size of block (+validity check)
+  if(s1 <= 0) return (-1) ;       // invalid block
+  if(p1[-1] != 0xBEBEFADA) return(-1) ; // this block is not free
+  if(p1[s1 + 2] == 0) return(0) ; // end of block chain, nothing to fuse
+  p2 = &p1[s1 + 4] ;
+  s2 = IsmmgrBlockValid(ap,p2);   // get size of next block
+  if(s2 <= 0) return (-1) ;       // invalid block
+
+  if(p2[-1] == 0xBEBEFADA){       // next block is free, fuse with current
+    p1[s1] = 0 ;                  // wipe upper p1 metadata
+    p1[s1 + 1] = 0 ;
+    p2[-1] = 0 ;                  // wipe lower p2 metadata
+    p2[-2] = 0 ;
+    s1 = s1 + s2 + 4;             // new size for p1
+    p1[-2] = s1 ;                 // update lower p1 size
+    p1[s1 + 1] = s1 ;             // update upper p1 size
+  }
+
+  s2 = p1[-3] ;                   // size of brevious block ;
+  if(s2 == 0) ;                   // beginning of block chain, nothing to fuse
+  if(p1[-4] != 0xBEBEFADA) return(0) ; // previous block is not free
+  p2 = &p1[-4 -s2] ;              // previous block
+  s2 = IsmmgrBlockValid(ap,p2);   // get size of block (+validity check)
+  if(s2 <= 0) return (-1) ;       // invalid block
+
+  p1[-1] = 0 ;                    // wipe lower p1 metadata
+  p1[-2] = 0 ;
+  p2[s2] = 0 ;                    // wipe upper p2 metadata
+  p2[s2 + 1] = 0 ;
+  s2 = s2 + s1 + 4 ;              // new size for p2
+  p2[-2] = s2 ;                   // update lower p2 size
+  p2[s2 + 1] = s2 ;               // update upper p1 size
+
+  return(0) ;
+}
+
 // split a data block
 static ITEM *IsmmgrSplit(void *iap, void *ip, int size){
   ITEM *ap = (ITEM *)iap ;
@@ -298,7 +341,7 @@ int IsmmgrFree(void *iap, void *ip, int sz){
   if(IsmmgrBlockValid(ap, p) <= 0) return(-1) ; // bad block or arena
   return(0);
 }
-
+#if defined(SELF_TEST)
 main(int argc,char**argv){
   int arena[2048];
   int status, sza;
@@ -367,4 +410,14 @@ main(int argc,char**argv){
   p2[-2] = p2[-2] - 1;
   status = IsmmgrCheck(ap,1);
   printf("status IsmmgrCheck = %d\n",status);
+
+  p2[-2] = p2[-2] + 1;
+  status = IsmmgrCheck(ap,1);
+  printf("status IsmmgrCheck = %d\n",status);
+  printf("fuse p2 with neighbours\n");
+  status = IsmmgrFuse(ap,p2);
+  printf("status IsmmgrFuse = %d\n",status);
+  status = IsmmgrCheck(ap,1);
+  printf("status IsmmgrCheck = %d\n",status);
 }
+#endif
