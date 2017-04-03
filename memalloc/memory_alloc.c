@@ -116,6 +116,52 @@ int IsmmgrBlockGood(void *iap, void *ip){
   return(sz);
 }
 
+// get bet size matching free block (from_top ==1 , scan from top end of memory arena)
+ITEM *IsmmgrBestMatch(void *iap, int size, int from_top){
+  ITEM *ap = (ITEM *)iap ;
+  ITEM *p = NULL;
+  ITEM *px = NULL;
+  int sza, sz ;
+  int i0, match ;
+  char *msg;
+
+  sza = IsmmgrArenaValid(iap) ;
+  if(sza <= 0) return (NULL);     // invalid arena
+
+  match = 0x7FFFFFFF ;   // huge as initial best match size
+  if(from_top){
+    i0 = sza - ap[sza-1] -2 ; // start of top block
+  }else{
+    i0 = 2 ;                  // first block at ap[2]
+  }
+  sz = ap[i0-2] ;         // size of block ;
+  while(sz > 0){          // until end of block chain reached
+    p = &ap[i0] ;              // pointer to block ;
+    sz = p[-2] ;
+    if(p[-1] == 0xBEBEFADA){  // free block, try to match
+      if( sz > size ){        // possible match
+	if(sz <= size + MINBLOCK){  // we have a good enough match
+	  px = p ;
+	  break ;
+	}
+	if(sz < match){   // best match so far
+	  match = sz ;
+	  px = p;
+	}
+      }  // ( sz > size )
+    }
+    if(from_top){
+      sz = p[-3] ;         // size of previous block
+      i0 = i0 - sz - 4 ;   // start of previous block
+    }else{
+      i0 = i0 + sz + 4 ;   // start of next block
+    }
+// printf("i0 , sz : %d %d\n",i0,sz);
+  }
+
+  return(px);
+}
+
 // check integrity of arena (print block metadata id dump != 0)
 int IsmmgrCheck(void *iap, int dump){
   ITEM *ap = (ITEM *)iap ;
@@ -126,7 +172,7 @@ int IsmmgrCheck(void *iap, int dump){
 
   sza = IsmmgrArenaValid(iap) ;
   if(sza <= 0) return (-1);     // invalid arena
-  i0 = 2 ;  // first block starts at ap[2], bblocx occupies sz+4 items where sz is block data size
+  i0 = 2 ;  // first block starts at ap[2], block occupies sz+4 items where sz is block data size
   while(i0 < sza){
     p = &ap[i0] ;
     sz = IsmmgrBlockGood(ap,p);
@@ -256,7 +302,7 @@ int IsmmgrFree(void *iap, void *ip, int sz){
 main(int argc,char**argv){
   int arena[2048];
   int status, sza;
-  ITEM *ap, *p1, *p2, *p3;
+  ITEM *ap, *p1, *p2, *p3, *p0;
 
   ap = IsmmgrInitArena(&arena[0], 2048);
   sza = ap[-2] ;
@@ -272,23 +318,53 @@ main(int argc,char**argv){
 
   p1 = &ap[2] ;
   printf("p1 = ap[%ld], size=%d\n",p1-ap,IsmmgrBlockSize(ap,p1)) ;
-  printf("=============== split p1 ===============\n");
+  printf("=============== split p1 at bottom (512) ===============\n");
   p2 = IsmmgrSplit(ap, p1, 512) ;
   printf("p1 = ap[%ld], size=%d\n",p1-ap,IsmmgrBlockSize(ap,p1)) ;
   printf("p2 = ap[%ld], size=%d\n",p2-ap,IsmmgrBlockSize(ap,p2)) ;
   printf("p2 does %s follow p1\n",(p2 == IsmmgrNextBlock(ap,p1)) ? "" : "not");
-  printf("=============== split p2 ===============\n");
+  printf("=============== split p2 at top (-128) ===============\n");
   p3 = IsmmgrSplit(ap, p2, -128) ;
   printf("p1 = ap[%ld], size=%d\n",p1-ap,IsmmgrBlockSize(ap,p1)) ;
   printf("p2 = ap[%ld], size=%d\n",p2-ap,IsmmgrBlockSize(ap,p2)) ;
   printf("p3 = ap[%ld], size=%d\n",p3-ap,IsmmgrBlockSize(ap,p3)) ;
   printf("p2 does %s precede p3\n",( p2 == IsmmgrPrevBlock(ap,p3) ) ? "" : "not");
 
+  status = IsmmgrCheck(ap,1);
+  printf("status IsmmgrCheck = %d\n",status);
   printf("IsmmgrSetUsed(ap,p2) = %d\n",IsmmgrSetUsed(ap,p2));
   status = IsmmgrCheck(ap,1);
   printf("status IsmmgrCheck = %d\n",status);
 
-  p3[-2] = 0;
+  p0 = IsmmgrBestMatch(ap, 100, 0) ;   // from bottom
+  printf("IsmmgrBestMatch(ap,100,0) = %ld\n",(p0 ? p0 : ap)-ap);
+  p0 = IsmmgrBestMatch(ap, 100, 1) ;   // from top
+  printf("IsmmgrBestMatch(ap,100,1) = %ld\n",(p0 ? p0 : ap)-ap);
+  p0 = IsmmgrBestMatch(ap, 400, 0) ;   // from bottom
+  printf("IsmmgrBestMatch(ap,400,0) = %ld\n",(p0 ? p0 : ap)-ap);
+  p0 = IsmmgrBestMatch(ap, 400, 1) ;   // from top
+  printf("IsmmgrBestMatch(ap,400,1) = %ld\n",(p0 ? p0 : ap)-ap);
+  p0 = IsmmgrBestMatch(ap, 514, 0) ;   // from bottom
+  printf("IsmmgrBestMatch(ap,514,0) = %ld\n",(p0 ? p0 : ap)-ap);
+  p0 = IsmmgrBestMatch(ap, 514, 1) ;   // from top
+  printf("IsmmgrBestMatch(ap,514,1) = %ld\n",(p0 ? p0 : ap)-ap);
+  p2[-1] = 0xBEBEFADA ;  // artificially make p2 free
+  p3[-4] = 0xBEBEFADA ;
+  printf("artificially made p2(1392) free\n");
+  p0 = IsmmgrBestMatch(ap, 514, 0) ;   // from bottom
+  printf("IsmmgrBestMatch(ap,514,0) = %ld\n",(p0 ? p0 : ap)-ap);
+  p0 = IsmmgrBestMatch(ap, 514, 1) ;   // from top
+  printf("IsmmgrBestMatch(ap,514,1) = %ld\n",(p0 ? p0 : ap)-ap);
+
+  printf("p2 bottom marker inconsistent\n");
+  p2[-1] = 0xCAFEDECA;
+  status = IsmmgrCheck(ap,1);
+  printf("status IsmmgrCheck = %d\n",status);
+  p2[-1] = 0xBEBEFADA;
+  status = IsmmgrCheck(ap,1);
+  printf("status IsmmgrCheck = %d\n",status);
+  printf("p2 size inconsistent\n");
+  p2[-2] = p2[-2] - 1;
   status = IsmmgrCheck(ap,1);
   printf("status IsmmgrCheck = %d\n",status);
 }
