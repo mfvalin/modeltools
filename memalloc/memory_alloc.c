@@ -324,22 +324,37 @@ static ITEM *IsmmgrSplit(void *iap, void *ip, int size){
 }
 
 // allocate a data block of size sz in arena ap
-ITEM *IsmmgrMalloc(void *iap, int sz){
+ITEM *IsmmgrMalloc(void *iap, int sz, int from_top){
   ITEM *ap = (ITEM *)iap ;
   ITEM *p = NULL;
+  ITEM *p2 = NULL;
 
   if(IsmmgrArenaValid(ap) <= 0) return(NULL) ; // bad arena
-  // locate a hole of size at least sz (try a best fit)
-  return(p);
+
+  p = IsmmgrBestMatch(ap, sz, from_top) ;  // locate a hole of size at least sz (try a best fit)
+  if(from_top) {
+    p2 = IsmmgrSplit(ap, p, -sz) ;         // split to get a block of size at least sz in upper part
+  }else{
+    p2 = IsmmgrSplit(ap, p,  sz) ;         // split to get a block of size at least sz in lower part
+    p2 = p ;
+  }
+
+  return(p2);
 }
 
 // free data block p from arena ap
-int IsmmgrFree(void *iap, void *ip, int sz){
+int IsmmgrFree(void *iap, void *ip){
   ITEM *ap = (ITEM *)iap ;
   ITEM *p = (ITEM *)ip ;
+  int sz ;
 
   if(IsmmgrBlockValid(ap, p) <= 0) return(-1) ; // bad block or arena
-  return(0);
+  sz = p[-2] ;
+  if(p[-1] == 0xBEBEFADA) return(-1) ; // already free
+  p[-1] = 0xBEBEFADA ;   // set marker to free
+  p[sz] = 0xBEBEFADA ;   // set marker to free
+  
+  return (IsmmgrFuse(ap,p) );  // fuse with free blocks around freed block
 }
 #if defined(SELF_TEST)
 main(int argc,char**argv){
