@@ -5,9 +5,9 @@
  * memory arena structure
  * 
  * +------+-------+------    ------+-------+------+
- * |  SZ  |   0   | SZ      items  |   0   |  SZ  |
+ * |  SZA |   0   | SZA     items  |   0   |  SZA |
  * +------+-------+------    ------+-------+------+
- *   [-2]   [-1]    [0]              [SZ]   [SZ+1]
+ *   [-2]   [-1]    [0]              [SZA]  [SZA+1]
  * 
  * 
  * split data blocks (2 consecutive blocks)
@@ -24,6 +24,7 @@
  * +---------+----------+------------------------------------        -----------------------------------+----------+---------+
  *    [-2]       [-1]    [0]                                                                                [NW]      [NW+1]
  * 
+ * sza    : size of useful memory arena
  * marker : 0xCAFEDECA   (block contains data)
  *          0xBEBEFADA   (block is empty)
  * NW     : size of block
@@ -38,11 +39,11 @@
 
 // idiot simple memory mamager
 
-// initialize memory arena
+// initialize memory arena and create on data block to fill it
 ITEM *IsmmgrInitArena(void *in, int total_size){
   ITEM *ap = (ITEM *)in ;   // pointer to arena
   ITEM *hp ;                // pointer to data block
-  int sz = total_size - 4;  // size of arena
+  int sz = total_size - 4;  // useful size of arena
 
   if(sz < MINARENA) return(NULL) ;                 // minimum size not met
   sz &= 0x7FFFFFFE ;                               // force even size
@@ -65,7 +66,7 @@ ITEM *IsmmgrInitArena(void *in, int total_size){
   return(ap) ;                  // return arena pointer that will be used from now on
 }
 
-// is arena minimally valid ?
+// is arena minimally valid ? (return arena size if OK, 0 if not)
 static int IsmmgrArenaValid(void *iap){
   ITEM *ap = (ITEM *)iap ;
   int sz ;
@@ -83,7 +84,7 @@ static int IsmmgrBlockValid(void *iap, void *ip){
   int sza, sz ;
 
   sza = IsmmgrArenaValid(iap) ;
-  if(sza <= 0) return(0);   // invalid arena
+  if(sza == 0) return(0);   // invalid arena
 
   sz = p[-2] ;
   if(sz == 0) return(sz);                    // invalid size
@@ -116,8 +117,10 @@ int IsmmgrBlockGood(void *iap, void *ip){
   return(sz);
 }
 
-// get bet size matching free block (from_top ==1 , scan from top end of memory arena)
-ITEM *IsmmgrBestMatch(void *iap, int size, int from_top){
+// get bet size matching free block
+// from_top == 0 , scan from bottom end of memory arena
+// from_top != 0 , scan from top end of memory arena
+static ITEM *IsmmgrBestMatch(void *iap, int size, int from_top){
   ITEM *ap = (ITEM *)iap ;
   ITEM *p = NULL;
   ITEM *px = NULL;
@@ -162,7 +165,7 @@ ITEM *IsmmgrBestMatch(void *iap, int size, int from_top){
   return(px);
 }
 
-// check integrity of arena (print block metadata id dump != 0)
+// check integrity of arena (print block metadata if dump != 0)
 int IsmmgrCheck(void *iap, int dump){
   ITEM *ap = (ITEM *)iap ;
   ITEM *p = NULL;
@@ -171,7 +174,7 @@ int IsmmgrCheck(void *iap, int dump){
   char *msg;
 
   sza = IsmmgrArenaValid(iap) ;
-  if(sza <= 0) return (-1);     // invalid arena
+  if(sza == 0) return (-1);     // invalid arena
   i0 = 2 ;  // first block starts at ap[2], block occupies sz+4 items where sz is block data size
   while(i0 < sza){
     p = &ap[i0] ;
@@ -189,8 +192,8 @@ int IsmmgrCheck(void *iap, int dump){
   return((i0 < sza) ? -1 : 0);
 }
 
-// set block status to used
-static int IsmmgrSetUsed(void *iap, void *ip){
+// set block status to used (return 0 if OK, -1 if block invalid or alredy used)
+int IsmmgrSetUsed(void *iap, void *ip){
   ITEM *ap = (ITEM *)iap ;
   ITEM *p = (ITEM *)ip ;
   int sz;
@@ -204,8 +207,8 @@ static int IsmmgrSetUsed(void *iap, void *ip){
   return(0);
 }
 
-// get block size (negative if free block, 0 if invalid block)
-static int IsmmgrBlockSize(void *iap, void *ip){
+// get block size (negative if free block, 0 if invalid block, positice if used block)
+int IsmmgrBlockSize(void *iap, void *ip){
   ITEM *ap = (ITEM *)iap ;
   ITEM *p = (ITEM *)ip ;
   int sz = 0;
@@ -216,8 +219,8 @@ static int IsmmgrBlockSize(void *iap, void *ip){
   if(p[-1] == 0xBEBEFADA) sz = -p[-2] ;             // size of current free block
   return(sz);
 }
-// get pointer to next block (NULL if no next block)
-static ITEM *IsmmgrNextBlock(void *iap, void *ip){
+// get pointer to next block (NULL if no valid next block)
+ITEM *IsmmgrNextBlock(void *iap, void *ip){
   ITEM *ap = (ITEM *)iap ;
   ITEM *p = (ITEM *)ip ;
   int sz ;
@@ -228,8 +231,8 @@ static ITEM *IsmmgrNextBlock(void *iap, void *ip){
   return( (p[-2] > 0) ? p : NULL);   // return NULL if next block has size 0
 }
 
-// get pointer to previous block (NULL if no previous block)
-static ITEM *IsmmgrPrevBlock(void *iap, void *ip){
+// get pointer to previous block (NULL if no valid previous block)
+ITEM *IsmmgrPrevBlock(void *iap, void *ip){
   ITEM *ap = (ITEM *)iap ;
   ITEM *p = (ITEM *)ip ;
   int sz ;
@@ -241,7 +244,7 @@ static ITEM *IsmmgrPrevBlock(void *iap, void *ip){
   return( (sz > 0) ? p : NULL);   // return NULL if next block has size 0
 }
 
-// fuse adjacent data blocks if free (fuse next then previous)
+// fuse adjacent data blocks if free (fuse next block then previous block if they are free)
 static int IsmmgrFuse(void *iap, void *ip){
   ITEM *ap = (ITEM *)iap ;
   ITEM *p1 = (ITEM *)ip ;
@@ -251,7 +254,7 @@ static int IsmmgrFuse(void *iap, void *ip){
   s1 = IsmmgrBlockValid(ap,p1);   // get size of block (+validity check)
   if(s1 <= 0) return (-1) ;       // invalid block
   if(p1[-1] != 0xBEBEFADA) return(-1) ; // this block is not free
-  if(p1[s1 + 2] == 0) return(0) ; // end of block chain, nothing to fuse
+  if(p1[s1 + 2] == 0) goto fuseprev ; // end of block chain, nothing to fuse forward
   p2 = &p1[s1 + 4] ;
   s2 = IsmmgrBlockValid(ap,p2);   // get size of next block
   if(s2 <= 0) return (-1) ;       // invalid block
@@ -265,7 +268,7 @@ static int IsmmgrFuse(void *iap, void *ip){
     p1[-2] = s1 ;                 // update lower p1 size
     p1[s1 + 1] = s1 ;             // update upper p1 size
   }
-
+fuseprev:
   s2 = p1[-3] ;                   // size of brevious block ;
   if(s2 == 0) ;                   // beginning of block chain, nothing to fuse
   if(p1[-4] != 0xBEBEFADA) return(0) ; // previous block is not free
@@ -285,6 +288,8 @@ static int IsmmgrFuse(void *iap, void *ip){
 }
 
 // split a data block
+// returns pointer to leftovers data block if enough leftovers
+// returns pointer to original block if not worth splitting
 static ITEM *IsmmgrSplit(void *iap, void *ip, int size){
   ITEM *ap = (ITEM *)iap ;
   ITEM *p1 = (ITEM *)ip ;
@@ -323,13 +328,14 @@ static ITEM *IsmmgrSplit(void *iap, void *ip, int size){
   return(p2) ; // return pointer to block 2
 }
 
-// allocate a data block of size sz in arena ap
+// allocate a data block of size sz in arena ap (returns pointer to data block)
 ITEM *IsmmgrMalloc(void *iap, int sz, int from_top){
   ITEM *ap = (ITEM *)iap ;
   ITEM *p = NULL;
   ITEM *p2 = NULL;
+  int status ;
 
-  if(IsmmgrArenaValid(ap) <= 0) return(NULL) ; // bad arena
+  if(IsmmgrArenaValid(ap) == 0) return(NULL) ; // bad arena
 
   p = IsmmgrBestMatch(ap, sz, from_top) ;  // locate a hole of size at least sz (try a best fit)
   if(from_top) {
@@ -338,11 +344,11 @@ ITEM *IsmmgrMalloc(void *iap, int sz, int from_top){
     p2 = IsmmgrSplit(ap, p,  sz) ;         // split to get a block of size at least sz in lower part
     p2 = p ;
   }
-
+  status = IsmmgrSetUsed(ap,p2) ;          // set block status to used
   return(p2);
 }
 
-// free data block p from arena ap
+// free data block p from arena ap (returns 0 upon success, != 0 otherwise)
 int IsmmgrFree(void *iap, void *ip){
   ITEM *ap = (ITEM *)iap ;
   ITEM *p = (ITEM *)ip ;
@@ -360,7 +366,7 @@ int IsmmgrFree(void *iap, void *ip){
 main(int argc,char**argv){
   int arena[2048];
   int status, sza;
-  ITEM *ap, *p1, *p2, *p3, *p0;
+  ITEM *ap, *p1, *p2, *p3, *p4, *p5, *p6, *p0;
 
   ap = IsmmgrInitArena(&arena[0], 2048);
   sza = ap[-2] ;
@@ -432,6 +438,38 @@ main(int argc,char**argv){
   printf("fuse p2 with neighbours\n");
   status = IsmmgrFuse(ap,p2);
   printf("status IsmmgrFuse = %d\n",status);
+  status = IsmmgrCheck(ap,1);
+  printf("status IsmmgrCheck = %d\n",status);
+
+  p1 = IsmmgrMalloc(ap, 512, 0) ;
+  p2 = IsmmgrMalloc(ap, 256, 0) ;
+  p3 = IsmmgrMalloc(ap, 128, 0) ;
+  p4 = IsmmgrMalloc(ap, 512, 1) ;
+  p5 = IsmmgrMalloc(ap, 256, 1) ;
+  p6 = IsmmgrMalloc(ap, 128, 1) ;
+  printf("p1 -> p6 = %5ld %5ld %5ld %5ld %5ld %5ld\n",(p1-ap),(p2-ap),(p3-ap),(p4-ap),(p5-ap),(p6-ap)) ;
+  status = IsmmgrCheck(ap,1);
+  printf("status IsmmgrCheck = %d\n",status);
+  status = IsmmgrFree(ap,p2) ; printf("free p2 \n");
+  if(status) printf("free p2 failed\n");
+  status = IsmmgrFree(ap,p5) ; printf("free p5 \n");
+  if(status) printf("free p5 failed\n");
+  status = IsmmgrCheck(ap,1);
+  printf("status IsmmgrCheck = %d\n",status);
+  status = IsmmgrFree(ap,p3) ; printf("free p3 \n");
+  if(status) printf("free p3 failed\n");
+  status = IsmmgrCheck(ap,1);
+  printf("status IsmmgrCheck = %d\n",status);
+  status = IsmmgrFree(ap,p4) ; printf("free p4 \n");
+  if(status) printf("free p4 failed\n");
+  status = IsmmgrCheck(ap,1);
+  printf("status IsmmgrCheck = %d\n",status);
+  status = IsmmgrFree(ap,p6) ; printf("free p6 \n");
+  if(status) printf("free p6 failed\n");
+  status = IsmmgrCheck(ap,1);
+  printf("status IsmmgrCheck = %d\n",status);
+  status = IsmmgrFree(ap,p1) ; printf("free p1 \n");
+  if(status) printf("free p1 failed\n");
   status = IsmmgrCheck(ap,1);
   printf("status IsmmgrCheck = %d\n",status);
 }
