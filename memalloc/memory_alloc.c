@@ -4,20 +4,21 @@
 /*
  * memory arena structure
  * 
- * +------+-------+------    ------+-------+------+
- * |  SZA |   0   | SZA     items  |   0   |  SZA |
- * +------+-------+------    ------+-------+------+
- *   [-2]   [-1]    [0]              [SZA]  [SZA+1]
+ *                |<--- data blocks --->|
+ * +------+-------+------         ------+-------+------+
+ * |  SZA |   0   | SZA          items  |   0   |  SZA |
+ * +------+-------+------         ------+-------+------+
+ *   [-2]   [-1]    [0]                   [SZA]  [SZA+1]
  * 
  * 
- * split data blocks (2 consecutive blocks)
+ * 2 consecutive data blocks
  * |<------------------------ block 1 ------------------------->|<------------------------- block 2 ------------------------>|
  * +---------+----------+------    --------+----------+---------+---------+----------+------    --------+----------+---------+
  * |   NW1   |  marker  |  NW1 data items  |  marker  |   NW1   |   NW2   |  marker  |  NW2 data items  |  marker  |   NW2   |
  * +---------+----------+------    --------+----------+---------+---------+----------+------    --------+----------+---------+
  *    [-2]       [-1]    [0]                  [NW1]     [NW1+1]    [-2]       [-1]    [0]                  [NW1]     [NW1+1]
  * 
- * fused data blocks (NW = NW1 + nW2 +4)
+ * same data blocks, fused (NW = NW1 + nW2 +4)
  * 
  * +---------+----------+------------------------------------        -----------------------------------+----------+---------+
  * |   NW    |  marker  |  NW data items                                                                |  marker  |   NW    |
@@ -28,18 +29,20 @@
  * marker : 0xCAFEDECA   (block contains data)
  *          0xBEBEFADA   (block is empty)
  * NW     : size of block
- * item   : a 32 bit quantity (markers and NW are unsigned integers)
+ * item   : a 32 bit quantity (markers and NW are of type ITEM)
  * []     : indices used for addressing [0] at start of data
  * 
  */
 
-#define ITEM unsigned int
+typedef unsigned int ITEM ;
 #define MINARENA 1024
 #define MINBLOCK 16
 
-// idiot simple memory mamager
+// Idiot simple memory mamager (I s s mgr)
 
-// initialize memory arena and create on data block to fill it
+// initialize memory arena and create one data block to fill it entirely
+// total_size is in ITEM units (see typedef above)
+// returns arena pointer to be passed to other routines
 ITEM *IsmmgrInitArena(void *in, int total_size){
   ITEM *ap = (ITEM *)in ;   // pointer to arena
   ITEM *hp ;                // pointer to data block
@@ -49,11 +52,11 @@ ITEM *IsmmgrInitArena(void *in, int total_size){
   sz &= 0x7FFFFFFE ;                               // force even size
 
   // initialize arena
-  ap += 2;  // from now on use arena indexing
-  ap[-2]   = sz ;
-  ap[-1]   = 0 ;
-  ap[sz]   = 0 ;
-  ap[sz+1] = sz ;
+  ap += 2;  // from now on use arena indexing (data relative)
+  ap[-2]   = sz ;          // arena size
+  ap[-1]   = 0 ;           // pseudo size (like a data bkock)
+  ap[sz]   = 0 ;           // pseudo size (like a data bkock)
+  ap[sz+1] = sz ;          // arena size
   
   // create first data block in arena (empty block filling the whole arena)
   hp = ap + 2 ;            // a normal data block pointer
@@ -63,42 +66,50 @@ ITEM *IsmmgrInitArena(void *in, int total_size){
   hp[sz] = 0xBEBEFADA ;    // empty block marker
   hp[sz+1] = sz ;          // data block size (tail)
 
-  return(ap) ;                  // return arena pointer that will be used from now on
+  return(ap) ;                  // return data relative arena pointer that will be used from now on
 }
 
 // is arena minimally valid ? (return arena size if OK, 0 if not)
+// iap  : arena pointer from IsmmgrInitArena
+// returns arena size if OK, 0 otherwise
 static int IsmmgrArenaValid(void *iap){
   ITEM *ap = (ITEM *)iap ;
-  int sz ;
+  int sza ;
 
-  sz = ap[-2] ;
-  if(sz < MINARENA) return(0);
-  if(ap[-1] != 0 || ap[sz] != 0 || ap[sz+1] != sz) return(0);
-  return(sz);
+  sza = ap[-2] ;                   // arena size
+  if(sza < MINARENA) return(0);    // unbelievably small, error
+  if(ap[-1] != 0 || ap[sza] != 0 || ap[sza+1] != sza) return(0);   // inconsistent markers
+  return(sza);                     // looks like an arena, return size
 }
 
-// are block and arena valid ? (return size of block or 0)
+// are block and arena valid ?
+// iap  : arena pointer from IsmmgrInitArena
+// ip   : pointer to data block
+// returns block size if OK, 0 otherwise
 static int IsmmgrBlockValid(void *iap, void *ip){
   ITEM *ap = (ITEM *)iap ;
   ITEM *p = (ITEM *)ip ;
   int sza, sz ;
 
   sza = IsmmgrArenaValid(iap) ;
-  if(sza == 0) return(0);   // invalid arena
+  if(sza == 0) return(0);                    // invalid arena
 
-  sz = p[-2] ;
+  sz = p[-2] ;                               // data block size
   if(sz == 0) return(sz);                    // invalid size
-  if( (p - ap) < 2 ) return(0) ;             // data block starts before arena
+  if( (p - ap) < 2 ) return(0) ;             // data block starts before arena beginning
   if( (p - ap) + sz > sza - 2 ) return(0) ;  // end of data block beyond arena end
 
   if(p[sz+1] != sz)  return(0);              // inconsistent size
   if(p[-1] != p[sz]) return(0);              // inconsistent free/used marker
   if(p[-1] != 0xBEBEFADA && p[-1] != 0xCAFEDECA ) return(0); // invalid marker
 
-  return(sz);
+  return(sz);                                // everything OK, return data block size
 }
 
-// is block valid and has size > 0 ? (arena assumed valid) (return size of block or 0)
+// is block valid and has size > 0 ? (arena is assumed valid)
+// iap  : arena pointer from IsmmgrInitArena
+// ip   : pointer to data block
+// returns block size if OK, 0 otherwise
 int IsmmgrBlockGood(void *iap, void *ip){
   ITEM *ap = (ITEM *)iap ;
   ITEM *p = (ITEM *)ip ;
@@ -117,9 +128,12 @@ int IsmmgrBlockGood(void *iap, void *ip){
   return(sz);
 }
 
-// get bet size matching free block
+// get free block with best matching size
 // from_top == 0 , scan from bottom end of memory arena
 // from_top != 0 , scan from top end of memory arena
+// iap  : arena pointer from IsmmgrInitArena
+// size : desired minimum free size
+// returns pointer to data block if found, NULL otherwise
 static ITEM *IsmmgrBestMatch(void *iap, int size, int from_top){
   ITEM *ap = (ITEM *)iap ;
   ITEM *p = NULL;
@@ -165,7 +179,10 @@ static ITEM *IsmmgrBestMatch(void *iap, int size, int from_top){
   return(px);
 }
 
-// check integrity of arena (print block metadata if dump != 0)
+// check integrity of arena (block chains)
+// iap  : arena pointer from IsmmgrInitArena
+// dump : if nonzero, print block metadata
+// returns 0 if OK, nonzero otherwise
 int IsmmgrCheck(void *iap, int dump){
   ITEM *ap = (ITEM *)iap ;
   ITEM *p = NULL;
@@ -178,13 +195,13 @@ int IsmmgrCheck(void *iap, int dump){
   i0 = 2 ;  // first block starts at ap[2], block occupies sz+4 items where sz is block data size
   while(i0 < sza){
     p = &ap[i0] ;
-    sz = IsmmgrBlockGood(ap,p);
+    sz = IsmmgrBlockGood(ap,p); // valid block ?
     if(dump) {
-      msg = (p[-1] == 0xCAFEDECA) ? "USED" : "FREE" ;
+      msg = (p[-1] == 0xCAFEDECA) ? "USED" : "FREE" ;  // msg will be USED|FREE|INVALID
       if(sz == 0) msg = "INVALID" ;
-      printf("[%10d] sz=%10d (%s)\n",i0,sz,msg);    // block index, block length, block status
+      printf("[%10d] sz=%10d (%s)\n",i0,sz,msg);       // block index, block length, block status
     }
-    if(sz == 0) break ;
+    if(sz == 0) break ;                                // end or bad block
     i0=i0+sz+4 ;
   }
 
@@ -192,7 +209,10 @@ int IsmmgrCheck(void *iap, int dump){
   return((i0 < sza) ? -1 : 0);
 }
 
-// set block status to used (return 0 if OK, -1 if block invalid or alredy used)
+// set data block status to used 
+// iap  : arena pointer from IsmmgrInitArena
+// ip   : pointer to data block
+// returns 0 if OK, nonzero otherwise ( block invalid or alredy used)
 int IsmmgrSetUsed(void *iap, void *ip){
   ITEM *ap = (ITEM *)iap ;
   ITEM *p = (ITEM *)ip ;
@@ -208,6 +228,10 @@ int IsmmgrSetUsed(void *iap, void *ip){
 }
 
 // get block index relative to arena (0 if invalid)
+// iap  : arena pointer from IsmmgrInitArena
+// ip   : pointer to data block
+// returns block index (in ITEM units) relative to ap if OK, 0 otherwise
+// the minimum possible value is 2
 int IsmmgrBlockIndex(void *iap, void *ip){
   ITEM *ap = (ITEM *)iap ;
   ITEM *p = (ITEM *)ip ;
@@ -219,6 +243,11 @@ int IsmmgrBlockIndex(void *iap, void *ip){
 }
 
 // get block size (negative if free block, 0 if invalid block, positice if used block)
+// iap  : arena pointer from IsmmgrInitArena
+// ip   : pointer to data block
+// returns block size (in ITEM units) if OK, 0 otherwise
+// if block is FREE, a negative size will be returned
+// if block is USED, a positive size will be returned
 int IsmmgrBlockSize(void *iap, void *ip){
   ITEM *ap = (ITEM *)iap ;
   ITEM *p = (ITEM *)ip ;
@@ -232,6 +261,9 @@ int IsmmgrBlockSize(void *iap, void *ip){
 }
 
 // get pointer to next block (NULL if no valid next block)
+// iap  : arena pointer from IsmmgrInitArena
+// ip   : pointer to data block
+// returns pointer to block following this block (NULL if at end of chain or following block invalid)
 ITEM *IsmmgrNextBlock(void *iap, void *ip){
   ITEM *ap = (ITEM *)iap ;
   ITEM *p = (ITEM *)ip ;
@@ -244,6 +276,9 @@ ITEM *IsmmgrNextBlock(void *iap, void *ip){
 }
 
 // get pointer to previous block (NULL if no valid previous block)
+// iap  : arena pointer from IsmmgrInitArena
+// ip   : pointer to data block
+// returns pointer to block preceding this block (NULL if at beginning of chain or preceding block invalid)
 ITEM *IsmmgrPrevBlock(void *iap, void *ip){
   ITEM *ap = (ITEM *)iap ;
   ITEM *p = (ITEM *)ip ;
@@ -257,6 +292,9 @@ ITEM *IsmmgrPrevBlock(void *iap, void *ip){
 }
 
 // fuse adjacent data blocks if free (fuse next block then previous block if they are free)
+// iap  : arena pointer from IsmmgrInitArena
+// ip   : pointer to data block
+// returns 0 if OK, nonzero otherwise
 static int IsmmgrFuse(void *iap, void *ip){
   ITEM *ap = (ITEM *)iap ;
   ITEM *p1 = (ITEM *)ip ;
@@ -300,8 +338,14 @@ fuseprev:
 }
 
 // split a data block
+// iap  : arena pointer from IsmmgrInitArena
+// ip   : pointer to data block
+// size : >0 split with size ITEMs at beginning of block
+// size : <0 split with size ITEMs at end of block
 // returns pointer to leftovers data block if enough leftovers
 // returns pointer to original block if not worth splitting
+// returns NULL in case of error (invalid block, size larger than block size)
+// splitting costs 4 ITEMs for new block metadata
 static ITEM *IsmmgrSplit(void *iap, void *ip, int size){
   ITEM *ap = (ITEM *)iap ;
   ITEM *p1 = (ITEM *)ip ;
@@ -316,13 +360,13 @@ static ITEM *IsmmgrSplit(void *iap, void *ip, int size){
   if(size == 0) return(p1) ;     // no split
 
   if(size >0) {   // size is low part
-    s1 = (size+1) & 0x7FFFFFFE ; // force even
+    s1 = (size+1) & 0x7FFFFFFE ; // force even size
     s2 = sz - s1 - 4 ;           // leftovers
     if(s2 < 0) return(NULL) ;    // sz too small, cannot split, ERROR
     if(s2 < MINBLOCK) return(p1) ;     // no split
   }else{          // size is high part
     size = -size ;
-    s2 = (size+1) & 0x7FFFFFFE ; // force even
+    s2 = (size+1) & 0x7FFFFFFE ; // force even size
     s1 = sz - s2 - 4 ;           // leftovers
     if(s1 < 0) return(NULL) ;    // sz too small, cannot split, ERROR
     if(s1 < MINBLOCK) return(p1) ;     // no split
@@ -341,6 +385,11 @@ static ITEM *IsmmgrSplit(void *iap, void *ip, int size){
 }
 
 // allocate a data block of size sz in arena ap (returns pointer to data block)
+// iap  : arena pointer from IsmmgrInitArena
+// sz   : size  (in ITEM units) of desired new block
+// from_top : if 0 allocate as close as possible to beginning of arena
+//            if nonzero allocate as close as possible to end of arena
+// returns pointer to new block (or NULL if request cannot be satisfied)
 ITEM *IsmmgrMalloc(void *iap, int sz, int from_top){
   ITEM *ap = (ITEM *)iap ;
   ITEM *p = NULL;
@@ -349,7 +398,7 @@ ITEM *IsmmgrMalloc(void *iap, int sz, int from_top){
 
   if(IsmmgrArenaValid(ap) == 0) return(NULL) ; // bad arena
 
-  p = IsmmgrBestMatch(ap, sz, from_top) ;  // locate a hole of size at least sz (try a best fit)
+  p = IsmmgrBestMatch(ap, sz, from_top) ;  // locate a free block of size at least sz (try a best fit)
   if(p == NULL) return(p) ;                // match failed 
 
   if(from_top) {
@@ -363,6 +412,9 @@ ITEM *IsmmgrMalloc(void *iap, int sz, int from_top){
 }
 
 // free data block p from arena ap (returns 0 upon success, != 0 otherwise)
+// iap  : arena pointer from IsmmgrInitArena
+// ip   : pointer to data block
+// returns 0 if OK, nonzero otherwise
 int IsmmgrFree(void *iap, void *ip){
   ITEM *ap = (ITEM *)iap ;
   ITEM *p = (ITEM *)ip ;
