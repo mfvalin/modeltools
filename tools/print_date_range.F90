@@ -13,10 +13,12 @@ program print_date_range
   if(argcount < 3 .or. argcount > 4) goto 777
 
   CALL get_command_argument(1, date1)
+  date1 = trim(date1)//'000000'
   read(date1,11,err=777)printable1(1),printable1(2)  ! start date in YYYYMMDD format
 11 format(I8,1x,I6)
 
   CALL get_command_argument(2, date2)
+  date2 = trim(date2)//'000000'
   read(date2,11,err=777)printable2(1),printable2(2)  ! end date in YYYYMMDD format
 
   CALL get_command_argument(3, interval)
