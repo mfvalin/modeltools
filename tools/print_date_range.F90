@@ -1,8 +1,8 @@
 program print_date_range
   implicit none
   integer, external :: newdate
-  integer :: yyyymmdd, hhmmss, stamp, p1, p2, stamp1, stamp2
-  integer, dimension(2) :: printable1, printable2
+  integer :: yyyymmdd, hhmmss, stamp, p1, p2, stamp1, stamp2, p3, p4, stamp3
+  integer, dimension(2) :: printable1, printable2, printable3
   real *8 :: delta, diff
   integer :: status, argcount
   character(len=128) :: date1, date2, interval, name, options
@@ -37,14 +37,19 @@ program print_date_range
 
   do while(diff >= 0)
     status = newdate(stamp1,p1,p2,-3)                 ! convert to printable
-    print 102,p1,'.',p2/100                           ! print it
+    p3 = p1
+    if(p2 == 0) then                                  ! hhmmss = 0, get previus day
+      call incdatr(stamp3,stamp1,-24.0_8)
+      status = newdate(stamp3,p3,p4,-3)
+    endif
+    print 102,p1,'.',p2/100,p3                        ! print it
     call incdatr(stamp,stamp1,delta)                  ! increment
     stamp1 = stamp
     call difdatr(stamp2,stamp1,diff)                  ! end - next date
   enddo
   stop
 101 format(3X,I3,3x,i10,3x,i10,3x,I8,3x,I6)
-102 format(3x,I8.8,A,I6.6)
+102 format(3x,I8.8,A,I6.6,3x,i8.8)
 777 continue
   write(0,*),'USAGE: '//trim(name)//' start_date end_date interval [year=gregorian|360_day|365_day]'
   write(0,*),'       start, end : YYYYMMDD.HHMMSS'
