@@ -1,0 +1,381 @@
+#!/bin/bash
+export ARCH_DELIMITER="/"     # "new arch" style
+#
+ls-http()
+{
+wget -O - ${1:-http://localhost:80/} 2>/dev/null \
+ | grep href= | grep -v '[[]DIR]' | sed -e 's/.*href="//' -e 's/".*//'
+}
+#
+must_be_dir()
+{
+  [[ -d ${1:-does_not_exist} ]] && return
+  echo "FATAL: directory '$1' MUST exist and DOES NOT"
+  exit 1
+}
+#
+[[ ! -x /bin/ksh93 ]] && echo 'FATAL ERROR: /bin/ksh93 is missing, "rmnlib" environment cannot be installed' && exit 1
+echo INFO: /bin/ksh93 FOUND, OK for install
+which python || { echo "Python not found, CANNOT INSTALL" ; exit 1 ; }
+which make || { echo "make not found, CANNOT INSTALL" ; exit 1 ; }
+which git || { echo "git not found, CANNOT INSTALL" ; exit 1 ; }
+which gfortran || { echo "gfortran not found, CANNOT INSTALL" ; exit 1 ; }
+#
+export NO_RPN_COMM=""
+unset NO_RPN_COMM
+which mpif90 || echo "MPI development not available, rpn_comm will not be installed"
+which mpif90 || export NO_RPN_COMM=1
+#
+if [[ -z $NO_RPN_COMM ]] ; then    # only needed to generate rpn_comm
+  #for i in  File::Spec::Functions File::Basename URI::file Cwd  Getopt::Long XML::Twig ; do perl -e "use 5.008_008; use strict; use $i" ; done >Failed 2>&1
+  for i in  File::Spec::Functions File::Basename URI::file Cwd  ; do perl -e "use 5.008_008; use strict; use $i" ; done >Failed 2>&1
+  [[ -s Failed ]] && cat Failed && rm -f Failed && echo "Missing PERL module(s), CANNOT INSTALL" && exit 1
+  #echo "perl modules File::Spec::Functions File::Basename URI::file Cwd  Getopt::Long XML::Twig found, OK for install"
+  echo "perl modules File::Spec::Functions File::Basename URI::file Cwd  found, OK for install"
+fi
+#
+#export MASTER_REPOSITORY=${1:-guillimin.clumeq.ca:/sb/home/winger/ssm-domains/repository}
+export MASTER_REPOSITORY=${1:-http://scaweb.sca.uqam.ca/armnlib/repository/}
+shift
+#
+# BOOTSTRAP install for environment
+# ssm and setup domains will be installed
+# this gets done WITHOUT environment
+#
+# optional argument 1 is the install tree top directory
+#
+# umask 002 pour ne pas creer de problemes avec les ACLs
+umask 002
+#
+# cd to top directory of install tree
+#
+mkdir -p ${1:-${HOME}/ssm-domains-base}
+must_be_dir ${1:-${HOME}/ssm-domains-base}
+cd ${1:-${HOME}/ssm-domains-base} || (echo FATAL: installation directory ${1:-${HOME}/ssm-domains-base} not found ; exit 1 ) || exit 1
+export BASEDIR=`pwd -P`
+echo BASEDIR=$BASEDIR
+#
+# fill/refresh repository from master repository (needed setup elements only)
+#
+export REPOSITORY=$BASEDIR/repository
+mkdir ${REPOSITORY}
+must_be_dir ${REPOSITORY}
+(cd ${REPOSITORY} && for i in $(ls-http $MASTER_REPOSITORY | grep -E '8.11|FI[A-Z]|subprocess' ) ; do \
+                       rm -f $i ; wget --no-verbose ${MASTER_REPOSITORY}/$i ; chmod 755 $i ; \
+                     done )
+#
+# basedir now in "true path" form
+#
+mkdir -p $BASEDIR/setup
+must_be_dir $BASEDIR/setup
+cd $BASEDIR/setup || (echo FATAL: cannot cd to $BASEDIR/setup ; exit 1) || exit 1
+mkdir -p ssm_8.11
+must_be_dir ssm_8.11
+#
+# check python version, if subprocess module is missing, make it available 
+#
+# python -c "import subprocess" 2>/dev/null || FixPython=true
+# if [[ "$FixPython" == true ]]
+# then
+#   echo INFO: getting subprocess module 
+#   export PYTHONPATH=${BASEDIR}/repository
+# fi
+# python -c "import subprocess" 2>/dev/null || (echo FATAL: inadequate version of python, 2.4 minimum ; exit 1 ) || exit 1
+# echo INFO: python is OK 
+#
+# install ssm version 8.11 and inject a copy of subprocess.py if necessary (python 2.3)
+#
+if [[ ! -d $BASEDIR/setup/ssm_8.11/all/etc/ssm.d ]]
+then
+  set -x
+  echo y | $REPOSITORY/ssm-installer_8.11_all.ssm --ssmRepositoryUrl $REPOSITORY -d $BASEDIR/setup/ssm_8.11 \
+                                                  -U ${USER:-$LOGNAME}} -G ${MyGid} --force
+  set +x
+#   [[ "$FixPython" == true ]] && cp $REPOSITORY/subprocess.py $BASEDIR/setup/ssm_8.11/ssm_8.11_all/lib/ssm.d/ssm/subprocess.py
+  unset PYTHONPATH
+else
+  echo ssm_8.11 already installed in $BASEDIR/setup/ssm_8.11
+fi
+#
+# create setup domains
+#
+export REPOSITORY=${MASTER_REPOSITORY}
+export SSM_SYSTEM_DOMAIN_HOME="$BASEDIR/setup/ssm_8.11"
+export SSM_DOMAIN_HOME="$BASEDIR/setup/ssm_8.11"
+. "${SSM_DOMAIN_HOME}/etc/ssm.d/profile"
+export SSM_USER_DOMAIN_HOME="$BASEDIR/setup/ssm_8.11"
+ssm version || exit 1
+set -x
+ssm created -d $BASEDIR/setup/ssm_8.11 --defaultRepositorySource $REPOSITORY -L ssm_8.11 -y 
+mkdir $BASEDIR/setup/v_001 
+must_be_dir $BASEDIR/setup/v_001 
+ssm created -d $BASEDIR/setup/v_001 --defaultRepositorySource $REPOSITORY -L environment_setup -y 
+#
+# add repository locator for make-ssm (missing because not created with s.ssm-creat)
+#
+echo "$REPOSITORY" >$BASEDIR/setup/v_001/.SsmDepot
+#
+# install and publish packages
+#
+ssm install -p ssm-marker_1.0_all --skipOnInstalled -d $BASEDIR/setup/ssm_8.11 -y 
+ssm publish -p ssm-marker_1.0_all --skipOnPublished -d $BASEDIR/setup/ssm_8.11 -y 
+ssm install -p 00000-dot-profile_1.0_multi --skipOnInstalled -d $BASEDIR/setup/v_001 -y 
+ssm publish -p 00000-dot-profile_1.0_multi --skipOnPublished -d $BASEDIR/setup/v_001 -y 
+ssm install -p zzzzz-dot-profile_1.0_multi --skipOnInstalled -d $BASEDIR/setup/v_001 -y 
+ssm publish -p zzzzz-dot-profile_1.0_multi --skipOnPublished -d $BASEDIR/setup/v_001 -y 
+echo EC_ARCH=$EC_ARCH ARCH=$ARCH BASE_ARCH=$BASE_ARCH
+ssm install -p dot-profile-setup_1.0_multi --skipOnInstalled -d $BASEDIR/setup/v_001 -y 
+ssm publish -p dot-profile-setup_1.0_multi --skipOnPublished -d $BASEDIR/setup/v_001 -y 
+ssm install -p tool-libs_1.0_multi --skipOnInstalled -d $BASEDIR/setup/v_001 -y 
+ssm publish -p tool-libs_1.0_multi --skipOnPublished -d $BASEDIR/setup/v_001 -y 
+ssm install -p ssm-wrappers_1.0.u_multi --skipOnInstalled -d $BASEDIR/setup/v_001 -y 
+ssm publish -p ssm-wrappers_1.0.u_multi --skipOnPublished -d $BASEDIR/setup/v_001 -y 
+ssm install -p shortcut-tools_1.0_all --skipOnInstalled -d $BASEDIR/setup/v_001 -y 
+#ssm install -p ord-soumet_1.xx.u_all --skipOnInstalled -d $BASEDIR/setup/v_001 -y 
+#ssm publish -p ord-soumet_1.xx.u_all --skipOnPublished -d $BASEDIR/setup/v_001 -y 
+#
+# register ssm 8.11 as a subdomain of setup domain
+#
+ssm registerd -D $BASEDIR/setup/ssm_8.11 -d $BASEDIR/setup/v_001 --force --verbose
+# rajouter le code pour arranger le masque des ACL le cas echeant
+cd $BASEDIR/
+#############################################
+#exit 0
+#############################################
+#
+# create tools, libs, atm domains
+#
+set -x
+mkdir -p atm libs tools
+mkdir tools/run-tools
+must_be_dir tools/run-tools
+ssm created -d $BASEDIR/tools/run-tools --defaultRepositorySource $REPOSITORY -L runtime_tools -y
+#for Package in afsisio_1.0u_all  armnlib_1.0u_all env-climat_1.0u_all env-configs_1.0u_all base_1.0u_linux24-x86-64 env-climat_1.0u_linux24-x86-64 env-utils_1.0u_all
+for Package in afsisio_1.0u_all  armnlib_1.0u_all env-climat_1.0u_all env-configs_1.0u_all env-utils_1.0u_all
+do
+  ssm install -p ${Package} --skipOnInstalled -d $BASEDIR/tools/run-tools -y
+  ssm publish -p ${Package} --skipOnPublished -d $BASEDIR/tools/run-tools -y
+done
+#mkdir tools/mpi-tools && ssm created -d $BASEDIR/tools/mpi-tools --defaultRepositorySource $REPOSITORY -L mpi_tools -y
+mkdir tools/dev-tools 
+must_be_dir tools/dev-tools 
+ssm created -d $BASEDIR/tools/dev-tools --defaultRepositorySource $REPOSITORY -L development_tools -y
+#for Package in env-utils_1.0_all code-tools_1.0_all env-utils_1.0_linux24-x86-64 fsplit_1.0_linux24-i386 \
+for Package in env-utils_1.0_all code-tools_1.0_all env-utils_1.0_linux24-x86-64 \
+               r.gppf_1.0.1_multi difftools_1.0_all etagere_1.0_all misc-utils_1.0_multi 
+do
+  ssm install -p ${Package} --skipOnInstalled -d $BASEDIR/tools/dev-tools -y
+  ssm publish -p ${Package} --skipOnPublished -d $BASEDIR/tools/dev-tools -y
+done
+#mkdir tools/vis-tools && ssm created -d $BASEDIR/tools/vis-tools --defaultRepositorySource $REPOSITORY -L visualization_tools -y
+#for Package in xrec_5.x_linux24-i386
+#do
+#  ssm install -p ${Package} --skipOnInstalled -d $BASEDIR/tools/vis-tools -y
+#  ssm publish -p ${Package} --skipOnPublished -d $BASEDIR/tools/vis-tools -y
+#done
+#mkdir tools/diag-tools && ssm created -d $BASEDIR/tools/diag-tools --defaultRepositorySource $REPOSITORY -L diagnostic_tools -y
+#for Package in rdiag_0.0u_linux24-x86-64
+#do
+#  ssm install -p ${Package} --skipOnInstalled -d $BASEDIR/tools/diag-tools -y
+#  ssm publish -p ${Package} --skipOnPublished -d $BASEDIR/tools/diag-tools -y
+#done
+mkdir libs/hpcs-dev
+must_be_dir libs/hpcs-dev
+ssm created -d $BASEDIR/libs/hpcs-dev --defaultRepositorySource $REPOSITORY -L hpcs_libraries -y
+for Package in perf-tools_1.0_multi # rpncomm_x.y.z_multi
+do
+  ssm install -p ${Package} --skipOnInstalled -d $BASEDIR/libs/hpcs-dev -y
+  ssm publish -p ${Package} --skipOnPublished -d $BASEDIR/libs/hpcs-dev -y
+done
+mkdir libs/rmnlib-dev
+must_be_dir libs/rmnlib-dev
+ssm created -d $BASEDIR/libs/rmnlib-dev --defaultRepositorySource $REPOSITORY -L rmnlib_libraries -y
+for  Package in environment-helpers_1.0u_all rmnlib-git_1.0_multi massvp4_1.0_multi rpncomm-git_1.0_multi \
+                rmnlib_016.x_linux26-x86-64 pyrpn_2.0u_linux26-x86-64 
+do
+  ssm install -p ${Package} --skipOnInstalled -d $BASEDIR/libs/rmnlib-dev -y
+  ssm publish -p ${Package} --skipOnPublished -d $BASEDIR/libs/rmnlib-dev -y
+done
+#
+cd $BASEDIR
+echo 'export RPN_TEMPLATE_LIBS=$ARMNLIB' > setup/v_001/dot-profile-setup_1.0_multi/notshared/data/ssm_domains/templates.sh
+echo "export EC_ARCH=\${BASE_ARCH}${ARCH_DELIMITER:-/}gfortran" > setup/v_001/dot-profile-setup_1.0_multi/notshared/data/ssm_domains/fortran.sh
+echo 'export ARCH=${EC_ARCH}' >>setup/v_001/dot-profile-setup_1.0_multi/notshared/data/ssm_domains/fortran.sh
+echo 'export COMP_ARCH=gfortran' >>setup/v_001/dot-profile-setup_1.0_multi/notshared/data/ssm_domains/fortran.sh
+echo 'fortran dev-tools run-tools rmnlib-dev templates hpcs-dev' >setup/v_001/dot-profile-setup_1.0_multi/notshared/data/ssm_domains/all.bndl
+echo "export EC_ARCH=\${BASE_ARCH}_gfortran" > setup/v_001/dot-profile-setup_1.0_multi/notshared/data/ssm_domains/old_arch.sh
+echo 'export ARCH=${EC_ARCH}' >>setup/v_001/dot-profile-setup_1.0_multi/notshared/data/ssm_domains/old_arch.sh
+cd
+rm -f ECssm
+ln -s $BASEDIR/setup/v_001 ECssm
+. $BASEDIR/setup/v_001/multi/bin/.profile 2>/dev/null
+resolver=$(readlink -e $(which s.resolve_ssm_shortcuts))
+cp ${resolver}_cygwin ${resolver}  # user resolver with bash rather than resolver with ksh93
+#
+#. $BASEDIR/setup/v_001/multi/bin/.profile 2>/dev/null
+cd $BASEDIR
+repository/FIX_SHORTCUTS
+repository/FIX_CACHE
+repository/FIX_SSMDEPOT
+######################################
+#return
+######################################
+# compile rmnlib v 15.2
+. s.ssmuse.dot all
+export EC_ARCH=${BASE_ARCH}/gfortran    # use new arch to compile
+export ARCH=${BASE_ARCH}/gfortran
+export OLD_EC_ARCH=${BASE_ARCH}_gfortran
+cd $BASEDIR/libs/rmnlib-dev/rmnlib-git_1.0_multi/lib   # prepare to publish both as new arch and old arch
+mkdir -p ${EC_ARCH}
+rm -f ${OLD_EC_ARCH} && ln -s ./${EC_ARCH}/. ${OLD_EC_ARCH}
+cd $BASEDIR/libs/rmnlib-dev/rmnlib-git_1.0_multi/include   # prepare to publish both as new arch and old arch
+mkdir -p ${EC_ARCH}
+rm -f ${OLD_EC_ARCH} && ln -s ./${EC_ARCH}/. ${OLD_EC_ARCH}
+cd $BASEDIR/libs/rmnlib-dev/rmnlib-git_1.0_multi/git-librmn || exit 1
+git checkout rmnlib_015.2_mfv || exit 1
+# apply patches for older gfortran compiler if present
+if [[ -d ${HOME}/RMNLIB-patches ]] ; then
+  find ${HOME}/RMNLIB-patches -type f -exec touch {} \;
+  rsync -aruvx ${HOME}/RMNLIB-patches/. .
+fi
+rm -f $EC_ARCH/librmn_015.2.a
+make SHELL=/bin/bash clean
+make SHELL=/bin/bash distclean
+make SHELL=/bin/bash
+[[ -f $EC_ARCH/librmn_015.2.a ]] || exit 1
+#  make shared library
+pushd $EC_ARCH/
+mkdir temp
+must_be_dir temp
+cd temp
+ar x ../librmn_015.2.a
+rm whiteboard_omp.o *ccard*.o
+s.f90 -shared -o ../librmnshared_015.2.so *.o
+cd ..
+rm -rf temp
+popd
+#
+mkdir -p ../lib/$EC_ARCH
+cp $EC_ARCH/librmn_015.2.a ../lib/$EC_ARCH/librmn_015.2.a
+cp $EC_ARCH/librmnshared_015.2.so ../lib/$EC_ARCH/librmnshared_015.2.so
+cd $BASEDIR/libs/rmnlib-dev
+s.ssm-publish rmnlib-git_1.0_multi -y
+######################################
+# compile rmnlib v 16
+. s.ssmuse.dot all
+export EC_ARCH=${BASE_ARCH}/gfortran    # use new arch to compile
+export ARCH=${BASE_ARCH}/gfortran
+export OLD_EC_ARCH=${BASE_ARCH}_gfortran
+cd $BASEDIR/libs/rmnlib-dev/rmnlib_016.x_linux26-x86-64/lib   # prepare to publish both as new arch and old arch
+mkdir -p ${EC_ARCH}
+rm -f ${OLD_EC_ARCH} && ln -s ./${EC_ARCH}/. ${OLD_EC_ARCH}
+cd $BASEDIR/libs/rmnlib-dev/rmnlib_016.x_linux26-x86-64/include   # prepare to publish both as new arch and old arch
+mkdir -p ${EC_ARCH}
+rm -f ${OLD_EC_ARCH} && ln -s ./${EC_ARCH}/. ${OLD_EC_ARCH}
+cd $BASEDIR/libs/rmnlib-dev/rmnlib_016.x_linux26-x86-64/ || exit 1
+git clone https://github.com/armnlib/librmn
+cd librmn
+git checkout -b temp Release-016.2
+make
+#  make shared library
+pushd $EC_ARCH/
+mkdir temp
+must_be_dir temp
+cd temp
+ar x ../librmn_016.2.a
+rm whiteboard_omp.o *ccard*.o
+s.f90 -shared -o ../librmnshared_016.2.so *.o
+cd ..
+rm -rf temp
+popd
+#
+mv  Linux_x86-64/gfortran/librmn_016.2.a  $BASEDIR/libs/rmnlib-dev/rmnlib_016.x_linux26-x86-64/lib/${EC_ARCH}/. || exit 1
+mv  Linux_x86-64/gfortran/librmnshared_016.2.so $BASEDIR/libs/rmnlib-dev/rmnlib_016.x_linux26-x86-64/lib/${EC_ARCH}/. || exit 1
+cd $BASEDIR/libs/rmnlib-dev
+s.ssm-publish rmnlib_016.x_linux26-x86-64 -y
+###############################################################
+# compile massvp4
+cd $BASEDIR/libs/rmnlib-dev/massvp4_1.0_multi/lib  # prepare to publish both as new arch and old arch
+mkdir -p ${EC_ARCH}
+rm -f ${OLD_EC_ARCH} && ln -s ./${EC_ARCH}/. ${OLD_EC_ARCH}
+cd $BASEDIR/libs/rmnlib-dev/massvp4_1.0_multi/include  # prepare to publish both as new arch and old arch
+mkdir -p ${EC_ARCH}
+rm -f ${OLD_EC_ARCH} && ln -s ./${EC_ARCH}/. ${OLD_EC_ARCH}
+cd $BASEDIR/libs/rmnlib-dev/massvp4_1.0_multi/src
+make updlib
+cd $BASEDIR/libs/rmnlib-dev
+s.ssm-publish massvp4_1.0_multi -y
+###############################################################
+#compile and publish libhpcsperf
+cd $BASEDIR/libs/hpcs-dev/perf-tools_1.0_multi/lib   # prepare to publish both as new arch and old arch
+mkdir -p ${EC_ARCH}
+rm -f ${OLD_EC_ARCH} && ln -s ./${EC_ARCH}/. ${OLD_EC_ARCH}
+cd $BASEDIR/libs/hpcs-dev/perf-tools_1.0_multi/include   # prepare to publish both as new arch and old arch
+mkdir -p ${EC_ARCH}
+rm -f ${OLD_EC_ARCH} && ln -s ./${EC_ARCH}/. ${OLD_EC_ARCH}
+cd $BASEDIR/libs/hpcs-dev/perf-tools_1.0_multi/src/TIMING
+make clean
+make library
+make install
+cd $BASEDIR/libs/hpcs-dev
+s.ssm-publish perf-tools_1.0_multi -y
+###############################################################
+# if mpi is installed, generate rpn_comm
+if [[ -z ${NO_RPN_COMM} ]] ; then
+  cd $BASEDIR/libs/rmnlib-dev/rpncomm-git_1.0_multi/lib   # prepare to publish both as new arch and old arch
+  mkdir -p ${EC_ARCH}
+  rm -f ${OLD_EC_ARCH} && ln -s ./${EC_ARCH}/. ${OLD_EC_ARCH}
+  cd $BASEDIR/libs/rmnlib-dev/rpncomm-git_1.0_multi/include   # prepare to publish both as new arch and old arch
+  mkdir -p ${EC_ARCH}
+  rm -f ${OLD_EC_ARCH} && ln -s ./${EC_ARCH}/. ${OLD_EC_ARCH}
+  cd $BASEDIR/libs/rmnlib-dev/rpncomm-git_1.0_multi/rpncomm/rpncomm
+  git checkout branch_4.5.16
+  git pull
+  cat RPN_COMM_version.inc
+  make clean
+  make itf
+  make all
+  make stublib
+  cd ..
+  rsync -aruvxlH lib include ../.
+  cd $BASEDIR/libs/rmnlib-dev
+  s.ssm-publish rpncomm-git_1.0_multi -y
+fi
+###############################################################
+# final check
+. s.ssmuse.dot all
+echo ===== final check for ${EC_ARCH} =====
+echo ===== rmn_015.2 =====
+ar tv  $(s.locate --lib rmn_015.2) | wc -l
+s.locate --lib rmnshared_015.2
+echo "===== rmn_016.2 (expecting 281 entries in rmnlib_016.2) ====="
+ar tv  $(s.locate --lib rmn_016.2) | wc -l
+s.locate --lib rmnshared_016.2
+echo ===== massvp4 =====
+ar tv  $(s.locate --lib massvp4 ) | wc -l
+echo ===== hpcsperf =====
+ar tv  $(s.locate --lib hpcsperf ) | wc -l
+if [[ -z ${NO_RPN_COMM} ]] ; then
+  echo ===== rpn_comm =====
+  ar tv  $(s.locate --lib rpn_comm ) | wc -l
+fi
+###############################################################
+. s.ssmuse.dot all old_arch
+echo ===== final check for ${EC_ARCH} =====
+echo ===== rmn_015.2 =====
+ar tv  $(s.locate --lib rmn_015.2) | wc -l
+s.locate --lib rmnshared_015.2
+echo "===== rmn_016.2 (expecting 281 entries in rmnlib_016.2) ====="
+ar tv  $(s.locate --lib rmn_016.2) | wc -l
+s.locate --lib rmnshared_016.2
+echo ===== massvp4 =====
+ar tv  $(s.locate --lib massvp4 ) | wc -l
+echo ===== hpcsperf =====
+ar tv  $(s.locate --lib hpcsperf ) | wc -l
+if [[ -z ${NO_RPN_COMM} ]] ; then
+  echo ===== rpn_comm =====
+  ar tv  $(s.locate --lib rpn_comm ) | wc -l
+fi
+###############################################################
+exit 0
+###############################################################
