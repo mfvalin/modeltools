@@ -8,30 +8,44 @@
 #define VSHIFT 3
 #define VMASK 7
 
-#define IEEE_EXP(a) ( (a>>23) & 0xFF )
+// IEEE 754 components
+#define IEEE32_EXP(a) ( ((unsigned int) (a) >> 23) & 0xFF )
+#define IEEE32_SGN(a) ( ((unsigned int) (a) >> 31) )
+#define IEEE32(sign,exp,mantissa) ( (sign << 31) | ( (exp+127) << 23) | ((mantissa) & 0x7FFFFF) )
+// minmax
 #define MAX(a,b) ( (a > b) ? (a) : (b) )
+#define MIN(a,b) ( (a < b) ? (a) : (b) )
+// shuffle control
 #define SELECT(a,b,c,d) ( a + (b<<2) + (c<<4) + (d<<6) )
+// endian swap macros
+#define ESWAP8x4_128(xmm)                    // 8 in 32
+#define ESWAP8x4_256(ymm)
+#define ESWAP16x2_128(xmm)                    // 16 in 32
+#define ESWAP16x2_256(ymm)
+#define ESWAP8x2_128(xmm)                    // 8 in 16
+#define ESWAP8x2_256(ymm)
+
 
 // get min value, max value, very rough average of 32 bit float array
-// the average is only correct if n is a multiple of 2 * VLEN
+// the average is only ~OK if n is a multiple of 2 * VLEN
 // otherwise some points are added twice (we sum 2* np2 points)
-void MinMaxRoughMean_4(float *z_in, short *quant, int n, int nbits, float *Max, float *Min, float *Avg)
+void FloatFastQuantizeLinear(float *z_in, short *quant, int n, int nbits, float *Max, float *Min, float *Avg, float *Rescl)
 {
-  int i, j, np, np2, offset, maxexp;
-  float scale;
+  int i, j, np, np2, offset, maxexp, izero, mask;
+  float scale, fzero;
   float *z_in0 = z_in;
 #if defined(__SSE__)
   __m128  x0, x1, x2, xxmin, xxmax, xxsum, xxrng, xxsca;
   __m256  y0, yymin, yysca, point5;
   __m128i ix0, ix1;
-  __m256i iy0;
+  __m256i iy0, yymsk;
 #else
   float tmax, tmin, tsum, vsum[VLEN], vmax[VLEN], vmin[VLEN];
 #endif
   union {
     unsigned int i;
     float f;
-  } xmax, xmin, xrng;
+  } xmax, xmin, xrng, xscl;
 // initialize min, max, sum
 #if defined(__SSE__)
   xxmin  = _mm_loadu_ps(&z_in[ 0]) ;  // min = max = 8 first elements of array
@@ -105,17 +119,32 @@ void MinMaxRoughMean_4(float *z_in, short *quant, int n, int nbits, float *Max, 
   *Min  = tmin;
   *Avg  = tsum / np ;
 #endif
+// code to quantize floating poing into 16 bit tokens (nbits significant bits)
+  mask = ~ (-1 << nbits) ;
   xmax.f = *Max;
   xmin.f = *Min;
   xrng.f = xmax.f - xmin.f;
-  maxexp = MAX( IEEE_EXP(xmax.i) , IEEE_EXP(xmin.i) );
-  maxexp = MAX( IEEE_EXP(xrng.i) , maxexp);
-  scale = 1.0;
-//   printf("max min range is %f %f %f \n",xmax.f,xmin.f,xrng.f);
+  maxexp = MAX( IEEE32_EXP(xmax.i) , IEEE32_EXP(xmin.i) );
+  maxexp = MAX( IEEE32_EXP(xrng.i) , maxexp);
+  xscl.i = IEEE32(0,(nbits-1) - (maxexp-127),0);
+  scale = xscl.f;   // TO BE FIXED, used to convert floats to range  0 <= X < 2**nbits -1 
+  xscl.i = IEEE32(0,(maxexp-127) - (nbits-1),0); // inverse scaling factor
+  *Rescl = xscl.f;
+  if(IEEE32_SGN(xmax.i) + IEEE32_SGN(xmin.i) == 1 ) {   // min < 0 and max >0
+    izero = (0 - *Min) * scale + .5;
+    fzero = *Min + izero * *Rescl;
+    *Min -= fzero ;
+//     izero = (0 - *Min) * scale + .5;
+//     printf("rescaled fzero = %f, from %f, new min = %f\n",*Min + izero / scale,fzero,*Min);
+  }
+//   printf("max min range maxexp scale mask is %f %f %f %i %f %8.8x\n",xmax.f,xmin.f,xrng.f,maxexp-127,scale,mask);
 #if defined(__AVX2__) && defined(__FMA__)
   yysca = _mm256_set1_ps(scale) ;
-  point5 = _mm256_set1_ps(.5) ;
+  point5 = _mm256_set1_ps(0.5) ;
   yymin = _mm256_set1_ps(xmin.f) ;
+  ix0 = (__m128i) _mm_broadcast_ss( (void *) &mask ) ;
+  yymsk = _mm256_inserti128_si256(yymsk,ix0,0) ;
+  yymsk = _mm256_inserti128_si256(yymsk,ix0,1) ;
   for (i=0 ; i<np2 ; i+=VLEN){
     x0    = _mm_loadu_ps(&z_in0[i]) ;          // stream from beginning
     x1    = _mm_loadu_ps(&z_in0[i+offset]) ;   // stream from "midpoint"
@@ -124,11 +153,12 @@ void MinMaxRoughMean_4(float *z_in, short *quant, int n, int nbits, float *Max, 
     y0    = _mm256_sub_ps(y0,yymin) ;          // x - min
     y0    = _mm256_fmadd_ps(y0,yysca,point5) ; // * scale + .5
     iy0   = _mm256_cvttps_epi32(y0) ;          // to integer (lower 16 bits used only)
-    ix0   = _mm256_extracti128_si256(iy0,0) ;
-    ix1   = _mm256_extracti128_si256(iy0,1) ;
-    ix0   = _mm_packus_epi32(ix0,ix1) ;        // pack 32 -> 16 ix0 and ix1 , then stuff both into ix0 (ix1 in upper part)
-    _mm_storel_epi64((void *)&quant[i],ix0) ;
-    _mm_storeh_pi((void *)&quant[i+offset],(__m128)ix0) ;
+    iy0   = _mm256_min_epi32(iy0,yymsk) ;
+    ix0   = _mm256_extracti128_si256(iy0,0) ;  // lower 128 bits
+    ix1   = _mm256_extracti128_si256(iy0,1) ;  // upper 128 bits
+    ix0   = _mm_packus_epi32(ix0,ix1) ;        // pack 32 -> 16 ix0 and ix1 , then stuff both back into ix0 (ix1 in upper part)
+    _mm_storel_epi64((void *)&quant[i],ix0) ;              // store lower 64 bits
+    _mm_storeh_pi((void *)&quant[i+offset],(__m128)ix0) ;  // store upper 64 bits
 #else
   for (i=0 ; i<np2 ; i+=VLEN){
     for(j=0 ; j<VLEN ; j++){
@@ -151,7 +181,7 @@ main()
   float a[ASIZE+10];
   short int ia[ASIZE+10];
   int nbits = 16;
-  float mi, ma, av, range, scal, mi0, fac;
+  float mi, ma, av, range, scal, mi0, fac, rescl;
   int ima, imi, exp;
   union {
     unsigned int i;
@@ -223,14 +253,14 @@ main()
   for (i=1 ; i<ASIZE ; i++){
     a[i] = a[i-1]*1.01;
   }
-  a[4] = -1.6 ; a[7] = 1.9 ;
+  a[4] = -8.7 ; a[7] = 65535.99 + a[4] ;
   printf("a[1,4,7,ASIZE-1] %8f %8f %8f %8f\n",a[1],a[4],a[7],a[ASIZE-2]);
-  MinMaxRoughMean_4(&a[1],&ia[1],ASIZE-2,nbits,&ma,&mi,&av);
-  printf("mi=%f, av=%f,ma=%f\n",mi,av,ma);
+  FloatFastQuantizeLinear(&a[1],&ia[1],ASIZE-2,nbits,&ma,&mi,&av,&rescl);
+  printf("mi=%f, av=%f, ma=%f, rescl=%f\n",mi,av,ma,rescl);
   av = 0;
   for (i=1 ; i<ASIZE-1 ; i++) { av = av + a[i] ; } ;
   av = av / (ASIZE-2) ;
-  printf("expected mi=%f, expected av=%f, expected ma=%f\n",-1.2,av,65434.7);
+  printf("expected mi=%f, expected av=%f, expected ma=%f\n",-1.2,av,a[7]);
   printf("a[1,4,7,ASIZE-2] %8f %8f %8f %8f\n",a[1],a[4],a[7],a[ASIZE-2]);
   printf("ia[1,4,7,ASIZE-2] %8hu %8hu %8hu %8hu\n",ia[1],ia[4],ia[7],ia[ASIZE-2]);
 
