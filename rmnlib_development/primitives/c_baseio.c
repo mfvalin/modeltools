@@ -22,6 +22,7 @@
 #define _LARGEFILE64_SOURCE
 #define _FILE_OFFSET_BITS 64
 
+#include <stdint.h>
 #include <rpnmacros.h>
 #include <ctype.h>
 #include <string.h>
@@ -62,12 +63,8 @@
 #endif
 
 #define FNOM_OWNER
-#include "../INTRALIB_INCLUDES/fnom.h"
-#include "wafile.h"
-
-#if defined (NEC)
-#define tell(fd) lseek(fd,0,1)
-#endif
+#include "../INTRALIB_INCLUDES/fnom_64.h"
+#include "wafile_64.h"
 
 #if defined(__linux__) || defined(__AIX__)
 #define tell64(fd) lseek64(fd,0,1)
@@ -180,7 +177,7 @@ void static dump_file_entry(int i)
               FGFDT[i].attr.unf?"+UNF":"+FMT",
               FGFDT[i].attr.read_only?"+R/O":"+R/W",
               FGFDT[i].attr.old?"+OLD":"",
-              FGFDT[i].attr.notpaged?"+NOT PAGED":"",
+              FGFDT[i].attr.paged?"+PAGED":"+NOT PAGED",
               FGFDT[i].attr.scratch?"+SCRATCH":"");
       fprintf(stderr,"\n");
 }
@@ -242,7 +239,7 @@ static void reset_file_entry(int i){
    FGFDT[i].attr.read_only = 0;
    FGFDT[i].attr.old       = 0;
    FGFDT[i].attr.scratch   = 0;
-   FGFDT[i].attr.notpaged  = 0;
+   FGFDT[i].attr.paged     = 0;
    FGFDT[i].attr.write_mode= 0;
    FGFDT[i].attr.remote    = 0;    /* remote file, socket wa file */
 }
@@ -292,12 +289,15 @@ static int find_file_entry(char *caller, int iun)
 *NOTES: If name is all in upper case it will be converted to lower case.
 *       c_fnom is intended to be called from C.
 *       fnom is intended to be called from FORTRAN.
+* 
+*       fnom is now a "honest" Fortran function calling c_fnom
 *
 *AUTHOR: Mario Lepine - RPN - nov 1995
 * 
-*Revision - mars 1999 - Bug fix allocation pour filename
+*Revision - mars  1999 - Bug fix allocation pour filename
 *           avril 2008 - Correction pour reconnaissance de iun=6,output iun=5,input
-*           sept 2008 - Correction du nom de fichier passe pour fichier cmcarc remote 
+*           sept  2008 - Correction du nom de fichier passe pour fichier cmcarc remote 
+*           may   2017 - new options, fnom moved from C to Fortran
 *
 */
 int c_fnom(int *iun,char *nom,char *type,int lrec)
@@ -420,7 +420,7 @@ int c_fnom(int *iun,char *nom,char *type,int lrec)
   FGFDT[i].attr.unf=0;
   FGFDT[i].attr.read_only=0;
   FGFDT[i].attr.old=0;
-  FGFDT[i].attr.notpaged=0;
+  FGFDT[i].attr.paged=0;
   FGFDT[i].attr.scratch = 0;
   FGFDT[i].attr.pipe = 0;
   FGFDT[i].attr.remote=0;
@@ -446,6 +446,7 @@ int c_fnom(int *iun,char *nom,char *type,int lrec)
   if (strstr(type,"D77")    || strstr(type,"d77"))   { FGFDT[i].attr.ftn=1;
                                                        FGFDT[i].attr.rnd=1; }
   if (strstr(type,"SCRATCH") || strstr(type,"scratch")) FGFDT[i].attr.scratch=1;
+  if (strstr(type,"PAGED")   || strstr(type,"paged"))   FGFDT[i].attr.paged=1;
   if (strstr(type,"REMOTE") || strstr(type,"remote")) { FGFDT[i].attr.remote=1; }
     
   if (!FGFDT[i].attr.std && !FGFDT[i].attr.burp && 
@@ -606,7 +607,7 @@ int c_fnom(int *iun,char *nom,char *type,int lrec)
         FGFDT[i].eff_file_size = dimm / sizeof(word);
         close(ier);
         }
-     ier = f77name(qqqf7op)(&iun77,FGFDT[i].file_name,&lrec77,&rndflag77,&unfflag77,&lmult,(F2Cl) lng);
+     ier = qqq_f7op(iun77,FGFDT[i].file_name,lrec77,rndflag77,unfflag77,lmult,lng);
   }
   else if (FGFDT[i].attr.stream || FGFDT[i].attr.std || FGFDT[i].attr.burp || FGFDT[i].attr.wa ||
           (FGFDT[i].attr.rnd && !FGFDT[i].attr.ftn) ) {
@@ -620,36 +621,6 @@ int c_fnom(int *iun,char *nom,char *type,int lrec)
   if (ier < 0) junk=c_fclos(liun);
   return(ier<0?-1:0);
 }  
-
-ftnword f77name(fnom)(ftnword *iun,char *nom,char *type,ftnword *flrec,F2Cl l1,F2Cl l2)
-{
-   int lrec,lng,tmp,liun=*iun;
-   char filename[1025],filetype[257];
-
-   lrec = *flrec;
-
-   lng = (l1 <= 1024) ? l1 : 1024;
-   strncpy(filename,nom,lng);        /*  copy filename into a C string  */
-   filename[lng] = '\0';
-
-   while ((filename[lng-1] == ' ') && (lng > 1)) {  /* strip trailing blanks */
-      lng--;
-      filename[lng] = '\0';
-      }
-
-   lng = (l2 <= 256) ? l2 : 256;
-   strncpy(filetype,type,lng);   /*  copy file type into a C string  */
-   filetype[lng] = '\0';
-
-   while ((filetype[lng-1] == ' ') && (lng > 1)) { /* strip trailing blanks */
-      lng--;
-      filetype[lng] = '\0';
-      }
-
-   tmp=(c_fnom(&liun,filename,filetype,lrec));
-   if(*iun==0) *iun = liun;
-   return (tmp);
-}
 
 
 /****************************************************************************

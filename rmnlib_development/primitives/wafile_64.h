@@ -6,19 +6,13 @@
 #define new_age_rd(age) (age+256)
 #define new_age_wr(age) (age+512)
 #define decay(age)      (age - (age >> 2))
-#if defined (NEC)
-/* long long llseek(); */
-#define LLSK long long
-#define LSEEK llseek
-#else
 #define LLSK long long
 #define LSEEK lseek64
-#endif
-#define WSEEK(fdesc,offst,posi)\
+#define WSEEK(fd,offst,posi)\
  {\
   LLSK local_off;\
   local_off = offst;\
-  LSEEK(fdesc,local_off * sizeof(word),posi);\
+  LSEEK(fd,local_off * sizeof(word),posi);\
  }
 
 #define CMCARC_SIGN "CMCARCHS"  /* signature du debut d'un fichier cmcarc */
@@ -26,8 +20,8 @@
 
 typedef struct {
    word *page_adr;
-   int wa0;
-   int walast;
+   uint64_t wa0;
+   uint64_t walast;
    int access_count;
    int last_access;
    int touch_flag;
@@ -38,7 +32,7 @@ typedef struct {
    int file_desc;
    int nb_page_in_use;
    PAGEINFO page[MAXPAGES];
-   long long offset;
+   uint64_t offset;
    } FILEINFO;
 
 typedef struct {
