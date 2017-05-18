@@ -886,12 +886,12 @@ ftnword f77name(waopen2)(ftnword *fiun)
    return(c_waopen2(iun));
 }
 
-void f77name(waopen)(ftnword *fiun)
-{
-   int iun;
-   iun = *fiun;
-   c_waopen(iun);
-}
+// void f77name(waopen)(ftnword *fiun)
+// {
+//    int iun;
+//    iun = *fiun;
+//    c_waopen(iun);
+// }
          
 /****************************************************************************
 * C _ W A C L O S ,   C _ W A C L O S 2 ,   W A C L O S ,   W A C L O S 2   *
@@ -930,12 +930,12 @@ ftnword f77name(waclos2)(ftnword *fiun)
    iun = *fiun;
    return(c_waclos2(iun));
 }
-void f77name(waclos)(ftnword *fiun)
-{
-   int iun;
-   iun = *fiun;
-   iun=c_waclos2(iun);
-}
+// void f77name(waclos)(ftnword *fiun)
+// {
+//    int iun;
+//    iun = *fiun;
+//    iun=c_waclos2(iun);
+// }
 
 
 /****************************************************************************
@@ -993,9 +993,9 @@ int c_wawrit2(int iun,void *buf,unsigned int adr,int nmots)
    if (*little_endian) swap_buffer_endianness(bufswap,nmots)
    return( nmots>0 ? nmots : 0);
 }
-void f77name(wawrit)(ftnword *fiun,void *buf,unsigned ftnword *fadr,ftnword *fnmots){
-     f77name(wawrit2)(fiun,buf,fadr,fnmots);
-     }
+// void f77name(wawrit)(ftnword *fiun,void *buf,unsigned ftnword *fadr,ftnword *fnmots){
+//      f77name(wawrit2)(fiun,buf,fadr,fnmots);
+//      }
 ftnword f77name(wawrit2)(ftnword *fiun,void *buf,unsigned ftnword *fadr,ftnword *fnmots)
 {
    int iun,adr,nmots;
@@ -1064,11 +1064,11 @@ int c_waread2(int iun,void *buf,unsigned int adr,int nmots)
    if (*little_endian) swap_buffer_endianness(bufswap,nmots)
    return(nmots);
 }
-void f77name(waread)(ftnword *fiun,void *buf,unsigned ftnword *fadr,
-                     ftnword *fnmots)
-{
-  f77name(waread2)(fiun,buf,fadr,fnmots);
-}
+// void f77name(waread)(ftnword *fiun,void *buf,unsigned ftnword *fadr,
+//                      ftnword *fnmots)
+// {
+//   f77name(waread2)(fiun,buf,fadr,fnmots);
+// }
 ftnword f77name(waread2)(ftnword *fiun,void *buf,unsigned ftnword *fadr,
                          ftnword *fnmots)
 {

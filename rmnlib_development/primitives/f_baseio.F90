@@ -107,4 +107,166 @@
     LONGUEUR = LNG
     RETURN
   END
+! ====================================================
+!     openda/closda readda/writda/checda
+!     "asynchronous" random access by block routines
+!     (the current implementation is SYNCHRONOUS)
+! IUN(IN)     : fortran unit number
+! BUF(IN/OUT) : array to write from or read into
+! NS          : number of "sectors" (sector = 512 bytes)
+! IS          : address of first "sector" for transfer
+!               file starts at sector #1
+! ====================================================
+subroutine openda(iun)
+  implicit none
+  integer, intent(IN) :: iun
+
+  call waopen(iun)
+end subroutine openda
+
+subroutine readda(iun,buf,ns,is)
+  implicit none
+  integer, intent(IN) :: iun, ns, is
+  integer, intent(OUT), dimension(512,ns) :: buf
+  call waread(iun,buf,(is-1)*512+1,ns*512)
+end subroutine readda
+
+subroutine writda(iun,buf,ns,is)
+  implicit none
+  integer, intent(IN) :: iun, ns, is
+  integer, intent(IN), dimension(512,ns) :: buf
+
+  call wawrit(iun,buf,(is-1)*512+1,ns*512)
+end subroutine writda
+
+subroutine checda(iun)
+  use ISO_C_BINDING
+  implicit none
+  interface
+    subroutine cchecda(iun) bind(C,name='c_checda')
+      import
+      integer(C_INT), intent(IN), value :: iun
+    end subroutine cchecda
+  end interface
+  integer, intent(IN) :: iun
+
+  call cchecda(iun)
+end subroutine checda
+
+subroutine closda(iun)
+  implicit none
+  integer, intent(IN) :: iun
+
+  call waclos(iun)
+end subroutine closda
+! ====================================================
+!  waopen/waclos waread/waread64/wawrit/wawrit64
+!   random access by word (4 bytes) routines
+!   these routines take care of endian conversion
+!   the file contents are always BIG-ENDIAN (4 bytes)
+! IUN(IN)     : fortran unit number
+! BUF(IN/OUT) : array to write from or read into
+! NMOTS(IN)   : number of "words" to read (word = 4 bytes)
+! ADR(IN)     : address of first word for transfer
+!               file starts at word #1
+! ====================================================
+subroutine waopen(iun)
+  use ISO_C_BINDING
+  implicit none
+  interface
+    subroutine cwaopen(iun) bind(C,name='c_waopen')
+      import
+      integer(C_INT), intent(IN), value :: iun
+    end subroutine cwaopen
+  end interface
+  integer, intent(IN) :: iun
+
+  call cwaopen(iun)
+end subroutine waopen
+
+subroutine waclos(iun)
+  use ISO_C_BINDING
+  implicit none
+  interface
+    subroutine cwaclos(iun) bind(C,name='c_waclos')
+      import
+      integer(C_INT), intent(IN), value :: iun
+    end subroutine cwaclos
+  end interface
+  integer, intent(IN) :: iun
+
+  call cwaclos(iun)
+end subroutine waclos
+
+subroutine waread(iun,buf,adr,nmots)
+  use ISO_C_BINDING
+  implicit none
+  interface
+    subroutine cwaread(iun,buf,adr,nmots) bind(C,name='c_waread')
+      import
+      integer(C_INT), intent(IN), value :: iun, nmots
+      integer(C_INT), intent(IN), value :: adr
+      integer(C_INT), intent(OUT), dimension(nmots) :: buf
+    end subroutine cwaread
+  end interface
+  integer, intent(IN) :: iun, nmots
+  integer, intent(IN) :: adr
+  integer, intent(OUT), dimension(nmots) :: buf
+print *,'waread, adr, nmots',adr,nmots
+  call cwaread(iun,buf,adr,nmots)
+end subroutine waread
+
+! subroutine waread64(iun,buf,adr,nmots,partition)
+!   use ISO_C_BINDING
+!   implicit none
+!   interface
+!     subroutine cwaread64(iun,buf,adr,nmots,partition) bind(C,name='c_waread64')
+!       import
+!       integer(C_INT), intent(IN), value :: iun, nmots, partition
+!       integer(C_LONG_LONG), intent(IN), value :: adr
+!       integer(C_INT), intent(OUT), dimension(nmots) :: buf
+!     end subroutine cwaread64
+!   end interface
+!   integer, intent(IN) :: iun, nmots, partition
+!   integer*8, intent(IN) :: adr
+!   integer, intent(OUT), dimension(nmots) :: buf
+! 
+!   call cwaread64(iun,buf,adr,nmots,partition)
+! end subroutine waread64
+
+subroutine wawrit(iun,buf,adr,nmots)
+  use ISO_C_BINDING
+  implicit none
+  interface
+    subroutine cwawrit(iun,buf,adr,nmots) bind(C,name='c_wawrit')
+      import
+      integer(C_INT), intent(IN), value :: iun, nmots
+      integer(C_INT), intent(IN), value :: adr
+      integer(C_INT), intent(IN), dimension(nmots) :: buf
+    end subroutine cwawrit
+  end interface
+  integer, intent(IN) :: iun, nmots
+  integer, intent(IN) :: adr
+  integer, intent(IN), dimension(nmots) :: buf
+
+  call cwawrit(iun,buf,adr,nmots)
+end subroutine wawrit
+
+! subroutine wawrit64(iun,buf,adr,nmots,partition)
+!   use ISO_C_BINDING
+!   implicit none
+!   interface
+!     subroutine cwawrit64(iun,buf,adr,nmots,partition) bind(C,name='c_wawrit64')
+!       import
+!       integer(C_INT), intent(IN), value :: iun, nmots, partition
+!       integer(C_LONG_LONG), intent(IN), value :: adr
+!       integer(C_INT), intent(IN), dimension(nmots) :: buf
+!     end subroutine cwawrit64
+!   end interface
+!   integer, intent(IN) :: iun, nmots, partition
+!   integer*8, intent(IN) :: adr
+!   integer, intent(IN), dimension(nmots) :: buf
+! 
+!   call cwawrit64(iun,buf,adr,nmots,partition)
+! end subroutine wawrit64
 

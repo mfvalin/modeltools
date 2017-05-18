@@ -32,7 +32,6 @@ int c_fretour(int iun);
 ftnword f77name(fretour)(ftnword *fiun);
 void f77name(d_fgfdt)();
 int c_fnom(int *iun,char *nom,char *type,int lrec);
-ftnword f77name(fnom)(ftnword *iun,char *nom,char *type,ftnword *flrec,F2Cl l1,F2Cl l2);
 int c_fclos(int iun);
 ftnword f77name(fclos)(ftnword *fiun);
 ftnword f77name(qqqfnom)(ftnword *iun,char *nom,char *type,ftnword *flrec,F2Cl l1,F2Cl l2);
