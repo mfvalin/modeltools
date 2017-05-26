@@ -251,13 +251,22 @@ print *,trim(acc)//'+'//trim(form)//'+'//trim(fstat)//'+'//trim(position)//'+'//
 print *,'recl =',lrec*lmult
 #endif
     if(rndflag == 1) then  ! no position nor form if random 77
-      OPEN(iun,FILE=name(1:lng),ACCESS=acc,FORM='UNFORMATTED',STATUS=fstat,ACTION=action,RECL=lrec*lmult,ERR=77)
+      if(trim(fstat) == 'SCRATCH') then
+        OPEN(iun,ACCESS='DIRECT',FORM='UNFORMATTED',STATUS='SCRATCH',ACTION=action,RECL=lrec*lmult,ERR=77)
+      else
+        OPEN(iun,FILE=name(1:lng),ACCESS='DIRECT',FORM='UNFORMATTED',STATUS='UNKNOWN',ACTION=action,RECL=lrec*lmult,ERR=77)
+      endif
     else                   ! no recl if not random 77
-      OPEN(iun,FILE=name(1:lng),ACCESS=acc,FORM=form,STATUS=fstat,POSITION=position,ACTION=action,ERR=77)
+      if(trim(fstat) == 'SCRATCH') then
+        OPEN(iun,ACCESS='SEQUENTIAL',FORM=form,STATUS='SCRATCH',POSITION=position,ACTION=action,ERR=77)
+      else
+        OPEN(iun,FILE=name(1:lng),ACCESS='SEQUENTIAL',FORM=form,STATUS='UNKNOWN',POSITION=position,ACTION=action,ERR=77)
+      endif
     endif
 !
     return
 77  continue
+print *,'error in qqqf7op_from_c'
     status = -1
     return
   end

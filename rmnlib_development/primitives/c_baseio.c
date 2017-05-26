@@ -927,30 +927,27 @@ int c_waclos2(int iun)
 *
 */
 
-void c_wawrit(int iun,void *buf,unsigned int adr,int nmots)
-{
-  c_wawrit2(iun,buf,adr,nmots);
-}
-int c_wawrit2(int iun,void *buf,unsigned int adr,int nmots)
+int c_wawrit64(int iun,void *buf,uint64_t adr64,int nmots, uint32_t options)
 {
 #define WA_HOLE 2048
    int i,ier;
    int32_t scrap[WA_HOLE];
    int32_t *bufswap = (int32_t *) buf;
+   uint32_t adr = adr64;
 
-   if ((i=find_file_entry("c_wawrit",iun)) < 0) return(i);
+   if ((i=find_file_entry("c_wawrit64",iun)) < 0) return(i);
 
    if (! FGFDT[i].open_flag) {
-      fprintf(stderr,"c_wawrit error: unit %d is not open\n",iun);
+      fprintf(stderr,"c_wawrit64 error: unit %d is not open\n",iun);
       return(-1);
       }
    if ( FGFDT[i].attr.read_only != 0 ) {
-      fprintf(stderr,"c_wawrit error: unit %d ,file= %s is READ ONLY\n",
+      fprintf(stderr,"c_wawrit64 error: unit %d ,file= %s is READ ONLY\n",
                      iun,FGFDT[i].file_name);
       return(-1);
       }
    if ( adr > FGFDT[i].file_size+WA_HOLE ) {
-      fprintf(stderr,"c_wawrit error: attempt to write beyond EOF+%d\n",WA_HOLE);
+      fprintf(stderr,"c_wawrit64 error: attempt to write beyond EOF+%d\n",WA_HOLE);
       fprintf(stderr,"                unit = %d, adr=%u > file_size=%d\n",
                      iun,adr,FGFDT[i].file_size);
       fprintf(stderr,"                filename=%s\n",FGFDT[i].file_name);
@@ -959,10 +956,20 @@ int c_wawrit2(int iun,void *buf,unsigned int adr,int nmots)
    if ( adr > FGFDT[i].file_size+1 ){
       qqcwawr(scrap,FGFDT[i].file_size+1,adr-FGFDT[i].file_size,i);
       }
-   if (*little_endian) swap_buffer_endianness(bufswap,nmots)
+   if (*little_endian) swap_buffer_endianness(bufswap,nmots)  // skip this if options contains WA_NOSAVE
    qqcwawr((int32_t *)buf,adr,nmots,i);
    if (*little_endian) swap_buffer_endianness(bufswap,nmots)
    return( nmots>0 ? nmots : 0);
+}
+int c_wawrit2(int iun,void *buf,uint32_t adr,int nmots)
+{
+  uint64_t adr64 = adr;
+  return c_wawrit64(iun, buf, adr, nmots, 0) ;
+}
+void c_wawrit(int iun,void *buf,uint32_t adr,int nmots)
+{
+  uint64_t adr64 = adr;
+  c_wawrit64(iun, buf, adr, nmots, 0) ;
 }
 
 /****************************************************************************
@@ -981,29 +988,16 @@ int c_wawrit2(int iun,void *buf,unsigned int adr,int nmots)
 *RETURNS: (only for c-waread2 and waread2) the number of words read.
 *
 */
-void c_waread(int iun,void *buf,unsigned int adr,int nmots)
-{
-  int ier, i;
-  ier = c_waread2(iun,buf,adr,nmots);
-  if (ier == -2) {
-    i = find_file_entry("c_waread",iun);
-    fprintf(stderr,
-            "c_waread error: attempt to read beyond EOF, of file %s\n",
-            FGFDT[i].file_name);
-    fprintf(stderr,"                addr = %u, EOF = %d\n",
-            adr,FGFDT[i].eff_file_size);
-  }
-
-}
-int c_waread2(int iun,void *buf,unsigned int adr,int nmots)
+int c_waread64(int iun,void *buf,uint64_t adr64,int nmots, uint32_t options)
 {
    int i,ier;
    int32_t *bufswap = (int32_t *) buf;
+   uint32_t adr = adr64;
 
-   if ((i=find_file_entry("c_waread",iun)) < 0) return(i);
+   if ((i=find_file_entry("c_waread64",iun)) < 0) return(i);
    
    if (! FGFDT[i].open_flag) {
-      fprintf(stderr,"c_waread error: unit %d is not open\n",iun);
+      fprintf(stderr,"c_waread64 error: unit %d is not open\n",iun);
       return(-1);
       }
 
@@ -1018,6 +1012,27 @@ int c_waread2(int iun,void *buf,unsigned int adr,int nmots)
    qqcward((int32_t *)buf,adr,nmots,i);
    if (*little_endian) swap_buffer_endianness(bufswap,nmots)
    return(nmots);
+}
+int c_waread2(int iun,void *buf,unsigned int adr,int nmots)
+{
+  uint64_t adr64 = adr;
+  return c_waread64(iun, buf, adr64, nmots, 0) ;
+}
+void c_waread(int iun,void *buf,unsigned int adr,int nmots)
+{
+  uint64_t adr64 = adr;
+  int ier, i;
+  ier = c_waread64(iun, buf, adr64, nmots, 0) ;
+
+  if (ier == -2) { 
+    i = find_file_entry("c_waread",iun);
+    fprintf(stderr,
+            "c_waread error: attempt to read beyond EOF, of file %s\n",
+            FGFDT[i].file_name);
+    fprintf(stderr,"                addr = %u, EOF = %d\n",
+            adr,FGFDT[i].eff_file_size);
+  }
+
 }
 
 /****************************************************************************
