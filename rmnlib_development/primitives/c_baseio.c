@@ -2376,13 +2376,13 @@ static void wa_page_write(int fd,int32_t *buf,unsigned int adr,int nmots,int ind
 *
 */
 
-static void qqcwawr(int32_t *buf,unsigned int wadr,int lnmots,int indf)
+static void qqcwawr64(int32_t *buf,uint64_t wadr,int lnmots,int indf)
 {
 
 int offset,i,adr0,nwritten,togo;
 int lng, l, lastadr, ind, statut;
 int lfd=FGFDT[indf].fd;
-long long ladr=wadr;
+uint64_t ladr=wadr;
 char *cbuf;
 
 ind = 0;
@@ -2500,6 +2500,11 @@ else {
     }
 } /* end else remote */
 }
+static void qqcwawr(int32_t *buf,unsigned int wadr,int lnmots,int indf)
+{
+  uint64_t wadr64 = wadr;
+  qqcwawr64(buf, wadr64, lnmots, indf);
+}
 
 /****************************************************************************
 *                              Q Q C W A R D                                *
@@ -2517,12 +2522,12 @@ else {
 *           in  indf    index of file in the master file table
 *
 */
-static void qqcward(int32_t *buf,unsigned int wadr,int  lnmots,int indf)
+static void qqcward64(int32_t *buf,uint64_t wadr64,int  lnmots,int indf)
 {
 int offset,i,wa0,adr0,lng,l,lastadr;
 int npages,reste,ind;
 int lfd=FGFDT[indf].fd;
-long long ladr=wadr;
+uint64_t ladr=wadr64;
 
 ind = 0;
 while ((wafile[ind].file_desc != lfd) && (ind < MAXWAFILES))
@@ -2594,6 +2599,11 @@ else {
     } /* end while */
   } /* end else */
 } /* end else */
+}
+static void qqcward(int32_t *buf,unsigned int wadr,int  lnmots,int indf)
+{
+  int64_t wadr64 = wadr;
+  qqcward64(buf, wadr64, lnmots, indf) ;
 }
 /****************************************************************************
 *                              fnom_rem_connect                             *
