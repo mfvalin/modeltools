@@ -2378,13 +2378,13 @@ static void wa_page_write(int fd,int32_t *buf,unsigned int adr,int nmots,int ind
 *
 */
 
-static void qqcwawr64(int32_t *buf,uint64_t wadr,int lnmots,int indf)
+static void qqcwawr64(int32_t *buf,uint64_t ladr,int lnmots,int indf)
 {
 
 int offset,i,adr0,nwritten,togo;
 int lng, l, lastadr, ind, statut;
 int lfd=FGFDT[indf].fd;
-uint64_t ladr=wadr;
+// uint64_t ladr=wadr;
 char *cbuf;
 
 ind = 0;
@@ -2524,12 +2524,12 @@ else {
 *           in  indf    index of file in the master file table
 *
 */
-static void qqcward64(int32_t *buf,uint64_t wadr64,int  lnmots,int indf)
+static void qqcward64(int32_t *buf,uint64_t ladr,int  lnmots,int indf)
 {
 int offset,i,wa0,adr0,lng,l,lastadr;
 int npages,reste,ind;
 int lfd=FGFDT[indf].fd;
-uint64_t ladr=wadr64;
+// uint64_t ladr=wadr64;
 
 ind = 0;
 while ((wafile[ind].file_desc != lfd) && (ind < MAXWAFILES))
