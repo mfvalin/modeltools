@@ -964,12 +964,12 @@ int c_wawrit64(int iun,void *buf,uint64_t adr64,int nmots, uint32_t options)
 int c_wawrit2(int iun,void *buf,uint32_t adr,int nmots)
 {
   uint64_t adr64 = adr;
-  return c_wawrit64(iun, buf, adr, nmots, 0) ;
+  return c_wawrit64(iun, buf, adr64, nmots, 0) ;
 }
 void c_wawrit(int iun,void *buf,uint32_t adr,int nmots)
 {
   uint64_t adr64 = adr;
-  c_wawrit64(iun, buf, adr, nmots, 0) ;
+  c_wawrit64(iun, buf, adr64, nmots, 0) ;
 }
 
 /****************************************************************************
