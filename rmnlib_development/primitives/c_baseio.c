@@ -93,8 +93,10 @@ static long long filepos(int indf);
 static int qqcopen(int indf);
 static void wa_page_read(int fd,int32_t *buf,unsigned int adr,int nmots,int indf);
 static void wa_page_write(int fd,int32_t *buf,unsigned int adr,int nmots,int indf);
-static void qqcwawr(int32_t *buf,unsigned int ladr,int lnmots,int indf);
-static void qqcward(int32_t *buf,unsigned int ladr,int  lnmots,int indf);
+// static void qqcwawr(int32_t *buf,uint32_t ladr,int lnmots,int indf);
+// static void qqcward(int32_t *buf,uint32_t ladr,int  lnmots,int indf);
+static void qqcwawr64(int32_t *buf,uint64_t ladr,int lnmots,int indf);
+static void qqcward64(int32_t *buf,uint64_t ladr,int  lnmots,int indf);
 static int32_t qqcnblk(int lfd,int indf);
 static void MOVE (int32_t *src, int32_t *dest, int nwords);
 static void ZERO ( int32_t *dest, int nwords);
@@ -933,7 +935,7 @@ int c_wawrit64(int iun,void *buf,uint64_t adr64,int nmots, uint32_t options)
    int i,ier;
    int32_t scrap[WA_HOLE];
    int32_t *bufswap = (int32_t *) buf;
-   uint32_t adr = adr64;
+   uint64_t adr = adr64;
 
    if ((i=find_file_entry("c_wawrit64",iun)) < 0) return(i);
 
@@ -954,10 +956,10 @@ int c_wawrit64(int iun,void *buf,uint64_t adr64,int nmots, uint32_t options)
       exit(1);
       }
    if ( adr > FGFDT[i].file_size+1 ){
-      qqcwawr(scrap,FGFDT[i].file_size+1,adr-FGFDT[i].file_size,i);
+      qqcwawr64(scrap,FGFDT[i].file_size+1,adr-FGFDT[i].file_size,i);
       }
    if (*little_endian) swap_buffer_endianness(bufswap,nmots)  // skip this if options contains WA_NOSAVE
-   qqcwawr((int32_t *)buf,adr,nmots,i);
+   qqcwawr64((int32_t *)buf,adr,nmots,i);
    if (*little_endian) swap_buffer_endianness(bufswap,nmots)
    return( nmots>0 ? nmots : 0);
 }
@@ -992,7 +994,7 @@ int c_waread64(int iun,void *buf,uint64_t adr64,int nmots, uint32_t options)
 {
    int i,ier;
    int32_t *bufswap = (int32_t *) buf;
-   uint32_t adr = adr64;
+   uint64_t adr = adr64;
 
    if ((i=find_file_entry("c_waread64",iun)) < 0) return(i);
    
@@ -1009,7 +1011,7 @@ int c_waread64(int iun,void *buf,uint64_t adr64,int nmots, uint32_t options)
       nmots -= (adr+nmots-1-FGFDT[i].eff_file_size);
       }
    if ( nmots == 0 ) return(0);
-   qqcward((int32_t *)buf,adr,nmots,i);
+   qqcward64((int32_t *)buf,adr,nmots,i);
    if (*little_endian) swap_buffer_endianness(bufswap,nmots)
    return(nmots);
 }
@@ -2500,11 +2502,11 @@ else {
     }
 } /* end else remote */
 }
-static void qqcwawr(int32_t *buf,unsigned int wadr,int lnmots,int indf)
-{
-  uint64_t wadr64 = wadr;
-  qqcwawr64(buf, wadr64, lnmots, indf);
-}
+// static void qqcwawr(int32_t *buf,unsigned int wadr,int lnmots,int indf)
+// {
+//   uint64_t wadr64 = wadr;
+//   qqcwawr64(buf, wadr64, lnmots, indf);
+// }
 
 /****************************************************************************
 *                              Q Q C W A R D                                *
@@ -2600,11 +2602,11 @@ else {
   } /* end else */
 } /* end else */
 }
-static void qqcward(int32_t *buf,unsigned int wadr,int  lnmots,int indf)
-{
-  int64_t wadr64 = wadr;
-  qqcward64(buf, wadr64, lnmots, indf) ;
-}
+// static void qqcward(int32_t *buf,unsigned int wadr,int  lnmots,int indf)
+// {
+//   int64_t wadr64 = wadr;
+//   qqcward64(buf, wadr64, lnmots, indf) ;
+// }
 /****************************************************************************
 *                              fnom_rem_connect                             *
 *****************************************************************************
