@@ -59,6 +59,7 @@ program print_date_range
   CALL get_command_argument(4, sym)
   sym = trim(sym)//'000000'
   read(sym,11,err=777)printable3(1),printable3(2)  ! end date in YYYYMMDD format
+  use_anal = (printable3(1) == printable1(1)) .and. (printable3(2) == printable1(2))
 
   CALL get_command_argument(5, anal)
   CALL get_command_argument(6, nest_rept)
