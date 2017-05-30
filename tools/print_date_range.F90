@@ -18,17 +18,17 @@ program print_date_range
       import :: C_CHAR, C_INT
       character(C_CHAR), intent(IN) :: path
       integer(C_INT), intent(IN), value :: mode
-      integer(C_INT) :: result
+      integer(C_INT) :: status
     end function f_mkdir
     function f_link(oldpath,newpath) result(status) bind(C,name='link')
       import :: C_CHAR, C_INT
       character(C_CHAR), intent(IN) :: oldpath, newpath
-      integer(C_INT) :: result
+      integer(C_INT) :: status
     end function f_link
     function f_symlink(oldpath,newpath) result(status) bind(C,name='symlink')
       import :: C_CHAR, C_INT
       character(C_CHAR), intent(IN) :: oldpath, newpath
-      integer(C_INT) :: result
+      integer(C_INT) :: status
     end function f_symlink
   end interface
 
