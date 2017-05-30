@@ -63,7 +63,7 @@ program print_date_range
 !   anal = 'GEM_anal'
 
   if(argcount == 7) then                             ! year=option is present
-    CALL get_command_argument(4, options)
+    CALL get_command_argument(7, options)
     call NewDate_Options(trim(options),'set')        ! set calendar option
     write(0,*),'INFO: using calendqar option '//trim(options)
   endif
