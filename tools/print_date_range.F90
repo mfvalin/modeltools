@@ -6,12 +6,13 @@ program print_date_range
   integer, dimension(2) :: printable1, printable2, printable3
   real *8 :: delta, diff
   integer :: status, argcount
-  character(len=128) :: date1, date2, interval, name, options
+  character(len=128) :: date1, date2, interval, name, options, sym
   character(len=32) :: arg1, arg2
   character(len=4096) :: oldpath, newpath, dirpath
   character(len=4096) :: nest_rept, nest_exp, anal
   character(len=1), dimension(1) :: template
   integer(C_INT) :: mode
+  logical :: use_anal
 
   interface
     function f_mkdir(path,mode) result(status) bind(C,name='mkdir')
@@ -35,7 +36,7 @@ program print_date_range
   CALL get_command_argument(0, name)
 
   argcount = command_argument_count()
-  if(argcount < 6 .or. argcount > 7) goto 777
+  if(argcount < 7 .or. argcount > 8) goto 777
   mode = o'0777'
 
   CALL get_command_argument(1, date1)
@@ -55,15 +56,19 @@ program print_date_range
   read(interval,*,err=777)delta                      ! interval in seconds
   delta = delta/3600.0                               ! interval in hours
 
-  CALL get_command_argument(4, anal)
-  CALL get_command_argument(5, nest_rept)
-  CALL get_command_argument(6, nest_exp)
+  CALL get_command_argument(4, sym)
+  sym = trim(sym)//'000000'
+  read(sym,11,err=777)printable3(1),printable3(2)  ! end date in YYYYMMDD format
+
+  CALL get_command_argument(5, anal)
+  CALL get_command_argument(6, nest_rept)
+  CALL get_command_argument(7, nest_exp)
 !   nest_rept = 'CLIMAT_nest_rept'
 !   nest_exp  = 'CLIMAT_nest_exp'
 !   anal = 'GEM_anal'
 
-  if(argcount == 7) then                             ! year=option is present
-    CALL get_command_argument(7, options)
+  if(argcount == 8) then                             ! year=option is present
+    CALL get_command_argument(8, options)
     call NewDate_Options(trim(options),'set')        ! set calendar option
     write(0,*),'INFO: using calendqar option '//trim(options)
   endif
@@ -93,18 +98,25 @@ program print_date_range
     newpath = trim(dirpath)//'/content'
     status = f_link( transfer(trim(oldpath)//achar(0),template(1)), transfer(trim(newpath)//achar(0),template(1)) )
     oldpath = trim(nest_rept) // '/' // trim(nest_exp) // '_' // arg2(1:6) // '/' // trim(nest_exp) // '_' // arg2(1:8)
+    if(use_anal) oldpath = trim(anal)
     newpath = 'VALID_' // trim(arg1) // '/GEM_input_file_0001'
     status = f_symlink( transfer(trim(oldpath)//achar(0),template(1)), transfer(trim(newpath)//achar(0),template(1)) )
     call incdatr(stamp,stamp1,delta)                  ! increment
     stamp1 = stamp
     call difdatr(stamp2,stamp1,diff)                  ! end - next date
+    use_anal = .false.
   enddo
   stop
 101 format(3X,I3,3x,i10,3x,i10,3x,I8,3x,I6)
 102 format(3x,I8.8,A,I6.6,3x,i8.8)
 777 continue
-  write(0,*),'USAGE: '//trim(name)//' start_date end_date interval anal nest_rept nest_exp [year=gregorian|360_day|365_day]'
-  write(0,*),'       start, end : YYYYMMDD.HHMMSS'
-  write(0,*),'       interval in seconds'
+  write(0,*),'USAGE: '//trim(name)//' start_date end_date interval start_sym anal nest_rept exp_name [year=gregorian|360_day|365_day]'
+  write(0,*),'       start_date, end_date : YYYYMMDD.HHMMSS , start end end of this simulation slice'
+  write(0,*),'       interval in seconds between boundary condition files'
+  write(0,*),'       start_sym : YYYYMMDD.HHMMSS , start of entire simulation'
+  write(0,*),'       anal , initial analysis (only used if start_date == start_sym'
+  write(0,*),'       nest_rept : directory containing the boundary condition files'
+  write(0,*),'       exp_name : experiment name'
+  write(0,*),'       last (optional) argument : calendar to be used (gregorian by default)'
   stop
 end program
