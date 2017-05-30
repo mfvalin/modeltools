@@ -111,12 +111,13 @@ program print_date_range
 102 format(3x,I8.8,A,I6.6,3x,i8.8)
 777 continue
   write(0,*),'USAGE: '//trim(name)//' start_date end_date interval start_sym anal nest_rept exp_name [year=gregorian|360_day|365_day]'
-  write(0,*),'       start_date, end_date : YYYYMMDD.HHMMSS , start end end of this simulation slice'
-  write(0,*),'       interval in seconds between boundary condition files'
-  write(0,*),'       start_sym : YYYYMMDD.HHMMSS , start of entire simulation'
-  write(0,*),'       anal , initial analysis (only used if start_date == start_sym'
-  write(0,*),'       nest_rept : directory containing the boundary condition files'
-  write(0,*),'       exp_name : experiment name'
-  write(0,*),'       last (optional) argument : calendar to be used (gregorian by default)'
+  write(0,*),'       start_date : YYYYMMDD.HHMMSS , start end end of this simulation slice'
+  write(0,*),'       end_date   : YYYYMMDD.HHMMSS , start end end of this simulation slice'
+  write(0,*),'       interval   : interval in seconds between boundary condition files'
+  write(0,*),'       start_sym  : YYYYMMDD.HHMMSS , start of entire simulation'
+  write(0,*),'       anal       : initial analysis (only used if start_date == start_sym)'
+  write(0,*),'       nest_rept  : directory containing the boundary condition files'
+  write(0,*),'       exp_name   : experiment name'
+  write(0,*),'       year=...   : (optional) argument ,  calendar to be used (gregorian by default)'
   stop
 end program
