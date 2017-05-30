@@ -9,6 +9,7 @@ program print_date_range
   character(len=128) :: date1, date2, interval, name, options, sym
   character(len=32) :: arg1, arg2
   character(len=4096) :: oldpath, newpath, dirpath
+  character(C_CHAR), dimension(4096) :: oldp, newp, dirp
   character(len=4096) :: nest_rept, nest_exp, anal
   character(len=1), dimension(1) :: template
   integer(C_INT) :: mode
@@ -17,18 +18,18 @@ program print_date_range
   interface
     function f_mkdir(path,mode) result(status) bind(C,name='mkdir')
       import :: C_CHAR, C_INT
-      character(C_CHAR), intent(IN) :: path
+      character(C_CHAR), dimension(*), intent(IN) :: path
       integer(C_INT), intent(IN), value :: mode
       integer(C_INT) :: status
     end function f_mkdir
     function f_link(oldpath,newpath) result(status) bind(C,name='link')
       import :: C_CHAR, C_INT
-      character(C_CHAR), intent(IN) :: oldpath, newpath
+      character(C_CHAR), dimension(*), intent(IN) :: oldpath, newpath
       integer(C_INT) :: status
     end function f_link
     function f_symlink(oldpath,newpath) result(status) bind(C,name='symlink')
       import :: C_CHAR, C_INT
-      character(C_CHAR), intent(IN) :: oldpath, newpath
+      character(C_CHAR), dimension(*), intent(IN) :: oldpath, newpath
       integer(C_INT) :: status
     end function f_symlink
   end interface
@@ -94,14 +95,19 @@ program print_date_range
     write(arg2,'(I8.8)')p3
     print *,trim(arg1),' ',trim(arg2)
     write(dirpath,'(A)')'VALID_'//trim(arg1)
-    status = f_mkdir( transfer(trim(dirpath)//achar(0),template(1)), mode )
+    dirp = transfer(trim(dirpath)//achar(0),dirp)
+    status = f_mkdir( dirp, mode )
     oldpath = 'content'
+    oldp = transfer(trim(oldpath)//achar(0),oldp)
     newpath = trim(dirpath)//'/content'
-    status = f_link( transfer(trim(oldpath)//achar(0),template(1)), transfer(trim(newpath)//achar(0),template(1)) )
+    newp = transfer(trim(newpath)//achar(0),newp)
+    status = f_link( oldp, newp )
     oldpath = trim(nest_rept) // '/' // trim(nest_exp) // '_' // arg2(1:6) // '/' // trim(nest_exp) // '_' // arg2(1:8)
     if(use_anal) oldpath = trim(anal)
+    oldp = transfer(trim(oldpath)//achar(0),oldp)
     newpath = 'VALID_' // trim(arg1) // '/GEM_input_file_0001'
-    status = f_symlink( transfer(trim(oldpath)//achar(0),template(1)), transfer(trim(newpath)//achar(0),template(1)) )
+    newp = transfer(trim(newpath)//achar(0),newp)
+    status = f_symlink( oldp, newp )
     call incdatr(stamp,stamp1,delta)                  ! increment
     stamp1 = stamp
     call difdatr(stamp2,stamp1,diff)                  ! end - next date
