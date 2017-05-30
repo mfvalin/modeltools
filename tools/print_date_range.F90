@@ -22,6 +22,11 @@ program print_date_range
       integer(C_INT), intent(IN), value :: mode
       integer(C_INT) :: status
     end function f_mkdir
+    function f_unlink(path) result(status) bind(C,name='unlink')
+      import :: C_CHAR, C_INT
+      character(C_CHAR), dimension(*), intent(IN) :: path
+      integer(C_INT) :: status
+    end function f_unlink
     function f_link(oldpath,newpath) result(status) bind(C,name='link')
       import :: C_CHAR, C_INT
       character(C_CHAR), dimension(*), intent(IN) :: oldpath, newpath
@@ -101,12 +106,14 @@ program print_date_range
     oldp = transfer(trim(oldpath)//achar(0),oldp)
     newpath = trim(dirpath)//'/content'
     newp = transfer(trim(newpath)//achar(0),newp)
+    status = f_unlink( newp )
     status = f_link( oldp, newp )
     oldpath = trim(nest_rept) // '/' // trim(nest_exp) // '_' // arg2(1:6) // '/' // trim(nest_exp) // '_' // arg2(1:8)
     if(use_anal) oldpath = trim(anal)
     oldp = transfer(trim(oldpath)//achar(0),oldp)
     newpath = 'VALID_' // trim(arg1) // '/GEM_input_file_0001'
     newp = transfer(trim(newpath)//achar(0),newp)
+    status = f_unlink( newp )
     status = f_symlink( oldp, newp )
     call incdatr(stamp,stamp1,delta)                  ! increment
     stamp1 = stamp
