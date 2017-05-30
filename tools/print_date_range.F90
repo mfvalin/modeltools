@@ -103,7 +103,7 @@ program print_date_range
 101 format(3X,I3,3x,i10,3x,i10,3x,I8,3x,I6)
 102 format(3x,I8.8,A,I6.6,3x,i8.8)
 777 continue
-  write(0,*),'USAGE: '//trim(name)//' start_date end_date interval [year=gregorian|360_day|365_day]'
+  write(0,*),'USAGE: '//trim(name)//' start_date end_date interval anal nest_rept nest_exp [year=gregorian|360_day|365_day]'
   write(0,*),'       start, end : YYYYMMDD.HHMMSS'
   write(0,*),'       interval in seconds'
   stop
