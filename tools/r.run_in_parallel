@@ -129,8 +129,10 @@ aprun_Linux_launch() {
   [[ -n ${verbose} ]] && \
     echo "INFO: OMP_NUM_THREADS=$OMP_NUM_THREADS" && \
     echo "INFO: aprun -j ${smt} -n ${PeInWorld[${MpiCommWorld}]} ${ExtraAprun} $@ ${ParallelScript}.${MpiCommWorld}"
-  [[ -z ${dryrun} ]] && \
+  [[ -z ${dryrun} ]] && ((${PeInWorld[${MpiCommWorld}]}>72)) && \
     PATH="/bin:/usr/bin" LD_LIBRARY_PATH="" $APRUN -j ${smt} -n ${PeInWorld[${MpiCommWorld}]} ${ExtraAprun} "$@" ${ParallelScript}.${MpiCommWorld}
+  [[ -z ${dryrun} ]] && ((${PeInWorld[${MpiCommWorld}]}<=72)) && \
+    $APRUN -j ${smt} -n ${PeInWorld[${MpiCommWorld}]} ${ExtraAprun} "$@" ${ParallelScript}.${MpiCommWorld}
   [[ -n ${alpspd} ]] && [[ "${alpspd}" != NoName ]] && apmgr pdomain -r ${alpspd} && echo "pdomain ${alpspd} removed" && apstat -P 
 }
 #################################################################################################################################
