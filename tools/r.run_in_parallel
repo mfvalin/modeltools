@@ -15,6 +15,7 @@ CMD_env=$(which env)
 CMD_wc=$(which wc)
 CMD_touch=$(which touch)
 CMD_sort=$(which sort)
+CMD_mkdir=$(which mkdir)
 CMD_hostname=$(which hostname)
 [[ "$1" == --version ]] && set -- -version
 # CAVEAT: this script uses typeset -Z (does not work for the bash shell, only for ksh93)
@@ -76,7 +77,7 @@ mpiexec_Linux() {
         OPEN_MPI_PARMS="--mca btl sm,self ${OPEN_MPI_PARMS}"         # do not try to use infiniband
       [[ "$mpirun" == mpirun ]] && [[ -n ${OPAL_PREFIX} ]] && \
         OPEN_MPI_PARMS="--prefix ${OPAL_PREFIX} ${OPEN_MPI_PARMS}"    # if not using rumpirun.openmpi (Dorval EC clusters)
-      OPEN_MPI_PARMS="--mca shmem mmap ${OPEN_MPI_PARMS}"
+      OPEN_MPI_PARMS="--mca shmem posix ${OPEN_MPI_PARMS}"
       echo "=== OPEN_MPI_PARMS=${OPEN_MPI_PARMS} ==="
       mpiexec_Linux_launch OpenMPI ${OPEN_MPI_PARMS} "$@"
       ;;
@@ -129,7 +130,7 @@ aprun_Linux_launch() {
     echo "INFO: OMP_NUM_THREADS=$OMP_NUM_THREADS" && \
     echo "INFO: aprun -j ${smt} -n ${PeInWorld[${MpiCommWorld}]} ${ExtraAprun} $@ ${ParallelScript}.${MpiCommWorld}"
   [[ -z ${dryrun} ]] && \
-    aprun -j ${smt} -n ${PeInWorld[${MpiCommWorld}]} ${ExtraAprun} "$@" ${ParallelScript}.${MpiCommWorld}
+    PATH="/bin:/usr/bin" LD_LIBRARY_PATH="" $APRUN -j ${smt} -n ${PeInWorld[${MpiCommWorld}]} ${ExtraAprun} "$@" ${ParallelScript}.${MpiCommWorld}
   [[ -n ${alpspd} ]] && [[ "${alpspd}" != NoName ]] && apmgr pdomain -r ${alpspd} && echo "pdomain ${alpspd} removed" && apstat -P 
 }
 #################################################################################################################################
@@ -644,8 +645,10 @@ wait_for() {
 #Version="1.1.26 2016/12/01"  # "simple" case no longer used
 #Version="1.1.27 2016/12/16"  # fixed -jio option on linux
 #Version="1.1.28 2017/01/23"  # introduced PMI_NO_INITIALIZE workaroud for aprun
+#Version="1.1.28b 2017/02/02"  # Reverted back to posix shmem mca for performance reasons
+#Version="1.1.28c 2017/06/01"  # Cray aprun optimizations
 true
-Version="1.1.28 2017/01/23"  # introduced PMI_NO_INITIALIZE workaroud for aprun
+Version="1.1.28c 2017/06/01"  # Cray aprun optimizations
 echo "INFO: ${0##*/} version $Version ( /bin/ksh93 )"
 MY_NODEFILE=${PARALLEL_NODEFILE:-${GECOSHEP_HOSTS_FILE:-${GECOSHEP_HOSTFILE:-${LOADL_HOSTFILE:-${PBS_NODEFILE:-${HOME}/.PBS_NODEFILE}}}}}
 [[ ! -f "${MY_NODEFILE}" ]] && \
@@ -881,7 +884,7 @@ ThreadsInWorld[0]=${OMP_NUM_THREADS}
 [[ -n "${debug}" ]] && echo "INFO: debug flag = '${debug}'" && set -x
 #################################################################################################################################
 # reset TMPDIR to make sure it is visible to all MPI tasks  (ideally on a COHERENT filesystem, NFS BEWARE)
-mkdir -p ${tmpdir}
+$CMD_mkdir -p ${tmpdir}
 export TMPDIR=${tmpdir}
 #################################################################################################################################
 # prepare node file (list of node names) and slot_number array (core ordinal on node) (ignored on Cray XC using aprun)
@@ -1069,7 +1072,7 @@ export OMP_NUM_THREADS=\${NThreads[\${Index}]}
 if [[ "$splittmp" == "splittmp" ]]
 then
   export TMPDIR=\$TMPDIR/\$HOSTNAME.\$\$
-  mkdir -p \$TMPDIR
+  $CMD_mkdir -p \$TMPDIR
 fi
 ${preexec} \${PNames[\${Index}]} ${args}
 Status=\$?
@@ -1318,7 +1321,7 @@ if [[ -n ${processorder} ]] ; then    #  a arranger pour le cas MPMD ===========
     for ISeqNum in $(seq 0 1 $((TotalInstances-1)) )
     do
       /usr/bin/printf "%5.5d\n" ${ISeqNum}
-    done  | xargs -L100 mkdir
+    done  | xargs -L100 $CMD_mkdir
     cd $CurrentDIR
     unset CurrentDIR
   fi
