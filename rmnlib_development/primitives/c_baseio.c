@@ -823,6 +823,28 @@ static int qqcclos(int indf)
 }
 
 /****************************************************************************
+ * c_wa_get_segment_limit, c_wa_set_segment_limit
+*****************************************************************************
+*/
+void c_wa_get_segment_limit(int iun, int segment, uint64_t *limit){
+  int i;
+
+  *limit = 0;
+  if ((i=find_file_entry("c_wa_get_segment_limit",iun)) < 0) return ;
+  if(FGFDT[i].attr.paged == 1 && FGFDT[i].attr.wa == 1 && segment < 2) {   // 2 segments max, paged wa file
+    *limit = wafile[FGFDT[i].waindx].segments[segment] ;
+  }
+}
+void c_wa_set_segment_limit(int iun, int segment, uint64_t limit){
+  int i;
+
+  if ((i=find_file_entry("c_wa_set_segment_limit",iun)) < 0) return ;
+  if(FGFDT[i].attr.paged == 1 && FGFDT[i].attr.wa == 1 && segment < 2) {   // 2 segments max, paged wa file
+    wafile[FGFDT[i].waindx].segments[segment] = limit;
+  }
+}
+
+/****************************************************************************
 *  C _ W A O P E N ,   C _ W A O P E N 2 ,   W A O P E N 2 ,   W A O P E N  *
 *****************************************************************************
 *
@@ -1916,7 +1938,7 @@ ind = 0;
 while ((wafile[ind].file_desc != -1) && (ind < MAXWAFILES))
 ind++;
 if (ind == MAXWAFILES) {
-  fprintf(stderr,"qqcopen error: too many open files\n");
+  fprintf(stderr,"qqcopen error: too many open word addressable files\n");
   return(-1);
 }
 
@@ -1986,6 +2008,7 @@ else {  /* not a CMCARC type file */
   wafile[ind].file_desc = fd;
   FGFDT[indf].fd = fd;
   FGFDT[indf].open_flag = 1;
+  FGFDT[indf].waindx = ind;
 }
 
 dim = 0;

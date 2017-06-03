@@ -1984,7 +1984,8 @@ int c_xdfopn(int iun,char *mode,word_2 *pri,int npri,
 
     c_waread(unit,&header64,wdaddress,W64TOWD(2));
     if (header64.data[0] == 'XDF1' || header64.data[0] == 'xdf1') {
-      c_wa_set_segment_limit(unit,0,header64.addr);  // set limit for segment 0 and activate segmented mode
+      uint64_t temp = header64.addr ;
+      c_wa_set_segment_limit(unit,0,temp);  // set limit for segment 0 and activate segmented mode
     }
     if (header64.data[0] == 'XDF0' || header64.data[0] == 'xdf0' || header64.data[0] == 'XDF1' || header64.data[0] == 'xdf1') {
     /*if (strncmp(&header64.data[0], "XDF0", 4) == 0 || strncmp(&header64.data[0], "xdf0", 4) == 0) {*/
@@ -3251,7 +3252,7 @@ static int create_new_xdf(int index, int iun, word_2 *pri, int npri,
 {
    file_header *file;
    int ikle=0, lprm=0, laux=0, lng_header=naux+npri+512/64;
-   int temp;
+   uint64_t temp;
 
    if ((file_table[index]->header = malloc(lng_header*8)) == NULL) {
       sprintf(errmsg,"memory is full\n");
@@ -3265,7 +3266,7 @@ static int create_new_xdf(int index, int iun, word_2 *pri, int npri,
    file->idtyp=0;
    file->lng=lng_header;           /* keys + fixed part of 512 bits */
    file->addr=0;
-   c_wa_get_segment_limit(0,&temp) ;
+   c_wa_get_segment_limit(iun,0,&temp) ;
    if(temp != 0){   // this is a segmented file
      file->addr = temp;
      file->vrsn = 'X' << 24 | 'D' << 16 | 'F' << 8 | '1';

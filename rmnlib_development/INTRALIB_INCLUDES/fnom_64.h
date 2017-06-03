@@ -17,7 +17,7 @@ typedef struct {
   int64_t eff_file_size;          /* effective file size in words */
   int32_t lrec;                   /* record length when appliable */
   int32_t open_flag;              /* open/close flag */
-  uint32_t pad32;
+  int32_t waindx;                 /* index into wa file table, -1 nmeans not a wa file */
   attributs attr;
 } general_file_info;
 
