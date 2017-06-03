@@ -824,6 +824,7 @@ static int qqcclos(int indf)
 
 /****************************************************************************
  * c_wa_get_segment_limit, c_wa_set_segment_limit
+ * (normally called with segment = 0) (segment 1 normally unlimited)
 *****************************************************************************
 */
 void c_wa_get_segment_limit(int iun, int segment, uint64_t *limit){
@@ -832,7 +833,7 @@ void c_wa_get_segment_limit(int iun, int segment, uint64_t *limit){
   *limit = 0;
   if ((i=find_file_entry("c_wa_get_segment_limit",iun)) < 0) return ;
   if(FGFDT[i].attr.paged == 1 && FGFDT[i].attr.wa == 1 && segment < 2) {   // 2 segments max, paged wa file
-    *limit = wafile[FGFDT[i].waindx].segments[segment] ;
+    *limit = wafile[FGFDT[i].waindx].segments[segment+1] ;
   }
 }
 void c_wa_set_segment_limit(int iun, int segment, uint64_t limit){
@@ -840,7 +841,7 @@ void c_wa_set_segment_limit(int iun, int segment, uint64_t limit){
 
   if ((i=find_file_entry("c_wa_set_segment_limit",iun)) < 0) return ;
   if(FGFDT[i].attr.paged == 1 && FGFDT[i].attr.wa == 1 && segment < 2) {   // 2 segments max, paged wa file
-    wafile[FGFDT[i].waindx].segments[segment] = limit;
+    wafile[FGFDT[i].waindx].segments[segment+1] = limit;
   }
 }
 
