@@ -77,7 +77,7 @@ program print_date_range
   if(argcount == 8) then                             ! year=option is present
     CALL get_command_argument(8, options)
     call NewDate_Options(trim(options),'set')        ! set calendar option
-    write(0,*),'INFO: using calendqar option '//trim(options)
+    write(0,*),'INFO: using calendar option '//trim(options)
   endif
 
   open(unit=11,file='content',form='FORMATTED')
