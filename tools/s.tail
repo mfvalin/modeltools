@@ -1,0 +1,24 @@
+#!/bin/bash
+set -x
+outputFile=${1}
+hostTarget=${2}
+ 
+[[ -r ${1:-IaRiEnLaDuToUt} ]] || exit 1
+ 
+[[ -n "${hostTarget}" ]] && ssh -t ${hostTarget} ${0} ${outputFile} && exit 0
+ 
+Target="$(tail -20 ${outputFile:-IaRiEnLaDuToUt} | tr '[\000-\011\013-\037\177-\377]' '.' | grep 'temporary listings' | head -1 | sed 's/.* //')"
+ 
+if [[ -n "${Target}" ]] ; then
+  [[ -d ${Target}/0000  ]] && Target="$(echo ${Target}/0000/stdout.*)"
+  [[ -d ${Target}/00000 ]] && Target="$(echo ${Target}/00000/stdout.*)"
+  test -f ${Target}  || { echo ${Target} not a file ; exit 1 ; }
+  echo "INFO: tail --lines=100 -s1 -f ${Target}"
+  # tail --lines=100 -s1 -f ${Target}
+  tail -f ${Target}
+  exit 0
+fi
+echo "INFO: tail --lines=100 -s1 -f ${outputFile}"
+#tail --lines=100 -s1 -f ${outputFile}
+tail -f ${outputFile}
+
