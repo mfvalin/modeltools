@@ -126,13 +126,12 @@ aprun_Linux_launch() {
   [[ -n ${alpspd} ]] && [[ "${alpspd}" != NoName ]] && USE_PDOMAIN=${alpspd} && apmgr pdomain -c ${alpspd} && apstat -P && echo "pdomain ${alpspd} created"
   [[ -n ${USE_PDOMAIN} ]] && ExtraAprun="${ExtraAprun} -p ${USE_PDOMAIN} "
   list_message
+  [[ -n ${extrapath} ]] && [[ "${extrapath}" != *: ]] && extrapath="${extrapath}:"
   [[ -n ${verbose} ]] && \
     echo "INFO: OMP_NUM_THREADS=$OMP_NUM_THREADS" && \
-    echo "INFO: aprun -j ${smt} -n ${PeInWorld[${MpiCommWorld}]} ${ExtraAprun} $@ ${ParallelScript}.${MpiCommWorld}"
-  [[ -z ${dryrun} ]] && ((${PeInWorld[${MpiCommWorld}]}>72)) && \
-    PATH="/bin:/usr/bin" LD_LIBRARY_PATH="" $APRUN -j ${smt} -n ${PeInWorld[${MpiCommWorld}]} ${ExtraAprun} "$@" ${ParallelScript}.${MpiCommWorld}
-  [[ -z ${dryrun} ]] && ((${PeInWorld[${MpiCommWorld}]}<=72)) && \
-    $APRUN -j ${smt} -n ${PeInWorld[${MpiCommWorld}]} ${ExtraAprun} "$@" ${ParallelScript}.${MpiCommWorld}
+    echo "INFO: PATH="${extrapath}/bin:/usr/bin" LD_LIBRARY_PATH="${extraldpath}" $APRUN -j ${smt} -n ${PeInWorld[${MpiCommWorld}]} ${ExtraAprun} "$@" ${ParallelScript}.${MpiCommWorld}"
+  [[ -z ${dryrun} ]] && \
+    PATH="${extrapath}/bin:/usr/bin" LD_LIBRARY_PATH="$extraldpath" $APRUN -j ${smt} -n ${PeInWorld[${MpiCommWorld}]} ${ExtraAprun} "$@" ${ParallelScript}.${MpiCommWorld}
   [[ -n ${alpspd} ]] && [[ "${alpspd}" != NoName ]] && apmgr pdomain -r ${alpspd} && echo "pdomain ${alpspd} removed" && apstat -P 
 }
 #################################################################################################################################
@@ -648,9 +647,11 @@ wait_for() {
 #Version="1.1.27 2016/12/16"  # fixed -jio option on linux
 #Version="1.1.28 2017/01/23"  # introduced PMI_NO_INITIALIZE workaroud for aprun
 #Version="1.1.28b 2017/02/02"  # Reverted back to posix shmem mca for performance reasons
-#Version="1.1.28c 2017/06/01"  # Cray aprun optimizations
+#Version="1.1.28b1 2017/06/01"  # Cray aprun PATH optimizations eliminating LD_LIBRARY_PATH and most of PATH
+#Version="1.1.28c 2017/06/01"  # further workaround for poor lustre performance adding extrapath and extraldpath
+#Version="1.1.28d 2017/08/01"  # touchups to 1.1.28c
 true
-Version="1.1.28c 2017/06/01"  # Cray aprun optimizations
+Version="1.1.28d 2017/08/01"  # Workaround for poor lustre performance by eliminating most of PATH and LD_LIBRARY_PATH
 echo "INFO: ${0##*/} version $Version ( /bin/ksh93 )"
 MY_NODEFILE=${PARALLEL_NODEFILE:-${GECOSHEP_HOSTS_FILE:-${GECOSHEP_HOSTFILE:-${LOADL_HOSTFILE:-${PBS_NODEFILE:-${HOME}/.PBS_NODEFILE}}}}}
 [[ ! -f "${MY_NODEFILE}" ]] && \
@@ -667,6 +668,8 @@ eval `cclargs_lite -D "" $0 \
     -dryrun "" "dryrun" "[]" \
     -e "NO" "YES" "[list failed processes" \
     -errp "e" "E" "[stderr prefix in listings]" \
+    -extrapath "" "" "[Extra string to be prepended to PATH (XC-40 only). WARNING: do not override unless necessary]" \
+    -extraldpath "" "" "[String to be used as LD_LIBRARY_PATH (XC-40 only). WARNING: do not override unless necessary]" \
     -gdb "" "Default" "[directive file for gdb]" \
     -geometry "" "" "[]" \
     -h "" "" "[help test]" \

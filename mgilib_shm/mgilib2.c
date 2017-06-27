@@ -1,7 +1,7 @@
 /* RMNLIB - Library of useful routines for C and FORTRAN programming
  * Copyright (C) 1975-2001  Division de Recherche en Prevision Numerique
  *                          Environnement Canada
- * Copyright (C) 2014       ESCER center, UQAM
+ * Copyright (C) 2014-2017  ESCER center, UQAM
  *
  * This library is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public
@@ -23,20 +23,20 @@
 
    Functions written for programs that run in "parallel" and need
    to exchange information simultaneously. MGI stands for Model Gossip
-   Interface. Each program using these functions will have to compile
-   with this library. There are 6 functions:
+   Interface. Each program using these functions will have to load
+   with this library. There are 6 basic functions:
 
    MGI_INIT
-   to initialize a channel using the name given and open the socket.
+   to initialize a channel using the name given and open the channel.
    It will also allocate a writing buffer dynamically and if all is
-   successful, it will return a channel number (socket descriptor).
+   successful, it will return a channel number .
 
    MGI_OPEN
    to open the channel in a certain mode:
    'R' for read: returns 0 to signal that data been written.
                  or returns nblks to be read
    'W' for write: returns 1 if open is ok.
-   'S' for storing a restart file:returns 1 if open is ok.
+   'S' for storing a restart file:returns 1 if open is ok. (NO LONGER AVAILABLE)
 
    MGI_READ
    to read from a channel that is open for READ mode.
@@ -45,23 +45,22 @@
    'I' for INTEGER
    'R' for REAL
    'D' for REAL*8
-   It returns the number of blocks left to read from channel.
+   It returns the number of items left to read from channel.
 
    MGI_WRITE
    to write to a channel that is open for WRITE mode.
    It accepts the same type of data as MGI_READ.
-   It returns the number of blocks written to channel.
+   It returns the number of items written to channel.
 
    MGI_CLOS
    to close the mode of a channel and check to make sure all is
    transmitted as requested. It returns the status of the data
-   file after it is closed.
+   channel after it is closed.
 
    MGI_TERM
-   to delete the PID file that was created in the beginning and
-   to release all the memory allocated dynamically. It closes all
-   the filepipes therefore, breaking all the pipe connections with
-   the other programs.
+   to delete the "*.channel" file that was created in the beginning and
+   to release all the memory allocated dynamically. It breaks all
+   connections with its partner program(s).
 
    ***NOTE: These functions are written to keep enough bits for the
    equivalent of an integer/float in C or integer/real*4 in FORTRAN.
@@ -90,9 +89,9 @@
            file descriptor
 
    new programs:
-   -mgi_shmem (C) is used to create the shared memory area associated with
-           a "shared memory channel".
-    mgi_shmem (C) will also monitor "shared memory channel" activity if needed.
+   -mgi_shmem (C) can used to create the shared memory area associated with
+           a "shared memory channel".  (NO LONGER NECESSARY)
+    mgi_shmem (C) can also monitor "shared memory channel" activity if needed.
 
    -mgi_test (C) is used to test a "shared memory channel" using the C API
            and a scenario file.
@@ -107,7 +106,56 @@
    Fortran callable mgi_read_c function has been added because there are two(2) character
    strings instead of one(1) in the interface.
 
-*/
+   Revision: Jun2 2017, M.Valin, UQAM
+   mgi_shmem is no longer necessary. The shared memory areas are created by the participating
+   programs. All programs make an attempt to create the shared memory area and to publish it.
+   Only one can be successful, the other programs will just perform a lookup to find said area.
+
+   N.B. 
+   The communication through shared memory will occur between th "PE0"s of the MPI applications.
+   These "PE0"s MUST reside on the same SMP node. (r.run_in_parallel is equipped to achieve this)
+
+     circular buffer layout (no need for any lock)
+ 
+     first : points to first element of buffer            (never updatedafter setup)
+     limit : points one past the last element in buffer   (never updated)
+     in    : points to insertion position                 (only updated by process that inserts data)
+     out   : points to extraction position                (only updated by process that extracts data)
+ 
+     empty buffer, in = out
+ 
+     +-----------------------------------------------------------------------------------------+
+     | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | +
+     +-----------------------------------------------------------------------------------------+
+      ^                   ^                                                                     ^
+      | first          in | out                                                                 | limit
+     ( 0 data elements in buffer, room for (limit - first - 1)
+ 
+     buffer neither empty nor full
+ 
+     +-----------------------------------------------------------------------------------------+
+     | | | | | | | | | | |d|d|d|d|d|d|d|d|d|d|d|d|d|d|d|d|d|d|d| | | | | | | | | | | | | | | | +
+     +-----------------------------------------------------------------------------------------+
+      ^                   ^                                     ^                               ^
+      | first             | out                                 | in                            | limit
+     (in - out) data elements in buffer, room for (limit - in) + (out - in -1) more
+ 
+ 
+     +-----------------------------------------------------------------------------------------+
+     |d|d|d|d|d|d|d|d|d|d| | | | | | | | | | | | | | | | | | | |d|d|d|d|d|d|d|d|d|d|d|d|d|d|d|d+
+     +-----------------------------------------------------------------------------------------+
+      ^                   ^                                     ^                               ^
+      | first             | in                                  | out                           | limit
+     (in - first) + limit - out) data elements in buffer, room for (out - in + 1)
+ 
+ 
+     full buffer, in = (out -1) (modulo limit)
+     +-----------------------------------------------------------------------------------------+
+     |d|d|d|d|d|d|d|d|d|d|d|d|d|d|d|d|d|d|d|d|d|d|d|d|d|d|d|d| |d|d|d|d|d|d|d|d|d|d|d|d|d|d|d|d+
+     +-----------------------------------------------------------------------------------------+
+      ^                                                       ^ ^                               ^
+      | first                                              in | | out                           | limit
+ */
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -123,7 +171,17 @@
 #include <ctype.h>
 #include "mgi.h"
 
+#include <mpi.h>
+
 #define MEMCPY_LIMIT 10
+
+#define MAX_PATH_LEN 4096
+
+#if ! defined(DEBUG)
+#define DEBUG 0
+#else
+#define DEBUG 1
+#endif
 
 #if ! defined(WITHOUT_GOSSIP)
 #include <gossip.h>
@@ -152,14 +210,14 @@ static int ichan = 0;
 static int init = 0;
 static int SIG_ACTIVE = 1;
 
-#ifdef NOT_USED
+#if defined(NOT_USED)
 static char PID_file[MAX_STR];
 static char *mgidir;
 #endif
 
 static int *intBuffer;
 
-#ifdef NOT_USED
+#if defined(NOT_USED)
 static void getmgidir ();
 static int makepidfile ();
 static void removepidfile ();
@@ -180,6 +238,222 @@ static char *mgierrors[]={
   "DATA_LENGTH_ERROR",
   "SEND_COMMAND_ERROR"
 };
+
+static int debug_rank=-1 ;
+static int timeout = 30*1000 ;   // 30 seconds = 30 * 1000 microseconds
+
+#pragma weak mgi_shm_publish_timeout__=MGI_Shm_Publish_timeout
+#pragma weak mgi_shm_publish_timeout_=MGI_Shm_Publish_timeout
+#pragma weak mgi_shm_publish_timeout=MGI_Shm_Publish_timeout
+void mgi_shm_publish_timeout__(int seconds);
+void mgi_shm_publish_timeout_(int seconds);
+void mgi_shm_publish_timeout(int seconds);
+void MGI_Shm_Publish_timeout(int seconds){
+  timeout = seconds * 1000 ; // convert to milliseconds
+}
+
+// mode == 0 : is this already published ? ( returns 0 if not, 1 if it is)
+// mode == 1 : remove channel and lock files (cleanup)
+static int MGI_Shm_Can_Publish_name(const char *shm_channel_name, int mode)
+{
+  char filename[MAX_PATH_LEN];
+  char filenew[MAX_PATH_LEN];
+  int status = 0;
+  int status2 = 0;
+  char *mgi_shm_home = getenv("MGI_SHM_HOME") ;
+
+  if(mgi_shm_home != NULL) {
+// if(DEBUG & (mode ==0)) printf("DEBUG: would be publishing in %s\n",mgi_shm_home);
+    snprintf(filename,MAX_PATH_LEN,"%s/%s.lock",mgi_shm_home,shm_channel_name);
+  }else{
+    snprintf(filename,MAX_PATH_LEN,"%s/%s",getenv("HOME"),".gossip");
+    mkdir(filename,0755);
+    snprintf(filename,MAX_PATH_LEN,"%s/%s",getenv("HOME"),".gossip/SHM");   // make sure that ~/.gossip/MPI directory exists
+    mkdir(filename,0755);
+    snprintf(filename,MAX_PATH_LEN,"%s/%s/%s.lock",getenv("HOME"),".gossip/SHM",shm_channel_name);
+    snprintf(filenew,MAX_PATH_LEN,"%s/%s/%s.channel",getenv("HOME"),".gossip/SHM",shm_channel_name);
+  }
+  if(mode == 0) {
+    status = open(filename,O_WRONLY+O_CREAT+O_EXCL,00700);   // setup mode, try to create lock file
+    if(status >= 0){                                         // file creation did not fail
+      close(status) ;
+      status = 0 ;
+    }
+// if(DEBUG) printf("DEBUG %d: status from create '%s' = %d\n",debug_rank,filename,status);
+  }else{
+    status = unlink(filename);        // cleanup mode, remove lock file
+    status = unlink(filenew);         // cleanup mode, remove channel file
+// if(DEBUG) printf("DEBUG %d: status from unlink '%s' = %d\n",debug_rank,filename,status);
+  }
+
+  return status + status2 ;
+}
+
+// publish the shared memory segment id into the xxx.channel file
+static int MGI_Shm_Publish_name(const char *shm_channel_name, int shmid)
+{
+  FILE *shm_gossip;
+  char filename[MAX_PATH_LEN];
+  char filenew[MAX_PATH_LEN];
+  char *mgi_shm_home = getenv("MGI_SHM_HOME") ;
+
+  if(mgi_shm_home != NULL) {        // MPI channel files directory
+// if(DEBUG) printf("DEBUG: publishing in %s\n",mgi_shm_home);
+    snprintf(filename,MAX_PATH_LEN,"%s/%s.new",    mgi_shm_home,shm_channel_name);
+    snprintf(filenew, MAX_PATH_LEN,"%s/%s.channel",mgi_shm_home,shm_channel_name);
+  }else{                            //  default directory for MPI channel files
+    snprintf(filename,MAX_PATH_LEN,"%s/%s",getenv("HOME"),".gossip");
+    mkdir(filename,0755);
+    snprintf(filename,MAX_PATH_LEN,"%s/%s",getenv("HOME"),".gossip/SHM");
+    mkdir(filename,0755);
+    snprintf(filename,MAX_PATH_LEN,"%s/%s/%s.new",    getenv("HOME"),".gossip/SHM",shm_channel_name);
+    snprintf(filenew, MAX_PATH_LEN,"%s/%s/%s.channel",getenv("HOME"),".gossip/SHM",shm_channel_name);
+  }
+  unlink(filename);
+  unlink(filenew);
+
+  shm_gossip = fopen(filename,"w");   // write shmid into what will become the xxx.channel file
+  fprintf(shm_gossip,"%d \n",shmid);
+  fclose(shm_gossip);
+
+  link(filename,filenew);             // link + unlink is a move from xxx.new to xxx.channel
+  unlink(filename);
+  printf("INFO %d: published '%s', id = %d\n",debug_rank,filename,shmid);
+  return 0;
+}
+
+// find the shared memory segment id from the xxx.channel file
+static int MGI_Shm_Lookup_name(const char *shm_channel_name, int *shmid)
+{
+  FILE *shm_gossip;
+  char filename[MAX_PATH_LEN];
+  char *mgi_shm_home = getenv("MGI_SHM_HOME") ;
+  int nitem = 0;
+  int time_out = timeout;
+
+  if(mgi_shm_home != NULL) {        // MPI channel files directory
+// if(DEBUG) printf("DEBUG: publishing in %s\n",mgi_shm_home);
+    snprintf(filename, MAX_PATH_LEN,"%s/%s.channel",mgi_shm_home,shm_channel_name);
+  }else{                            //  default directory for MPI channel files
+    snprintf(filename,MAX_PATH_LEN,"%s/%s",getenv("HOME"),".gossip");
+    mkdir(filename,0755);
+    snprintf(filename,MAX_PATH_LEN,"%s/%s",getenv("HOME"),".gossip/SHM");
+    mkdir(filename,0755);
+    snprintf(filename, MAX_PATH_LEN,"%s/%s/%s.channel",getenv("HOME"),".gossip/SHM",shm_channel_name);
+  }
+// if(DEBUG) printf("DEBUG %d: lookup from '%s'\n",debug_rank,filename) ;
+  while( (shm_gossip = fopen(filename,"r")) == NULL) { usleep(1000) ; if(time_out-- <= 0) break ; } ;
+  *shmid = -1 ;
+  if (shm_gossip == NULL) {
+    printf("ERROR %d: failed to open '%s' after %d ms\n",debug_rank,filename,timeout-time_out) ;
+    return -1 ;
+  }
+  *shmid = -999 ;
+  nitem = fscanf(shm_gossip,"%d",shmid);   // read shared memory id from file
+  fclose(shm_gossip);
+  if(nitem < 1) {
+    printf("ERROR %d: failed to read from '%s'\n",debug_rank,filename) ;
+    return -1 ;
+  }
+
+  return 0;
+}
+
+// perform allocation and initialization od chared memory area(s)
+// mode == 0 : setup
+// mode == 1 : cleanup
+static int Mpi_Mgi_Shm_Init(int mode){        // setup/cleanup for all shared memory channels
+  char *cfg = getenv("MGI_SHM_CFG") ;  // export MGI_SHM_CFG=" nb_chan : name_1 size_1 : .... : name_nb_chan size_nb_chan"
+  int last_shm_channel = 0 ;
+  int i, shmid ;
+  char name[128] ;
+  size_t memsiz ;
+  size_t shm_size;
+  void *memptr ;
+  struct shmid_ds shm_buf;
+  int temp ;
+  mgi_shm_buf *shm;
+
+  if(cfg == NULL) return -1;   // OOPS, environment variable for configuration not found
+
+  sscanf(cfg,"%d",&last_shm_channel) ;
+  for(i=0 ; i<=last_shm_channel ; i++) {    // get size, alias1, alias2 for all channels, build channel name
+    while(*cfg != ':') {                    // skip to : delimiter
+      if(*cfg == '\0') return(-1);          // premature termination of configuration string
+      cfg++;
+    }
+    cfg++;  // skip :
+    temp = 0 ; sscanf(cfg,"%32s%d",&name[0],&temp) ; memsiz = temp;       // get channel name and size (in MBytes)
+
+    if(mode == 0) {                            // init mode
+      if( MGI_Shm_Can_Publish_name(name,0) == 0 ){  // check if already published
+        memsiz = memsiz * 1024 * 1024 ;             // size in Bytes
+        shmid = shmget(IPC_PRIVATE,memsiz,IPC_CREAT | 0600) ;   // create shared memory segment
+        if( shmid == -1) {
+          perror("shmget");
+          printf("ERROR %d: shared memory segment creation failed, name = '%s' , memsiz = %ld MB\n",debug_rank,name,memsiz/1024/1024) ;
+          return -1;                 // creation failed
+        }
+        memptr = shmat(shmid, NULL, 0) ;            // attach it
+        if(memptr == (void *) -1) {
+          printf("ERROR %d: failed to attach shared memory segment, name = '%s' , memsiz = %ld MB, id = %d\n",debug_rank,name,memsiz/1024/1024,shmid) ;
+          return -1;                 // attach failed
+        }
+        shmctl(shmid,IPC_RMID,&shm_buf) ;           // mark it for deletion
+
+        shm = (mgi_shm_buf *) memptr ;              // prepare for use
+        shm->read_lock = 0;
+        shm->write_lock = 0;
+        shm->read_status = MGI_SHM_IDLE;    // set state to IDLE
+        shm->write_status = MGI_SHM_IDLE;
+        shm->first = 0;                     /* first position in circular buffer */
+        shm->in = 0;                        /* insertion position in buffer, only updated by writer process */
+        shm->out = 0;                       /* extraction position in buffer, only updated by reader process */
+        shm_size = memsiz;                  /* size of memory area */
+        shm_size -= sizeof(mgi_shm_buf);    /* minus structure size */
+        shm_size /= sizeof(unsigned int);   /* convert to number of unsigned int */
+        shm->limit = shm_size;              /* last permissible position in circular buffer */        
+
+if(DEBUG) printf("DEBUG %d: created channel '%s', size = %ldMB, id = %d, at address %p\n",debug_rank,name,memsiz/1024/1024,shmid,memptr) ;
+if(DEBUG) sleep(5);
+        MGI_Shm_Publish_name(name,shmid) ;          // publish shmid under name
+      }else{
+        MGI_Shm_Lookup_name(name, &shmid) ;
+        printf("INFO %d: channel '%s', size = %ldMB is already published, id = %d\n",debug_rank,name,memsiz/1024/1024,shmid) ;
+      }
+    }else{                                     // terminate mode
+      MGI_Shm_Can_Publish_name(name,1) ;   // remove lock file and channel file
+    }
+  }
+
+  return 0;
+}
+
+// intercept call to mpi_init to perform setup on PE0
+int MPI_Init(int *argc, char ***argv){
+  int rank ;
+
+  PMPI_Init(argc, argv) ;
+
+  MPI_Comm_rank(MPI_COMM_WORLD,&rank) ;
+  debug_rank = rank ;
+// if(DEBUG) printf("DEBUG %d: initializing\n",debug_rank) ;
+  if(rank != 0) return MPI_SUCCESS ;
+
+  return Mpi_Mgi_Shm_Init(0) ;    // initialize on rank 0 only
+}
+
+// intercept call to mpi_init to perform cleanup on PE0
+int MPI_Finalize(){
+  int rank ;
+
+  MPI_Comm_rank(MPI_COMM_WORLD,&rank) ;
+  if(rank == 0) Mpi_Mgi_Shm_Init(1) ;
+// if(DEBUG) printf("DEBUG %d: finalizing\n",debug_rank) ;
+
+  return PMPI_Finalize() ;               // cleanup on rank 0 only
+}
+
 
 void PrintMgiError(int code)
 {
@@ -333,7 +607,7 @@ static void strcopy( char *s, char *t, F2Cl charlen )
 /* #define DEBUG */
 
 /*********************************************************************************************/
-#ifdef NOTUSED
+#if defined(NOTUSED)
 
 void f77_name (mgi_nosig) ()
      /* to disable the signals between filepipes */
@@ -473,7 +747,7 @@ static int bwrite ( int chan, void *buffer, int nelem, char *dtype )
       return WRITE_ERROR;
     }
 
-#ifdef DEBUG
+#if defined(DEBUG)
   fprintf(stderr,"mgilib2::bwrite(), ==\n");
 #endif
   nb = 0 ;
@@ -524,8 +798,12 @@ static int bwrite ( int chan, void *buffer, int nelem, char *dtype )
  ********************************************************************************************/
 ftnword f77_name (mgi_clos) (ftnword *f_chan)
 {
-  int ier = 0, chan;
+//   int ier = 0, chan;
+#if ! defined(WITHOUT_GOSSIP)
+  int ier;
   char buf[1024];
+#endif
+  int chan;
   chan = (int) *f_chan;
   int force=0;
 
@@ -650,7 +928,7 @@ ftnword f77_name (mgi_init) (char *channel_name, F2Cl lname)
       init = 1;
     }
 
-#ifdef DEBUG
+#if defined(DEBUG)
   fprintf(stderr,"MGI_INIT ** \n");
 #endif
   ichan++;
@@ -693,7 +971,7 @@ ftnword f77_name (mgi_init) (char *channel_name, F2Cl lname)
       if(env_var_value != NULL) {                /* it is a shared memory channel */
         chn[chan].shmid = atoi(env_var_value);   /* get shared memory segment ID */
       }else{  /* look for a channel id file */
-        snprintf(shm_fil_name,sizeof(shm_fil_name),"%s/.gossip/SHM/%s.id",getenv("HOME"),chn[chan].name);
+        snprintf(shm_fil_name,sizeof(shm_fil_name),"%s/.gossip/SHM/%s.channel",getenv("HOME"),chn[chan].name);
         FD=fopen(shm_fil_name,"r");
         if(FD != NULL){
           items = fscanf(FD,"%d",&chn[chan].shmid);  /* get shared memory segment ID */
@@ -1103,7 +1381,7 @@ ftnword f77_name (mgi_write) (ftnword *f_chan, void *buffer, ftnword *f_nelem, c
 	'D': real*8 ; note that only the precision of a real would be kept
      */
 {
-  int nb, chan, nelem;
+  int chan, nelem;
   int lnblnk_();
   int len_typ;
   int timeout;
@@ -1111,7 +1389,10 @@ ftnword f77_name (mgi_write) (ftnword *f_chan, void *buffer, ftnword *f_nelem, c
 
   chan = (int) *f_chan;
   nelem = (int) *f_nelem;
+#if ! defined(WITHOUT_GOSSIP)
+  int nb;
   char *tmpstr;
+#endif
 
   if(validchan(chan) != 0) return(CONNECTION_ERROR); /* invalid channel */
 
@@ -1153,7 +1434,7 @@ ftnword f77_name (mgi_write) (ftnword *f_chan, void *buffer, ftnword *f_nelem, c
 
       tmpstr = (char *)malloc(nelem + 1);
 
-#ifdef DEBUG
+#if defined(DEBUG)
       fprintf(stderr,"MGI_WRITE: data type = %c, elts Nbr = %d, strlen = %d,  subchannel = %s\n", dtype[0], nelem, ltype, chn[chan].name);
 #endif
 
@@ -1174,7 +1455,7 @@ ftnword f77_name (mgi_write) (ftnword *f_chan, void *buffer, ftnword *f_nelem, c
     {
       chn[chan].nblks++;
 
-#ifdef DEBUG
+#if defined(DEBUG)
       fprintf(stderr,"MGI_WRITE: data type = %c, elts Nbr = %d, subchannel = %s\n", dtype[0], nelem, chn[chan].name);
       fprintf(stderr,"MGI_WRITE: data type = %s\n", dtype);
       fprintf(stderr,"MGI_WRITE: elts Nbr = %d\n", nelem);
@@ -1247,13 +1528,15 @@ ftnword f77_name (mgi_read) (ftnword *f_chan, void *buffer, ftnword *f_nelem, ch
 	'D': real*8  (double)
      */
 {
-  int ier, chan, nelem;
+  int chan, nelem;
   int lt = ltype;
   int len_typ;
   char typ;
   int timeout;
   int status;
-
+#if ! defined(WITHOUT_GOSSIP)
+  int ier;
+#endif
   chan = (int) *f_chan;
   nelem = (int) *f_nelem;
 
@@ -1421,7 +1704,7 @@ ftnword f77_name (mgi_read) (ftnword *f_chan, void *buffer, ftnword *f_nelem, ch
       fprintf(stderr,"ERROR: (mgi_read) channel '%s': Unknown data type: %c\n", chn[chan].name, *dtype);
       return READ_TYPE_ERROR;
     }
-#ifdef UNUSED_CODE
+#if defined(UNUSED_CODE)
   if(ier == CLOSE)  /* cannot happen !! */
     {
       close_channel(chn[chan].gchannel, chn[chan].name);
@@ -1444,8 +1727,22 @@ int C_mgi_read (int c_chan, void *buffer, int c_nelem, char c_dtype){
   char dtype=c_dtype;
   return( f77_name (mgi_read) (&f_chan, buffer, &f_nelem, &dtype, ltype) );
 }
+
 #if defined(WITH_MAIN)
-main(int argc, char**argv){
+int main(int argc, char**argv){
   printf("Hello World!!\n");
+  return 0;
+}
+#endif
+
+#if defined(SELF_TEST)
+int main(int argc, char **argv){
+  MGI_Shm_Publish_timeout(30) ;
+  MPI_Init(&argc, &argv) ;
+  MPI_Comm_rank(MPI_COMM_WORLD,&debug_rank) ;
+//   printf("DEBUG %d: after MPI_init \n",debug_rank) ;
+  sleep(20) ;
+  MPI_Finalize() ;
+  return 0;
 }
 #endif
