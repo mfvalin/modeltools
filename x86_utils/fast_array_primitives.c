@@ -64,6 +64,7 @@ void FloatFastQuantizeLinear(float *z_in, short *quant, int n, int nbits, float 
   
   for (i=0 ; i<np2 ; i+=VLEN){
 #if defined(__SSE__)
+    // SIMD code (only needs SSE instruction set 
     x0    = _mm_loadu_ps(&z_in[i]) ;          // stream from beginning
     x1    = _mm_loadu_ps(&z_in[i+offset]) ;   // stream from "midpoint"
     xxsum = _mm_add_ps(xxsum,x0);
@@ -73,6 +74,7 @@ void FloatFastQuantizeLinear(float *z_in, short *quant, int n, int nbits, float 
     xxmax = _mm_max_ps(xxmax,x1);
     xxmin = _mm_min_ps(xxmin,x1);
 #else
+    // straight C code
     for(j=0 ; j<VLEN ; j++){
       vmax[j] = (vmax[j] > z_in[j]) ? vmax[j] : z_in[j] ;
       vmin[j] = (vmin[j] < z_in[j]) ? vmin[j] : z_in[j] ;
@@ -85,22 +87,23 @@ void FloatFastQuantizeLinear(float *z_in, short *quant, int n, int nbits, float 
 #endif
   }
 #if defined(__SSE__)
+// reduction operation on last 4 elements using vector instructions 
   x0 = _mm_shuffle_ps(xxmin,xxmin,SELECT(2,3,2,3)) ;  //  put elements 2 and 3 on top of 0 and 1
   x1 = _mm_shuffle_ps(xxmax,xxmax,SELECT(2,3,2,3)) ;
   x2 = _mm_shuffle_ps(xxsum,xxsum,SELECT(2,3,2,3)) ;
-  xxmin = _mm_min_ps(xxmin,x0);   // min(0,2) , min(1,3), ?? , ??
+  xxmin = _mm_min_ps(xxmin,x0);   // f(0,2) , f(1,3), ?? , ?? ( f = min/max/add)
   xxmax = _mm_max_ps(xxmax,x1);
   xxsum = _mm_add_ps(xxsum,x2);
-  x0 = _mm_shuffle_ps(xxmin,xxmin,SELECT(1,1,1,1)) ;  // put f(1,3) on top of f(0,2)
+  x0 = _mm_shuffle_ps(xxmin,xxmin,SELECT(1,1,1,1)) ;  // put f(1,3) on top of f(0,2) (element 0 of vector)
   x1 = _mm_shuffle_ps(xxmax,xxmax,SELECT(1,1,1,1)) ;
   x2 = _mm_shuffle_ps(xxsum,xxsum,SELECT(1,1,1,1)) ;
-  xxmin = _mm_min_ps(xxmin,x0);   // f( f(0,2) , f(1,3) ) , ?? , ??, ??
+  xxmin = _mm_min_ps(xxmin,x0);   // f( f(0,2) , f(1,3) ) , ?? , ?? , ?? ( f = min/max/add)
   xxmax = _mm_max_ps(xxmax,x1);
   xxsum = _mm_add_ps(xxsum,x2);
-  xxmin = _mm_shuffle_ps(xxmin,xxmin,SELECT(0,0,0,0)) ;  // broadcast
-  xxmax = _mm_shuffle_ps(xxmax,xxmax,SELECT(0,0,0,0)) ;
-  xxrng = _mm_sub_ps(xxmax,xxmin) ;
-  xxsum = _mm_shuffle_ps(xxsum,xxsum,SELECT(0,0,0,0)) ;
+//   xxmin = _mm_shuffle_ps(xxmin,xxmin,SELECT(0,0,0,0)) ;  // broadcast to all elements of vector
+//   xxmax = _mm_shuffle_ps(xxmax,xxmax,SELECT(0,0,0,0)) ;
+//   xxrng = _mm_sub_ps(xxmax,xxmin) ;                      // max - min
+//   xxsum = _mm_shuffle_ps(xxsum,xxsum,SELECT(0,0,0,0)) ;
   _mm_store_ss(Min,xxmin);
   _mm_store_ss(Max,xxmax);
   _mm_store_ss(Avg,xxsum);
@@ -130,6 +133,9 @@ void FloatFastQuantizeLinear(float *z_in, short *quant, int n, int nbits, float 
   scale = xscl.f;   // TO BE FIXED, used to convert floats to range  0 <= X < 2**nbits -1 
   xscl.i = IEEE32(0,(maxexp-127) - (nbits-1),0); // inverse scaling factor
   *Rescl = xscl.f;
+  // eventually, add code to force xmin to be an integral multiple of the discretization interval
+  // modulo = mod(min,interval) (Fortran)      modulo = fmodf(min,interval) (C)
+  // min = min - modulo (min>0) , min = min - (interval+modulo) (min < 0)
   if(IEEE32_SGN(xmax.i) + IEEE32_SGN(xmin.i) == 1 ) {   // min < 0 and max >0
     izero = (0 - *Min) * scale + .5;
     fzero = *Min + izero * *Rescl;
@@ -139,6 +145,7 @@ void FloatFastQuantizeLinear(float *z_in, short *quant, int n, int nbits, float 
   }
 //   printf("max min range maxexp scale mask is %f %f %f %i %f %8.8x\n",xmax.f,xmin.f,xrng.f,maxexp-127,scale,mask);
 #if defined(__AVX2__) && defined(__FMA__)
+  // uses AVX2, SSE4, FMA instructions
   yysca = _mm256_set1_ps(scale) ;
   point5 = _mm256_set1_ps(0.5) ;
   yymin = _mm256_set1_ps(xmin.f) ;
@@ -181,7 +188,7 @@ main()
   float a[ASIZE+10];
   short int ia[ASIZE+10];
   int nbits = 16;
-  float mi, ma, av, range, scal, mi0, fac, rescl;
+  float mi, ma, av, range, scal, mi0, fac, rescl, minval;
   int ima, imi, exp;
   union {
     unsigned int i;
@@ -253,14 +260,15 @@ main()
   for (i=1 ; i<ASIZE ; i++){
     a[i] = a[i-1]*1.01;
   }
-  a[4] = -8.7 ; a[7] = 65535.99 + a[4] ;
+  minval = -8.7 ;
+  a[4] = minval ; a[7] = 65535.99 + a[4] ;
   printf("a[1,4,7,ASIZE-1] %8f %8f %8f %8f\n",a[1],a[4],a[7],a[ASIZE-2]);
   FloatFastQuantizeLinear(&a[1],&ia[1],ASIZE-2,nbits,&ma,&mi,&av,&rescl);
   printf("mi=%f, av=%f, ma=%f, rescl=%f\n",mi,av,ma,rescl);
   av = 0;
   for (i=1 ; i<ASIZE-1 ; i++) { av = av + a[i] ; } ;
   av = av / (ASIZE-2) ;
-  printf("expected mi=%f, expected av=%f, expected ma=%f\n",-1.2,av,a[7]);
+  printf("expected mi=%f, expected av=%f, expected ma=%f\n",minval,av,a[7]);
   printf("a[1,4,7,ASIZE-2] %8f %8f %8f %8f\n",a[1],a[4],a[7],a[ASIZE-2]);
   printf("ia[1,4,7,ASIZE-2] %8hu %8hu %8hu %8hu\n",ia[1],ia[4],ia[7],ia[ASIZE-2]);
 
