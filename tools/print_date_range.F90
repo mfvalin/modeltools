@@ -106,14 +106,14 @@ program print_date_range
     oldp = transfer(trim(oldpath)//achar(0),oldp)
     newpath = trim(dirpath)//'/content'
     newp = transfer(trim(newpath)//achar(0),newp)
-    status = f_unlink( newp )
+    if(use_anal) status = f_unlink( newp )
     status = f_link( oldp, newp )
     oldpath = trim(nest_rept) // '/' // trim(nest_exp) // '_' // arg2(1:6) // '/' // trim(nest_exp) // '_' // arg2(1:8)
     if(use_anal) oldpath = trim(anal)
     oldp = transfer(trim(oldpath)//achar(0),oldp)
     newpath = 'VALID_' // trim(arg1) // '/GEM_input_file_0001'
     newp = transfer(trim(newpath)//achar(0),newp)
-    status = f_unlink( newp )
+    if(use_anal) status = f_unlink( newp )
     status = f_symlink( oldp, newp )
     call incdatr(stamp,stamp1,delta)                  ! increment
     stamp1 = stamp
