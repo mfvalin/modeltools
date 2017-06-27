@@ -313,9 +313,11 @@ static int Mpi_Mgi_Shm_Init(int mode){        // setup/cleanup for all shared me
   int i, shmid ;
   char name[128] ;
   size_t memsiz ;
+  size_t shm_size;
   void *memptr ;
   struct shmid_ds shm_buf;
   int temp ;
+  mgi_shm_buf *shm;
 
   if(cfg == NULL) return -1;   // environment variable for configuration not found
 
@@ -343,6 +345,20 @@ static int Mpi_Mgi_Shm_Init(int mode){        // setup/cleanup for all shared me
           return -1;                 // attach failed
         }
         shmctl(shmid,IPC_RMID,&shm_buf) ;           // mark it for deletion
+
+        shm = (mgi_shm_buf *) memptr ;              // prepare for use
+        shm->read_lock = 0;
+        shm->write_lock = 0;
+        shm->read_status = MGI_SHM_IDLE;
+        shm->write_status = MGI_SHM_IDLE;
+        shm->first = 0;                     /* first position in buffer */
+        shm->in = 0;                        /* insertion position in buffer */
+        shm->out = 0;                       /* extraction position in buffer */
+        shm_size = memsiz;      /* size of memory area */
+        shm_size -= sizeof(mgi_shm_buf);    /* minus structure size */
+        shm_size /= sizeof(unsigned int);   /* convert to number of unsigned int */
+        shm->limit = shm_size;              /* last position in buffer */        
+
 if(DEBUG) printf("DEBUG %d: created channel '%s', size = %ldMB, id = %d, at address %p\n",debug_rank,name,memsiz/1024/1024,shmid,memptr) ;
 if(DEBUG) sleep(5);
         MGI_Shm_Publish_name(name,shmid) ;          // publish shmid under name
@@ -898,7 +914,7 @@ ftnword f77_name (mgi_init) (char *channel_name, F2Cl lname)
       if(env_var_value != NULL) {                /* it is a shared memory channel */
         chn[chan].shmid = atoi(env_var_value);   /* get shared memory segment ID */
       }else{  /* look for a channel id file */
-        snprintf(shm_fil_name,sizeof(shm_fil_name),"%s/.gossip/SHM/%s.id",getenv("HOME"),chn[chan].name);
+        snprintf(shm_fil_name,sizeof(shm_fil_name),"%s/.gossip/SHM/%s.channel",getenv("HOME"),chn[chan].name);
         FD=fopen(shm_fil_name,"r");
         if(FD != NULL){
           items = fscanf(FD,"%d",&chn[chan].shmid);  /* get shared memory segment ID */
