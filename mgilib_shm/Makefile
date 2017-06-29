@@ -1,3 +1,4 @@
+coupled: mgilib2.o atm.Abs oce.Abs
 
 all: mgilib2.o atm.Abs oce.Abs test.Abs mpi.Abs mgi_shm.Abs
 
@@ -14,10 +15,10 @@ oce.Abs: mgilib2.o f_mgi_test.F90
 	s.f90 -mpi -DMODEL -DOCE f_mgi_test.F90 mgilib2.o -o oce.Abs
 
 test.Abs: mgilib2.o f_mgi_test.F90
-	s.f90 f_mgi_test.F90 mgilib2.o -o test.Abs
+	s.f90 -mpi f_mgi_test.F90 mgilib2.o -o test.Abs
 
 mgilib2.o: mgilib2.c mgi.h
-	s.cc -I. -c -DWITHOUT_GOSSIP -O 2 mgilib2.c -o mgilib2.o
+	s.cc -mpi -I. -c -DWITHOUT_GOSSIP -O 2 mgilib2.c -o mgilib2.o
 
 clean:
 	rm -f mgilib2.o atm.Abs oce.Abs mgi_shm.Abs mpi.Abs
