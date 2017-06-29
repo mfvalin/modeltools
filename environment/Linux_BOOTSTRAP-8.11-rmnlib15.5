@@ -190,7 +190,7 @@ done
 mkdir libs/rmnlib-dev
 must_be_dir libs/rmnlib-dev
 ssm created -d $BASEDIR/libs/rmnlib-dev --defaultRepositorySource $REPOSITORY -L rmnlib_libraries -y
-for  Package in environment-helpers_1.0u_all rmnlib-git_1.0_multi massvp4_1.0_multi rpncomm-git_1.0_multi #rmnlib_14.0u_multi
+for  Package in environment-helpers_1.0u_all rmnlib-git_1.0_multi massvp4_1.0_multi rpncomm-git_1.0_multi makebidon_1.0_multi #rmnlib_14.0u_multi
 do
   ssm install -p ${Package} --skipOnInstalled -d $BASEDIR/libs/rmnlib-dev -y
   ssm publish -p ${Package} --skipOnPublished -d $BASEDIR/libs/rmnlib-dev -y
@@ -218,7 +218,7 @@ repository/FIX_SSMDEPOT
 ######################################
 #return
 ######################################
-# compile rmnlib v 15.2
+# compile rmnlib v 15.2 amd makebidon
 . s.ssmuse.dot all
 export EC_ARCH=${BASE_ARCH}/gfortran    # use new arch to compile
 export ARCH=${BASE_ARCH}/gfortran
@@ -258,6 +258,12 @@ cp $EC_ARCH/librmn_015.2.a ../lib/$EC_ARCH/librmn_015.2.a
 cp $EC_ARCH/librmnshared_015.2.so ../lib/$EC_ARCH/librmnshared_015.2.so
 cd $BASEDIR/libs/rmnlib-dev
 s.ssm-publish rmnlib-git_1.0_multi -y
+######################################
+cd $BASEDIR/libs/rmnlib-dev/makebidon_1.0_multi/src
+. s.ssmuse.dot all
+make dist
+cd $BASEDIR/libs/rmnlib-dev
+s.ssm-publish makebidon_1.0_multi -y
 ###############################################################
 # compile massvp4
 cd $BASEDIR/libs/rmnlib-dev/massvp4_1.0_multi/lib  # prepare to publish both as new arch and old arch
