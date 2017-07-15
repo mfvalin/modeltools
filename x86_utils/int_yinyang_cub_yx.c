@@ -33,6 +33,13 @@ void int_yinyang_cub_yx(float *f, float *r, int ni, int ninj, int nk, int np, do
   int ni2 = ni + ni;    // + 2 rows
   int ni3 = ni2 + ni;   // + 3 rows
   int i, k;
+  int ix, iy;
+
+  ix = x - 1;
+  iy = y - 1;
+  x  = x - ix;
+  y  = y - iy;
+  f = f + ix + iy * ni;
 
   wx[0] = cm133*x*(x-one)*(x-two);
   wx[1] = cp5*(x+one)*(x-one)*(x-two);
@@ -220,7 +227,7 @@ void int_yinyang_cub_yx_mono(float *f, float *r, int ni, int ninj, int nk, int n
 #define NI 65
 #define NJ 27
 #define NK 80
-#define NP 19
+#define NP 2
 
 int main(int argc,char **argv){
   float f[NK][NJ][NI] ;
@@ -232,20 +239,21 @@ int main(int argc,char **argv){
   for(i=0 ; i<NI ; i++){
     for(j=0 ; j<NJ ; j++){
       for(k=0 ; k<NK ; k++){
-	f[k][j][i] = i + j;
+	f[k][j][i] = i + j + 2;
       }
     }
   }
   for(i=0 ; i<NP ; i++){
-    x[i] = 0.0 ;
-    y[i] = 0.0 ;
+    x[i] = 2 + i ;
+    y[i] = 2 + i ;
   }
   t1 = rdtsc();
   for(i=0 ; i<NP ; i++){
-    int_yinyang_cub_yx(&f[0][i][i], &r[0][i], NI, NI*NJ, NK, NP, x[i], y[i]) ;
+    int_yinyang_cub_yx(&f[0][0][0], &r[0][i], NI, NI*NJ, NK, NP, x[i], y[i]) ;
   }
   t2 = rdtsc();
   k = t2 - t1;
+  printf(" r = %f %f\n",r[0][0],r[0][1]);
   printf("time = %d clocks for %d values, %d flops\n",k,NP*NK,NP*NK*35);
 }
 #endif
