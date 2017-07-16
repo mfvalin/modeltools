@@ -1,7 +1,7 @@
 #if ! defined(FORTRAN_CODE)
-static float cp133 = 0.166666666667;
-static float cm133 = -0.16666666667;
-static float cp5 = .5;
+static float cp133 =  0.166666666666666667E0;
+static float cm133 = -0.166666666666666667E0;
+static float cp5 =  .5;
 static float cm5 = -.5;
 static float one = 1.0;
 static float two = 2.0;
@@ -271,7 +271,7 @@ program test_interp
   integer, parameter :: NI=65
   integer, parameter :: NJ=27
   integer, parameter :: NK=80
-  integer, parameter :: NP=2
+  integer, parameter :: NP=4
   integer, parameter :: HX=2
   integer, parameter :: HY=2
   real(C_FLOAT), dimension(1-HX:NI+HX , 1-HY:NJ+HY , NK) :: f
@@ -301,24 +301,29 @@ program test_interp
 !    print *,f(1,1,k),f(2,2,k)
   enddo
   do i = 1 , NP
-    x(i) = i + .1
-    y(i) = i + .1
+    x(i) = i - .1
+    y(i) = i - .1
   enddo
   nidim = NI + 2*HX
   ninjdim = nidim * (NJ + HY*2)
 !  print *,'nidim=',nidim,' , ninjdim=',ninjdim
 !  print *,'x=',x,' y=',y
 !  print *,f(nint(x(1)),nint(y(1)),1),f(nint(x(2)),nint(y(2)),1),f(nint(x(1)),nint(y(1)),2),f(nint(x(2)),nint(y(2)),2)
-  print 101,loc(f(1,1,1)), loc(r(1,1))
+!  print 101,loc(f(1,1,1)), loc(r(1,1))
 101 format(2Z17)
-  print *,f(1,1,1), r(1,1)
+!  print *,f(1,1,1), r(1,1)
   t1 = rdtsc()
   do i = 1 , NP
     call int_yinyang_cub_yx( f(1,1,1), r(i,1), nidim, ninjdim, NK, NP, x(i), y(i) )
   enddo
   t2 = rdtsc()
   print *,'time=',t2-t1,' cycles for',NP*NK*35,' values'
-  print *,f(nint(x(1)),nint(y(1)),1),f(nint(x(2)),nint(y(2)),1),f(nint(x(1)),nint(y(1)),NK),f(nint(x(2)),nint(y(2)),NK)
-  print *,r(:,1),r(:,NK)
+!  print 102,f(nint(x(1)),nint(y(1)),1),f(nint(x(2)),nint(y(2)),1),f(nint(x(1)),nint(y(1)),NK),f(nint(x(2)),nint(y(2)),NK)
+!  print 102,x(1)+y(1)+1,x(2)+y(2)+1,x(1)+y(1)+NK,x(2)+y(2)+NK
+  print *,' expected'
+  print 102,x(:)+y(:)+1, x(:)+y(:)+NK
+  print *,' got'
+  print 102,r(:,1),r(:,NK)
+102 format(16F15.6)
 end
 #endif
