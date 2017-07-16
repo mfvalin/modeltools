@@ -1,3 +1,4 @@
+#if ! defined(FORTRAN_CODE)
 static float cp133 = 0.166666666667;
 static float cm133 = -0.16666666667;
 static float cp5 = .5;
@@ -5,8 +6,11 @@ static float cm5 = -.5;
 static float one = 1.0;
 static float two = 2.0;
 
+#include <stdio.h>
 #include <stdint.h>
-static uint64_t rdtsc(void) {   // version rapide "out of order"
+#pragma weak rdtsc_=rdtsc
+uint64_t rdtsc_(void);
+uint64_t rdtsc(void) {   // version rapide "out of order"
 #if defined(__x86_64__) || defined( __i386__ )
   uint32_t lo, hi;
   __asm__ volatile ("rdtsc"
@@ -21,7 +25,7 @@ static uint64_t rdtsc(void) {   // version rapide "out of order"
 
 #include <immintrin.h>
 
-void int_yinyang_cub_yx(float *f, float *r, int ni, int ninj, int nk, int np, double x, double y){
+void int_yinyang_cub_yx(float *f, float *r, int ni, int ninj, int nk, int np, double xx, double yy){
 #if defined(__AVX2__) && defined(__x86_64__)
   __m256d fd0, fd1, fd2, fd3, fwx, fwy0, fwy1, fwy2, fwy3, fdt ;
   __m128  fr0, fr1, fr2, fr3, frt ;
@@ -30,17 +34,20 @@ void int_yinyang_cub_yx(float *f, float *r, int ni, int ninj, int nk, int np, do
   double fd0[4], fd1[4], fd2[4], fd3[0] ;
 #endif
   double  wx[4], wy[4] ;
+  double  x, y;
   int ni2 = ni + ni;    // + 2 rows
   int ni3 = ni2 + ni;   // + 3 rows
   int i, k;
   int ix, iy;
-
-  ix = x - 1;
-  iy = y - 1;
-  x  = x - ix;
-  y  = y - iy;
+// printf("DEBUG: f = %p, r = %p \n",f,r);
+// printf("DEBUG: f[0] = %f, r[0] = %f, ni = %d, ninj = %d, nk = %d, np = %d, xx = %f, yy = %f\n",f[0],r[0],ni,ninj,nk,np,xx,yy);
+  x = xx - 1.0 ; y = yy - 1.0; // xx and yy are in "ORIGIN 1"
+  ix = x ; ix = ix - 1;   // xx and yy are in "ORIGIN 1"
+  iy = y ; iy = iy - 1;
+  x  = x - 1 - ix;
+  y  = y - 1 - iy;
   f = f + ix + iy * ni;
-
+// printf("DEBUG: f[0] = %f, ix = %d, iy = %d, x = %f, y = %f\n",f[0],ix,iy,x,y);
   wx[0] = cm133*x*(x-one)*(x-two);
   wx[1] = cp5*(x+one)*(x-one)*(x-two);
   wx[2] = cm5*x*(x+one)*(x-two);
@@ -256,4 +263,62 @@ int main(int argc,char **argv){
   printf(" r = %f %f\n",r[0][0],r[0][1]);
   printf("time = %d clocks for %d values, %d flops\n",k,NP*NK,NP*NK*35);
 }
+#endif
+#else
+program test_interp
+  use ISO_C_BINDING
+  implicit none
+  integer, parameter :: NI=65
+  integer, parameter :: NJ=27
+  integer, parameter :: NK=80
+  integer, parameter :: NP=2
+  integer, parameter :: HX=2
+  integer, parameter :: HY=2
+  real(C_FLOAT), dimension(1-HX:NI+HX , 1-HY:NJ+HY , NK) :: f
+  real(C_FLOAT), dimension(NP,NK) :: r
+  real(C_DOUBLE), dimension(NP) :: x, y
+  integer :: i, j, k
+  integer*8, external :: rdtsc
+  real *8 :: t1, t2
+  integer :: nidim, ninjdim
+  interface
+    subroutine int_yinyang_cub_yx(f, r, ni, ninj, nk, np, x, y) bind(C,name='int_yinyang_cub_yx')
+      import :: C_INT, C_FLOAT, C_DOUBLE
+      real(C_FLOAT), dimension(*), intent(IN) :: f
+      real(C_FLOAT), dimension(*), intent(OUT) :: r
+      real(C_DOUBLE), intent(IN), value :: x, y
+      integer(C_INT), intent(IN), value :: ni, ninj, nk, np
+    end subroutine int_yinyang_cub_yx
+  end interface
+
+  r = 9999.99
+  do k = 1 , NK
+    do j = 1-HY , NJ+HY
+      do i = 1-HX , NI+HX
+        f(i,j,k) = i + j  + k
+      enddo
+    enddo
+!    print *,f(1,1,k),f(2,2,k)
+  enddo
+  do i = 1 , NP
+    x(i) = i + .1
+    y(i) = i + .1
+  enddo
+  nidim = NI + 2*HX
+  ninjdim = nidim * (NJ + HY*2)
+!  print *,'nidim=',nidim,' , ninjdim=',ninjdim
+!  print *,'x=',x,' y=',y
+!  print *,f(nint(x(1)),nint(y(1)),1),f(nint(x(2)),nint(y(2)),1),f(nint(x(1)),nint(y(1)),2),f(nint(x(2)),nint(y(2)),2)
+  print 101,loc(f(1,1,1)), loc(r(1,1))
+101 format(2Z17)
+  print *,f(1,1,1), r(1,1)
+  t1 = rdtsc()
+  do i = 1 , NP
+    call int_yinyang_cub_yx( f(1,1,1), r(i,1), nidim, ninjdim, NK, NP, x(i), y(i) )
+  enddo
+  t2 = rdtsc()
+  print *,'time=',t2-t1,' cycles for',NP*NK*35,' values'
+  print *,f(nint(x(1)),nint(y(1)),1),f(nint(x(2)),nint(y(2)),1),f(nint(x(1)),nint(y(1)),NK),f(nint(x(2)),nint(y(2)),NK)
+  print *,r(:,1),r(:,NK)
+end
 #endif
