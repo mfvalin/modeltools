@@ -5,10 +5,6 @@ static unsigned short fp_trap_status  = 0xFFFF;
 
 #define FP_TRAP_FLAGS (FE_INVALID | FE_DIVBYZERO | FE_OVERFLOW)
 
-#pragma weak x86_fp_trap_control__=x86_fp_trap_control
-#pragma weak x86_fp_trap_control_=x86_fp_trap_control
-int x86_fp_trap_control__ (unsigned int onoff);
-int x86_fp_trap_control_ (unsigned int onoff);
 int x86_fp_trap_control (unsigned int onoff)
 {
   unsigned short int x87_status, sse_status;
@@ -41,6 +37,20 @@ int x86_fp_trap_control (unsigned int onoff)
 
   fp_trap_status = onoff;
   return old_status;
+}
+
+#pragma weak x86_fp_trap_on_=x86_fp_trap_on
+int x86_fp_trap_on_(void);
+int x86_fp_trap_on(void)
+{
+  return x86_fp_trap_control(1);
+}
+
+#pragma weak x86_fp_trap_off_=x86_fp_trap_off
+int x86_fp_trap_off_(void);
+int x86_fp_trap_off(void)
+{
+  return x86_fp_trap_control(0);
 }
 
 #if defined(SELF_TEST)
