@@ -324,6 +324,10 @@ program test_interp
   print 102,x(:)+y(:)+1, x(:)+y(:)+NK
   print *,' got'
   print 102,r(:,1),r(:,NK)
+  print *,' delta'
+  print 102,(r(:,1)-(x(:)+y(:)+1)),(r(:,NK)-(x(:)+y(:)+NK))
+  print 103,(r(:,1)-(x(:)+y(:)+1))/(x(:)+y(:)+1) , (r(:,NK)-(x(:)+y(:)+NK))/(x(:)+y(:)+NK)
 102 format(16F15.6)
+103 format(16E15.2)
 end
 #endif
