@@ -7,6 +7,7 @@ static unsigned short fp_trap_status  = 0xFFFF;
 
 int x86_fp_trap_control (unsigned int onoff)
 {
+#if defined(__x86_64__)
   unsigned short int x87_status, sse_status;
   unsigned short int old_status = fp_trap_status ;
 
@@ -37,6 +38,9 @@ int x86_fp_trap_control (unsigned int onoff)
 
   fp_trap_status = onoff;
   return old_status;
+#else
+  return 0;
+#endif
 }
 
 #pragma weak x86_fp_trap_on_=x86_fp_trap_on
