@@ -1,4 +1,23 @@
-#if ! defined(FORTRAN_CODE)
+#if ! defined(F_TEST)
+/* RMNLIB - Library of useful routines for C and FORTRAN programming
+ * Copyright (C) 1975-2017  Division de Recherche en Prevision Numerique
+ *                          Environnement Canada
+ *
+ * This library is free software; you can redistribute it and/or
+ * modify it under the terms of the GNU Lesser General Public
+ * License as published by the Free Software Foundation,
+ * version 2.1 of the License.
+ *
+ * This library is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * Lesser General Public License for more details.
+ *
+ * You should have received a copy of the GNU Lesser General Public
+ * License along with this library; if not, write to the
+ * Free Software Foundation, Inc., 59 Temple Place - Suite 330,
+ * Boston, MA 02111-1307, USA.
+ */
 static float cp133 =  0.166666666666666667E0;
 static float cm133 = -0.166666666666666667E0;
 static float cp5 =  .5;
@@ -6,6 +25,7 @@ static float cm5 = -.5;
 static float one = 1.0;
 static float two = 2.0;
 
+#if defined(TIMING)
 #include <stdio.h>
 #include <stdint.h>
 #pragma weak rdtsc_=rdtsc
@@ -22,9 +42,35 @@ uint64_t rdtsc(void) {   // version rapide "out of order"
   return time0++;
 #endif
 }
-
+#endif
 #include <immintrin.h>
-
+/*
+           interpolate a column from a 3D source array f, put results in array r
+  
+   f       3D source array, fortran dimension(ni,nj,nk),  ni*nj = ninj
+   ni      distance between f(i,j,k) and f(i,j+1,k)
+   ninj    distance between f(i,j,k) and f(i,j,k+1)
+   r       2D array, fortran dimension(np,nk)
+   nk      number of levels
+   xx      i coordinate in i j fractional index space of desired column
+   yy      j coordinate in i j fractional index space of desired column
+  
+   f is assumed to point to f(1,1,1)
+  
+   xx = 2.5, yy = 2.5 would be the center ot the square formed by
+   f(2,2,k) f(3,2,k) f(2,3,k) f(3.3.k)  (where 1 <= k <= nk)
+  
+   to call from FORTRAN, the following interface is needed
+  interface
+    subroutine int_yinyang_cub_yx(f, r, ni, ninj, nk, np, x, y) bind(C,name='int_yinyang_cub_yx')
+      import :: C_INT, C_FLOAT, C_DOUBLE
+      real(C_FLOAT), dimension(*), intent(IN) :: f
+      real(C_FLOAT), dimension(*), intent(OUT) :: r
+      real(C_DOUBLE), intent(IN), value :: x, y
+      integer(C_INT), intent(IN), value :: ni, ninj, nk, np
+    end subroutine int_yinyang_cub_yx
+  end interface
+ */
 void int_yinyang_cub_yx(float *f, float *r, int ni, int ninj, int nk, int np, double xx, double yy){
 #if defined(__AVX2__) && defined(__x86_64__)
   __m256d fd0, fd1, fd2, fd3, fwx, fwy0, fwy1, fwy2, fwy3, fdt ;
@@ -48,12 +94,12 @@ void int_yinyang_cub_yx(float *f, float *r, int ni, int ninj, int nk, int np, do
   y  = y - 1 - iy;
   f = f + ix + iy * ni;
 // printf("DEBUG: f[0] = %f, ix = %d, iy = %d, x = %f, y = %f\n",f[0],ix,iy,x,y);
-  wx[0] = cm133*x*(x-one)*(x-two);
+  wx[0] = cm133*x*(x-one)*(x-two);       // polynomial coefficients along i
   wx[1] = cp5*(x+one)*(x-one)*(x-two);
   wx[2] = cm5*x*(x+one)*(x-two);
   wx[3] = cp133*x*(x+one)*(x-one);
 
-  wy[0] = cm133*y*(y-one)*(y-two);
+  wy[0] = cm133*y*(y-one)*(y-two);       // polynomial coefficients along j
   wy[1] = cp5*(y+one)*(y-one)*(y-two);
   wy[2] = cm5*y*(y+one)*(y-two);
   wy[3] = cp133*y*(y+one)*(y-one);
@@ -64,9 +110,7 @@ void int_yinyang_cub_yx(float *f, float *r, int ni, int ninj, int nk, int np, do
   fwy1 = _mm256_set1_pd(wy[1]) ;
   fwy2 = _mm256_set1_pd(wy[2]) ;
   fwy3 = _mm256_set1_pd(wy[3]) ;
-#endif
-#if defined(__AVX2__) && defined(__x86_64__)
-  // fetch 4 rows, level 0
+  // fetch 4 rows, level 1
   fr0 = _mm_loadu_ps(f) ;                 // row 1 : f[i:i+3 , j   ,k]
   fd0 = _mm256_cvtps_pd(fr0) ;            // promote row 1 to double
   fr1 = _mm_loadu_ps(f+ni) ;              // row 2 : f[i:i+3 , j+1 ,k]
@@ -77,7 +121,7 @@ void int_yinyang_cub_yx(float *f, float *r, int ni, int ninj, int nk, int np, do
   fd3 = _mm256_cvtps_pd(fr3) ;            // promote row 4 to double
   for(k=0 ; k<nk-1 ; k++){
     f+= ninj;
-    // interpolation along J level k, prefetch 4 rows level k+1
+    // interpolation along J level k, prefetch 4 rows for level k+1
     fdt = _mm256_mul_pd(fd0,fwy0) ;         // sum of row[j] * coefficient[j]
     fr0 = _mm_loadu_ps(f) ;                 // row 1 : f[i:i+3 , j   ,k]
     fd0 = _mm256_cvtps_pd(fr0) ;            // promote row 1 to double
@@ -94,30 +138,30 @@ void int_yinyang_cub_yx(float *f, float *r, int ni, int ninj, int nk, int np, do
     fr3 = _mm_loadu_ps(f+ni3) ;             // row 4 : f[i:i+3 , j+3 ,k]
     fd3 = _mm256_cvtps_pd(fr3) ;            // promote row 4 to double
 
-    // interpolation along i, multiply by coefficients along x , then sum elements
+    // interpolation along i: multiply by coefficients along x , then sum elements (using vector folding)
     fdt = _mm256_mul_pd(fdt,fwx) ;
     ft1 = _mm256_extractf128_pd(fdt,1) ;    // fdt[2]                      fdt[3]
     ft0 = _mm256_extractf128_pd(fdt,0) ;    // fdt[0]                      fdt[1]
     ft0 = _mm_add_pd(ft0,ft1) ;             // fdt[0]+fdt[2]               fdt[1]+fdt[3]
-    ft1 = _mm_permute_pd(ft0,0x55) ;        // fdt[1]+fdt[3]               fdt[1]+fdt[3]
-    ft0 = _mm_add_pd(ft0,ft1) ;             // fdt[1]+fdt[3]+fdt[1]+fdt[3] fdt[1]+fdt[3]+fdt[1]+fdt[3]
-    frt = _mm_cvtsd_ss(frt,ft0) ;           // convert fdt[1]+fdt[3]+fdt[1]+fdt[3] to float
+    ft1 = _mm_permute_pd(ft0,0x05) ;        // fdt[1]+fdt[3]               fdt[1]+fdt[3]
+    ft0 = _mm_add_sd(ft0,ft1) ;             // fdt[0]+fdt[2]+fdt[1]+fdt[3]
+    frt = _mm_cvtsd_ss(frt,ft0) ;           // convert fdt[0]+fdt[2]+fdt[1]+fdt[3] to float
     _mm_store_ss(r,frt) ;                   // store float
     r += np;
   }
-  // interpolation along J , last value along k
+  // interpolation along j , level nk
   fdt = _mm256_mul_pd(fd0,fwy0) ;            // sum of row[j] * coefficient[j]
   fdt = _mm256_fmadd_pd(fd1,fwy1,fdt) ;
   fdt = _mm256_fmadd_pd(fd2,fwy2,fdt) ;
   fdt = _mm256_fmadd_pd(fd3,fwy3,fdt) ;
-  // interpolation along i, multiply by coefficients along x , then sum elements
+  // interpolation along i: multiply by coefficients along x , then sum elements
   fdt = _mm256_mul_pd(fdt,fwx) ;
   ft0 = _mm256_extractf128_pd(fdt,0) ;    // fdt[0]                      fdt[1]
   ft1 = _mm256_extractf128_pd(fdt,1) ;    // fdt[2]                      fdt[3]
   ft0 = _mm_add_pd(ft0,ft1) ;             // fdt[0]+fdt[2]               fdt[1]+fdt[3]
-  ft1 = _mm_permute_pd(ft0,0x55) ;        // fdt[1]+fdt[3]               fdt[1]+fdt[3]
-  ft0 = _mm_add_pd(ft0,ft1) ;             // fdt[1]+fdt[3]+fdt[1]+fdt[3] fdt[1]+fdt[3]+fdt[1]+fdt[3]
-  frt = _mm_cvtsd_ss(frt,ft0) ;           // convert fdt[1]+fdt[3]+fdt[1]+fdt[3] to float
+  ft1 = _mm_permute_pd(ft0,0x05) ;        // fdt[1]+fdt[3]               fdt[1]+fdt[3]
+  ft0 = _mm_add_sd(ft0,ft1) ;             // fdt[0]+fdt[2]+fdt[1]+fdt[3]
+  frt = _mm_cvtsd_ss(frt,ft0) ;           // convert fdt[0]+fdt[2]+fdt[1]+fdt[3] to float
   _mm_store_ss(r,frt) ;                   // store float
 #else
   for(k=1 ; k<nk ; k++){
@@ -226,7 +270,7 @@ void int_yinyang_cub_yx_mono(float *f, float *r, int ni, int ninj, int nk, int n
 }
 #endif
 
-#if defined(SELF_TEST)
+#if defined(C_TEST)
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdint.h>
@@ -282,13 +326,13 @@ program test_interp
   real *8 :: t1, t2
   integer :: nidim, ninjdim
   interface
-    subroutine int_yinyang_cub_yx(f, r, ni, ninj, nk, np, x, y) bind(C,name='int_yinyang_cub_yx')
-      import :: C_INT, C_FLOAT, C_DOUBLE
-      real(C_FLOAT), dimension(*), intent(IN) :: f
-      real(C_FLOAT), dimension(*), intent(OUT) :: r
-      real(C_DOUBLE), intent(IN), value :: x, y
-      integer(C_INT), intent(IN), value :: ni, ninj, nk, np
-    end subroutine int_yinyang_cub_yx
+    subroutine int_yinyang_cub_yx(f, r, ni, ninj, nk, np, x, y) bind(C,name='int_yinyang_cub_yx') !InTf!
+      import :: C_INT, C_FLOAT, C_DOUBLE                                                          !InTf!
+      real(C_FLOAT), dimension(*), intent(IN) :: f                                                !InTf!
+      real(C_FLOAT), dimension(*), intent(OUT) :: r                                               !InTf!
+      real(C_DOUBLE), intent(IN), value :: x, y                                                   !InTf!
+      integer(C_INT), intent(IN), value :: ni, ninj, nk, np                                       !InTf!
+    end subroutine int_yinyang_cub_yx                                                             !InTf!
   end interface
 
   r = 9999.99
