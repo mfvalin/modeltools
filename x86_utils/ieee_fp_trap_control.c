@@ -1,3 +1,22 @@
+/* RMNLIB - Library of useful routines for C and FORTRAN programming
+ * Copyright (C) 1975-2017  Division de Recherche en Prevision Numerique
+ *                          Environnement Canada
+ *
+ * This library is free software; you can redistribute it and/or
+ * modify it under the terms of the GNU Lesser General Public
+ * License as published by the Free Software Foundation,
+ * version 2.1 of the License.
+ *
+ * This library is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * Lesser General Public License for more details.
+ *
+ * You should have received a copy of the GNU Lesser General Public
+ * License along with this library; if not, write to the
+ * Free Software Foundation, Inc., 59 Temple Place - Suite 330,
+ * Boston, MA 02111-1307, USA.
+ */
 #define _GNU_SOURCE
 #include <fenv.h>
 
@@ -5,6 +24,11 @@ static unsigned short fp_trap_status  = 0xFFFF;
 
 #define FP_TRAP_FLAGS (FE_INVALID | FE_DIVBYZERO | FE_OVERFLOW)
 
+// activate/deactivate the following 3 Floating Point traps: FE_INVALID  FE_DIVBYZERO FE_OVERFLOW
+// onoff = 0  : deactivate
+// onoff = 1  : activate
+// return value : 1 if traps were already active, 0 if traps were not active
+//                any other value returned means unknown previous state
 int ieee_fp_trap_control (unsigned int onoff)
 {
 #if defined(__x86_64__)
@@ -47,7 +71,7 @@ int ieee_fp_trap_control (unsigned int onoff)
 #pragma weak ieee_fp_trap_on_=ieee_fp_trap_on
 int ieee_fp_trap_on__(void);
 int ieee_fp_trap_on_(void);
-int ieee_fp_trap_on(void)
+int ieee_fp_trap_on(void)    // activate FE_INVALID  FE_DIVBYZERO FE_OVERFLOW traps
 {
   return ieee_fp_trap_control(1);
 }
@@ -56,7 +80,7 @@ int ieee_fp_trap_on(void)
 #pragma weak ieee_fp_trap_off_=ieee_fp_trap_off
 int ieee_fp_trap_off__(void);
 int ieee_fp_trap_off_(void);
-int ieee_fp_trap_off(void)
+int ieee_fp_trap_off(void)    // deactivate FE_INVALID  FE_DIVBYZERO FE_OVERFLOW traps
 {
   return ieee_fp_trap_control(0);
 }
