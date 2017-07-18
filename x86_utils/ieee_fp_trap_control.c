@@ -5,7 +5,7 @@ static unsigned short fp_trap_status  = 0xFFFF;
 
 #define FP_TRAP_FLAGS (FE_INVALID | FE_DIVBYZERO | FE_OVERFLOW)
 
-int x86_fp_trap_control (unsigned int onoff)
+int ieee_fp_trap_control (unsigned int onoff)
 {
 #if defined(__x86_64__)
   unsigned short int x87_status, sse_status;
@@ -43,18 +43,22 @@ int x86_fp_trap_control (unsigned int onoff)
 #endif
 }
 
-#pragma weak x86_fp_trap_on_=x86_fp_trap_on
-int x86_fp_trap_on_(void);
-int x86_fp_trap_on(void)
+#pragma weak ieee_fp_trap_on__=ieee_fp_trap_on
+#pragma weak ieee_fp_trap_on_=ieee_fp_trap_on
+int ieee_fp_trap_on__(void);
+int ieee_fp_trap_on_(void);
+int ieee_fp_trap_on(void)
 {
-  return x86_fp_trap_control(1);
+  return ieee_fp_trap_control(1);
 }
 
-#pragma weak x86_fp_trap_off_=x86_fp_trap_off
-int x86_fp_trap_off_(void);
-int x86_fp_trap_off(void)
+#pragma weak ieee_fp_trap_off__=ieee_fp_trap_off
+#pragma weak ieee_fp_trap_off_=ieee_fp_trap_off
+int ieee_fp_trap_off__(void);
+int ieee_fp_trap_off_(void);
+int ieee_fp_trap_off(void)
 {
-  return x86_fp_trap_control(0);
+  return ieee_fp_trap_control(0);
 }
 
 #if defined(SELF_TEST)
@@ -63,10 +67,10 @@ int main(void) {
   float a = 1., b = 0.;
   float c;
   int old_status;
-  old_status = x86_fp_trap_control(0) ;
+  old_status = ieee_fp_trap_control(0) ;
   c = a/b;
   printf("after first zero divide (SUCCESS, this message must appear), c=%G, old_status=%d\n",c,old_status);
-   old_status = x86_fp_trap_control(1) ;
+   old_status = ieee_fp_trap_control(1) ;
   c = a/b;
   printf("after second zero divide (ERROR, this must not appear), c=%G, old_status=%d\n",c,old_status);
     return 0;
