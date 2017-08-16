@@ -143,7 +143,7 @@ void int_yinyang_cub_yx(float *f, float *r, int ni, int ninj, int nk, int np, do
     ft1 = _mm256_extractf128_pd(fdt,1) ;    // fdt[2]                      fdt[3]
     ft0 = _mm256_extractf128_pd(fdt,0) ;    // fdt[0]                      fdt[1]
     ft0 = _mm_add_pd(ft0,ft1) ;             // fdt[0]+fdt[2]               fdt[1]+fdt[3]
-    ft1 = _mm_permute_pd(ft0,0x05) ;        // fdt[1]+fdt[3]               fdt[1]+fdt[3]
+    ft1 = _mm_permute_pd(ft0,0x3) ;         // fdt[1]+fdt[3]               fdt[1]+fdt[3]
     ft0 = _mm_add_sd(ft0,ft1) ;             // fdt[0]+fdt[2]+fdt[1]+fdt[3]
     frt = _mm_cvtsd_ss(frt,ft0) ;           // convert fdt[0]+fdt[2]+fdt[1]+fdt[3] to float
     _mm_store_ss(r,frt) ;                   // store float
@@ -159,7 +159,7 @@ void int_yinyang_cub_yx(float *f, float *r, int ni, int ninj, int nk, int np, do
   ft0 = _mm256_extractf128_pd(fdt,0) ;    // fdt[0]                      fdt[1]
   ft1 = _mm256_extractf128_pd(fdt,1) ;    // fdt[2]                      fdt[3]
   ft0 = _mm_add_pd(ft0,ft1) ;             // fdt[0]+fdt[2]               fdt[1]+fdt[3]
-  ft1 = _mm_permute_pd(ft0,0x05) ;        // fdt[1]+fdt[3]               fdt[1]+fdt[3]
+  ft1 = _mm_permute_pd(ft0,0x3) ;        // fdt[1]+fdt[3]               fdt[1]+fdt[3]
   ft0 = _mm_add_sd(ft0,ft1) ;             // fdt[0]+fdt[2]+fdt[1]+fdt[3]
   frt = _mm_cvtsd_ss(frt,ft0) ;           // convert fdt[0]+fdt[2]+fdt[1]+fdt[3] to float
   _mm_store_ss(r,frt) ;                   // store float
@@ -216,33 +216,33 @@ void int_yinyang_cub_yx_mono(float *f, float *r, int ni, int ninj, int nk, int n
   fwy2 = _mm256_set1_pd(wy[2]) ;
   fwy3 = _mm256_set1_pd(wy[3]) ;
   // fetch 4 rows, level 1
-  fr0 = _mm_loadu_ps(f) ;                 // row 1 : f[i:i+3 , j   ,k]
+  fr0 = _mm_loadu_ps(f) ;                 // row 1 : f[i:i+3 , j   ,0]
   fd0 = _mm256_cvtps_pd(fr0) ;            // promote row 1 to double
-  fr1 = _mm_loadu_ps(f+ni) ;              // row 2 : f[i:i+3 , j+1 ,k]
+  fr1 = _mm_loadu_ps(f+ni) ;              // row 2 : f[i:i+3 , j+1 ,0]
   fd1 = _mm256_cvtps_pd(fr1) ;            // promote row 2 to double
-  fr2 = _mm_loadu_ps(f+ni2) ;             // row 3 : f[i:i+3 , j+2 ,k]
+  fr2 = _mm_loadu_ps(f+ni2) ;             // row 3 : f[i:i+3 , j+2 ,0]
   fd2 = _mm256_cvtps_pd(fr2) ;            // promote row 3 to double
-  fr3 = _mm_loadu_ps(f+ni3) ;             // row 4 : f[i:i+3 , j+3 ,k]
+  fr3 = _mm_loadu_ps(f+ni3) ;             // row 4 : f[i:i+3 , j+3 ,0]
   fd3 = _mm256_cvtps_pd(fr3) ;            // promote row 4 to double
   for(k=0 ; k<nk-1 ; k++){
-    f+= ninj;
+    f+= ninj;                               // point to next level
     // interpolation along J level k, prefetch 4 rows for level k+1
     fmi = _mm_min_ps(fr0,fr1) ;             // min of first 2 rows
     fma = _mm_max_ps(fr0,fr1) ;             // max of first 2 rows
     fdt = _mm256_mul_pd(fd0,fwy0) ;         // sum of row[j] * coefficient[j]
-    fr0 = _mm_loadu_ps(f) ;                 // row 1 : f[i:i+3 , j   ,k]
+    fr0 = _mm_loadu_ps(f) ;                 // row 1 : f[i:i+3 , j   ,k+1]
     fd0 = _mm256_cvtps_pd(fr0) ;            // promote row 1 to double
 
     fmi = _mm_min_ps(fmi,fr2) ;             // min of first 3 rows
     fma = _mm_max_ps(fma,fr2) ;             // max of first 3 rows
     fdt = _mm256_fmadd_pd(fd1,fwy1,fdt) ;
-    fr1 = _mm_loadu_ps(f+ni) ;              // row 2 : f[i:i+3 , j+1 ,k]
+    fr1 = _mm_loadu_ps(f+ni) ;              // row 2 : f[i:i+3 , j+1 ,k+1]
     fd1 = _mm256_cvtps_pd(fr1) ;            // promote row 2 to double
 
     fmi = _mm_min_ps(fmi,fr3) ;             // min of the 4 rows
     fma = _mm_max_ps(fma,fr3) ;             // max of the 4 rows
     fdt = _mm256_fmadd_pd(fd2,fwy2,fdt) ;
-    fr2 = _mm_loadu_ps(f+ni2) ;             // row 3 : f[i:i+3 , j+2 ,k]
+    fr2 = _mm_loadu_ps(f+ni2) ;             // row 3 : f[i:i+3 , j+2 ,k+1]
     fd2 = _mm256_cvtps_pd(fr2) ;            // promote row 3 to double
 
     // get minimum of 4 vector elements
@@ -258,7 +258,7 @@ void int_yinyang_cub_yx_mono(float *f, float *r, int ni, int ninj, int nk, int n
     fma = _mm_max_ss(fma,frt) ;             // max(fma[0],fma[1])
 
     fdt = _mm256_fmadd_pd(fd3,fwy3,fdt) ;
-    fr3 = _mm_loadu_ps(f+ni3) ;             // row 4 : f[i:i+3 , j+3 ,k]
+    fr3 = _mm_loadu_ps(f+ni3) ;             // row 4 : f[i:i+3 , j+3 ,k+1]
     fd3 = _mm256_cvtps_pd(fr3) ;            // promote row 4 to double
 
     // interpolation along i: multiply by coefficients along x , then sum elements (using vector folding)
@@ -315,6 +315,159 @@ void int_yinyang_cub_yx_mono(float *f, float *r, int ni, int ninj, int nk, int n
       fd0[i] = ( f[i]*wy[0] + f[i+ni]*wy[1] + f[i+ni2]*wy[2] + f[i+ni3]*wy[3] ) * wx[i];
     }
     r[0] = fd0[0] + fd0[1] + fd0[2] + fd0[3];
+    f+= ninj;
+    r += np;
+  }
+#endif
+}
+#endif
+
+#if defined(MONO8)
+void int_yinyang_cub_yx_mono(float *f, float *r, int ni, int ninj, int nk, int np, double xx, double yy){
+#if defined(__AVX2__) && defined(__x86_64__)
+  __m256d fd0, fd1, fd2, fd3, fwx, fwy0, fwy1, fwy2, fwy3, fdt, fmi, fma ;
+  __m128  fr0, fr1, fr2, fr3, frt ;   // frt is used as a scalar, fr0->fr3 are 128 bit aliases for fd0->fd3
+  __m128d ft0, ft1, smi, sma ;        // smi, sma are used as scalars (reduction of fmi, fma)
+#else
+  double fd0[4], fd1[4], fd2[4], fd3[0] ;
+#endif
+  double  wx[4], wy[4] ;
+  double  x, y, minval, maxval;
+  int ni2 = ni + ni;    // + 2 rows
+  int ni3 = ni2 + ni;   // + 3 rows
+  int i, k;
+  int ix, iy;
+// printf("DEBUG: f = %p, r = %p \n",f,r);
+// printf("DEBUG: f[0] = %f, r[0] = %f, ni = %d, ninj = %d, nk = %d, np = %d, xx = %f, yy = %f\n",f[0],r[0],ni,ninj,nk,np,xx,yy);
+  x = xx - 1.0 ; y = yy - 1.0; // xx and yy are in "ORIGIN 1"
+  ix = x ; ix = ix - 1;   // xx and yy are in "ORIGIN 1"
+  iy = y ; iy = iy - 1;
+  x  = x - 1 - ix;
+  y  = y - 1 - iy;
+  f = f + ix + iy * ni;
+// printf("DEBUG: f[0] = %f, ix = %d, iy = %d, x = %f, y = %f\n",f[0],ix,iy,x,y);
+  wx[0] = cm133*x*(x-one)*(x-two);       // polynomial coefficients along i
+  wx[1] = cp5*(x+one)*(x-one)*(x-two);
+  wx[2] = cm5*x*(x+one)*(x-two);
+  wx[3] = cp133*x*(x+one)*(x-one);
+
+  wy[0] = cm133*y*(y-one)*(y-two);       // polynomial coefficients along j
+  wy[1] = cp5*(y+one)*(y-one)*(y-two);
+  wy[2] = cm5*y*(y+one)*(y-two);
+  wy[3] = cp133*y*(y+one)*(y-one);
+
+#if defined(__AVX2__) && defined(__x86_64__)
+  fwx  = _mm256_loadu_pd(wx) ;            // vector of coefficients along i
+  fwy0 = _mm256_set1_pd(wy[0]) ;          // scalar * vector not available,
+  fwy1 = _mm256_set1_pd(wy[1]) ;          // promote scalars to vectors
+  fwy2 = _mm256_set1_pd(wy[2]) ;
+  fwy3 = _mm256_set1_pd(wy[3]) ;
+  frt  = _mm_xor_ps(frt,frt) ;            // set frt to zero
+  // prefetch and promote to double 4 rows, level 1
+  fr0 = _mm_loadu_ps(f) ;                 // row 1 : f[i:i+3 , j   ,k]
+  fd0 = _mm256_cvtps_pd(fr0) ;            // promote row 1 to double
+  fr1 = _mm_loadu_ps(f+ni) ;              // row 2 : f[i:i+3 , j+1 ,k]
+  fd1 = _mm256_cvtps_pd(fr1) ;            // promote row 2 to double
+  fr2 = _mm_loadu_ps(f+ni2) ;             // row 3 : f[i:i+3 , j+2 ,k]
+  fd2 = _mm256_cvtps_pd(fr2) ;            // promote row 3 to double
+  fr3 = _mm_loadu_ps(f+ni3) ;             // row 4 : f[i:i+3 , j+3 ,k]
+  fd3 = _mm256_cvtps_pd(fr3) ;            // promote row 4 to double
+  for(k=0 ; k<nk-1 ; k++){
+    f+= ninj;
+    // interpolation along J, level k,
+    // prefetch and promote to double 4 rows, level k+1
+    fdt = _mm256_mul_pd(fd0,fwy0) ;         // sum of row[j] * coefficient[j]
+    fr0 = _mm_loadu_ps(f) ;                 // row 1 : f[i:i+3 , j   ,k]
+    fd0 = _mm256_cvtps_pd(fr0) ;            // promote row 1 to double
+
+    fmi = _mm256_min_pd(fd1,fd2) ;          // min of rows 1 and 2 (ignore 0 and 3)
+    fma = _mm256_max_pd(fd1,fd2) ;          // max of rows 1 and 2 (ignore 0 and 3)
+
+    fdt = _mm256_fmadd_pd(fd1,fwy1,fdt) ;
+    fr1 = _mm_loadu_ps(f+ni) ;              // row 2 : f[i:i+3 , j+1 ,k]
+    fd1 = _mm256_cvtps_pd(fr1) ;            // promote row 2 to double
+
+    fdt = _mm256_fmadd_pd(fd2,fwy2,fdt) ;
+    fr2 = _mm_loadu_ps(f+ni2) ;             // row 3 : f[i:i+3 , j+2 ,k]
+    fd2 = _mm256_cvtps_pd(fr2) ;            // promote row 3 to double
+
+    // get minimum of fmi vector elements 1 and 2 (ignore 0 and 3)
+    ft0 = _mm256_extractf128_pd(fmi,0) ;    // fmi[0]              fmi[1]
+    ft1 = _mm256_extractf128_pd(fmi,1) ;    // fmi[2]              fmi[3]
+    ft0 = _mm_permute_pd(ft0,0x3)      ;    // fmi[1]              fmi[1]
+    smi = _mm_min_sd(ft0,ft1) ;             // min(fmi[1],fmi[2])
+
+    // get maximum of fma vector elements 1 and 2 (ignore 0 and 3)
+    ft0 = _mm256_extractf128_pd(fma,0) ;    // fma[0]              fma[1]
+    ft1 = _mm256_extractf128_pd(fma,1) ;    // fma[2]              fma[3]
+    ft0 = _mm_permute_pd(ft0,0x3) ;         // fma[1]              fma[1]
+    sma = _mm_max_sd(ft0,ft1) ;             // max(fma[1],fma[2])
+
+    fdt = _mm256_fmadd_pd(fd3,fwy3,fdt) ;
+    fr3 = _mm_loadu_ps(f+ni3) ;             // row 4 : f[i:i+3 , j+3 ,k]
+    fd3 = _mm256_cvtps_pd(fr3) ;            // promote row 4 to double
+
+    // interpolation along i: multiply by coefficients along x , then sum elements (using vector folding)
+    fdt = _mm256_mul_pd(fdt,fwx) ;
+    ft1 = _mm256_extractf128_pd(fdt,1) ;    // fdt[2]                      fdt[3]
+    ft0 = _mm256_extractf128_pd(fdt,0) ;    // fdt[0]                      fdt[1]
+    ft0 = _mm_add_pd(ft0,ft1) ;             // fdt[0]+fdt[2]               fdt[1]+fdt[3]
+    ft1 = _mm_permute_pd(ft0,0x3) ;         // fdt[1]+fdt[3]               fdt[1]+fdt[3]
+    ft0 = _mm_add_sd(ft0,ft1) ;             // fdt[0]+fdt[2]+fdt[1]+fdt[3]
+    ft0 = _mm_max_sd(ft0,smi) ;             // max(result, min value)
+    ft0 = _mm_min_sd(ft0,sma) ;             // min(result, max value)
+    frt = _mm_cvtsd_ss(frt,ft0) ;           // convert result to float
+    _mm_store_ss(r,frt) ;                   // store float
+    r += np;
+  }
+  // interpolation along j , level nk
+  fdt = _mm256_mul_pd(fd0,fwy0) ;            // sum of row[j] * coefficient[j]
+  fmi = _mm256_min_pd(fd1,fd2) ;             // min of rows 1 and 2 (ignore 0 and 3)
+  fma = _mm256_max_pd(fd1,fd2) ;             // max of rows 1 and 2 (ignore 0 and 3)
+  fdt = _mm256_fmadd_pd(fd1,fwy1,fdt) ;
+  fdt = _mm256_fmadd_pd(fd2,fwy2,fdt) ;
+  fdt = _mm256_fmadd_pd(fd3,fwy3,fdt) ;
+
+  // get minimum of fmi vector elements 1 and 2 (ignore 0 and 3)
+  ft0 = _mm256_extractf128_pd(fmi,0) ;    // fmi[0]              fmi[1]
+  ft1 = _mm256_extractf128_pd(fmi,1) ;    // fmi[2]              fmi[3]
+  ft0 = _mm_permute_pd(ft0,0x3)      ;    // fmi[1]              fmi[1]
+  smi = _mm_min_sd(ft0,ft1) ;             // min(fmi[1],fmi[2])
+
+  // get maximum of fma vector elements 1 and 2 (ignore 0 and 3)
+  ft0 = _mm256_extractf128_pd(fma,0) ;    // fma[0]              fma[1]
+  ft1 = _mm256_extractf128_pd(fma,1) ;    // fma[2]              fma[3]
+  ft0 = _mm_permute_pd(ft0,0x3) ;         // fma[1]              fma[1]
+  sma = _mm_max_sd(ft0,ft1) ;             // max(fma[1],fma[2])
+
+  // interpolation along i: multiply by coefficients along x , then sum elements (using vector folding)
+  fdt = _mm256_mul_pd(fdt,fwx) ;
+  ft0 = _mm256_extractf128_pd(fdt,0) ;    // fdt[0]                      fdt[1]
+  ft1 = _mm256_extractf128_pd(fdt,1) ;    // fdt[2]                      fdt[3]
+  ft0 = _mm_add_pd(ft0,ft1) ;             // fdt[0]+fdt[2]               fdt[1]+fdt[3]
+  ft1 = _mm_permute_pd(ft0,0x3) ;         // fdt[1]+fdt[3]               fdt[1]+fdt[3]
+  ft0 = _mm_add_sd(ft0,ft1) ;             // fdt[0]+fdt[2]+fdt[1]+fdt[3]
+
+  ft0 = _mm_max_sd(ft0,smi) ;             // max(result, min value)
+  ft0 = _mm_min_sd(ft0,sma) ;             // min(result, max value)
+  frt = _mm_cvtsd_ss(frt,ft0) ;           // convert result to float
+  _mm_store_ss(r,frt) ;                   // store float
+#else
+  for(k=0 ; k<nk ; k++){
+    for(i=0 ; i<4 ; i++){                   // easily vectorizable form
+      fd0[i] = ( f[i]*wy[0] + f[i+ni]*wy[1] + f[i+ni2]*wy[2] + f[i+ni3]*wy[3] ) * wx[i];
+    }
+    minval = f[ni+1] ;
+    maxval = f[ni+1] ;
+    minval = (minval > f[ni+2] ) ? f[ni+2] : minval ;
+    maxval = (maxval < f[ni+2] ) ? f[ni+2] : maxval ;
+    minval = (minval > f[ni2+1] ) ? f[ni2+1] : minval ;
+    maxval = (maxval < f[ni2+1] ) ? f[ni2+1] : maxval ;
+    minval = (minval > f[ni2+2] ) ? f[ni2+2] : minval ;
+    maxval = (maxval < f[ni2+2] ) ? f[ni2+2] : maxval ;
+    r[0] = fd0[0] + fd0[1] + fd0[2] + fd0[3];
+    r[0] = (r[0] < minval ) ? minval : r[0] ;
+    r[0] = (r[0] > maxval ) ? maxval : r[0] ;
     f+= ninj;
     r += np;
   }
@@ -490,7 +643,7 @@ program test_interp
   implicit none
   integer, parameter :: NI=65
   integer, parameter :: NJ=27
-  integer, parameter :: NK=80
+  integer, parameter :: NK=81
   integer, parameter :: NP=4
   integer, parameter :: HX=2
   integer, parameter :: HY=2
