@@ -88,11 +88,12 @@ void int_yinyang_cub_yx(float *f, float *r, int ni, int ninj, int nk, int np, do
 // printf("DEBUG: f = %p, r = %p \n",f,r);
 // printf("DEBUG: f[0] = %f, r[0] = %f, ni = %d, ninj = %d, nk = %d, np = %d, xx = %f, yy = %f\n",f[0],r[0],ni,ninj,nk,np,xx,yy);
   x = xx - 1.0 ; y = yy - 1.0; // xx and yy are in "ORIGIN 1"
-  ix = x ; ix = ix - 1;   // xx and yy are in "ORIGIN 1"
-  iy = y ; iy = iy - 1;
+  ix = xx ; ix = ix - 1;   // xx and yy are in "ORIGIN 1"
+  iy = yy ; iy = iy - 1;
   x  = x - 1 - ix;
   y  = y - 1 - iy;
   f = f + ix + iy * ni;
+//   printf("DEBUG: ix=%d, iy=%d, ni=%d\n",ix, iy, ni);
 // printf("DEBUG: f[0] = %f, ix = %d, iy = %d, x = %f, y = %f\n",f[0],ix,iy,x,y);
   wx[0] = cm133*x*(x-one)*(x-two);       // polynomial coefficients along i
   wx[1] = cp5*(x+one)*(x-one)*(x-two);
@@ -193,8 +194,8 @@ void int_yinyang_cub_yx_mono(float *f, float *r, int ni, int ninj, int nk, int n
 // printf("DEBUG: f = %p, r = %p \n",f,r);
 // printf("DEBUG: f[0] = %f, r[0] = %f, ni = %d, ninj = %d, nk = %d, np = %d, xx = %f, yy = %f\n",f[0],r[0],ni,ninj,nk,np,xx,yy);
   x = xx - 1.0 ; y = yy - 1.0; // xx and yy are in "ORIGIN 1"
-  ix = x ; ix = ix - 1;   // xx and yy are in "ORIGIN 1"
-  iy = y ; iy = iy - 1;
+  ix = xx ; ix = ix - 2;   // xx and yy are in "ORIGIN 1"
+  iy = yy ; iy = iy - 2;
   x  = x - 1 - ix;
   y  = y - 1 - iy;
   f = f + ix + iy * ni;
@@ -328,6 +329,7 @@ void int_yinyang_cub_yx_mono(float *f, float *r, int ni, int ninj, int nk, int n
   __m256d fd0, fd1, fd2, fd3, fwx, fwy0, fwy1, fwy2, fwy3, fdt, fmi, fma ;
   __m128  fr0, fr1, fr2, fr3, frt ;   // frt is used as a scalar, fr0->fr3 are 128 bit aliases for fd0->fd3
   __m128d ft0, ft1, smi, sma ;        // smi, sma are used as scalars (reduction of fmi, fma)
+  double dd0[4], dd1[4], dd2[4], dd3[0] ;
 #else
   double fd0[4], fd1[4], fd2[4], fd3[0] ;
 #endif
@@ -340,11 +342,12 @@ void int_yinyang_cub_yx_mono(float *f, float *r, int ni, int ninj, int nk, int n
 // printf("DEBUG: f = %p, r = %p \n",f,r);
 // printf("DEBUG: f[0] = %f, r[0] = %f, ni = %d, ninj = %d, nk = %d, np = %d, xx = %f, yy = %f\n",f[0],r[0],ni,ninj,nk,np,xx,yy);
   x = xx - 1.0 ; y = yy - 1.0; // xx and yy are in "ORIGIN 1"
-  ix = x ; ix = ix - 1;   // xx and yy are in "ORIGIN 1"
-  iy = y ; iy = iy - 1;
+  ix = xx ; ix = ix - 2;   // xx and yy are in "ORIGIN 1"
+  iy = yy ; iy = iy - 2;
   x  = x - 1 - ix;
   y  = y - 1 - iy;
   f = f + ix + iy * ni;
+//   printf("DEBUG: ix=%d, iy=%d, ni=%d\n",ix, iy, ni);
 // printf("DEBUG: f[0] = %f, ix = %d, iy = %d, x = %f, y = %f\n",f[0],ix,iy,x,y);
   wx[0] = cm133*x*(x-one)*(x-two);       // polynomial coefficients along i
   wx[1] = cp5*(x+one)*(x-one)*(x-two);
@@ -372,6 +375,14 @@ void int_yinyang_cub_yx_mono(float *f, float *r, int ni, int ninj, int nk, int n
   fd2 = _mm256_cvtps_pd(fr2) ;            // promote row 3 to double
   fr3 = _mm_loadu_ps(f+ni3) ;             // row 4 : f[i:i+3 , j+3 ,k]
   fd3 = _mm256_cvtps_pd(fr3) ;            // promote row 4 to double
+//   _mm256_storeu_pd (dd0,fd0);
+//   _mm256_storeu_pd (dd1,fd1);
+//   _mm256_storeu_pd (dd2,fd2);
+//   _mm256_storeu_pd (dd3,fd3);
+//   printf("DEBUG: %f %f %f %f\n",dd3[0],dd3[1],dd3[2],dd3[3]);
+//   printf("DEBUG: %f %f %f %f\n",dd2[0],dd2[1],dd2[2],dd2[3]);
+//   printf("DEBUG: %f %f %f %f\n",dd1[0],dd1[1],dd1[2],dd1[3]);
+//   printf("DEBUG: %f %f %f %f\n",dd0[0],dd0[1],dd0[2],dd0[3]);
   for(k=0 ; k<nk-1 ; k++){
     f+= ninj;
     // interpolation along J, level k,
@@ -394,13 +405,13 @@ void int_yinyang_cub_yx_mono(float *f, float *r, int ni, int ninj, int nk, int n
     // get minimum of fmi vector elements 1 and 2 (ignore 0 and 3)
     ft0 = _mm256_extractf128_pd(fmi,0) ;    // fmi[0]              fmi[1]
     ft1 = _mm256_extractf128_pd(fmi,1) ;    // fmi[2]              fmi[3]
-    ft0 = _mm_permute_pd(ft0,0x3)      ;    // fmi[1]              fmi[1]
+    ft0 = _mm_permute_pd(ft0,0x1)      ;    // fmi[1]              fmi[1]
     smi = _mm_min_sd(ft0,ft1) ;             // min(fmi[1],fmi[2])
 
     // get maximum of fma vector elements 1 and 2 (ignore 0 and 3)
     ft0 = _mm256_extractf128_pd(fma,0) ;    // fma[0]              fma[1]
     ft1 = _mm256_extractf128_pd(fma,1) ;    // fma[2]              fma[3]
-    ft0 = _mm_permute_pd(ft0,0x3) ;         // fma[1]              fma[1]
+    ft0 = _mm_permute_pd(ft0,0x1) ;         // fma[1]              fma[1]
     sma = _mm_max_sd(ft0,ft1) ;             // max(fma[1],fma[2])
 
     fdt = _mm256_fmadd_pd(fd3,fwy3,fdt) ;
@@ -417,6 +428,9 @@ void int_yinyang_cub_yx_mono(float *f, float *r, int ni, int ninj, int nk, int n
     ft0 = _mm_max_sd(ft0,smi) ;             // max(result, min value)
     ft0 = _mm_min_sd(ft0,sma) ;             // min(result, max value)
     frt = _mm_cvtsd_ss(frt,ft0) ;           // convert result to float
+//   _mm_store_sd(&minval,smi) ;
+//   _mm_store_sd(&maxval,sma) ;
+//   if(k == 0) printf("DEBUG: LIMITS(1) = %f %f\n",minval,maxval);
     _mm_store_ss(r,frt) ;                   // store float
     r += np;
   }
@@ -431,13 +445,13 @@ void int_yinyang_cub_yx_mono(float *f, float *r, int ni, int ninj, int nk, int n
   // get minimum of fmi vector elements 1 and 2 (ignore 0 and 3)
   ft0 = _mm256_extractf128_pd(fmi,0) ;    // fmi[0]              fmi[1]
   ft1 = _mm256_extractf128_pd(fmi,1) ;    // fmi[2]              fmi[3]
-  ft0 = _mm_permute_pd(ft0,0x3)      ;    // fmi[1]              fmi[1]
+  ft0 = _mm_permute_pd(ft0,0x1)      ;    // fmi[1]              fmi[1]
   smi = _mm_min_sd(ft0,ft1) ;             // min(fmi[1],fmi[2])
 
   // get maximum of fma vector elements 1 and 2 (ignore 0 and 3)
   ft0 = _mm256_extractf128_pd(fma,0) ;    // fma[0]              fma[1]
   ft1 = _mm256_extractf128_pd(fma,1) ;    // fma[2]              fma[3]
-  ft0 = _mm_permute_pd(ft0,0x3) ;         // fma[1]              fma[1]
+  ft0 = _mm_permute_pd(ft0,0x1) ;         // fma[1]              fma[1]
   sma = _mm_max_sd(ft0,ft1) ;             // max(fma[1],fma[2])
 
   // interpolation along i: multiply by coefficients along x , then sum elements (using vector folding)
@@ -451,6 +465,9 @@ void int_yinyang_cub_yx_mono(float *f, float *r, int ni, int ninj, int nk, int n
   ft0 = _mm_max_sd(ft0,smi) ;             // max(result, min value)
   ft0 = _mm_min_sd(ft0,sma) ;             // min(result, max value)
   frt = _mm_cvtsd_ss(frt,ft0) ;           // convert result to float
+//   _mm_store_sd(&minval,smi) ;
+//   _mm_store_sd(&maxval,sma) ;
+//   printf("DEBUG: LIMITS(NK) = %f %f\n",minval,maxval);
   _mm_store_ss(r,frt) ;                   // store float
 #else
   for(k=0 ; k<nk ; k++){
@@ -650,8 +667,9 @@ program test_interp
   integer, parameter :: NR=20
   real(C_FLOAT), dimension(1-HX:NI+HX , 1-HY:NJ+HY , NK) :: f
   real(C_FLOAT), dimension(NP,NK) :: r
-  real(C_DOUBLE), dimension(NP) :: x, y
+  real(C_DOUBLE), dimension(NP) :: x, y, xmin, xmax
   integer :: i, j, k
+  integer :: i0, j0
   integer*8, external :: rdtsc
   integer*8 :: t1, t2, tmg1(NR), tmg2(nr)
   integer :: nidim, ninjdim
@@ -722,6 +740,23 @@ program test_interp
 100 format(A,20I6)
 !  print 102,f(nint(x(1)),nint(y(1)),1),f(nint(x(2)),nint(y(2)),1),f(nint(x(1)),nint(y(1)),NK),f(nint(x(2)),nint(y(2)),NK)
 !  print 102,x(1)+y(1)+1,x(2)+y(2)+1,x(1)+y(1)+NK,x(2)+y(2)+NK
+  print *,'X coordinates'
+  print 102,x(:)
+  print *,'Y coordinates'
+  print 102,y(:)
+  print *,'F matrix'
+  do j = 4, 1-hy, -1
+    print 102,f(1-hx:5,j,1)
+  enddo
+  print *,'MONO: limit (min, max)'
+  do i = 1 , NP
+    i0 = x(i)
+    j0 = y(i)
+    xmin(i) = i0 + j0
+    xmax(i) = i0 + j0 + 2
+  enddo
+  print 102,xmin(:) + 1, xmin(:) + NK
+  print 102,xmax(:) + 1, xmax(:) + NK
   print *,'MONO: expected'
   print 102,x(:)+y(:)+1, x(:)+y(:)+NK
   print *,' got'
