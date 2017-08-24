@@ -396,7 +396,7 @@ program test_interp
   integer, parameter :: NR=25
   real(C_FLOAT), dimension(1-HX:NI+HX , 1-HY:NJ+HY , NK) :: f
   real(C_FLOAT), dimension(NP,NK) :: r
-  real(C_DOUBLE), dimension(NP) :: x, y, xmin, xmax
+  real(C_DOUBLE), dimension(NP) :: x, y, xmin, xmax, xmin2, xmax2
   integer :: i, j, k
   integer :: i0, j0
   integer*8, external :: rdtsc
@@ -475,19 +475,25 @@ program test_interp
   print 102,x(:)
   print *,'Y coordinates'
   print 102,y(:)
-  print *,'F matrix'
-  do j = 4, 1-hy, -1
+  print *,'F matrix (1)'
+  do j = 5, 1-hy, -1
     print 102,f(1-hx:5,j,1)
+  enddo
+  print *,'F matrix (nk)'
+  do j = 5, 1-hy, -1
+    print 102,f(1-hx:5,j,NK)
   enddo
   print *,'MONO: limit (min, max)'
   do i = 1 , NP
     i0 = x(i)
     j0 = y(i)
-    xmin(i) = i0 + j0
-    xmax(i) = i0 + j0 + 2
+    xmin(i) = minval(f(i0:i0+1,j0:j0+1,1))
+    xmax(i) = maxval(f(i0:i0+1,j0:j0+1,1))
+    xmin2(i) = minval(f(i0:i0+1,j0:j0+1,NK))
+    xmax2(i) = maxval(f(i0:i0+1,j0:j0+1,NK))
   enddo
-  print 102,xmin(:) + 1, xmin(:) + NK
-  print 102,xmax(:) + 1, xmax(:) + NK
+  print 102,xmin(:) , xmin2(:)
+  print 102,xmax(:) , xmax2(:)
   print *,'MONO: expected'
   print 102,FXY(x(:),y(:),1), FXY(x(:),y(:),NK)
 !  print 102,x(:)+y(:)+1, x(:)+y(:)+NK
