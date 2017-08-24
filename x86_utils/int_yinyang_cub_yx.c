@@ -664,7 +664,7 @@ program test_interp
   integer, parameter :: NP=4
   integer, parameter :: HX=2
   integer, parameter :: HY=2
-  integer, parameter :: NR=20
+  integer, parameter :: NR=25
   real(C_FLOAT), dimension(1-HX:NI+HX , 1-HY:NJ+HY , NK) :: f
   real(C_FLOAT), dimension(NP,NK) :: r
   real(C_DOUBLE), dimension(NP) :: x, y, xmin, xmax
@@ -696,12 +696,14 @@ program test_interp
       integer(C_INT), intent(IN), value :: ni, ninj, nk, np                                       !InTf!
     end subroutine int_yinyang_cub_yx_mono_                                                       !InTf!
   end interface
+#define FXY(A,B,C) (1.3*(A)**3 + 1.4*(A)**2 + (A)*1.5 + 2.3*(B)**3 + 2.4*(B)**2 + (B)*2.5 + (C))
 
   r = 9999.99
   do k = 1 , NK
     do j = 1-HY , NJ+HY
       do i = 1-HX , NI+HX
-        f(i,j,k) = i + j  + k
+!        f(i,j,k) = i + j  + k
+        f(i,j,k) = FXY(i*1.0 , j*1.0 , k*1.0)
       enddo
     enddo
 !    print *,f(1,1,k),f(2,2,k)
@@ -737,7 +739,7 @@ program test_interp
   print 100,'direct =',tmg1
   print 100,'mono   =',tmg2
   print 100,'flops  =',NP*NK*35
-100 format(A,20I6)
+100 format(A,40I6)
 !  print 102,f(nint(x(1)),nint(y(1)),1),f(nint(x(2)),nint(y(2)),1),f(nint(x(1)),nint(y(1)),NK),f(nint(x(2)),nint(y(2)),NK)
 !  print 102,x(1)+y(1)+1,x(2)+y(2)+1,x(1)+y(1)+NK,x(2)+y(2)+NK
   print *,'X coordinates'
@@ -758,12 +760,14 @@ program test_interp
   print 102,xmin(:) + 1, xmin(:) + NK
   print 102,xmax(:) + 1, xmax(:) + NK
   print *,'MONO: expected'
-  print 102,x(:)+y(:)+1, x(:)+y(:)+NK
+  print 102,FXY(x(:),y(:),1), FXY(x(:),y(:),NK)
+!  print 102,x(:)+y(:)+1, x(:)+y(:)+NK
   print *,' got'
   print 102,r(:,1),r(:,NK)
   print *,' delta'
-  print 102,(r(:,1)-(x(:)+y(:)+1)),(r(:,NK)-(x(:)+y(:)+NK))
-  print 103,(r(:,1)-(x(:)+y(:)+1))/(x(:)+y(:)+1) , (r(:,NK)-(x(:)+y(:)+NK))/(x(:)+y(:)+NK)
+  print 102,(r(:,1)-FXY(x(:),y(:),1)),(r(:,NK)-FXY(x(:),y(:),NK))
+  print 103,(r(:, 1)-FXY(x(:),y(:), 1))  / FXY(x(:),y(:), 1) , & 
+            (r(:,NK)-FXY(x(:),y(:),NK))  / FXY(x(:),y(:),NK)
 
   do i = 1 , NP
     call int_yinyang_cub_yx( f(1,1,1), r(i,1), nidim, ninjdim, NK, NP, x(i), y(i) )
@@ -771,12 +775,13 @@ program test_interp
 !  print 102,f(nint(x(1)),nint(y(1)),1),f(nint(x(2)),nint(y(2)),1),f(nint(x(1)),nint(y(1)),NK),f(nint(x(2)),nint(y(2)),NK)
 !  print 102,x(1)+y(1)+1,x(2)+y(2)+1,x(1)+y(1)+NK,x(2)+y(2)+NK
   print *,'DIRECT: expected'
-  print 102,x(:)+y(:)+1, x(:)+y(:)+NK
+  print 102,FXY(x(:),y(:),1), FXY(x(:),y(:),NK)
   print *,' got'
   print 102,r(:,1),r(:,NK)
   print *,' delta'
-  print 102,(r(:,1)-(x(:)+y(:)+1)),(r(:,NK)-(x(:)+y(:)+NK))
-  print 103,(r(:,1)-(x(:)+y(:)+1))/(x(:)+y(:)+1) , (r(:,NK)-(x(:)+y(:)+NK))/(x(:)+y(:)+NK)
+  print 102,(r(:,1)-FXY(x(:),y(:),1)),(r(:,NK)-FXY(x(:),y(:),NK))
+  print 103,(r(:, 1)-FXY(x(:),y(:), 1))  / FXY(x(:),y(:), 1) , & 
+            (r(:,NK)-FXY(x(:),y(:),NK))  / FXY(x(:),y(:),NK)
 
 102 format(16F15.6)
 103 format(16E15.2)
