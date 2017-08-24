@@ -126,7 +126,7 @@ aprun_Linux_launch() {
   [[ -n ${alpspd} ]] && [[ "${alpspd}" != NoName ]] && USE_PDOMAIN=${alpspd} && apmgr pdomain -c ${alpspd} && apstat -P && echo "pdomain ${alpspd} created"
   [[ -n ${USE_PDOMAIN} ]] && ExtraAprun="${ExtraAprun} -p ${USE_PDOMAIN} "
   list_message
-  [[ -n ${extrapath} ]] && [[ "${extrapath}" != *: ]] && extrapath="${extrapath}:"
+  [[ -n ${extrapath} ]] && [[ $(echo -n ${extrapath} | tail -c 1) != ":" ]] && extrapath="${extrapath}:"
   [[ -n ${verbose} ]] && \
     echo "INFO: OMP_NUM_THREADS=$OMP_NUM_THREADS" && \
     echo "INFO: PATH="${extrapath}/bin:/usr/bin" LD_LIBRARY_PATH="${extraldpath}" $APRUN -j ${smt} -n ${PeInWorld[${MpiCommWorld}]} ${ExtraAprun} "$@" ${ParallelScript}.${MpiCommWorld}"
@@ -650,8 +650,10 @@ wait_for() {
 #Version="1.1.28b1 2017/06/01"  # Cray aprun PATH optimizations eliminating LD_LIBRARY_PATH and most of PATH
 #Version="1.1.28c 2017/06/01"  # further workaround for poor lustre performance adding extrapath and extraldpath
 #Version="1.1.28d 2017/08/01"  # touchups to 1.1.28c
+#Version="1.1.28d 2017/08/01"  # Workaround for poor lustre performance by eliminating most of PATH and LD_LIBRARY_PATH
+#Version="1.1.28e 2017/08/24"  # listing collection optimization attempt
 true
-Version="1.1.28d 2017/08/01"  # Workaround for poor lustre performance by eliminating most of PATH and LD_LIBRARY_PATH
+Version="1.1.28e 2017/08/24"  # listing collection optimization attempt
 echo "INFO: ${0##*/} version $Version ( /bin/ksh93 )"
 MY_NODEFILE=${PARALLEL_NODEFILE:-${GECOSHEP_HOSTS_FILE:-${GECOSHEP_HOSTFILE:-${LOADL_HOSTFILE:-${PBS_NODEFILE:-${HOME}/.PBS_NODEFILE}}}}}
 [[ ! -f "${MY_NODEFILE}" ]] && \
@@ -990,6 +992,8 @@ touch ${ParallelScript}.0
 #################################################################################################################################
 export RedirectStdout="1>\${MP_SeqNum}/stdout.\${MP_Tag}"   # will be expanded at run time in ParallelScript
 export RedirectStderr="2>\${MP_SeqNum}/stderr"   # will be expanded at run time in ParallelScript
+export OptimizedOutput="/tmp/${USER}_$(date +%s-%N)"
+echo "DEBUG: OptimizedOutput=$OptimizedOutput"
 [[ "${spliteo}" == no ]] && RedirectStderr="2>&1"
 [[ -z ${processorder} ]] && RedirectStderr="" && RedirectStdout=""
 export  Prefix3="${errp}-"
@@ -1271,7 +1275,19 @@ cd ${tmpdir}
 #
 #[[ -n "${processorder}" ]] &&
 $CMD_touch fail.\${MP_Tag}.\${MP_SeqNum}   # precondition status to failure
-source ./${MpiRunScript#${tmpdir}/}.${MpiCommWorld}  ${RedirectStdout} ${RedirectStderr}
+######  source ./${MpiRunScript#${tmpdir}/}.${MpiCommWorld}  ${RedirectStdout} ${RedirectStderr}
+if [[ "${spliteo}" == "no" ]] ; then
+  source ./${MpiRunScript#${tmpdir}/}.${MpiCommWorld}  1>${OptimizedOutput}.\${MP_SeqNum} 2>&1
+  cd ${tmpdir}
+  cat ${OptimizedOutput}.\${MP_SeqNum} ${RedirectStdout} || true
+  rm -f ${OptimizedOutput}.\${MP_SeqNum}
+else
+  source ./${MpiRunScript#${tmpdir}/}.${MpiCommWorld}  1>${OptimizedOutput}.\${MP_SeqNum}.out 2>${OptimizedOutput}.\${MP_SeqNum}.err
+  cd ${tmpdir}
+  cat ${OptimizedOutput}.\${MP_SeqNum}.out ${RedirectStdout}    || true   # never fail
+  cat ${OptimizedOutput}.\${MP_SeqNum}.err >${RedirectStderr#??} || true
+  rm -f ${OptimizedOutput}.\${MP_SeqNum}.out ${OptimizedOutput}.\${MP_SeqNum}.err
+fi
 [[ -n "${LOADL_STEP_CLASS}" ]] && [[ -x ${tmpdir}/null_mpi ]] && ${tmpdir}/null_mpi   # AIX LoadLeveler only
 [[ -n "${processorder}" ]] || exit 0     # no listings to process, exit
 # lines=0
