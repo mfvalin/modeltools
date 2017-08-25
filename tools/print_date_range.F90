@@ -80,7 +80,7 @@ program print_date_range
       call NewDate_Options(trim(option(8:4096)),'set')       ! set calendar option
       write(0,*),'INFO: using calendar option '//trim(option)
     else if(option(1:9)  == '--version' ) then              ! version option
-      write(0,*),'version = 1.0.0'
+      write(0,*),'version = 1.0.0 2017/08/25'
       goto 777
     else if(option(1:6)  == '--help' ) then              ! help option
       goto 777
