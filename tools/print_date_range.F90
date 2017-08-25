@@ -79,7 +79,14 @@ program print_date_range
     else if(option(1:7)  == '--year=' ) then             ! calendar option (optional)
       call NewDate_Options(trim(option(8:4096)),'set')       ! set calendar option
       write(0,*),'INFO: using calendar option '//trim(option)
-    else
+    else if(option(1:9)  == '--version' ) then              ! version option
+      write(0,*),'version = 1.0.0'
+      goto 777
+    else if(option(1:6)  == '--help' ) then              ! help option
+      goto 777
+    else if(option(1:2)  == '-h' ) then                  ! help option
+      goto 777
+    else 
       print *,"ERROR: unrecognized option '"//trim(option)//"'"
     endif
     cur_arg = cur_arg + 1
@@ -155,8 +162,8 @@ program print_date_range
   stop
 11  format(I8,1x,I6)
 777 continue
-  write(0,*),'USAGE: '//trim(name)//' --start_date= --end_date= --nhours= --nseconds= [--start_sym=] \'
-  write(0,*),'        [--start_anal=] --pilot_data= --set_name= [--year=gregorian|360_day|365_day]'
+  write(0,*),'USAGE: '//trim(name)//' [-h|--help] --start_date= --end_date= --nhours= --nseconds= [--start_sym=] \'
+  write(0,*),'        [--version] [--start_anal=] --pilot_data= --set_name= [--year=gregorian|360_day|365_day]'
   write(0,*),'       start_date : YYYYMMDD.HHMMSS , start end end of this simulation slice'
   write(0,*),'       end_date   : YYYYMMDD.HHMMSS , start end end of this simulation slice'
   write(0,*),'       nseconds   : interval in seconds between boundary condition files'
