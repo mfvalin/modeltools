@@ -126,7 +126,7 @@ aprun_Linux_launch() {
   [[ -n ${alpspd} ]] && [[ "${alpspd}" != NoName ]] && USE_PDOMAIN=${alpspd} && apmgr pdomain -c ${alpspd} && apstat -P && echo "pdomain ${alpspd} created"
   [[ -n ${USE_PDOMAIN} ]] && ExtraAprun="${ExtraAprun} -p ${USE_PDOMAIN} "
   list_message
-  [[ -n ${extrapath} ]] && [[ "${extrapath}" != *: ]] && extrapath="${extrapath}:"
+  [[ -n ${extrapath} ]] && [[ $(echo -n ${extrapath} | tail -c 1) != ":" ]] && extrapath="${extrapath}:"
   [[ -n ${verbose} ]] && \
     echo "INFO: OMP_NUM_THREADS=$OMP_NUM_THREADS" && \
     echo "INFO: PATH="${extrapath}/bin:/usr/bin" LD_LIBRARY_PATH="${extraldpath}" $APRUN -j ${smt} -n ${PeInWorld[${MpiCommWorld}]} ${ExtraAprun} "$@" ${ParallelScript}.${MpiCommWorld}"
@@ -329,7 +329,7 @@ cat_output() {  #  cat captured stdout/stderr files into stdout with appropriate
   done
   [[ ${OutputFound} == yes ]] && return
 # Output preprocessing within MPI was not done for some reason, process outputs the hard way
-  for the_file in ${tmpdir}/[0-9][0-9][0-9][0-9]/stdout.*
+  for the_file in ${tmpdir}/[0-9][0-9][0-9][0-9][0-9]/stdout.*
   do
     MP_Tag=${the_file##*.}
     [[ -f ${the_file} ]] && \
@@ -650,8 +650,11 @@ wait_for() {
 #Version="1.1.28b1 2017/06/01"  # Cray aprun PATH optimizations eliminating LD_LIBRARY_PATH and most of PATH
 #Version="1.1.28c 2017/06/01"  # further workaround for poor lustre performance adding extrapath and extraldpath
 #Version="1.1.28d 2017/08/01"  # touchups to 1.1.28c
+#Version="1.1.28d 2017/08/01"  # Workaround for poor lustre performance by eliminating most of PATH and LD_LIBRARY_PATH
+#Version="1.1.28e 2017/08/24"  # listing collection optimization attempt
+#Version="1.1.28f 2017/08/24"  # listing collection optimization with fail recovery
 true
-Version="1.1.28d 2017/08/01"  # Workaround for poor lustre performance by eliminating most of PATH and LD_LIBRARY_PATH
+Version="1.1.28f 2017/08/24+"  # listing recovery attempt when run fails (not complete yet)
 echo "INFO: ${0##*/} version $Version ( /bin/ksh93 )"
 MY_NODEFILE=${PARALLEL_NODEFILE:-${GECOSHEP_HOSTS_FILE:-${GECOSHEP_HOSTFILE:-${LOADL_HOSTFILE:-${PBS_NODEFILE:-${HOME}/.PBS_NODEFILE}}}}}
 [[ ! -f "${MY_NODEFILE}" ]] && \
@@ -659,6 +662,9 @@ MY_NODEFILE=${PARALLEL_NODEFILE:-${GECOSHEP_HOSTS_FILE:-${GECOSHEP_HOSTFILE:-${L
   MY_NODEFILE=${TMPDIR}/JOB_NODE_FILE && \
   echo localhost  >${MY_NODEFILE} && \
   echo "INFO: created Node File '${MY_NODEFILE}'"
+export OptimizedOutput="/tmp/${USER}_$(date +%s-%N)"
+echo "DEBUG: OptimizedOutput=$OptimizedOutput"
+echo "OptimizedOutput=$OptimizedOutput" >${TMPDIR}/OptimizedOutput
 eval `cclargs_lite -D "" $0 \
     -alpspd "" "NoName" "[use Cray ALPS]" \
     -args "" "" "[arguments to the command]" \
@@ -1271,7 +1277,19 @@ cd ${tmpdir}
 #
 #[[ -n "${processorder}" ]] &&
 $CMD_touch fail.\${MP_Tag}.\${MP_SeqNum}   # precondition status to failure
-source ./${MpiRunScript#${tmpdir}/}.${MpiCommWorld}  ${RedirectStdout} ${RedirectStderr}
+######  source ./${MpiRunScript#${tmpdir}/}.${MpiCommWorld}  ${RedirectStdout} ${RedirectStderr}
+if [[ "${spliteo}" == "no" ]] ; then
+  source ./${MpiRunScript#${tmpdir}/}.${MpiCommWorld}  1>${OptimizedOutput}.\${MP_SeqNum}.out 2>&1
+  cd ${tmpdir}
+  cat ${OptimizedOutput}.\${MP_SeqNum}.out ${RedirectStdout} || true
+  rm -f ${OptimizedOutput}.\${MP_SeqNum}.out
+else
+  source ./${MpiRunScript#${tmpdir}/}.${MpiCommWorld}  1>${OptimizedOutput}.\${MP_SeqNum}.out 2>${OptimizedOutput}.\${MP_SeqNum}.err
+  cd ${tmpdir}
+  cat ${OptimizedOutput}.\${MP_SeqNum}.out ${RedirectStdout}    || true   # never fail
+  cat ${OptimizedOutput}.\${MP_SeqNum}.err >${RedirectStderr#??} || true
+  rm -f ${OptimizedOutput}.\${MP_SeqNum}.out ${OptimizedOutput}.\${MP_SeqNum}.err
+fi
 [[ -n "${LOADL_STEP_CLASS}" ]] && [[ -x ${tmpdir}/null_mpi ]] && ${tmpdir}/null_mpi   # AIX LoadLeveler only
 [[ -n "${processorder}" ]] || exit 0     # no listings to process, exit
 # lines=0
