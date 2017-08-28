@@ -64,7 +64,7 @@ program print_date_range
       interval = option(10:4096)
       read(interval,*,err=777)delta                      ! interval in hours
     else if(option(1:11) == '--nseconds=' ) then         ! seconds
-      interval = option(10:4096)
+      interval = option(12:4096)
       read(interval,*,err=777)delta                      ! interval in seconds
       delta = delta/3600.0                               ! interval in hours
     else if(option(1:12) == '--start_sym=' ) then        ! YYYYMMDD.HHMMSS
