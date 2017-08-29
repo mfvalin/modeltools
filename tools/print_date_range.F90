@@ -16,7 +16,7 @@ program print_date_range
   logical :: use_anal
   integer :: cur_arg, nargs, arg_len, ntimes
   integer :: month_is_file = 0
-  character(len=128) :: version = 'version 1.0.3 2017/08/29'
+  character(len=128) :: version = 'version 1.0.3a 2017/08/29'
 
   interface
     function f_mkdir(path,mode) result(status) bind(C,name='mkdir')
@@ -152,7 +152,7 @@ program print_date_range
     if(trim(oldmonth) .ne. trim(nest_rept) // '/' // trim(set_name) // '_' // arg2(1:6)) then
       oldmonth = trim(nest_rept) // '/' // trim(set_name) // '_' // arg2(1:6)
       month_is_file = clib_isfile( trim(nest_rept) // '/' // trim(set_name) // '_' // arg2(1:6) )
-      write(0,*),trim(nest_rept) // '/' // trim(set_name) // '_' // arg2(1:6),month_is_file
+!       write(0,*),trim(nest_rept) // '/' // trim(set_name) // '_' // arg2(1:6),month_is_file
       if(month_is_file == 1) then
         write(0,*),'INFO: using monthly file '//trim(oldmonth)
       else
