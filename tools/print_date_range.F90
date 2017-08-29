@@ -9,14 +9,14 @@ program print_date_range
   integer :: status
   character(len=128) :: date1, date2, interval, name, sym
   character(len=32) :: arg1, arg2
-  character(len=4096) :: oldpath, newpath, dirpath, option
+  character(len=4096) :: oldpath, newpath, dirpath, option, oldmonth
   character(C_CHAR), dimension(4096) :: oldp, newp, dirp
   character(len=4096) :: nest_rept, set_name, anal
   integer(C_INT) :: mode
   logical :: use_anal
   integer :: cur_arg, nargs, arg_len, ntimes
   integer :: month_is_file = 0
-  character(len=128) :: version = 'version 1.0.2 2017/08/29'
+  character(len=128) :: version = 'version 1.0.3 2017/08/29'
 
   interface
     function f_mkdir(path,mode) result(status) bind(C,name='mkdir')
@@ -45,6 +45,7 @@ program print_date_range
   CALL get_command_argument(0, name)
 
   mode = o'0777'
+  oldmonth = ' '
 
   cur_arg = 1
   nargs = command_argument_count()
@@ -148,13 +149,14 @@ program print_date_range
     newp = transfer(trim(newpath)//achar(0),newp)
     if(use_anal) status = f_unlink( newp )
     status = f_link( oldp, newp )
-    if(month_is_file == 0) then
+    if(trim(oldmonth) .ne. trim(nest_rept) // '/' // trim(set_name) // '_' // arg2(1:6)) then
+      oldmonth = trim(nest_rept) // '/' // trim(set_name) // '_' // arg2(1:6)
       month_is_file = clib_isfile( trim(nest_rept) // '/' // trim(set_name) // '_' // arg2(1:6) )
       write(0,*),trim(nest_rept) // '/' // trim(set_name) // '_' // arg2(1:6),month_is_file
       if(month_is_file == 1) then
-        write(0,*),'INFO: using monthly file mode'
+        write(0,*),'INFO: using monthly file '//trim(oldmonth)
       else
-        write(0,*),'INFO: using file in monthly directory mode'
+        write(0,*),'INFO: using monthly directory '//trim(oldmonth)
       endif
     endif
     if(month_is_file == 1) then
