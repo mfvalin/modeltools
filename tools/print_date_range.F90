@@ -156,6 +156,10 @@ program print_date_range
       if(month_is_file == 1) then
         write(0,*),'INFO: using monthly file '//trim(oldmonth)
       else
+        if(clib_isdir( trim(nest_rept) // '/' // trim(set_name) // '_' // arg2(1:6) ) .ne. 1) then
+          write(0,*),'ERROR: '//trim(oldmonth)//' is not a directory, ABORTING'
+          stop
+        endif
         write(0,*),'INFO: using monthly directory '//trim(oldmonth)
       endif
     endif
