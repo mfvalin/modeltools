@@ -82,7 +82,7 @@ program print_date_range
       call NewDate_Options(trim(option(8:4096)),'set')       ! set calendar option
       write(0,*),'INFO: using calendar option '//trim(option)
     else if(option(1:9)  == '--version' ) then              ! version option
-      write(0,*),'version 1.0.1 2017/08/28'
+      write(0,*),'version 1.0.2 2017/08/29'
       stop
     else if(option(1:6)  == '--help' ) then              ! help option
       goto 777
@@ -148,10 +148,19 @@ program print_date_range
     if(use_anal) status = f_unlink( newp )
     status = f_link( oldp, newp )
     if(month_is_file == 0) then
-      month_is_file = clib_isdir( trim(nest_rept) // '/' // trim(set_name) // '_' // arg2(1:6) )
+      month_is_file = clib_isfile( trim(nest_rept) // '/' // trim(set_name) // '_' // arg2(1:6) )
       write(0,*),trim(nest_rept) // '/' // trim(set_name) // '_' // arg2(1:6),month_is_file
+      if(month_is_file == 1) then
+        write(0,*),'INFO: using monthly file mode'
+      else
+        write(0,*),'INFO: using file in monthly directory mode'
+      endif
     endif
-    oldpath = trim(nest_rept) // '/' // trim(set_name) // '_' // arg2(1:6) // '/' // trim(set_name) // '_' // arg2(1:8)
+    if(month_is_file == 1) then
+      oldpath = trim(nest_rept) // '/' // trim(set_name) // '_' // arg2(1:6)
+    else
+      oldpath = trim(nest_rept) // '/' // trim(set_name) // '_' // arg2(1:6) // '/' // trim(set_name) // '_' // arg2(1:8)
+    endif
     if(use_anal) oldpath = trim(anal)
     oldp = transfer(trim(oldpath)//achar(0),oldp)
     newpath = 'VALID_' // trim(arg1) // '/GEM_input_file_0001'
