@@ -16,6 +16,7 @@ program print_date_range
   logical :: use_anal
   integer :: cur_arg, nargs, arg_len, ntimes
   integer :: month_is_file = 0
+  character(len=128) :: version = 'version 1.0.2 2017/08/29'
 
   interface
     function f_mkdir(path,mode) result(status) bind(C,name='mkdir')
@@ -82,7 +83,7 @@ program print_date_range
       call NewDate_Options(trim(option(8:4096)),'set')       ! set calendar option
       write(0,*),'INFO: using calendar option '//trim(option)
     else if(option(1:9)  == '--version' ) then              ! version option
-      write(0,*),'version 1.0.2 2017/08/29'
+      write(0,*),version
       stop
     else if(option(1:6)  == '--help' ) then              ! help option
       goto 777
@@ -179,7 +180,7 @@ program print_date_range
 777 continue
   write(0,*),'USAGE: '//trim(name)//' [-h|--help] --start_date= --end_date= --nhours= --nseconds= [--start_sym=] \'
   write(0,*),'        [--version] [--start_anal=] --pilot_data= --set_name= [--year=gregorian|360_day|365_day]'
-  write(0,*),'       version 1.0.0 2017/08/25'
+  write(0,*),'       '//version
   write(0,*),''
   write(0,*),'       start_date : YYYYMMDD.HHMMSS , start end end of this simulation slice'
   write(0,*),'       end_date   : YYYYMMDD.HHMMSS , start end end of this simulation slice'
