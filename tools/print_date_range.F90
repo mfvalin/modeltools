@@ -1,6 +1,7 @@
 program print_date_range
   use ISO_C_BINDING
   implicit none
+#include "clib_interface.cdk"
   integer, external :: newdate
   integer :: stamp, p1, p2, stamp1, stamp2, p3, p4, stamp3
   integer, dimension(2) :: printable1, printable2, printable3
@@ -14,6 +15,7 @@ program print_date_range
   integer(C_INT) :: mode
   logical :: use_anal
   integer :: cur_arg, nargs, arg_len, ntimes
+  integer :: month_is_file = 0
 
   interface
     function f_mkdir(path,mode) result(status) bind(C,name='mkdir')
@@ -145,6 +147,10 @@ program print_date_range
     newp = transfer(trim(newpath)//achar(0),newp)
     if(use_anal) status = f_unlink( newp )
     status = f_link( oldp, newp )
+    if(month_is_file == 0) then
+      month_is_file = clib_isdir( trim(nest_rept) // '/' // trim(set_name) // '_' // arg2(1:6) )
+      write(0,*),trim(nest_rept) // '/' // trim(set_name) // '_' // arg2(1:6),month_is_file
+    endif
     oldpath = trim(nest_rept) // '/' // trim(set_name) // '_' // arg2(1:6) // '/' // trim(set_name) // '_' // arg2(1:8)
     if(use_anal) oldpath = trim(anal)
     oldp = transfer(trim(oldpath)//achar(0),oldp)
