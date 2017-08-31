@@ -42,7 +42,7 @@ uint64_t rdtsc_(void);
 uint64_t rdtsc(void) {   // version rapide "out of order"
 #if defined(__x86_64__) || defined( __i386__ )
   uint32_t lo, hi;
-  __asm__ volatile ("rdtsc"
+  __asm__ volatile ("rdtscp"
       : /* outputs */ "=a" (lo), "=d" (hi)
       : /* no inputs */
       : /* clobbers */ "%rcx");
