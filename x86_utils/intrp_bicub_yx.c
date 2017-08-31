@@ -18,6 +18,15 @@
  * Free Software Foundation, Inc., 59 Temple Place - Suite 330,
  * Boston, MA 02111-1307, USA.
  */
+#if defined(NEVER_TRUE)
+ to test (Intel compilers) :
+ rm -f intrp_bicub_yx intrp_bicub_yx.o intrp_bicub_yx_f.F90
+ s.cc -O2 -DTIMING -c -march=core-avx2 intrp_bicub_yx.c
+ ln -sf intrp_bicub_yx.c intrp_bicub_yx_f.F90
+ s.f90 -no-wrap-margin -DF_TEST -o intrp_bicub_yx intrp_bicub_yx_f.F90 intrp_bicub_yx.o
+ ./intrp_bicub_yx
+#endif
+
 static float cp133 =  0.166666666666666667E0;
 static float cm133 = -0.166666666666666667E0;
 static float cp5 =  .5;
