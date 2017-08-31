@@ -108,7 +108,7 @@ aprun_Linux_launch() {
 
   [[ "$map" == map ]] && echo "INFO: rank map requested" && export MPICH_RANK_REORDER_DISPLAY=1     # PE map requested
   [[ -n ${verbose} ]] && echo "INFO: pernode=$pernode, pernuma=$pernuma"
-  ExtraAprun="-d ${ThreadsInWorld[${MpiCommWorld}]}"             # use number of threads as spacing
+  ExtraAprun="-d ${ThreadsInWorld[${MpiCommWorld}]} -cc depth"             # use number of threads as spacing
   export OMP_NUM_THREADS=${ThreadsInWorld[${MpiCommWorld}]}
   if ((pernode > 0)) ; then
     ExtraAprun="-N $pernode -d $((CoresOnNode/pernode)) -cc none"   # -pernode option, any binding will be done by application
@@ -129,7 +129,7 @@ aprun_Linux_launch() {
   [[ -n ${extrapath} ]] && [[ $(echo -n ${extrapath} | tail -c 1) != ":" ]] && extrapath="${extrapath}:"
   [[ -n ${verbose} ]] && \
     echo "INFO: OMP_NUM_THREADS=$OMP_NUM_THREADS" && \
-    echo "INFO: PATH="${extrapath}/bin:/usr/bin" LD_LIBRARY_PATH="${extraldpath}" $APRUN -j ${smt} -n ${PeInWorld[${MpiCommWorld}]} ${ExtraAprun} "$@" ${ParallelScript}.${MpiCommWorld}"
+    echo "INFO: PATH=${extrapath}/bin:/usr/bin LD_LIBRARY_PATH=${extraldpath} $APRUN -j ${smt} -n ${PeInWorld[${MpiCommWorld}]} ${ExtraAprun} $@ ${ParallelScript}.${MpiCommWorld}"
   [[ -z ${dryrun} ]] && \
     PATH="${extrapath}/bin:/usr/bin" LD_LIBRARY_PATH="$extraldpath" $APRUN -j ${smt} -n ${PeInWorld[${MpiCommWorld}]} ${ExtraAprun} "$@" ${ParallelScript}.${MpiCommWorld}
   [[ -n ${alpspd} ]] && [[ "${alpspd}" != NoName ]] && apmgr pdomain -r ${alpspd} && echo "pdomain ${alpspd} removed" && apstat -P 
@@ -655,7 +655,7 @@ wait_for() {
 #Version="1.1.28f 2017/08/24"  # listing collection optimization with fail recovery
 #Version="1.1.28g 2017/08/31"  # fixed redirection bug 
 true
-Version="1.1.28g 2017/08/31"  # fixed redirection bug 
+Version="1.1.28h 2017/08/31"  # auto adjust pernuma, pernode and smt, use depth by default for aprun
 echo "INFO: ${0##*/} version $Version ( /bin/ksh93 )"
 MY_NODEFILE=${PARALLEL_NODEFILE:-${GECOSHEP_HOSTS_FILE:-${GECOSHEP_HOSTFILE:-${LOADL_HOSTFILE:-${PBS_NODEFILE:-${HOME}/.PBS_NODEFILE}}}}}
 [[ ! -f "${MY_NODEFILE}" ]] && \
@@ -726,6 +726,8 @@ eval `cclargs_lite -D "" $0 \
 #
 [[ -n ${version} ]] && exit 0
 #
+#((smt>1)) && ((pernuma==0)) && ((pernuma=9999))   # force pernuma automatic mode if smt and pernuma has default value
+#
 export APRUN="$(which aprun 2>/dev/null)"
 [[ -n ${APRUN} ]]  && hostos=CLE   # Cray linux environment
 #
@@ -744,14 +746,15 @@ fi
 preexec="${JIO_PRELOAD} ${preexec}"
 #
 OMP_NUM_THREADS=${OMP_NUM_THREADS:-1}
+((OMP_NUM_THREADS=OMP_NUM_THREADS*smt))
 DefaultNumberOfThreads=${OMP_NUM_THREADS}
 #
 export CoresOnNode=128
 [[ "$hostos" == AIX ]]   && CoresOnNode=$(($(bindprocessor -q | sed 's/.*[ ]//')+1))        # AIX
 [[ "$hostos" == Linux ]] && CoresOnNode=$(grep MHz /proc/cpuinfo 2>/dev/null | wc -l)       # straight Linux
 [[ "$hostos" == CLE ]]   && CoresOnNode=$(aprun -n 1 cat /proc/cpuinfo | grep MHz | wc -l) && ((CoresOnNode=CoresOnNode/2*smt)) # Cray XC
-[[ "$pernode" == 9999 ]] && ((pernode=CoresOnNode))
-[[ "$pernuma" == 9999 ]] && ((pernuma=CoresOnNode/2))
+[[ "$pernode" == 9999 ]] && ((pernode=CoresOnNode/OMP_NUM_THREADS))
+[[ "$pernuma" == 9999 ]] && ((pernuma=CoresOnNode/OMP_NUM_THREADS/2))
 ((CoresOnNode<=0)) && CoresOnNode=1
 ((MaxCores=CoresOnNode))
 [[ -n $maxcores ]] && ((MaxCores=maxcores))
