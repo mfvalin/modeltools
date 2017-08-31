@@ -729,7 +729,7 @@ eval `cclargs_lite -D "" $0 \
 #((smt>1)) && ((pernuma==0)) && ((pernuma=9999))   # force pernuma automatic mode if smt and pernuma has default value
 #
 export APRUN="$(which aprun 2>/dev/null)"
-[[ -n ${APRUN} ]]  && hostos=CLE   # Cray linux environment
+[[ -n ${APRUN} ]]  && hostos=CLE  && export KMP_AFFINITY=disabled # Cray linux environment
 #
 [[ -n $jio ]] && export JIO_ENV=${JIO_ENV:-JIO_${jio}}
 [[ -n ${JIO_ENV} ]] && which s.jio-prof-linux-64.so 2>/dev/null 1>/dev/null && jio="$(which s.jio-prof-linux-64.so 2>/dev/null)"  # automatic activation if JIO_ENV is set
