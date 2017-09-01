@@ -18,6 +18,15 @@
  * Free Software Foundation, Inc., 59 Temple Place - Suite 330,
  * Boston, MA 02111-1307, USA.
  */
+#if defined(NEVER_TRUE)
+ to test (Intel compilers) :
+ rm -f intrp_bicub_yx intrp_bicub_yx.o intrp_bicub_yx_f.F90
+ s.cc -O2 -DTIMING -c -march=core-avx2 intrp_bicub_yx.c
+ ln -sf intrp_bicub_yx.c intrp_bicub_yx_f.F90
+ s.f90 -no-wrap-margin -DF_TEST -o intrp_bicub_yx intrp_bicub_yx_f.F90 intrp_bicub_yx.o
+ ./intrp_bicub_yx
+#endif
+
 static float cp133 =  0.166666666666666667E0;
 static float cm133 = -0.166666666666666667E0;
 static float cp5 =  .5;
@@ -33,7 +42,7 @@ uint64_t rdtsc_(void);
 uint64_t rdtsc(void) {   // version rapide "out of order"
 #if defined(__x86_64__) || defined( __i386__ )
   uint32_t lo, hi;
-  __asm__ volatile ("rdtsc"
+  __asm__ volatile ("rdtscp"
       : /* outputs */ "=a" (lo), "=d" (hi)
       : /* no inputs */
       : /* clobbers */ "%rcx");
@@ -62,16 +71,16 @@ uint64_t rdtsc(void) {   // version rapide "out of order"
   
    to call from FORTRAN, the following interface is needed
   interface
-    subroutine int_yinyang_cub_yx(f, r, ni, ninj, nk, np, x, y) bind(C,name='int_yinyang_cub_yx')
+    subroutine intrp_bicub_yx(f, r, ni, ninj, nk, np, x, y) bind(C,name='intrp_bicub_yx')
       import :: C_INT, C_FLOAT, C_DOUBLE
       real(C_FLOAT), dimension(*), intent(IN) :: f
       real(C_FLOAT), dimension(*), intent(OUT) :: r
       real(C_DOUBLE), intent(IN), value :: x, y
       integer(C_INT), intent(IN), value :: ni, ninj, nk, np
-    end subroutine int_yinyang_cub_yx
+    end subroutine intrp_bicub_yx
   end interface
  */
-void int_yinyang_cub_yx(float *f, float *r, int ni, int ninj, int nk, int np, double xx, double yy){
+void intrp_bicub_yx(float *f, float *r, int ni, int ninj, int nk, int np, double xx, double yy){
 #if defined(__AVX2__) && defined(__x86_64__)
   __m256d fd0, fd1, fd2, fd3, fwx, fwy0, fwy1, fwy2, fwy3, fdt ;
   __m128  fr0, fr1, fr2, fr3, frt ;
@@ -176,8 +185,7 @@ void int_yinyang_cub_yx(float *f, float *r, int ni, int ninj, int nk, int np, do
 #endif
 }
 
-#if defined(MONO8)
-void int_yinyang_cub_yx_mono(float *f, float *r, int ni, int ninj, int nk, int np, double xx, double yy){
+void intrp_bicub_yx_mono(float *f, float *r, int ni, int ninj, int nk, int np, double xx, double yy){
 #if defined(__AVX2__) && defined(__x86_64__)
   __m256d fd0, fd1, fd2, fd3, fwx, fwy0, fwy1, fwy2, fwy3, fdt, fmi, fma ;
   __m128  fr0, fr1, fr2, fr3, frt ;   // frt is used as a scalar, fr0->fr3 are 128 bit aliases for fd0->fd3
@@ -343,7 +351,6 @@ void int_yinyang_cub_yx_mono(float *f, float *r, int ni, int ninj, int nk, int n
   }
 #endif
 }
-#endif
 
 #if defined(C_TEST)
 #include <stdio.h>
@@ -375,7 +382,7 @@ int main(int argc,char **argv){
   }
   t1 = rdtsc();
   for(i=0 ; i<NP ; i++){
-    int_yinyang_cub_yx(&f[0][0][0], &r[0][i], NI, NI*NJ, NK, NP, x[i], y[i]) ;
+    intrp_bicub_yx(&f[0][0][0], &r[0][i], NI, NI*NJ, NK, NP, x[i], y[i]) ;
   }
   t2 = rdtsc();
   k = t2 - t1;
@@ -403,27 +410,20 @@ program test_interp
   integer*8 :: t1, t2, tmg1(NR), tmg2(nr)
   integer :: nidim, ninjdim
   interface
-    subroutine int_yinyang_cub_yx(f, r, ni, ninj, nk, np, x, y) bind(C,name='int_yinyang_cub_yx') !InTf!
+    subroutine intrp_bicub_yx(f, r, ni, ninj, nk, np, x, y) bind(C,name='intrp_bicub_yx') !InTf!
       import :: C_INT, C_FLOAT, C_DOUBLE                                                          !InTf!
       real(C_FLOAT), dimension(*), intent(IN) :: f                                                !InTf!
       real(C_FLOAT), dimension(*), intent(OUT) :: r                                               !InTf!
       real(C_DOUBLE), intent(IN), value :: x, y                                                   !InTf!
       integer(C_INT), intent(IN), value :: ni, ninj, nk, np                                       !InTf!
-    end subroutine int_yinyang_cub_yx                                                             !InTf!
-    subroutine int_yinyang_cub_yx_mono(f, r, ni, ninj, nk, np, x, y) bind(C,name='int_yinyang_cub_yx_mono') !InTf!
+    end subroutine intrp_bicub_yx                                                             !InTf!
+    subroutine intrp_bicub_yx_mono(f, r, ni, ninj, nk, np, x, y) bind(C,name='intrp_bicub_yx_mono') !InTf!
       import :: C_INT, C_FLOAT, C_DOUBLE                                                          !InTf!
       real(C_FLOAT), dimension(*), intent(IN) :: f                                                !InTf!
       real(C_FLOAT), dimension(*), intent(OUT) :: r                                               !InTf!
       real(C_DOUBLE), intent(IN), value :: x, y                                                   !InTf!
       integer(C_INT), intent(IN), value :: ni, ninj, nk, np                                       !InTf!
-    end subroutine int_yinyang_cub_yx_mono                                                        !InTf!
-    subroutine int_yinyang_cub_yx_mono_(f, r, ni, ninj, nk, np, x, y) bind(C,name='int_yinyang_cub_yx_mono_') !InTf!
-      import :: C_INT, C_FLOAT, C_DOUBLE                                                          !InTf!
-      real(C_FLOAT), dimension(*), intent(IN) :: f                                                !InTf!
-      real(C_FLOAT), dimension(*), intent(OUT) :: r                                               !InTf!
-      real(C_DOUBLE), intent(IN), value :: x, y                                                   !InTf!
-      integer(C_INT), intent(IN), value :: ni, ninj, nk, np                                       !InTf!
-    end subroutine int_yinyang_cub_yx_mono_                                                       !InTf!
+    end subroutine intrp_bicub_yx_mono                                                        !InTf!
   end interface
 #define FXY(A,B,C) (1.3*(A)**3 + 1.4*(A)**2 + (A)*1.5 + 2.3*(B)**3 + 2.4*(B)**2 + (B)*2.5 + (C))
 
@@ -452,14 +452,14 @@ program test_interp
   do j = 1, NR
     t1 = rdtsc()
     do i = 1 , NP
-      call int_yinyang_cub_yx( f(1,1,1), r(i,1), nidim, ninjdim, NK, NP, x(i), y(i) )
+      call intrp_bicub_yx( f(1,1,1), r(i,1), nidim, ninjdim, NK, NP, x(i), y(i) )
     enddo
     t2 = rdtsc()
     tmg1(j) = t2 - t1
 !    print *,'time=',t2-t1,' cycles for',NP*NK*35,' values'
     t1 = rdtsc()
     do i = 1 , NP
-      call int_yinyang_cub_yx_mono( f(1,1,1), r(i,1), nidim, ninjdim, NK, NP, x(i), y(i) )
+      call intrp_bicub_yx_mono( f(1,1,1), r(i,1), nidim, ninjdim, NK, NP, x(i), y(i) )
     enddo
     t2 = rdtsc()
     tmg2(j) = t2 - t1
@@ -505,7 +505,7 @@ program test_interp
             (r(:,NK)-FXY(x(:),y(:),NK))  / FXY(x(:),y(:),NK)
 
   do i = 1 , NP
-    call int_yinyang_cub_yx( f(1,1,1), r(i,1), nidim, ninjdim, NK, NP, x(i), y(i) )
+    call intrp_bicub_yx( f(1,1,1), r(i,1), nidim, ninjdim, NK, NP, x(i), y(i) )
   enddo
 !  print 102,f(nint(x(1)),nint(y(1)),1),f(nint(x(2)),nint(y(2)),1),f(nint(x(1)),nint(y(1)),NK),f(nint(x(2)),nint(y(2)),NK)
 !  print 102,x(1)+y(1)+1,x(2)+y(2)+1,x(1)+y(1)+NK,x(2)+y(2)+NK
