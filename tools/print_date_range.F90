@@ -16,7 +16,10 @@ program print_date_range
   logical :: use_anal
   integer :: cur_arg, nargs, arg_len, ntimes
   integer :: month_is_file = 0
-  character(len=128) :: version = 'version 1.0.3a 2017/08/29'
+  character(len=128) :: version = 'version 1.0.4 2017/09/01'
+  integer, parameter :: MAXGLOB=2
+  character(len=4096), dimension(MAXGLOB) :: globs
+  integer :: nglob
 
   interface
     function f_mkdir(path,mode) result(status) bind(C,name='mkdir')
@@ -166,7 +169,14 @@ program print_date_range
     if(month_is_file == 1) then
       oldpath = trim(nest_rept) // '/' // trim(set_name) // '_' // arg2(1:6)
     else
-      oldpath = trim(nest_rept) // '/' // trim(set_name) // '_' // arg2(1:6) // '/' // trim(set_name) // '_' // arg2(1:8)
+!       oldpath = trim(nest_rept) // '/' // trim(set_name) // '_' // arg2(1:6) // '/' // trim(set_name) // '_' // arg2(1:8)
+      oldpath = trim(nest_rept) // '/' // trim(set_name) // '_' // arg2(1:6) // '/' // '*' // arg2(1:8)
+      status = clib_glob(globs,nglob,trim(oldpath),MAXGLOB)
+      if(status .ne. CLIB_OK) then
+         write(0,*),'ERROR: '//trim(oldpath)//' is ambiguous or does not exist'
+         stop
+      endif
+      oldpath = globs(1)
     endif
     if(use_anal) oldpath = trim(anal)
     oldp = transfer(trim(oldpath)//achar(0),oldp)
