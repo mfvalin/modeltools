@@ -228,62 +228,6 @@ mpiexec_Linux_launch() {
 }
 #################################################################################################################################
 #
-# MPI launcher for AIX, using POE under LoadLeveler, uses MP_NEWJOB for multiple MPI worlds
-#
-mpiexec_AIX() {
-#
-  ((npe_total=TotalInstances))
-  make_node_file
-#  ((MpiCommWorlds>1)) && echo "ERROR: MpiCommWorlds>1 not supported yet" && return
-  export ENVIRONMENT_PASSED=yes
-  export MpiCommWorld=0
-  export ChildOffset=0
-  export WorldOffset=0
-  if tty -s || [[ -z ${LOADL_HOSTFILE} ]] ; then  # node list only necessary in interactive case
-    echo "INFO: interactive use of MPI on AIX"
-    export MP_PROCS
-    export MP_HOSTFILE=${MY_NODEFILE}
-    grep -q $(hostname) ${HOME}/.rhosts 2>/dev/null || echo $(hostname) ${USER} >>${HOME}/.rhosts
-    chmod 700 ${HOME}/.rhosts
-  fi
-  list_message
-  if((MpiCommWorlds==1 && ${npe_total} == ${BATCH_MPI_CPUS:-npe_total} )) ; then  # only one world, use regular call to poe
-    ((MP_PROCS=${PeInWorld[0]}))
-    echo "========== poe command file with ${MP_PROCS} tasks in single MPI world =========="
-    [[ -z ${dryrun} ]] && poe ${ParallelScript}.0 </dev/null
-  else
-    if [[ "${LOADL_STEP_CLASS}" == "preemptable" ]] ; then
-      echo "multiple MPI worlds not supported for preemptable jobs"
-      exit 1
-    fi
-    cat <<EOT >${tmpdir}/null_mpi.c
-#include <mpi.h>
-void main(int argc, char **argv)
-{
- MPI_Init(&argc,&argv);
- MPI_Finalize();
-}
-EOT
-    mpcc -o ${tmpdir}/null_mpi ${tmpdir}/null_mpi.c
-    rm -f ${ParallelScript}.ALL
-    ((MP_PROCS=0))
-    while(( MpiCommWorld<MpiCommWorlds)) ; do  # build POE command file((MpiCommWorlds=MpiCommWorlds+1))
-      echo "${ParallelScript}.${MpiCommWorld}@$((MpiCommWorld+1))%${PeInWorld[${MpiCommWorld}]}%mpi:*" >>${ParallelScript}.ALL
-      ((MP_PROCS=MP_PROCS+${PeInWorld[${MpiCommWorld}]}))
-      ((MpiCommWorld=MpiCommWorld+1))
-    done
-    export MP_NEWJOB=parallel
-    export ChildOffset=0   # poe takes care of adjusting MP_CHILD
-    echo MP_PROCS=${MP_PROCS}
-    echo "COMPLETE" >>${ParallelScript}.ALL # terminate POE command file
-    echo "========== poe command file with ${MP_PROCS} tasks in ${MpiCommWorlds} MPI world(s) =========="
-    cat ${ParallelScript}.ALL
-    # multiple poe instances in parallel, gather, consolidate, run
-    [[ -z ${dryrun} ]] && poe -cmdfile ${ParallelScript}.ALL </dev/null
-  fi
-}
-#################################################################################################################################
-#
 # print list of failed tasks
 # clean up tmpdir directory used for launch help files and listings
 #
@@ -397,8 +341,6 @@ EOT
 echo INFO: compiling C test program mpi_c_test.c into mpi_c_test
 which mpicc 2>/dev/null 1>/dev/null && \
   mpicc -o ${tmpdir}/mpi_c_test ${tmpdir}/mpi_c_test.c
-which mpcc 2>/dev/null 1>/dev/null && \
-  mpcc -o ${tmpdir}/mpi_c_test ${tmpdir}/mpi_c_test.c
 echo INFO: removing C test program source mpi_c_test.c
 rm ${tmpdir}/mpi_c_test.c
 #
@@ -406,10 +348,6 @@ echo INFO: compiling Fortran test program mpi_f_test.f90 into mpi_f_test
 which mpif90 2>/dev/null 1>/dev/null && \
   mpif90 ${tmpdir}/mpi_f_test.f90 -mp -o ${tmpdir}/mpi_f_test 2>/dev/null || \
   mpif90 ${tmpdir}/mpi_f_test.f90 -o ${tmpdir}/mpi_f_test
-which mpxlf90_r 2>/dev/null 1>/dev/null && \
-  mpxlf90_r ${tmpdir}/mpi_f_test.f90 -o ${tmpdir}/mpi_f_test
-[[ -x ${tmpdir}/mpi_f_test ]] && echo INFO: mpi_f_test created
-[[ -x ${tmpdir}/mpi_c_test ]] && echo INFO: mpi_c_test created
 echo INFO: removing Fortran test source program mpi_f_test.f90
 rm ${tmpdir}/mpi_f_test.f90
 }
@@ -522,8 +460,6 @@ remap_nodes() {
 # -geometry processing will only work with openmpi/linux
 # in that case a node file will be expected with as many nodes as there
 # are lines in the geometry file
-# under AIX the remapping is expected to be performed by the LoadLeveler
-# geometry keyword in the job header
 # all this will have to be revisited in the future in order to support
 # heterogenous OpenMP factors (probably using the geometry)
 # OMP_NUM_THREADS consistency with computed "loops" is not checked
@@ -654,8 +590,10 @@ wait_for() {
 #Version="1.1.28e 2017/08/24"  # listing collection optimization attempt
 #Version="1.1.28f 2017/08/24"  # listing collection optimization with fail recovery
 #Version="1.1.28g 2017/08/31"  # fixed redirection bug 
+#Version="1.1.28h 2017/08/31"  # auto adjust pernuma, pernode and smt, use depth by default for aprun
+#Version="1.1.29 2017/09/06"  # undo Cray listing optimizations (no gain observed), step 1 of AIX/POE removal, remove unused code
 true
-Version="1.1.28h 2017/08/31"  # auto adjust pernuma, pernode and smt, use depth by default for aprun
+Version="1.1.29 2017/09/06"  # undo Cray listing optimizations (no gain observed), step 1 of AIX/POE removal, remove unused code
 echo "INFO: ${0##*/} version $Version ( /bin/ksh93 )"
 MY_NODEFILE=${PARALLEL_NODEFILE:-${GECOSHEP_HOSTS_FILE:-${GECOSHEP_HOSTFILE:-${LOADL_HOSTFILE:-${PBS_NODEFILE:-${HOME}/.PBS_NODEFILE}}}}}
 [[ ! -f "${MY_NODEFILE}" ]] && \
@@ -663,9 +601,6 @@ MY_NODEFILE=${PARALLEL_NODEFILE:-${GECOSHEP_HOSTS_FILE:-${GECOSHEP_HOSTFILE:-${L
   MY_NODEFILE=${TMPDIR}/JOB_NODE_FILE && \
   echo localhost  >${MY_NODEFILE} && \
   echo "INFO: created Node File '${MY_NODEFILE}'"
-export OptimizedOutput="/tmp/${USER}_$(date +%s-%N)"
-echo "DEBUG: OptimizedOutput=$OptimizedOutput"
-echo "OptimizedOutput=$OptimizedOutput" >${TMPDIR}/OptimizedOutput
 eval `cclargs_lite -D "" $0 \
     -alpspd "" "NoName" "[use Cray ALPS]" \
     -args "" "" "[arguments to the command]" \
@@ -750,7 +685,6 @@ OMP_NUM_THREADS=${OMP_NUM_THREADS:-1}
 DefaultNumberOfThreads=${OMP_NUM_THREADS}
 #
 export CoresOnNode=128
-[[ "$hostos" == AIX ]]   && CoresOnNode=$(($(bindprocessor -q | sed 's/.*[ ]//')+1))        # AIX
 [[ "$hostos" == Linux ]] && CoresOnNode=$(grep MHz /proc/cpuinfo 2>/dev/null | wc -l)       # straight Linux
 [[ "$hostos" == CLE ]]   && CoresOnNode=$(aprun -n 1 cat /proc/cpuinfo | grep MHz | wc -l) && ((CoresOnNode=CoresOnNode/2*smt)) # Cray XC
 [[ "$pernode" == 9999 ]] && ((pernode=CoresOnNode/OMP_NUM_THREADS))
@@ -758,11 +692,6 @@ export CoresOnNode=128
 ((CoresOnNode<=0)) && CoresOnNode=1
 ((MaxCores=CoresOnNode))
 [[ -n $maxcores ]] && ((MaxCores=maxcores))
-#
-if [[ "$hostos" == AIX ]] ; then
-  [[ "${nodemap}" != NoNe ]] && echo "-nodemap not supported for AIX, use LoadLeveler geometry instead" && exit 1
-  [[ "${coremap}" != NoNe ]] && echo "-coremap not supported for AIX, use LoadLeveler geometry instead" && exit 1
-fi
 #
 if [[ "${mpich2}" == "mpich2" ]] ; then
   mpich2="$(which rumpirun.mpich2 2>/dev/null)"
@@ -915,18 +844,6 @@ if [[ ! -r ${nodefile} ]] ; then   # no nodefile supplied, make one
     echo "INFO: no nodefile found, creating one with $npe_total entries"
     ((r=0))
     while ((r < npe_total)) ; do echo localhost >>${nodefile} ; ((r=r+1)) ; done
-  # else
-  #  if [[ "$hostos" == Linux ]] ; then  # no nodefile expected under AIX in batch mode
-  #    echo "ERROR: no nodefile found, not an interactive job, Linux OS, aborting"
-  #    rm -rf ${tmpdir}
-  #    exit 1
-  #  fi
-  #fi  # tty -s
-#else
-#  echo "INFO: sorting ${nodefile} into ${MY_NODEFILE}__"
-#  sort  <${nodefile} >${MY_NODEFILE}__
-#  nodefile=${MY_NODEFILE}__
-#  cat ${nodefile}
 fi  # no nodefile supplied
 [[ ! -f ${nodefile} ]] && echo "ERROR: no node file found, ABORTING" 1>&2 && exit 1
 ((TotalThreads=npe_total*OMP_NUM_THREADS))
@@ -1026,7 +943,8 @@ set -- $pgm @@
 ((TotalInstances=0))
 ((TotalThreads=0))
 #################################################################################################################################
-# if [[ "$3" != "" ]] ; then # complex sequence, SPMD or MPMD, (automatic multiple MPI worlds with @@)
+# simple or complex sequence, SPMD or MPMD, (automatic multiple MPI worlds with @@)
+# note: multiple worlds not supported yet on Cray (ALPS)
   unset ProGrams Directories  ProgramIndex ProgramNames DirNames
 #################################################################################################################################
   while [[ -n "${1}" ]]
@@ -1066,9 +984,10 @@ set -- $pgm @@
 #=========================== instance script, sourced by ParallelScript ===========================
 #==================================================================================================
       echo "INFO: complex SPMD / MPMD , MPI world ${MpiCommWorld}"
+#
       cat <<EOT >${MpiRunScript}.${MpiCommWorld}
 #!/bin/ksh93
-# SHELL for scripts run under AIX/POE MUST BE /bin/ksh93
+# SHELL for scripts run under AIX/POE had to be /bin/ksh93
 export RPN_COMM_DOM='${NDomains}${RPN_COMM_DOM}'
 export RPN_COMM_DIRS="${RPN_COMM_DIRS}"        # RPN_COMM_DIRS no longer needed by RPN_COMM_init as cd is now performed by script
 #export OMP_NUM_THREADS=${NLThreads}
@@ -1096,7 +1015,7 @@ Status=\$?
 echo "END of child \${WORLD_CHILD}, status = \${Status}  \$($CMD_date)"
 EOT
 #==================================================================================================
-#============== Parameters file, sourced by MpiRunScript, sourced by ParallelScript ===============
+#======== Prepare parameters file, sourced by MpiRunScript, itself sourced by ParallelScript ======
 #==================================================================================================
       [[ "$pemap" == @* ]] && [[ -r ${pemap#@} ]] && pemap="$(cat ${pemap#@})"
       Nindex=${#ProgramIndex[@]}
@@ -1108,6 +1027,7 @@ EOT
           exit 1
         fi
       fi
+#
       cat <<EOT >${MpiRunParms}.${MpiCommWorld}
 CoresOnNode=${MaxCores}
 MaxChild=$((${Instances}-1))
@@ -1186,55 +1106,6 @@ EOT
   done # while [[ "$1" != "" ]]
 #==================================================================================================
   if ((ErRoR > 0)) ; then echo "$ErRoR ERROR(S) detected" ; local_cleanup ; exit 1 ; fi
-#
-# else #################### simple SPMD case, one MPI world, old style call ##########################
-# #
-#   ((TotalInstances=npe_total))
-#   [[  "${pgm}" == /* ]] || pgm="${SetCurrentDir}/${pgm}"  # relative path, add "current" directory
-#   [[ -x $pgm ]] || pgm="$(which ${1} 2>/dev/null)"
-#   if [[ ! -x $pgm ]] ; then                        # same executable for all worlds
-#     echo "ERROR: ${1} does not exist or is not executable"
-#     local_cleanup
-#     exit 1
-#   fi
-#   MpiCommWorld=0
-#   MpiCommWorlds=1
-#   ((NDomains=NDomains+1))
-#   RPN_COMM_DOM=",0,1,$((npe_total-1))"
-#   PeInWorld[0]=${npe_total}
-#   ThreadsInWorld[0]=${OMP_NUM_THREADS}
-#   MembersInWorld[0]=${npey}
-#   ((TotalThreads=OMP_NUM_THREADS))
-# #==================================================================================================
-# #=========================== instance script, sourced by ParallelScript ===========================
-# #==================================================================================================
-# echo "INFO: simple SPMD"
-#   cat <<EOT >${MpiRunScript}.0   # MpiCommWorld is 0 in this case
-# #!/bin/ksh93
-# # SHELL for scripts run under AIX/POE MUST BE /bin/ksh93
-# unset RPN_COMM_DOM
-# unset RPN_COMM_DIRS
-# export OMP_NUM_THREADS=${NLThreads:-${OMP_NUM_THREADS}}
-# ((WORLD_CHILD=MP_CHILD))
-# export WORLD_CHILD
-# [[ -z "${nosep}" ]] && \
-#   [[ -n "${processorder}" ]] && \
-#   /usr/bin/printf "============== stdout W:0:%5.5d M:%5.5d-%5.5d Seq:%s ==============\n" \${RP_WorldChild} \${RP_Member} \${RP_MemberChild} \${MP_SeqNum}
-# if [[ "$splittmp" == "splittmp" ]]
-# then
-#   export TMPDIR=\$TMPDIR/\$HOSTNAME.\$\$
-#   mkdir -p \$TMPDIR
-# fi
-# cd ${SetCurrentDir}
-# ${preexec} ${pgm} ${args}
-# Status=\$?
-# ((Status==0)) && $CMD_rm -f ${tmpdir}/fail.\${MP_Tag}.\${MP_SeqNum}
-# echo "END of child \${WORLD_CHILD} with status = \${Status}  \$($CMD_date)"
-# EOT
-# #==================================================================================================
-#   echo "INFO: ${npe_total} instances of '$pgm' in MPI world 0"
-# #
-# fi ########################## if complex sequence, possibly MPMD ####################
 #==================================================================================================
 #=================== prepare primary launch scripts (one per world) ===============================
 #==================================================================================================
@@ -1243,8 +1114,6 @@ export WorldOffset=0
 #
 # prepare tagging format and contents
 #
-#tag_values='${RP_CommWorld} ${RP_Member} ${RP_MemberChild}'
-#tag_format='%1d-%5.5d-%5.5d'
 [[ "${tag}" == full ]] && ((MpiCommWorlds>1)) && F_world='%1d-' && V_world='${RP_CommWorld}'
 [[ "${tag}" == full ]] && F_member='%5.5d-' && V_member='${RP_Member}' && \
                           F_child='%5.5d' && V_child='${RP_MemberChild}'
@@ -1254,7 +1123,8 @@ export WorldOffset=0
 export F_world V_world F_member V_member F_child V_child F_seq V_seq
 
 #==================================================================================================
-#========================== primary launch scripts (one per world) ================================
+#========================== Primary launch scripts (one per world) ================================
+#========================== sources MpiRunScript redirecting its output appropriately =============
 #==================================================================================================
 while ((MpiCommWorld<MpiCommWorlds))
 do
@@ -1281,25 +1151,21 @@ cd ${tmpdir}
 #
 #[[ -n "${processorder}" ]] &&
 $CMD_touch fail.\${MP_Tag}.\${MP_SeqNum}   # precondition status to failure
-######  source ./${MpiRunScript#${tmpdir}/}.${MpiCommWorld}  ${RedirectStdout} ${RedirectStderr}
-if [[ "${spliteo}" == no ]] ; then
-  source ./${MpiRunScript#${tmpdir}/}.${MpiCommWorld}  1>${OptimizedOutput}.\${MP_SeqNum}.out 2>&1
-  cd ${tmpdir}
-  cat ${OptimizedOutput}.\${MP_SeqNum}.out ${RedirectStdout} || true
-  rm -f ${OptimizedOutput}.\${MP_SeqNum}.out
-else
-  source ./${MpiRunScript#${tmpdir}/}.${MpiCommWorld}  1>${OptimizedOutput}.\${MP_SeqNum}.out 2>${OptimizedOutput}.\${MP_SeqNum}.err
-  cd ${tmpdir}
-  cat ${OptimizedOutput}.\${MP_SeqNum}.out ${RedirectStdout}    || true   # never fail
-  RedirectStderr="${RedirectStderr:-1>&2}"
-  cat ${OptimizedOutput}.\${MP_SeqNum}.err >\${RedirectStderr#??} || true
-  rm -f ${OptimizedOutput}.\${MP_SeqNum}.out ${OptimizedOutput}.\${MP_SeqNum}.err
-fi
-[[ -n "${LOADL_STEP_CLASS}" ]] && [[ -x ${tmpdir}/null_mpi ]] && ${tmpdir}/null_mpi   # AIX LoadLeveler only
+source ./${MpiRunScript#${tmpdir}/}.${MpiCommWorld}  ${RedirectStdout} ${RedirectStderr}
+# if [[ "${spliteo}" == no ]] ; then
+#   source ./${MpiRunScript#${tmpdir}/}.${MpiCommWorld}  1>${OptimizedOutput}.\${MP_SeqNum}.out 2>&1
+#   cd ${tmpdir}
+#   cat ${OptimizedOutput}.\${MP_SeqNum}.out ${RedirectStdout} || true
+#   rm -f ${OptimizedOutput}.\${MP_SeqNum}.out
+# else
+#   source ./${MpiRunScript#${tmpdir}/}.${MpiCommWorld}  1>${OptimizedOutput}.\${MP_SeqNum}.out 2>${OptimizedOutput}.\${MP_SeqNum}.err
+#   cd ${tmpdir}
+#   cat ${OptimizedOutput}.\${MP_SeqNum}.out ${RedirectStdout}    || true   # never fail
+#   RedirectStderr="${RedirectStderr:-1>&2}"
+#   cat ${OptimizedOutput}.\${MP_SeqNum}.err >\${RedirectStderr#??} || true
+#   rm -f ${OptimizedOutput}.\${MP_SeqNum}.out ${OptimizedOutput}.\${MP_SeqNum}.err
+# fi
 [[ -n "${processorder}" ]] || exit 0     # no listings to process, exit
-# lines=0
-# the_file=${tmpdir}/\${MP_SeqNum}/stdout.\${MP_Tag}
-# [[ -r \${the_file} ]] && lines="\$($CMD_wc -l <\${the_file})" && ((lines<${minstdout})) && $CMD_rm \${the_file}  # remove stdout files shorter than minimum
 cd ${tmpdir}
 touch \${MP_SeqNum}/done  # tell that listing is there and should be complete
 [[ \${MP_SeqNum} != *00 ]] && $CMD_true && exit   # output pre processing by nn00 processes
@@ -1357,7 +1223,7 @@ if [[ -n ${processorder} ]] ; then    #  a arranger pour le cas MPMD ===========
 fi
 echo "INFO: START of parallel execution : $(date)"
 #
-if [[ ${nompi} == run_with_mpi || ${nompi} == pseudo_mpi ]] ; then  # MPI launch (linux or AIX supported)
+if [[ ${nompi} == run_with_mpi || ${nompi} == pseudo_mpi ]] ; then  # MPI launch (linux)
 #
   SystemPlatform=$(uname -s)
   MpiImplementation=""
