@@ -685,10 +685,17 @@ OMP_NUM_THREADS=${OMP_NUM_THREADS:-1}
 DefaultNumberOfThreads=${OMP_NUM_THREADS}
 #
 export CoresOnNode=128
-[[ "$hostos" == Linux ]] && CoresOnNode=$(grep MHz /proc/cpuinfo 2>/dev/null | wc -l)       # straight Linux
-[[ "$hostos" == CLE ]]   && CoresOnNode=$(aprun -n 1 cat /proc/cpuinfo | grep MHz | wc -l) && ((CoresOnNode=CoresOnNode/2*smt)) # Cray XC
+export NumaNodes=1
+if [[ "$hostos" == Linux ]] ; then
+  NumaNodes="$(lscpu | grep 'NUMA node(s):' | sed 's/.* //')"
+  CoresOnNode=$(grep MHz /proc/cpuinfo 2>/dev/null | wc -l)       # straight Linux
+fi
+if [[ "$hostos" == CLE ]]  ; then
+  NumaNodes="$(aprun -n 1 lscpu | grep 'NUMA node(s):' | sed 's/.* //')"
+  CoresOnNode="$(aprun -n 1 cat /proc/cpuinfo | grep MHz | wc -l)" && ((CoresOnNode=CoresOnNode/NumaNodes*smt)) # Cray XC
+fi
 [[ "$pernode" == 9999 ]] && ((pernode=CoresOnNode/OMP_NUM_THREADS))
-[[ "$pernuma" == 9999 ]] && ((pernuma=CoresOnNode/OMP_NUM_THREADS/2))
+[[ "$pernuma" == 9999 ]] && ((pernuma=CoresOnNode/OMP_NUM_THREADS/NumaNodes))
 ((CoresOnNode<=0)) && CoresOnNode=1
 ((MaxCores=CoresOnNode))
 [[ -n $maxcores ]] && ((MaxCores=maxcores))
