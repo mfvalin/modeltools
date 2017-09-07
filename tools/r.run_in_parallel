@@ -591,9 +591,9 @@ wait_for() {
 #Version="1.1.28f 2017/08/24"  # listing collection optimization with fail recovery
 #Version="1.1.28g 2017/08/31"  # fixed redirection bug 
 #Version="1.1.28h 2017/08/31"  # auto adjust pernuma, pernode and smt, use depth by default for aprun
-#Version="1.1.29 2017/09/06"  # undo Cray listing optimizations (no gain observed), step 1 of AIX/POE removal, remove unused code
+#Version="1.1.29 2017/09/07"  # undo Cray listing optimizations (no gain observed), step 1 of AIX/POE removal, remove unused code
 true
-Version="1.1.29 2017/09/06"  # undo Cray listing optimizations (no gain observed), step 1 of AIX/POE removal, remove unused code
+Version="1.1.29 2017/09/07"  # undo Cray listing optimizations (no gain observed), step 1 of AIX/POE removal, remove unused code
 echo "INFO: ${0##*/} version $Version ( /bin/ksh93 )"
 MY_NODEFILE=${PARALLEL_NODEFILE:-${GECOSHEP_HOSTS_FILE:-${GECOSHEP_HOSTFILE:-${LOADL_HOSTFILE:-${PBS_NODEFILE:-${HOME}/.PBS_NODEFILE}}}}}
 [[ ! -f "${MY_NODEFILE}" ]] && \
@@ -1152,19 +1152,6 @@ cd ${tmpdir}
 #[[ -n "${processorder}" ]] &&
 $CMD_touch fail.\${MP_Tag}.\${MP_SeqNum}   # precondition status to failure
 source ./${MpiRunScript#${tmpdir}/}.${MpiCommWorld}  ${RedirectStdout} ${RedirectStderr}
-# if [[ "${spliteo}" == no ]] ; then
-#   source ./${MpiRunScript#${tmpdir}/}.${MpiCommWorld}  1>${OptimizedOutput}.\${MP_SeqNum}.out 2>&1
-#   cd ${tmpdir}
-#   cat ${OptimizedOutput}.\${MP_SeqNum}.out ${RedirectStdout} || true
-#   rm -f ${OptimizedOutput}.\${MP_SeqNum}.out
-# else
-#   source ./${MpiRunScript#${tmpdir}/}.${MpiCommWorld}  1>${OptimizedOutput}.\${MP_SeqNum}.out 2>${OptimizedOutput}.\${MP_SeqNum}.err
-#   cd ${tmpdir}
-#   cat ${OptimizedOutput}.\${MP_SeqNum}.out ${RedirectStdout}    || true   # never fail
-#   RedirectStderr="${RedirectStderr:-1>&2}"
-#   cat ${OptimizedOutput}.\${MP_SeqNum}.err >\${RedirectStderr#??} || true
-#   rm -f ${OptimizedOutput}.\${MP_SeqNum}.out ${OptimizedOutput}.\${MP_SeqNum}.err
-# fi
 [[ -n "${processorder}" ]] || exit 0     # no listings to process, exit
 cd ${tmpdir}
 touch \${MP_SeqNum}/done  # tell that listing is there and should be complete
