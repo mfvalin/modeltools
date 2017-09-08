@@ -592,8 +592,9 @@ wait_for() {
 #Version="1.1.28g 2017/08/31"  # fixed redirection bug 
 #Version="1.1.28h 2017/08/31"  # auto adjust pernuma, pernode and smt, use depth by default for aprun
 #Version="1.1.29 2017/09/06"  # undo Cray listing optimizations (no gain observed), step 1 of AIX/POE removal, remove unused code
+#Version="1.1.29a 2017/09/07"  # added warning when cores per numa node not an integral multiple of OMP_NUM_THREADS
 true
-Version="1.1.29 2017/09/06"  # undo Cray listing optimizations (no gain observed), step 1 of AIX/POE removal, remove unused code
+Version="1.1.29a 2017/09/07"  # added warning when cores per numa node not an integral multiple of OMP_NUM_THREADS
 echo "INFO: ${0##*/} version $Version ( /bin/ksh93 )"
 MY_NODEFILE=${PARALLEL_NODEFILE:-${GECOSHEP_HOSTS_FILE:-${GECOSHEP_HOSTFILE:-${LOADL_HOSTFILE:-${PBS_NODEFILE:-${HOME}/.PBS_NODEFILE}}}}}
 [[ ! -f "${MY_NODEFILE}" ]] && \
@@ -689,6 +690,11 @@ export CoresOnNode=128
 [[ "$hostos" == CLE ]]   && CoresOnNode=$(aprun -n 1 cat /proc/cpuinfo | grep MHz | wc -l) && ((CoresOnNode=CoresOnNode/2*smt)) # Cray XC
 [[ "$pernode" == 9999 ]] && ((pernode=CoresOnNode/OMP_NUM_THREADS))
 [[ "$pernuma" == 9999 ]] && ((pernuma=CoresOnNode/OMP_NUM_THREADS/2))
+numaspaces="$(lscpu | grep "NUMA node(s):" | sed 's/.* //')"
+((corespernuma=CoresOnNode/numaspaces))
+if(((corespernuma%OMP_NUM_THREADS)>0)) ; then
+  echo "WARNING: cores per numa space (${corespernuma}) is not a multiple of OMP_NUM_THREADS (${OMP_NUM_THREADS})"
+fi
 ((CoresOnNode<=0)) && CoresOnNode=1
 ((MaxCores=CoresOnNode))
 [[ -n $maxcores ]] && ((MaxCores=maxcores))
