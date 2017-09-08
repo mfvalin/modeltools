@@ -686,12 +686,18 @@ OMP_NUM_THREADS=${OMP_NUM_THREADS:-1}
 DefaultNumberOfThreads=${OMP_NUM_THREADS}
 #
 export CoresOnNode=128
-[[ "$hostos" == Linux ]] && CoresOnNode=$(grep MHz /proc/cpuinfo 2>/dev/null | wc -l)       # straight Linux
-[[ "$hostos" == CLE ]]   && CoresOnNode=$(aprun -n 1 cat /proc/cpuinfo | grep MHz | wc -l) && ((CoresOnNode=CoresOnNode/2*smt)) # Cray XC
+export NumaNodes=1
+if [[ "$hostos" == Linux ]] ; then
+  NumaNodes="$(lscpu | grep 'NUMA node(s):' | sed 's/.* //')"
+  CoresOnNode=$(grep MHz /proc/cpuinfo 2>/dev/null | wc -l)       # straight Linux
+fi
+if [[ "$hostos" == CLE ]]  ; then
+  NumaNodes="$(aprun -n 1 lscpu | grep 'NUMA node(s):' | sed 's/.* //')"
+  CoresOnNode="$(aprun -n 1 cat /proc/cpuinfo | grep MHz | wc -l)" && ((CoresOnNode=CoresOnNode/NumaNodes*smt)) # Cray XC
+fi
 [[ "$pernode" == 9999 ]] && ((pernode=CoresOnNode/OMP_NUM_THREADS))
-[[ "$pernuma" == 9999 ]] && ((pernuma=CoresOnNode/OMP_NUM_THREADS/2))
-numaspaces="$(lscpu | grep "NUMA node(s):" | sed 's/.* //')"
-((corespernuma=CoresOnNode/numaspaces))
+[[ "$pernuma" == 9999 ]] && ((pernuma=CoresOnNode/OMP_NUM_THREADS/NumaNodes))
+((corespernuma=CoresOnNode/NumaNodes))
 if(((corespernuma%OMP_NUM_THREADS)>0)) ; then
   echo "WARNING: cores per numa space (${corespernuma}) is not a multiple of OMP_NUM_THREADS (${OMP_NUM_THREADS})"
 fi
@@ -1158,19 +1164,6 @@ cd ${tmpdir}
 #[[ -n "${processorder}" ]] &&
 $CMD_touch fail.\${MP_Tag}.\${MP_SeqNum}   # precondition status to failure
 source ./${MpiRunScript#${tmpdir}/}.${MpiCommWorld}  ${RedirectStdout} ${RedirectStderr}
-# if [[ "${spliteo}" == no ]] ; then
-#   source ./${MpiRunScript#${tmpdir}/}.${MpiCommWorld}  1>${OptimizedOutput}.\${MP_SeqNum}.out 2>&1
-#   cd ${tmpdir}
-#   cat ${OptimizedOutput}.\${MP_SeqNum}.out ${RedirectStdout} || true
-#   rm -f ${OptimizedOutput}.\${MP_SeqNum}.out
-# else
-#   source ./${MpiRunScript#${tmpdir}/}.${MpiCommWorld}  1>${OptimizedOutput}.\${MP_SeqNum}.out 2>${OptimizedOutput}.\${MP_SeqNum}.err
-#   cd ${tmpdir}
-#   cat ${OptimizedOutput}.\${MP_SeqNum}.out ${RedirectStdout}    || true   # never fail
-#   RedirectStderr="${RedirectStderr:-1>&2}"
-#   cat ${OptimizedOutput}.\${MP_SeqNum}.err >\${RedirectStderr#??} || true
-#   rm -f ${OptimizedOutput}.\${MP_SeqNum}.out ${OptimizedOutput}.\${MP_SeqNum}.err
-# fi
 [[ -n "${processorder}" ]] || exit 0     # no listings to process, exit
 cd ${tmpdir}
 touch \${MP_SeqNum}/done  # tell that listing is there and should be complete

@@ -56,29 +56,29 @@ uint64_t rdtsc(void) {   // version rapide "out of order"
 /*
            interpolate a column from a 3D source array f, put results in array r
   
-   f       3D source array, fortran dimension(ni,nj,nk),  ni*nj = ninj
+   f       3D Fortran indexed source array, real*4, dimension(mini:maxi,minj:maxj,nk)
+           ni = (maxi-mini-1)
+           ninj = (maxi-mini-1)*(maxj-minj-1)
    ni      distance between f(i,j,k) and f(i,j+1,k)
    ninj    distance between f(i,j,k) and f(i,j,k+1)
    r       2D array, fortran dimension(np,nk)
-   nk      number of levels
-   xx      i coordinate in i j fractional index space of desired column
-   yy      j coordinate in i j fractional index space of desired column
+   nk      number of 2D planes
+   xx      i coordinate in i j fractional index space of desired column ( xx(l) is assumed >= mini+1 )
+   yy      j coordinate in i j fractional index space of desired column ( yy(l) is assumed >= minj+1 )
   
    f is assumed to point to f(1,1,1)
   
    xx = 2.5, yy = 2.5 would be the center ot the square formed by
    f(2,2,k) f(3,2,k) f(2,3,k) f(3.3.k)  (where 1 <= k <= nk)
   
-   to call from FORTRAN, the following interface is needed
-  interface
-    subroutine intrp_bicub_yx(f, r, ni, ninj, nk, np, x, y) bind(C,name='intrp_bicub_yx')
-      import :: C_INT, C_FLOAT, C_DOUBLE
+   to call from FORTRAN, the following interface is used
+
+    subroutine intrp_bicub_yx(f, r, ni, ninj, nk, np, x, y)      bind(C,name='intrp_bicub_yx')
+    subroutine intrp_bicub_yx_mono(f, r, ni, ninj, nk, np, x, y) bind(C,name='intrp_bicub_yx_mono')
       real(C_FLOAT), dimension(*), intent(IN) :: f
       real(C_FLOAT), dimension(*), intent(OUT) :: r
       real(C_DOUBLE), intent(IN), value :: x, y
       integer(C_INT), intent(IN), value :: ni, ninj, nk, np
-    end subroutine intrp_bicub_yx
-  end interface
  */
 void intrp_bicub_yx(float *f, float *r, int ni, int ninj, int nk, int np, double xx, double yy){
 #if defined(__AVX2__) && defined(__x86_64__)
@@ -97,8 +97,8 @@ void intrp_bicub_yx(float *f, float *r, int ni, int ninj, int nk, int np, double
 // printf("DEBUG: f = %p, r = %p \n",f,r);
 // printf("DEBUG: f[0] = %f, r[0] = %f, ni = %d, ninj = %d, nk = %d, np = %d, xx = %f, yy = %f\n",f[0],r[0],ni,ninj,nk,np,xx,yy);
   x = xx - 1.0 ; y = yy - 1.0; // xx and yy are in "ORIGIN 1"
-  ix = xx ; ix = ix - 1;   // xx and yy are in "ORIGIN 1"
-  iy = yy ; iy = iy - 1;
+  ix = xx ; if(ix > xx) ix = ix -1 ; ix = ix - 2;   // xx and yy are in "ORIGIN 1"
+  iy = yy ; if(iy > yy) iy = iy -1 ; iy = iy - 2;
   x  = x - 1 - ix;
   y  = y - 1 - iy;
   f = f + ix + iy * ni;
@@ -203,8 +203,8 @@ void intrp_bicub_yx_mono(float *f, float *r, int ni, int ninj, int nk, int np, d
 // printf("DEBUG: f = %p, r = %p \n",f,r);
 // printf("DEBUG: f[0] = %f, r[0] = %f, ni = %d, ninj = %d, nk = %d, np = %d, xx = %f, yy = %f\n",f[0],r[0],ni,ninj,nk,np,xx,yy);
   x = xx - 1.0 ; y = yy - 1.0; // xx and yy are in "ORIGIN 1"
-  ix = xx ; ix = ix - 2;   // xx and yy are in "ORIGIN 1"
-  iy = yy ; iy = iy - 2;
+  ix = xx ; if(ix > xx) ix = ix -1 ; ix = ix - 2;   // xx and yy are in "ORIGIN 1"
+  iy = yy ; if(iy > yy) iy = iy -1 ; iy = iy - 2;
   x  = x - 1 - ix;
   y  = y - 1 - iy;
   f = f + ix + iy * ni;
@@ -410,20 +410,20 @@ program test_interp
   integer*8 :: t1, t2, tmg1(NR), tmg2(nr)
   integer :: nidim, ninjdim
   interface
-    subroutine intrp_bicub_yx(f, r, ni, ninj, nk, np, x, y) bind(C,name='intrp_bicub_yx') !InTf!
+    subroutine intrp_bicub_yx(f, r, ni, ninj, nk, np, x, y) bind(C,name='intrp_bicub_yx')         !InTf!
       import :: C_INT, C_FLOAT, C_DOUBLE                                                          !InTf!
       real(C_FLOAT), dimension(*), intent(IN) :: f                                                !InTf!
       real(C_FLOAT), dimension(*), intent(OUT) :: r                                               !InTf!
       real(C_DOUBLE), intent(IN), value :: x, y                                                   !InTf!
       integer(C_INT), intent(IN), value :: ni, ninj, nk, np                                       !InTf!
-    end subroutine intrp_bicub_yx                                                             !InTf!
+    end subroutine intrp_bicub_yx                                                                 !InTf!
     subroutine intrp_bicub_yx_mono(f, r, ni, ninj, nk, np, x, y) bind(C,name='intrp_bicub_yx_mono') !InTf!
       import :: C_INT, C_FLOAT, C_DOUBLE                                                          !InTf!
       real(C_FLOAT), dimension(*), intent(IN) :: f                                                !InTf!
       real(C_FLOAT), dimension(*), intent(OUT) :: r                                               !InTf!
       real(C_DOUBLE), intent(IN), value :: x, y                                                   !InTf!
       integer(C_INT), intent(IN), value :: ni, ninj, nk, np                                       !InTf!
-    end subroutine intrp_bicub_yx_mono                                                        !InTf!
+    end subroutine intrp_bicub_yx_mono                                                            !InTf!
   end interface
 #define FXY(A,B,C) (1.3*(A)**3 + 1.4*(A)**2 + (A)*1.5 + 2.3*(B)**3 + 2.4*(B)**2 + (B)*2.5 + (C))
 
@@ -438,8 +438,8 @@ program test_interp
 !    print *,f(1,1,k),f(2,2,k)
   enddo
   do i = 1 , NP
-    x(i) = i - .1
-    y(i) = i - .1
+    x(i) = i - .999
+    y(i) = i - .999
   enddo
   nidim = NI + 2*HX
   ninjdim = nidim * (NJ + HY*2)
