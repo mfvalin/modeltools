@@ -593,8 +593,9 @@ wait_for() {
 #Version="1.1.28h 2017/08/31"  # auto adjust pernuma, pernode and smt, use depth by default for aprun
 #Version="1.1.29 2017/09/06"  # undo Cray listing optimizations (no gain observed), step 1 of AIX/POE removal, remove unused code
 #Version="1.1.29a 2017/09/07"  # added warning when cores per numa node not an integral multiple of OMP_NUM_THREADS
+#Version="1.1.29b 2017/09/07"  # better message
 true
-Version="1.1.29a 2017/09/07"  # added warning when cores per numa node not an integral multiple of OMP_NUM_THREADS
+Version="1.1.29b 2017/09/07"  # better message
 echo "INFO: ${0##*/} version $Version ( /bin/ksh93 )"
 MY_NODEFILE=${PARALLEL_NODEFILE:-${GECOSHEP_HOSTS_FILE:-${GECOSHEP_HOSTFILE:-${LOADL_HOSTFILE:-${PBS_NODEFILE:-${HOME}/.PBS_NODEFILE}}}}}
 [[ ! -f "${MY_NODEFILE}" ]] && \
@@ -699,7 +700,8 @@ fi
 [[ "$pernuma" == 9999 ]] && ((pernuma=CoresOnNode/OMP_NUM_THREADS/NumaNodes))
 ((corespernuma=CoresOnNode/NumaNodes))
 if(((corespernuma%OMP_NUM_THREADS)>0)) ; then
-  echo "WARNING: cores per numa space (${corespernuma}) is not a multiple of OMP_NUM_THREADS (${OMP_NUM_THREADS})"
+  echo "WARNING: The number of OpenMP threads asked for (${OMP_NUM_THREADS}) is not efficient for the target architecture"
+  echo "WARNING: (it should be a divisor of ${corespernuma})"
 fi
 ((CoresOnNode<=0)) && CoresOnNode=1
 ((MaxCores=CoresOnNode))
