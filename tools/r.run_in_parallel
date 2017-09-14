@@ -700,7 +700,8 @@ fi
 [[ "$pernuma" == 9999 ]] && ((pernuma=CoresOnNode/OMP_NUM_THREADS/NumaNodes))
 ((corespernuma=CoresOnNode/NumaNodes))
 if(((corespernuma%OMP_NUM_THREADS)>0)) ; then
-  echo "WARNING: cores per numa space (${corespernuma}) is not a multiple of OMP_NUM_THREADS (${OMP_NUM_THREADS})"
+  echo "WARNING: The number of OpenMP threads asked for (${OMP_NUM_THREADS}) is not efficient for the target architecture"
+  echo "WARNING: (it should be a divisor of ${corespernuma})"
 fi
 ((CoresOnNode<=0)) && CoresOnNode=1
 ((MaxCores=CoresOnNode))
