@@ -1,11 +1,13 @@
 #include <stdio.h>
 #include <stdlib.h>
+#include <unistd.h>
+#include <ctype.h>
 
 #ifndef _XOPEN_SOURCE_EXTENDED
 #define _XOPEN_SOURCE_EXTENDED 
 #endif
 #ifdef NOUI
-vmenu()
+int vmenu()
 {
 printf("cclargs ERROR: Interactive mode NOT SUPPORTED\n");
 exit(1);
@@ -27,15 +29,24 @@ return 1;
 *    exec a la version curses si necessaire                  *
 *                                                            *
 **************************************************************/
+#if defined(COMPILE_COMMENTS_TO_FAIL)
+  compilation receipes
+  to generate the pair of executables for version 567 
+  VERSION=567
+  cc -O2 -DVERSION=${VERSION} cclargs_lite+.c -DNOUI  -o cclargs_lite
+  cc -O2 -DVERSION=${VERSION} cclargs_lite+.c progmenu.c -lncurses -o cclargs_lite_curses_${VERSION}
+#endif
 #include <stdio.h>
 #include <string.h>
 #include <malloc.h>
 
 #define NKLEMAX 1024
 
-static char OUTBUF[40960];  /* buffer containing output, if exec to curses version
-                               is necessary, buffer is discarded  */
+#define OUTBUFSZ 128000
+static char OUTBUF[OUTBUFSZ];  /* buffer containing output, if exec to curses version
+                                  is necessary, buffer is discarded  */
 static char *OUTBUFPTR=&OUTBUF[0];
+static char *OUTBUFEND=&OUTBUF[OUTBUFSZ-2];
 
 static char delimiter=':';
 enum interpreter {perl,python,shell} ;
@@ -57,13 +68,15 @@ struct definition
     enum typecle type;
 };
 
-check_argv(char **argv){
+void check_argv(char **argv){
   if(*argv != NULL) return;
   fprintf(stderr,"cclargs: FATAL ERROR, argument expected, NULL found\n");
   exit(1);
 }
 
-main(argc, argv)
+char *mainhelp="";
+
+int main(argc, argv)
 int argc;
 char **argv;
 {
@@ -119,6 +132,7 @@ char **argv;
   {
       getnom(scriptnom,*argv,49);
       argv++ ; check_argv(argv);
+      if(**argv == '[') mainhelp = *argv ;
   }
   else
   {
@@ -174,26 +188,26 @@ if(interp== shell) {
    /*
      print list of OUTPUT keys
    */
-   OUTBUFPTR+=sprintf(OUTBUFPTR,"CCLARGS_OUT_KEYS='");
+   OUTBUFPTR+=snprintf(OUTBUFPTR,OUTBUFEND-OUTBUFPTR,"CCLARGS_OUT_KEYS='");
    for(i=0;i<=NKLES;i++){
      if(*defo[i].kle_nom == '_') {
    /*
        defo[i].kle_nom++;
    */
-       OUTBUFPTR+=sprintf(OUTBUFPTR," %s",defo[i].kle_nom);
+       OUTBUFPTR+=snprintf(OUTBUFPTR,OUTBUFEND-OUTBUFPTR," %s",defo[i].kle_nom);
      }
    }
-   OUTBUFPTR+=sprintf(OUTBUFPTR,"';");
+   OUTBUFPTR+=snprintf(OUTBUFPTR,OUTBUFEND-OUTBUFPTR,"';");
    /*
      print list of ALL keys
    */
    temp = defo[0].kle_nom; while ( *temp == '-' ) temp++;
-   OUTBUFPTR+=sprintf(OUTBUFPTR,"CCLARGS_KEYS='%s",temp);
+   OUTBUFPTR+=snprintf(OUTBUFPTR,OUTBUFEND-OUTBUFPTR,"CCLARGS_KEYS='%s",temp);
    for(i=1;i<=NKLES;i++) {
      temp = defo[i].kle_nom; while ( *temp == '-' ) temp++;
-     OUTBUFPTR+=sprintf(OUTBUFPTR," %s",temp);
+     OUTBUFPTR+=snprintf(OUTBUFPTR,OUTBUFEND-OUTBUFPTR," %s",temp);
    }
-   OUTBUFPTR+=sprintf(OUTBUFPTR,"';");
+   OUTBUFPTR+=snprintf(OUTBUFPTR,OUTBUFEND-OUTBUFPTR,"';");
 }
 
   /* recuperation des arguments en mode positionnel */
@@ -242,8 +256,8 @@ if(interp== shell) {
        apres_moin_moin(pointeur);
   }
  
-  if(interp == python) OUTBUFPTR+=sprintf(OUTBUFPTR,"]");
-  if(interp == perl) OUTBUFPTR+=sprintf(OUTBUFPTR,"]");
+  if(interp == python) OUTBUFPTR+=snprintf(OUTBUFPTR,OUTBUFEND-OUTBUFPTR,"]");
+  if(interp == perl) OUTBUFPTR+=snprintf(OUTBUFPTR,OUTBUFEND-OUTBUFPTR,"]");
   imprime(defo);
   printf("%s",OUTBUF);
 /*   fprintf(stderr,"Number of characters on stdout=%d\n",strlen(OUTBUF));    */
@@ -282,7 +296,7 @@ int *status;
 {
    void pas_de_deux(), converti();
    enum typecle majmin();
-   int compte, i, ldesc;
+   int compte=0, i, ldesc;
    char *egal_pointeur ;
 
    i = -1;
@@ -406,11 +420,11 @@ char **argv;
     int count = 0;
     
     if(interp == perl)
-      OUTBUFPTR+=sprintf(OUTBUFPTR,"%cCclArgs=('--'=>[",'%');
+      OUTBUFPTR+=snprintf(OUTBUFPTR,OUTBUFEND-OUTBUFPTR,"%cCclArgs=('--'=>[",'%');
     if(interp == python)
-      OUTBUFPTR+=sprintf(OUTBUFPTR,"CclArgs={'--':[");
+      OUTBUFPTR+=snprintf(OUTBUFPTR,OUTBUFEND-OUTBUFPTR,"CclArgs={'--':[");
     if(interp == shell)
-      OUTBUFPTR+=sprintf(OUTBUFPTR," set nil ; shift ; ");
+      OUTBUFPTR+=snprintf(OUTBUFPTR,OUTBUFEND-OUTBUFPTR," set nil ; shift ; ");
 
     while(*argv)
     {
@@ -422,11 +436,11 @@ char **argv;
       {
          if (count == 0 && interp == shell)
          {
-            OUTBUFPTR+=sprintf(OUTBUFPTR,"set ");
+            OUTBUFPTR+=snprintf(OUTBUFPTR,OUTBUFEND-OUTBUFPTR,"set ");
          }
-         if(interp == shell) OUTBUFPTR+=sprintf(OUTBUFPTR," %s ",*argv);
-         if(interp == python) OUTBUFPTR+=sprintf(OUTBUFPTR,"%s'%s'",separateur,*argv);
-         if(interp == perl) OUTBUFPTR+=sprintf(OUTBUFPTR,"%s'%s'",separateur,*argv);
+         if(interp == shell) OUTBUFPTR+=snprintf(OUTBUFPTR,OUTBUFEND-OUTBUFPTR," %s ",*argv);
+         if(interp == python) OUTBUFPTR+=snprintf(OUTBUFPTR,OUTBUFEND-OUTBUFPTR,"%s'%s'",separateur,*argv);
+         if(interp == perl) OUTBUFPTR+=snprintf(OUTBUFPTR,OUTBUFEND-OUTBUFPTR,"%s'%s'",separateur,*argv);
          separateur=virgule;
       }
 
@@ -434,7 +448,7 @@ char **argv;
      }
 
      if(count > 0) {
-       if(interp == shell) OUTBUFPTR+=sprintf(OUTBUFPTR," ; ");
+       if(interp == shell) OUTBUFPTR+=snprintf(OUTBUFPTR,OUTBUFEND-OUTBUFPTR," ; ");
      }
 
      return(argv);
@@ -469,10 +483,10 @@ int *status;
    void pas_de_deux(), converti(), sequence_appel();
    int valide_kle();
    char **argu_list();
-   int index;
+   int index=-1;
    char *keyname;
    char *egal_pointeur;
-   int nom_ecrit;
+   int nom_ecrit=0;
    char arg_val_buf[65538];
 
       while(*argv)
@@ -757,19 +771,18 @@ char *scriptnom;
 {
 
      int i = 0;
-
      
      fprintf(stderr,"\n *** SEQUENCE D'APPEL ***\n\n");
 
-     fprintf(stderr,"%s [positionnels]\n",scriptnom);
+     fprintf(stderr,"%s [positionnels] \t%s\n",scriptnom,mainhelp+1);
    
      while(defo[i].kle_nom != '\0')
      {
        if(*defo[i].kle_nom == '_') /* supprimer le _ au debut des cles de sortie */
-        fprintf(stderr," IN/OUT   -%s [%s:%s]\n",defo[i].kle_nom+1,defo[i].kle_def1,defo[i].kle_def2);
+        fprintf(stderr," INOUT -%-12s [%s:%s] \t%s\n",defo[i].kle_nom+1,defo[i].kle_def1,defo[i].kle_def2,defo[i].kle_desc);
        else
-        fprintf(stderr," IN       -%s [%s:%s]\n",defo[i].kle_nom,defo[i].kle_def1,defo[i].kle_def2);
-         i++;
+        fprintf(stderr," IN    -%-12s [%s:%s] \t%s\n",defo[i].kle_nom,defo[i].kle_def1,defo[i].kle_def2,defo[i].kle_desc);
+       i++;
      }
      fprintf(stderr,"          [-- positionnels]\n");
      fprintf(stderr,"\n");
@@ -794,9 +807,9 @@ struct definition defo[];
 	 temp = defo[index].kle_nom;
 	 while(*temp == '-') temp++;
          if(strcmp(defo[index].kle_val,"%%%%"))
-	    OUTBUFPTR+=sprintf(OUTBUFPTR," %s=\"%s\" ;",temp,defo[index].kle_val);
+	    OUTBUFPTR+=snprintf(OUTBUFPTR,OUTBUFEND-OUTBUFPTR," %s=\"%s\" ;",temp,defo[index].kle_val);
 /*
-	    OUTBUFPTR+=sprintf(OUTBUFPTR," %s=\"%s\" ;",defo[index].kle_nom,defo[index].kle_val);
+	    OUTBUFPTR+=snprintf(OUTBUFPTR,OUTBUFEND-OUTBUFPTR," %s=\"%s\" ;",defo[index].kle_nom,defo[index].kle_val);
 */
          index++;
      }
@@ -807,13 +820,13 @@ struct definition defo[];
 	 if(*temp == '-') temp++;
      {
          if(strcmp(defo[index].kle_val,"%%%%"))
-	    OUTBUFPTR+=sprintf(OUTBUFPTR,",'%s'=>'%s'",temp,defo[index].kle_val);
+	    OUTBUFPTR+=snprintf(OUTBUFPTR,OUTBUFEND-OUTBUFPTR,",'%s'=>'%s'",temp,defo[index].kle_val);
 /*
-	    OUTBUFPTR+=sprintf(OUTBUFPTR,",'%s'=>'%s'",defo[index].kle_nom,defo[index].kle_val);
+	    OUTBUFPTR+=snprintf(OUTBUFPTR,OUTBUFEND-OUTBUFPTR,",'%s'=>'%s'",defo[index].kle_nom,defo[index].kle_val);
 */
          index++;
      }
-     OUTBUFPTR+=sprintf(OUTBUFPTR,")");
+     OUTBUFPTR+=snprintf(OUTBUFPTR,OUTBUFEND-OUTBUFPTR,")");
    }
    if(interp == python) {
      while(defo[index].kle_nom)
@@ -821,13 +834,13 @@ struct definition defo[];
 	 temp = defo[index].kle_nom;
 	 if(*temp == '-') temp++;
          if(strcmp(defo[index].kle_val,"%%%%"))
-	    OUTBUFPTR+=sprintf(OUTBUFPTR,",'%s':'%s'",temp,defo[index].kle_val);
+	    OUTBUFPTR+=snprintf(OUTBUFPTR,OUTBUFEND-OUTBUFPTR,",'%s':'%s'",temp,defo[index].kle_val);
 /*
-	    OUTBUFPTR+=sprintf(OUTBUFPTR,",'%s':'%s'",defo[index].kle_nom,defo[index].kle_val);
+	    OUTBUFPTR+=snprintf(OUTBUFPTR,OUTBUFEND-OUTBUFPTR,",'%s':'%s'",defo[index].kle_nom,defo[index].kle_val);
 */
          index++;
      }
-     OUTBUFPTR+=sprintf(OUTBUFPTR,"}");
+     OUTBUFPTR+=snprintf(OUTBUFPTR,OUTBUFEND-OUTBUFPTR,"}");
    }
 
 }
@@ -854,18 +867,18 @@ char **argv;
 
 {
     
-    if(interp == shell) OUTBUFPTR+=sprintf(OUTBUFPTR," set -- $* ");
+    if(interp == shell) OUTBUFPTR+=snprintf(OUTBUFPTR,OUTBUFEND-OUTBUFPTR," set -- $* ");
 
     while(*argv)
     {
-      if(interp == shell) OUTBUFPTR+=sprintf(OUTBUFPTR," %s ",*argv);
-      if(interp == python) OUTBUFPTR+=sprintf(OUTBUFPTR,"%s'%s'",separateur,*argv);
-      if(interp == perl) OUTBUFPTR+=sprintf(OUTBUFPTR,"%s'%s'",separateur,*argv);
+      if(interp == shell) OUTBUFPTR+=snprintf(OUTBUFPTR,OUTBUFEND-OUTBUFPTR," %s ",*argv);
+      if(interp == python) OUTBUFPTR+=snprintf(OUTBUFPTR,OUTBUFEND-OUTBUFPTR,"%s'%s'",separateur,*argv);
+      if(interp == perl) OUTBUFPTR+=snprintf(OUTBUFPTR,OUTBUFEND-OUTBUFPTR,"%s'%s'",separateur,*argv);
       separateur=virgule;
       argv++;
     }
 
-     if(interp == shell) OUTBUFPTR+=sprintf(OUTBUFPTR," ; ");
+     if(interp == shell) OUTBUFPTR+=snprintf(OUTBUFPTR,OUTBUFEND-OUTBUFPTR," ; ");
 
 }
 
@@ -904,16 +917,16 @@ char *scriptnom, *help_general;
     for(i=1;i<nbliste;i++)
     {
       val[i] = (char *) malloc(256*sizeof(char));
-      defo[i-1].kle_val && strcpy(val[i],defo[i-1].kle_val);
+      if(defo[i-1].kle_val) strcpy(val[i],defo[i-1].kle_val);
     }
 
     aide = (char **) malloc(sizeof(char *)*nbliste);
     aide[0] = (char *) malloc(182*sizeof(char));
-    help_general && strcpy(aide[0],help_general);
+    if(help_general) strcpy(aide[0],help_general);
     for(i=1;i<nbliste;i++)
     {
       aide[i] = (char *) malloc(182*sizeof(char));
-      defo[i-1].kle_desc && strcpy(aide[i],defo[i-1].kle_desc);
+      if(defo[i-1].kle_desc) strcpy(aide[i],defo[i-1].kle_desc);
     }
 
     do
@@ -968,7 +981,7 @@ int size;
    
    if(ncar <= size)
    {
-      *pttmp--;
+      pttmp--;
       while(ncar)
       {
          *scriptnom++ = *pttmp--;
