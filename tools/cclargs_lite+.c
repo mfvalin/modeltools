@@ -74,7 +74,7 @@ void check_argv(char **argv){
   exit(1);
 }
 
-char *mainhelp="";
+char *mainhelp="   ";
 
 int main(argc, argv)
 int argc;
