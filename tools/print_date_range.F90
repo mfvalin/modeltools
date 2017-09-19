@@ -14,13 +14,13 @@ program print_date_range
   character(C_CHAR), dimension(4096) :: oldp, newp, dirp
   character(len=4096) :: nest_rept, set_name, anal
   integer(C_INT) :: mode
-  logical :: use_anal
+  logical :: use_anal, first_in_month
   integer :: cur_arg, nargs, arg_len, ntimes
   integer :: month_is_file = 0
   character(len=128) :: version = 'version 1.0.4a 2017/09/05'
   integer, parameter :: MAXGLOB=2
   character(len=4096), dimension(MAXGLOB) :: globs
-  integer :: nglob
+  integer :: nglob, arg2_nc
 
   interface
     function f_mkdir(path,mode) result(status) bind(C,name='mkdir')   ! interface to libc mkdir
@@ -62,6 +62,9 @@ program print_date_range
   anal = ''
   set_name = ''
   nest_rept = ''
+  arg2_nc = 8
+  first_in_month = .true.
+
   do while(cur_arg <= nargs)      ! process command line options
     call get_command_argument(cur_arg,option,arg_len,status)
     if(option(1:13)      == '--start_date=' ) then       ! YYYYMMDD.HHMMSS
@@ -151,7 +154,7 @@ program print_date_range
     endif
 !     print 102,p1,'.',p2/100,p3                        ! print itname
     write(arg1,'(I8.8,A1,I6.6)')p1,'.',p2/100          ! YYYYMMDD.hhmmss
-    write(arg2,'(I8.8)')p3                             ! YYYYMMDD
+    write(arg2,'(2I8.8)')p3,p2                         ! YYYYMMDDhhmmss00
 !     print *,trim(arg1),' ',trim(arg2)
     write(dirpath,'(A)')'VALID_'//trim(arg1)           ! VALID_YYYYMMDD.hhmmss
     dirp = transfer(trim(dirpath)//achar(0),dirp)      ! C null terminated string from Fortran string
@@ -167,6 +170,7 @@ program print_date_range
     month_name = trim(nest_rept) // '/' // trim(set_name) // '_' // arg2(1:6)   ! can be a file or a directory
     if(trim(oldmonth) .ne. month_name) then      ! new month name
       oldmonth = month_name
+      first_in_month = .true.
       month_is_file = clib_isfile( month_name )  ! it is a file name
 !       write(0,*),month_name,month_is_file
       if(month_is_file == 1) then
@@ -186,7 +190,16 @@ program print_date_range
       if(month_is_file == 1) then   ! monthly boundary contitions file, may get linked to multiple times
         oldpath = month_name
       else    ! same month, another day
-        oldpath = month_name // '/' // trim(set_pattern) // arg2(1:8)    ! look for 'pattern'YYYYMMDD file name ( default is *YYYYMMDD )
+        if(first_in_month) then  ! see if name ends in YYYYMMDDhh, if so use 10 chars from arg2
+          oldpath = month_name // '/' // trim(set_pattern) // arg2(1:10)   ! look for 'pattern'YYYYMMDDhh filename
+          status = clib_glob(globs,nglob,trim(oldpath),MAXGLOB)            ! find file name match(es)
+          if(status == CLIB_OK .and. nglob == 1) then                      ! one match found
+            arg2_nc = 10   ! name ends in YYYYMMDDhh
+          else
+            arg2_nc = 8    ! name ends in YYYYMMDD
+          endif
+        endif
+        oldpath = month_name // '/' // trim(set_pattern) // arg2(1:arg2_nc)    ! look for 'pattern'YYYYMMDD file name ( default is *YYYYMMDD )
         globs(1) = 'UnknownFile'
         status = clib_glob(globs,nglob,trim(oldpath),MAXGLOB)            ! find file name match(es)
         if(status .ne. CLIB_OK .or. nglob > 1) then                      ! there must be one and only one match
@@ -207,6 +220,7 @@ program print_date_range
     stamp1 = stamp
     call difdatr(stamp2,stamp1,diff)                  ! end date - next date
 
+    first_in_month = .false.
     use_anal = .false.                                ! use_anal can only be true for the first time frame
     ntimes = ntimes + 1                               ! counter for time frames
   enddo

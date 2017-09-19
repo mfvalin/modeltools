@@ -1,0 +1,11 @@
+#!/bin/bash
+echo "ARGS = $@"
+echo "SHELL=$SHELL"
+module --force purge
+unset __Init_Default_Modules
+echo =====================================
+env | sort
+echo =====================================
+set -x
+cat $1 | $SHELL
+
