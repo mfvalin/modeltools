@@ -1,6 +1,6 @@
 #!/home/valin/dummy_shell_slurm
 #SBATCH --time=00:01:00
-#SBATCH --account=def-sushama
+#SBATCH --account=def-example
 #SBATCH --output=/home/valin/listings/graham/%j.o
 #SBATCH --nodes=2
 #SBATCH --ntasks-per-node=4
