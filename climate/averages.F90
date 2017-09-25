@@ -246,7 +246,7 @@
         date_lo = 0
         date_hi = 0
       else
-        if( (weight_ip3 .and. (.not. is_special)) .or. (trim(typvar) .eq. 'MN') ) then ! weight is IP3 (number of samples)
+        if( weight_ip3 .or. (trim(typvar) .eq. 'MN') ) then ! weight is IP3 (number of samples)
           i = ip3
           if(ishft(i,-24) == 15) i = iand(ip3,Z'00FFFFFF')   ! keep lower 24 bits (type 15)
           weight = max(1,i)
