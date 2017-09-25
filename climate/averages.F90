@@ -232,22 +232,33 @@
       dnp = dnp * deet
       is_special = any(nomvar == specials(1:nspecials))
       weight = 1.0
-      if( (weight_ip3 .and. (.not. is_special)) .or. (trim(typvar) .eq. 'MN') ) then ! weight is IP3 (number of samples)
-        i = ip3
-        if(ishft(i,-24) == 15) i = iand(ip3,Z'00FFFFFF')   ! keep lower 24 bits (type 15)
-        weight = max(1,i)
-      endif
-      if(weight_time .and. (.not. is_special)) then                                 ! time weight
-        weight = (dnp) / (3600.0 * time_weight)
-      endif
-      if(weight_abs .and. (.not. is_special)) weight = time_weight                  ! explicit wright
+!       if(weight_ip3 .and. (.not. is_special)) then         ! weight is IP3 (number of samples)
+!         i = ip3
+!         if(ishft(i,-24) == 15) i = iand(ip3,Z'00FFFFFF')   ! keep lower 24 bits (type 15)
+!         weight = max(1,i)
+!       endif
+!       if(weight_time .and. (.not. is_special)) then                                 ! time weight
+!         weight = (dnp) / (3600.0 * time_weight)
+!       endif
+!       if(weight_abs .and. (.not. is_special)) weight = time_weight                  ! explicit wright
       sample = 0
       if(is_special) then
         date_lo = 0
         date_hi = 0
       else
-        date_lo = date_stamp_64(dateo)      ! compute 64 bit date_lo from dateo (in seconds)
-        date_hi = date_lo + dnp             ! date of validity of sample (in seconds)
+        if( (weight_ip3 .and. (.not. is_special)) .or. (trim(typvar) .eq. 'MN') ) then ! weight is IP3 (number of samples)
+          i = ip3
+          if(ishft(i,-24) == 15) i = iand(ip3,Z'00FFFFFF')   ! keep lower 24 bits (type 15)
+          weight = max(1,i)
+        endif
+        if(weight_time) then                                 ! time weight
+          weight = (dnp) / (3600.0 * time_weight)
+        endif
+        if(weight_abs) then
+          weight = time_weight                  ! explicit weight
+        endif
+        date_lo = date_stamp_64(dateo)      ! compute 64 bit date_lo from dateo
+        date_hi = date_lo + dnp             ! date of validity of sample
         if(weight == 1.0) then
           date_lo = date_hi
         else
