@@ -841,8 +841,10 @@
 !       if(verbose > 2) print *,'INFO: ',p%nsamples,' '//p%nomvar//' "samples" every',p%sample/3600.0,' hours'
       if(verbose > 2) print *,'INFO: ',p%nsamples,' '//p%nomvar//' "samples"'
       if(newtags) then ! new tagging style (work in progress)
-        r4 = ip3       ! only change ip3 for now
+        r4 = ip3       ! change ip3 to new style coding
         call convip_plus( ip3, r4, 15, 2, string, .false. ) ! ip kind 15,  number of samples
+        r4 = ip2       ! change ip2 to new style coding
+        call convip_plus( ip2, r4, 10, 2, string, .false. ) ! ip kind 10,  hours
       endif
       call fstecr(z,z,-32,fstdmean, &
                   new_dateo,deet,npas,p%ni,p%nj,1,ip1,ip2,ip3,"MN",p%nomvar,p%etiket, &
