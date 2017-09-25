@@ -1,4 +1,4 @@
-#define VERSION '1.0_rc12'
+#define VERSION '1.0_rc13'
   module averages_common   ! tables and table management routines
     use iso_c_binding
     implicit none
@@ -37,7 +37,7 @@
 
     integer, save :: next = -1             ! index of las valid record in statistics table
     integer, save :: verbose = 2           ! ERROR + WARNING
-    logical, save :: variance = .true.     ! variance or standard deviation required
+    logical, save :: variance = .true.     ! variance or standard deviation required [true unless -novar is used]
     integer, save :: fstdmean = 0          ! unit number for standard file into which averages are written
     integer, save :: fstdvar = 0           ! unit number for standard file into which variances/std deviatoins are written
     logical, save :: std_dev = .false.     ! output standard deviation rather than variance
@@ -232,7 +232,7 @@
       dnp = dnp * deet
       is_special = any(nomvar == specials(1:nspecials))
       weight = 1.0
-      if(weight_ip3 .and. (.not. is_special)) then         ! weight is IP3 (number of samples)
+      if( (weight_ip3 .and. (.not. is_special)) .or. (trim(typvar) .eq. 'MN') ) then ! weight is IP3 (number of samples)
         i = ip3
         if(ishft(i,-24) == 15) i = iand(ip3,Z'00FFFFFF')   ! keep lower 24 bits (type 15)
         weight = max(1,i)
@@ -246,8 +246,8 @@
         date_lo = 0
         date_hi = 0
       else
-        date_lo = date_stamp_64(dateo)      ! compute 64 bit date_lo from dateo
-        date_hi = date_lo + dnp             ! date of validity of sample
+        date_lo = date_stamp_64(dateo)      ! compute 64 bit date_lo from dateo (in seconds)
+        date_hi = date_lo + dnp             ! date of validity of sample (in seconds)
         if(weight == 1.0) then
           date_lo = date_hi
         else
@@ -262,12 +262,13 @@
         if(p%ip1 .ne. ip1) cycle    ! test most probable / cheapest differencing criteria first
         if(p%ni .ne. ni .or. p%nj .ne. nj) cycle
         if(trim(p%nomvar) .ne. trim(nomvar)) cycle
-        if(trim(p%typvar) .ne. trim(typvar)) cycle
         if(trim(p%grtyp) .ne. trim(grtyp)) cycle
         if(trim(p%etiket) .ne. trim(etiket)) cycle
         if((p%dateo .ne. dateo) .and. check_dateo) cycle   ! dateo verification is optional
         if(p%ip2 .ne. ip2 .and. is_special) cycle
         if(p%ip3 .ne. ip3 .and. is_special) cycle
+        if(trim(p%typvar) .eq. 'MN') p%typvar = trim(typvar)  ! force typvar into p%typvar if MN
+        if(trim(p%typvar) .ne. trim(typvar)) cycle
         if(sample .ne. p%sample .and. weight == 1.0) then
            if(verbose > 1) print *,'WARNING: sample interval mismatch, got',sample,' expected',p%sample
            if(strict) call f_exit(1)    ! abort if strict mode
@@ -829,7 +830,7 @@
 !       if(verbose > 2) print *,'INFO: ',p%nsamples,' '//p%nomvar//' "samples" every',p%sample/3600.0,' hours'
       if(verbose > 2) print *,'INFO: ',p%nsamples,' '//p%nomvar//' "samples"'
       if(newtags) then ! new tagging style (this code is a placeholder and a NO-OP for now)
-        ip2 = 0   ! for now
+!         ip2 = 0   ! for now
         r4 = ip3
         call convip_plus( ip3, r4, 15, 2, string, .false. )
 ! print *,'DEBUG: ip<-p,kind=',ip3, r4, 15
