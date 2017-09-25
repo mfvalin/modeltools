@@ -593,9 +593,9 @@ wait_for() {
 #Version="1.1.28h 2017/08/31"  # auto adjust pernuma, pernode and smt, use depth by default for aprun
 #Version="1.1.29 2017/09/06"  # undo Cray listing optimizations (no gain observed), step 1 of AIX/POE removal, remove unused code
 #Version="1.1.29a 2017/09/07"  # added warning when cores per numa node not an integral multiple of OMP_NUM_THREADS
-#Version="1.1.29b 2017/09/07"  # better message
+#Version="1.1.29b 2017/09/14"  # cosmetic doc changes in cclargs call
 true
-Version="1.1.29b 2017/09/07"  # better message
+Version="1.1.29b 2017/09/14"  # cosmetic doc changes in cclargs call
 echo "INFO: ${0##*/} version $Version ( /bin/ksh93 )"
 MY_NODEFILE=${PARALLEL_NODEFILE:-${GECOSHEP_HOSTS_FILE:-${GECOSHEP_HOSTFILE:-${LOADL_HOSTFILE:-${PBS_NODEFILE:-${HOME}/.PBS_NODEFILE}}}}}
 [[ ! -f "${MY_NODEFILE}" ]] && \
@@ -603,7 +603,7 @@ MY_NODEFILE=${PARALLEL_NODEFILE:-${GECOSHEP_HOSTS_FILE:-${GECOSHEP_HOSTFILE:-${L
   MY_NODEFILE=${TMPDIR}/JOB_NODE_FILE && \
   echo localhost  >${MY_NODEFILE} && \
   echo "INFO: created Node File '${MY_NODEFILE}'"
-eval `cclargs_lite -D "" $0 \
+eval `cclargs_lite -D "" $0 "[high level MPI launcher CRAY+OpenMPI]" \
     -alpspd "" "NoName" "[use Cray ALPS]" \
     -args "" "" "[arguments to the command]" \
     -bind "none" "bind" "[]" \
