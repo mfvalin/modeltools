@@ -836,20 +836,13 @@
       call datmgp2(date_array)
       ip2 = ip2 + date_array(5)             ! zulu hour at start of period
       ip2 = ip2 + 24 * (date_array(3)-1)    ! force back to first day of month
-      ip3 = p%nsamples ! number of samples
+      ip3 = p%nsamples                      ! number of samples
       ip1 = p%ip1
 !       if(verbose > 2) print *,'INFO: ',p%nsamples,' '//p%nomvar//' "samples" every',p%sample/3600.0,' hours'
       if(verbose > 2) print *,'INFO: ',p%nsamples,' '//p%nomvar//' "samples"'
-      if(newtags) then ! new tagging style (this code is a placeholder and a NO-OP for now)
-!         ip2 = 0   ! for now
-        r4 = ip3
-        call convip_plus( ip3, r4, 15, 2, string, .false. )
-! print *,'DEBUG: ip<-p,kind=',ip3, r4, 15
-!         my_kind = -1
-!         r4 = -1
-!         call convip_plus( ip3, r4, my_kind, -1, string, .false. )
-! print *,'DEBUG: ip->p,kind=',ip3, r4, my_kind
-!        ip3 = ip3 + ishft(15,24) ! ip kind 15,  number of samples
+      if(newtags) then ! new tagging style (work in progress)
+        r4 = ip3       ! only change ip3 for now
+        call convip_plus( ip3, r4, 15, 2, string, .false. ) ! ip kind 15,  number of samples
       endif
       call fstecr(z,z,-32,fstdmean, &
                   new_dateo,deet,npas,p%ni,p%nj,1,ip1,ip2,ip3,"MN",p%nomvar,p%etiket, &
