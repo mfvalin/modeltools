@@ -1,0 +1,8 @@
+. s.ssmuse.dot gemclim_3.3.3.1-dev ovbin
+cd ${HOME}/CONTAINERS
+which r.run_in_parallel
+export FLAGDIR=$(pwd -P)/$(hostname)_$$
+mkdir -p $FLAGDIR
+r.run_in_parallel -pgm  ./taskset.sh  -inorder -tag
+ls $FLAGDIR/FLAG*
+sleep 10

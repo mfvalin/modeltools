@@ -1,0 +1,4 @@
+#!/bin/bash
+set -x
+./the_jobs_multi
+./SubmitJobContainers -t 600 -cpus 32x1 -name super_001 -nodesize 16 -cfg multi_container.cfg -submit  -- -q debug
