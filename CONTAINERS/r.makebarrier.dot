@@ -1,0 +1,25 @@
+[[ "$1" == -h ]] && cat <<true && return 1
+# usage: . r.makebarrier.dot [N] [path]
+# N  : number of participants to the barrier (default is 2)
+# path : directory to be used for the barrier components (default is $TMPDIR/Barrier)
+# NOTE: arguments are positional
+true
+export BARRIER_DIR=${2:-$TMPDIR/Barrier}
+mkdir -p ${BARRIER_DIR}
+[[ -d "${BARRIER_DIR}" ]] || { echo "ERROR: cannot create barrier directory '${BARRIER_DIR}'" ; return 1 ; }
+rm -f ${BARRIER_DIR}/ID.* ${BARRIER_DIR}/in.* ${BARRIER_DIR}/out.*
+BarrierCount=${1:-2}
+Message="BARRIER directory = '${BARRIER_DIR}', number of processes = ${BarrierCount}"
+echo "O.K." >${BARRIER_DIR}/in.$BarrierCount
+echo "$BarrierCount" >${BARRIER_DIR}/ID.$BarrierCount
+((BarrierCount=BarrierCount-1))
+while [[ $BarrierCount -gt 0 ]] ; do 
+  mknod ${BARRIER_DIR}/in.$BarrierCount p
+  mknod ${BARRIER_DIR}/out.$BarrierCount p
+  echo "$BarrierCount" >${BARRIER_DIR}/ID.$BarrierCount
+  ((BarrierCount=BarrierCount-1))
+done
+echo "O.K." >${BARRIER_DIR}/out.0
+echo "$Message"
+unset Message
+unset BarrierCount

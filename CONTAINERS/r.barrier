@@ -1,0 +1,30 @@
+#!/bin/bash
+[[ "$1" == -h ]] && cat <<true && exit 1
+# usage: . r.barrier [message]
+# NOTE: message arguments are informative only
+#       environment variable BARRIER_DIR must point to a directory
+#       initialized by r.makebarrier.dot
+true
+[[ -n "${BARRIER_DIR}" ]] || { echo "ERROR: environment variable BARRIER_DIR is not defined" ; exit 1 ; }
+[[ -d "${BARRIER_DIR}" ]] || { echo "ERROR: barrier directory BARRIER_DIR='${BARRIER_DIR}' not found" ; exit 1 ; }
+#set -x
+cd ${BARRIER_DIR:-.}    # go to barrier directory
+MYDIR=priv_$$
+mkdir $MYDIR
+for id in ID.*    # try to capture an ID marker ID.number
+do
+  mv $id $MYDIR/$id
+  if [[ -f $MYDIR/$id ]] ; then break ; fi  # if capture successful
+done
+if [[ ! -f $MYDIR/$id ]] ; then echo ERROR: no BARRIER ID available ; exit 1 ; fi
+BARRIER_NO=$MYDIR/$id
+BARRIER_NO=${BARRIER_NO##*.}    # get rid of everything up to the period
+echo "INFO: ${@} entering BARRIER as process number $BARRIER_NO on $(date)"
+B1=${BARRIER_NO}
+((B2=B1-1))
+cat <in.$B1 >in.$B2   # wait for input from pipe B1 , feed into pipe B1-1 (in.last is a file)
+cat <out.$B2 >out.$B1   # wait for output from pipe B1-1 , feed into pipe B1  (out.0 is a file)
+# in.last -> in.(last-1) -> .... ->in.0  and out.0 -> out.1 -> .... -> out.last done (round trip done)
+echo "INFO: process number $BARRIER_NO exiting barrier on $(date)"
+mv $MYDIR/$id ./$id   # move captured ID back
+rmdir $MYDIR   # remove private capture directory
