@@ -272,7 +272,7 @@ subroutine mgi_test_body(channel_r,channel_w)
   end interface
 
   integer, external :: mgi_read, mgi_write, mgi_read_c, mgi_write_c
-  integer, parameter :: MAXVAL=1000000
+  integer, parameter :: MAXVAL=100000000
   integer, dimension(MAXVAL) :: is, is2
   real, dimension(MAXVAL) :: fs, fs2
   real*8, dimension(MAXVAL) :: ds, ds2
