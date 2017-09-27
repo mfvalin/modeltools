@@ -1,4 +1,6 @@
 #!/bin/bash
+echo This version kept for historical reference, it is no longer used
+exit 1
 usage() {
 cat <<EOT
   usage: ${0##*/} -wall n_seconds -cpus n_cpus -nodesize n_cores -queue q_name -name job_name [-submit] -cfg config_file
