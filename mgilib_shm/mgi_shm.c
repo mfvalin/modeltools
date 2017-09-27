@@ -38,6 +38,7 @@ The program will wait 10 milliseconds between checks of parent process existence
 #include <signal.h>
 #include <string.h>
 #include <unistd.h>
+#include <sys/time.h>
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <fcntl.h>
@@ -61,7 +62,7 @@ void usage(){
 int mgi_stop(int argc, char **argv){
 
   char channel_filename[1024];
-  char char_id[32];
+//   char char_id[32];
   int shm_id;
   int items;
   int temp;
@@ -152,7 +153,7 @@ int read_status=0;
 int write_status=0;
 volatile int in=0;
 volatile int out=0;
-long long time0;
+long long time0=0;
 long long time1;
 double rtime;
 struct timeval timetag;
@@ -326,16 +327,16 @@ while(1){
       if(out < in) {   /* write from out to in-1 */
         count = sizeof(shm->data[0])*(in-out);
         nc1 = write(fd, &(shm->data[out]), count);
-        fprintf(stderr,"INFO: %d/%d bytes written to %s\n",nc1,count,channel_filename);
-        if(monitor)fprintf(LOG,"INFO: %d/%d bytes written to %s\n",nc1,count,channel_filename);
+        fprintf(stderr,"INFO: %d/%zd bytes written to %s\n",nc1,count,channel_filename);
+        if(monitor)fprintf(LOG,"INFO: %d/%zd bytes written to %s\n",nc1,count,channel_filename);
       }else{                     /* write from out to limit, then first to in-1 */
         count1 = sizeof(shm->data[0])*(shm->limit-shm->out+1);
         nc1 = write(fd, &(shm->data[out]), count1);
         count2 = sizeof(shm->data[0])*(shm->in-shm->first);
         nc2 = write(fd, &(shm->data[shm->first]), count2);
         count = count1 + count2;
-        fprintf(stderr,"INFO: %d/%d bytes written to %s\n",nc1+nc2,count,channel_filename);
-        if(monitor)fprintf(LOG,"INFO: %d/%d bytes written to %s\n",nc1+nc2,count,channel_filename);
+        fprintf(stderr,"INFO: %d/%zd bytes written to %s\n",nc1+nc2,count,channel_filename);
+        if(monitor)fprintf(LOG,"INFO: %d/%zd bytes written to %s\n",nc1+nc2,count,channel_filename);
       }
       fprintf(stderr,"INFO: leftover data saved to '%s'\n",channel_filename);
       if(monitor)fprintf(LOG,"INFO: leftover data saved to '%s'\n",channel_filename);
@@ -355,7 +356,9 @@ while(1){
       time1 = timetag.tv_sec;
       time1 *= 1000000;
       time1 += timetag.tv_usec;
+      if(time0 == 0) time0 = time1;
       rtime = time1 - time0;
+      time0 = time1;
       rtime /= 1000000.;
       if(monitor) {
         fprintf(LOG,"%12.3f: size = %d, attach count = %d, creator=%d, last attach=%d ",rtime,
