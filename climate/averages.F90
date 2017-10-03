@@ -1,4 +1,4 @@
-#define VERSION '1.0_rc14'
+#define VERSION '1.0_rc15'
   module averages_common   ! tables and table management routines
     use iso_c_binding
     implicit none
@@ -276,8 +276,11 @@
         if(trim(p%grtyp) .ne. trim(grtyp)) cycle
         if(trim(p%etiket) .ne. trim(etiket)) cycle
         if((p%dateo .ne. dateo) .and. check_dateo) cycle   ! dateo verification is optional
-        if(p%ip2 .ne. ip2 .and. is_special) cycle
-        if(p%ip3 .ne. ip3 .and. is_special) cycle
+        if(is_special)then
+          if(p%ip2 .ne. ip2 .or. p%ip3 .ne. ip3) cycle
+        else
+          if( (ishft(ip1,-24) == ishft(ip2,-24)) .and. (p%ip2 .ne. ip2) ) cycle ! level interval and not identical
+        endif
         if(trim(p%typvar) .eq. 'MN') p%typvar = trim(typvar)  ! force typvar into p%typvar if MN
         if(trim(p%typvar) .ne. trim(typvar)) cycle
         if(sample .ne. p%sample .and. weight == 1.0) then
@@ -846,8 +849,12 @@
       if(newtags) then ! new tagging style (work in progress)
         r4 = ip3       ! change ip3 to new style coding
         call convip_plus( ip3, r4, 15, 2, string, .false. ) ! ip kind 15,  number of samples
-        r4 = ip2       ! change ip2 to new style coding
+!         r4 = ip2
+        call difdatr(new_dateo,p%dateo,hours)   ! ip2 = hours from start of model run
+        r4 = hours       ! change ip2 to new style coding
         call convip_plus( ip2, r4, 10, 2, string, .false. ) ! ip kind 10,  hours
+        ! if ip2 was a level tag, code as a level tag
+        if( ishft(p%ip2,-24) == ishft(p%ip2,-24) ) ip2 = p%ip2
       endif
       call fstecr(z,z,-32,fstdmean, &
                   new_dateo,deet,npas,p%ni,p%nj,1,ip1,ip2,ip3,"MN",p%nomvar,p%etiket, &
