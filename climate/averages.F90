@@ -1,4 +1,4 @@
-#define VERSION '1.0_rc13'
+#define VERSION '1.0_rc14'
   module averages_common   ! tables and table management routines
     use iso_c_binding
     implicit none
@@ -333,7 +333,7 @@
   subroutine print_usage(name)
     implicit none
     character(len=*) :: name
-    print *,'USAGE: '//trim(name)//' [-h|--help] [-newtags] [-strict] [-novar] [-stddev] [-tag nomvar] \'
+    print *,'USAGE: '//trim(name)//' [-h|--help] [-version] [-newtags] [-strict] [-novar] [-stddev] [-tag nomvar] \'
     print *,'           [-npas0] [-dateo] [-mean mean_out] [-var var_out] [-weight ip3|time|hours|days|nnn] \'
     print *,'           [-status path/to/status/file] [-test] [-q[q]] [-v[v][v]] [--|-f] \'
     print *,'           [mean_out] [var_out] in_1 ... in_n'
@@ -412,6 +412,9 @@
 
       if( option == '-h' .or. option == '--help' ) then
         call print_usage(progname)
+        call f_exit(0)
+
+      else if( option == '-version' ) then
         call f_exit(0)
 
       else if( option == '-strict' ) then   ! set strict mode
@@ -783,7 +786,7 @@
     endif
 
     status = 0
-    if(verbose > 2) print *,"INFO:",next," records will be written into mean/variance files"
+    if(verbose > 2) print *,"INFO:",next+1," records will be written into mean/variance files"
     vartag = 'VA'               ! typvar for variance/std deviation file
     if(std_dev) vartag = 'ST'
     do i = 0 , next             ! loop over valid entries
