@@ -203,13 +203,21 @@ int main( int argc, char **argv )
       MPI_Win_unlock(0,window);
       t2 = MPI_Wtime();
       printf("after put, time = %G\n",1000*(t2-t1));
+#if defined(SERVER)
+      MPI_Sendrecv(buf, 1, MPI_INTEGER,world_size-rank, tag, buf+1, 1, MPI_INTEGER, world_size-rank, tag, MPI_COMM_WORLD, &status);  // tell partner it is done
+#else
       MPI_Sendrecv(buf, 1, MPI_INTEGER,world_size-1-rank, tag, buf+1, 1, MPI_INTEGER, world_size-1-rank, tag, MPI_COMM_WORLD, &status);  // tell partner it is done
+#endif
     }
     if(rank == world_size-1){   // send receive with client 1, one sided get from server, check that data has been received
       for(i=0 ; i<MAXSIZE ; i++) data[i] = -1;
       MPI_Barrier(MPI_COMM_WORLD);
       printf("before sendrecv\n");
+#if defined(SERVER)
+      MPI_Sendrecv(buf, 1, MPI_INTEGER,world_size-rank, tag, buf+1, 1, MPI_INTEGER, world_size-rank, tag, MPI_COMM_WORLD, &status);  // wait until partner is done
+#else
       MPI_Sendrecv(buf, 1, MPI_INTEGER,world_size-1-rank, tag, buf+1, 1, MPI_INTEGER, world_size-1-rank, tag, MPI_COMM_WORLD, &status);  // wait until partner is done
+#endif
       printf("after sendrecv\n");
       t1 = MPI_Wtime();
       MPI_Win_lock(MPI_LOCK_SHARED,0,0,window);
