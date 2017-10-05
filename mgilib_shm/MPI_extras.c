@@ -34,7 +34,7 @@ static char *public_names[MAX_NAMES];
 static char *port_names[MAX_NAMES];
 static char is_published[MAX_NAMES];
 
-static int name_lookup(char *public_name){
+static int name_lookup(const char *public_name){
   int i;
 
   for (i=0 ; i<=last_name ; i++) {
@@ -47,32 +47,32 @@ static int name_lookup(char *public_name){
   return -1;
 }
 
-static int name_insert(char *public_name, char *port_name){
+static int name_insert(const char *public_name,const char *port_name){
   size_t maxlen = MPI_MAX_PORT_NAME;
   size_t stlen;
   char *str1;
   char *str2;
 
   if(last_name+1 >= MAX_NAMES) return -1;
-// printf("public_name(%ld), port_name(%ld)\n",strnlen(public_name,maxlen),strnlen(port_name,maxlen));
+
   str1 = malloc(10+strnlen(public_name,maxlen));
   str2 = malloc(10+strnlen(port_name  ,maxlen));
   if(str1 == NULL || str2 == NULL) return -1;
 
-  public_names[last_name+1] = str1;
-  port_names[last_name+1]   = str2;
-  is_published[last_name+1] = 1;
-  while(*public_name) { *str1++ = *public_name++ ; } ; *str1 = '\0';
-  while(*port_name)   { *str2++ = *port_name++   ; } ; *str2 = '\0';
-// return -1;
-//   strncpy(str1,public_name,maxlen);
-//   strncpy(str2,port_name  ,maxlen);
-// printf("DEBUG: in name_insert\n");
   last_name++;
+
+  public_names[last_name] = str1;
+  while(*public_name) { *str1++ = *public_name++ ; } ; *str1 = '\0';
+
+  port_names[last_name] = str2;
+  while(*port_name)   { *str2++ = *port_name++   ; } ; *str2 = '\0';
+
+  is_published[last_name] = 1;
+
   return last_name;
 }
 
-int MPI_Unpublish_name(char *service_name, MPI_Info info, char *port_name)
+int MPI_Unpublish_name(const char *service_name, MPI_Info info, const char *port_name)
 {
   char filename[4096];
   char *home = getenv("HOME");
@@ -102,7 +102,7 @@ int MPI_Unpublish_named_port( char *service_name)
   return MPI_Unpublish_name(service_name,MPI_INFO_NULL,"Not Used");
 }
 
-int MPI_Publish_name( char *service_name, MPI_Info info,  char *port_name)
+int MPI_Publish_name(const char *service_name, MPI_Info info, const char *port_name)
 {
   FILE *gossip;
   char filename[4096];
@@ -143,7 +143,7 @@ printf("DEBUG: after name_insert\n");
   return MPI_SUCCESS;
 }
 
-int MPI_Lookup_name( char *service_name, MPI_Info info, char *port_name)
+int MPI_Lookup_name(const char *service_name, MPI_Info info, char *port_name)
 {
   char filename[4096];
   int fd, nc;
@@ -243,4 +243,32 @@ int MPI_Accept_on_named_port(char *publish_name, MPI_Comm *client, MPI_Comm *loc
   }
   printf("INFO: handshake successful\n");
   return MPI_SUCCESS ;
+}
+
+int MPI_Get_words_simple(void *data, int n, int disp, int rankoftarget, MPI_Win window, int lock){
+  MPI_Aint TargetDisp = disp;
+  int value;
+  if(lock) MPI_Win_lock(MPI_LOCK_SHARED, rankoftarget, 0, window);
+  value = MPI_Get(data, n, MPI_INTEGER, rankoftarget, TargetDisp, n, MPI_INTEGER, window);
+  if(lock) MPI_Win_ublock(rankoftarget, window);
+  return value;
+}
+
+int MPI_Put_words_simple(void *data, int n, int disp, int rankoftarget, MPI_Win window, int lock){
+  MPI_Aint TargetDisp = disp;
+  int value;
+  if(lock) MPI_Win_lock(MPI_LOCK_SHARED, rankoftarget, 0, window);
+  value = MPI_Put(data, n, MPI_INTEGER, rankoftarget, TargetDisp, n, MPI_INTEGER, window);
+  if(lock) MPI_Win_ublock(rankoftarget, window);
+  return value;
+}
+
+//MPI_Fetch_and_op(origin_addr, result_addr, datatype, target_rank, target_disp, op, win)
+int MPI_Fetch_and_op_int_simple(void *src, void *dst, int disp, int rankoftarget, MPI_Win window, MPI_Op op, int lock){
+  MPI_Aint TargetDisp = disp;
+  int value;
+  if(lock) MPI_Win_lock(MPI_LOCK_SHARED, rankoftarget, 0, window);
+  value = MPI_Fetch_and_op(src, dst, MPI_INTEGER, rankoftarget, TargetDisp, op, window);
+  if(lock) MPI_Win_ublock(rankoftarget, window);
+  return value;
 }
