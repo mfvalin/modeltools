@@ -52,6 +52,16 @@ int atomic_fetch_and_add(int* what, int n)
     );
     return n;
 }
+
+uint32_t atomic_compare_exchange(uint32_t *what, uint32_t expected, uint32_t desired)
+{
+   uint32_t previous;
+    asm volatile("lock cmpxchgl %2, %1"
+                 : "=a"(previous), "+m"(*what)
+                 : "q"(desired), "0"(expected));
+    return previous;
+}
+
 #if defined(SELF_TEST)
 
 uint64_t rdtsc(void) {   // version rapide "out of order"
@@ -85,6 +95,18 @@ main(){
 // printf("%d %3d what = %3d\n",omp_get_thread_num(),r,what);
  }
  t2 = rdtsc();
- printf("what = %10d, n= %10d, time = %10ld\n",what,n,t2-t1);
+ printf("what = %d, n= %d, time = %ld\n",what,n,t2-t1);
+
+  what = 0;
+  t1 = rdtsc();
+  for(i=1 ; i < 2000000 ; i++) {n=atomic_compare_exchange( &what , i-1, i); }
+  t2 = rdtsc();
+  printf("%10d %10d %10ld\n",i,what,t2-t1);
+
+  what=-1;
+  t1 = rdtsc();
+  for(i=1 ; i < 2000000 ; i++) {n=atomic_compare_exchange( &what , i-1, i); }
+  t2 = rdtsc();
+  printf("%10d %10d %10ld\n",i,what,t2-t1);
 }
 #endif
