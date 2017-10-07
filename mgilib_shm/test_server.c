@@ -18,20 +18,13 @@
  * Boston, MA 02111-1307, USA.
  */
 #include "mpi.h" 
+#include "mgi.h"
+
 #define MAX_DATA 128
 #define MAXSIZE 512*1024
 #define FATAL 1
 
-typedef struct{
-  int control;    // flags
-  int first;      // start of buffer
-  int in;         // insertion index
-  int out;        // extraction index
-  int limit;      // end of buffer + 1
-  int data[1];    // place holder, start of data buffer
-} mpi_channel;
-
-static mpi_channel *memptr;
+static mgi_channel_buffer *memptr;
 
 int MPI_Create_named_port(char *publish_name);
 int MPI_Unpublish_named_port( char *service_name);
@@ -46,6 +39,7 @@ int main( int argc, char **argv )
   MPI_Aint winsize;
   int dispunit = sizeof(int);
   MPI_Aint TargetDisp;
+  int TargetSize;
   double t1, t2;
 //   void *memptr;
   MPI_Status status; 
@@ -78,9 +72,10 @@ int main( int argc, char **argv )
   }
 #if defined(SERVER)
   if(rank == 0) {   // server
-    winsize = 1024*1024*dispunit + sizeof(mpi_channel);
+    winsize = 1024*1024*dispunit + sizeof(mgi_channel_buffer);
     MPI_Alloc_mem(winsize,MPI_INFO_NULL,&memptr);
-    memptr->control = 0;
+    memptr->read_status  = MGI_CHAN_IDLE;
+    memptr->write_status = MGI_CHAN_IDLE;
     memptr->first = 1;
     memptr->in = 1;
     memptr->out = 1;
@@ -170,39 +165,51 @@ int main( int argc, char **argv )
       MPI_Barrier(MPI_COMM_WORLD);
       t1 = MPI_Wtime();
       MPI_Win_lock(MPI_LOCK_SHARED,0,0,window);
-      TargetDisp = 5;
-      MPI_Put(data, MAXSIZE, MPI_INTEGER, 0, TargetDisp, MAXSIZE, MPI_INTEGER, window);  // put to server memory
-      MPI_Win_unlock(0,window);
-      t2 = MPI_Wtime();
-      printf("after put, time = %G\n",1000*(t2-t1));
-      t1 = MPI_Wtime();
-      MPI_Win_lock(MPI_LOCK_SHARED,0,0,window);
-      TargetDisp = 0;
-      MPI_Put(data, 100000, MPI_INTEGER, 0, TargetDisp, 100000, MPI_INTEGER, window);  // put to server memory
-      MPI_Win_unlock(0,window);
-      t2 = MPI_Wtime();
-      printf("after put, time = %G\n",1000*(t2-t1));
-      t1 = MPI_Wtime();
-      MPI_Win_lock(MPI_LOCK_SHARED,0,0,window);
-      TargetDisp = 0;
-      MPI_Put(data, 10000, MPI_INTEGER, 0, TargetDisp, 10000, MPI_INTEGER, window);  // put to server memory
-      MPI_Win_unlock(0,window);
-      t2 = MPI_Wtime();
-      printf("after put, time = %G\n",1000*(t2-t1));
-      t1 = MPI_Wtime();
-      MPI_Win_lock(MPI_LOCK_SHARED,0,0,window);
-      TargetDisp = 0;
-      MPI_Put(data, 1000, MPI_INTEGER, 0, TargetDisp, 1000, MPI_INTEGER, window);  // put to server memory
-      MPI_Win_unlock(0,window);
-      t2 = MPI_Wtime();
-      printf("after put, time = %G\n",1000*(t2-t1));
-      t1 = MPI_Wtime();
-      MPI_Win_lock(MPI_LOCK_SHARED,0,0,window);
-      TargetDisp = 0;
+      TargetDisp = 0; TargetSize = 1;
       MPI_Put(data, 1, MPI_INTEGER, 0, TargetDisp, 1, MPI_INTEGER, window);  // put to server memory
       MPI_Win_unlock(0,window);
       t2 = MPI_Wtime();
-      printf("after put, time = %G\n",1000*(t2-t1));
+//       printf("after put,(%6d)  time = %10.6f ms\n",TargetSize,1000*(t2-t1));
+
+      t1 = MPI_Wtime();
+      MPI_Win_lock(MPI_LOCK_SHARED,0,0,window);
+      TargetDisp = 0; TargetSize = 1;
+      MPI_Put(data, 1, MPI_INTEGER, 0, TargetDisp, 1, MPI_INTEGER, window);  // put to server memory
+      MPI_Win_unlock(0,window);
+      t2 = MPI_Wtime();
+      printf("after put,(%6d)  time = %10.6f ms\n",TargetSize,1000*(t2-t1));
+
+      t1 = MPI_Wtime();
+      MPI_Win_lock(MPI_LOCK_SHARED,0,0,window);
+      TargetDisp = 0; TargetSize = 1000;
+      MPI_Put(data, 1000, MPI_INTEGER, 0, TargetDisp, 1000, MPI_INTEGER, window);  // put to server memory
+      MPI_Win_unlock(0,window);
+      t2 = MPI_Wtime();
+      printf("after put,(%6d)  time = %10.6f ms\n",TargetSize,1000*(t2-t1));
+
+      t1 = MPI_Wtime();
+      MPI_Win_lock(MPI_LOCK_SHARED,0,0,window);
+      TargetDisp = 0; TargetSize = 10000;
+      MPI_Put(data, 10000, MPI_INTEGER, 0, TargetDisp, 10000, MPI_INTEGER, window);  // put to server memory
+      MPI_Win_unlock(0,window);
+      t2 = MPI_Wtime();
+      printf("after put,(%6d)  time = %10.6f ms\n",TargetSize,1000*(t2-t1));
+
+      t1 = MPI_Wtime();
+      MPI_Win_lock(MPI_LOCK_SHARED,0,0,window);
+      TargetDisp = 0; TargetSize = 100000;
+      MPI_Put(data, 100000, MPI_INTEGER, 0, TargetDisp, 100000, MPI_INTEGER, window);  // put to server memory
+      MPI_Win_unlock(0,window);
+      t2 = MPI_Wtime();
+      printf("after put,(%6d)  time = %10.6f ms\n",TargetSize,1000*(t2-t1));
+
+      t1 = MPI_Wtime();
+      MPI_Win_lock(MPI_LOCK_SHARED,0,0,window);
+      TargetDisp = 5; TargetSize = MAXSIZE;
+      MPI_Put(data, MAXSIZE, MPI_INTEGER, 0, TargetDisp, MAXSIZE, MPI_INTEGER, window);  // put to server memory
+      MPI_Win_unlock(0,window);
+      t2 = MPI_Wtime();
+      printf("after put,(%6d)  time = %10.6f ms\n",TargetSize,1000*(t2-t1));
 #if defined(SERVER)
       MPI_Sendrecv(buf, 1, MPI_INTEGER,world_size-rank, tag, buf+1, 1, MPI_INTEGER, world_size-rank, tag, MPI_COMM_WORLD, &status);  // tell partner it is done
 #else
@@ -221,40 +228,53 @@ int main( int argc, char **argv )
       printf("after sendrecv\n");
       t1 = MPI_Wtime();
       MPI_Win_lock(MPI_LOCK_SHARED,0,0,window);
-      TargetDisp = 5;
-      MPI_Get(data, MAXSIZE, MPI_INTEGER, 0, TargetDisp, MAXSIZE, MPI_INTEGER, window);  // get from server memory
-      MPI_Win_unlock(0,window);
-      t2 = MPI_Wtime();
-      printf("after get time = %G\n",1000*(t2-t1));
-      printf("read data[0] = %d, data[MAXSIZE-1] = %d\n",data[0],data[MAXSIZE-1]);
-      t1 = MPI_Wtime();
-      MPI_Win_lock(MPI_LOCK_SHARED,0,0,window);
-      TargetDisp = 0;
-      MPI_Get(data, 100000, MPI_INTEGER, 0, TargetDisp, 100000, MPI_INTEGER, window);  // get from server memory
-      MPI_Win_unlock(0,window);
-      t2 = MPI_Wtime();
-      printf("after get time = %G\n",1000*(t2-t1));
-      t1 = MPI_Wtime();
-      MPI_Win_lock(MPI_LOCK_SHARED,0,0,window);
-      TargetDisp = 0;
-      MPI_Get(data, 10000, MPI_INTEGER, 0, TargetDisp, 10000, MPI_INTEGER, window);  // get from server memory
-      MPI_Win_unlock(0,window);
-      t2 = MPI_Wtime();
-      printf("after get time = %G\n",1000*(t2-t1));
-      t1 = MPI_Wtime();
-      MPI_Win_lock(MPI_LOCK_SHARED,0,0,window);
-      TargetDisp = 0;
-      MPI_Get(data, 1000, MPI_INTEGER, 0, TargetDisp, 1000, MPI_INTEGER, window);  // get from server memory
-      MPI_Win_unlock(0,window);
-      t2 = MPI_Wtime();
-      printf("after get time = %G\n",1000*(t2-t1));
-      t1 = MPI_Wtime();
-      MPI_Win_lock(MPI_LOCK_SHARED,0,0,window);
-      TargetDisp = 0;
+      TargetDisp = 0; TargetSize = 1;
       MPI_Get(data, 1, MPI_INTEGER, 0, TargetDisp, 1, MPI_INTEGER, window);  // get from server memory
       MPI_Win_unlock(0,window);
       t2 = MPI_Wtime();
-      printf("after get time = %G\n",1000*(t2-t1));
+//       printf("after get(%6d)  time = %10.6f ms\n",TargetSize,1000*(t2-t1));
+
+      t1 = MPI_Wtime();
+      MPI_Win_lock(MPI_LOCK_SHARED,0,0,window);
+      TargetDisp = 0; TargetSize = 1;
+      MPI_Get(data, 1, MPI_INTEGER, 0, TargetDisp, 1, MPI_INTEGER, window);  // get from server memory
+      MPI_Win_unlock(0,window);
+      t2 = MPI_Wtime();
+      printf("after get(%6d)  time = %10.6f ms\n",TargetSize,1000*(t2-t1));
+
+      t1 = MPI_Wtime();
+      MPI_Win_lock(MPI_LOCK_SHARED,0,0,window);
+      TargetDisp = 0; TargetSize = 1000;
+      MPI_Get(data, 1000, MPI_INTEGER, 0, TargetDisp, 1000, MPI_INTEGER, window);  // get from server memory
+      MPI_Win_unlock(0,window);
+      t2 = MPI_Wtime();
+      printf("after get(%6d)  time = %10.6f ms\n",TargetSize,1000*(t2-t1));
+
+      t1 = MPI_Wtime();
+      MPI_Win_lock(MPI_LOCK_SHARED,0,0,window);
+      TargetDisp = 0; TargetSize = 10000;
+      MPI_Get(data, 10000, MPI_INTEGER, 0, TargetDisp, 10000, MPI_INTEGER, window);  // get from server memory
+      MPI_Win_unlock(0,window);
+      t2 = MPI_Wtime();
+      printf("after get(%6d)  time = %10.6f ms\n",TargetSize,1000*(t2-t1));
+
+      t1 = MPI_Wtime();
+      MPI_Win_lock(MPI_LOCK_SHARED,0,0,window);
+      TargetDisp = 0; TargetSize = 100000;
+      MPI_Get(data, 100000, MPI_INTEGER, 0, TargetDisp, 100000, MPI_INTEGER, window);  // get from server memory
+      MPI_Win_unlock(0,window);
+      t2 = MPI_Wtime();
+      printf("after get(%6d)  time = %10.6f ms\n",TargetSize,1000*(t2-t1));
+
+      t1 = MPI_Wtime();
+      MPI_Win_lock(MPI_LOCK_SHARED,0,0,window);
+      TargetDisp = 5; TargetSize = MAXSIZE;
+      MPI_Get(data, MAXSIZE, MPI_INTEGER, 0, TargetDisp, MAXSIZE, MPI_INTEGER, window);  // get from server memory
+      MPI_Win_unlock(0,window);
+      t2 = MPI_Wtime();
+      printf("after get(%6d)  time = %10.6f ms\n",TargetSize,1000*(t2-t1));
+
+      printf("read data[0] = %d, data[MAXSIZE-1] = %d\n",data[0],data[MAXSIZE-1]);
     }
     printf("before barrier(server)\n");
     MPI_Barrier(server);

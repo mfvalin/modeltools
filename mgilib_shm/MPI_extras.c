@@ -250,7 +250,7 @@ int MPI_Get_words_simple(void *data, int n, int disp, int rankoftarget, MPI_Win 
   int value;
   if(lock) MPI_Win_lock(MPI_LOCK_SHARED, rankoftarget, 0, window);
   value = MPI_Get(data, n, MPI_INTEGER, rankoftarget, TargetDisp, n, MPI_INTEGER, window);
-  if(lock) MPI_Win_ublock(rankoftarget, window);
+  if(lock) MPI_Win_unlock(rankoftarget, window);
   return value;
 }
 
@@ -259,7 +259,7 @@ int MPI_Put_words_simple(void *data, int n, int disp, int rankoftarget, MPI_Win 
   int value;
   if(lock) MPI_Win_lock(MPI_LOCK_SHARED, rankoftarget, 0, window);
   value = MPI_Put(data, n, MPI_INTEGER, rankoftarget, TargetDisp, n, MPI_INTEGER, window);
-  if(lock) MPI_Win_ublock(rankoftarget, window);
+  if(lock) MPI_Win_unlock(rankoftarget, window);
   return value;
 }
 
@@ -269,6 +269,6 @@ int MPI_Fetch_and_op_int_simple(void *src, void *dst, int disp, int rankoftarget
   int value;
   if(lock) MPI_Win_lock(MPI_LOCK_SHARED, rankoftarget, 0, window);
   value = MPI_Fetch_and_op(src, dst, MPI_INTEGER, rankoftarget, TargetDisp, op, window);
-  if(lock) MPI_Win_ublock(rankoftarget, window);
+  if(lock) MPI_Win_unlock(rankoftarget, window);
   return value;
 }

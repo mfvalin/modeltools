@@ -45,4 +45,21 @@ typedef struct
   char name[MAX_NAME];
   char mode;
 } channel;
+
+#define MGI_CHAN_IDLE   -1
+#define MGI_CHAN_ACTIVE 1
+#define MGI_CHAN_CLOSED 2
+
+typedef struct{
+  int read_lock;
+  int write_lock;
+  int read_status;   // flags used by remote reader [ initialized as 0]
+  int write_status;  // flags used by remote writer [ initialized as 0]
+  int first;         // start of buffer [normally 0]
+  int in;            // insertion index
+  int out;           // extraction index
+  int limit;         // end of buffer + 1  [index]
+  unsigned int data[1];       // place holder, start of data buffer
+} mgi_channel_buffer;
+
 #endif
