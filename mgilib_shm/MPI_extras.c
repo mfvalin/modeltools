@@ -174,10 +174,20 @@ int MPI_Close_named_port(char *publish_name)
   printf("INFO: named port '%s' closed\n",publish_name);
 }
 
-int MPI_Create_named_port(char *publish_name)
+int MPI_Create_named_port(char *publish_name, int shmid, int no_mpi_port)
 {
-  char port_name[MPI_MAX_PORT_NAME]; 
-  MPI_Open_port(MPI_INFO_NULL, port_name); 
+  char port_name[MPI_MAX_PORT_NAME+32];   // enough room to add hostid and shmid if necessary
+  int len;
+  int hostid;
+
+  port_name[0] = '\0';
+  if(! no_mpi_port) MPI_Open_port(MPI_INFO_NULL, port_name);
+  len = strnlen(port_name, sizeof(port_name));
+
+  if(shmid != -1) {   // valid shared memory id, publish it along with host id
+    hostid = gethostid();
+    snprintf(&port_name[len], sizeof(port_name)-len, "\n%d %d\n", hostid, shmid);
+  }
   printf("INFO: named port '%s' available at %s\n",publish_name,port_name); 
   return(MPI_Publish_name(publish_name, MPI_INFO_NULL, &port_name[0]));
 }

@@ -13,8 +13,12 @@
 #define TRUE        !FALSE
 #endif
 
-#define MGI_SHM_IDLE -2
-#define MGI_SHM_ACTIVE 1
+#define MGI_SHM_IDLE     -2
+#define MGI_SHM_ACTIVE    1
+
+#define WITHOUT_SHM_PORT -1
+#define WITHOUT_MPI_PORT  1
+#define WITH_MPI_PORT     0
 
 typedef struct
 {
@@ -47,8 +51,8 @@ typedef struct
 } channel;
 
 #define MGI_CHAN_IDLE   -1
-#define MGI_CHAN_ACTIVE 1
-#define MGI_CHAN_CLOSED 2
+#define MGI_CHAN_ACTIVE  1
+#define MGI_CHAN_CLOSED  2
 
 typedef struct{
   int read_lock;
@@ -60,6 +64,6 @@ typedef struct{
   int out;           // extraction index
   int limit;         // end of buffer + 1  [index]
   unsigned int data[1];       // place holder, start of data buffer
-} mgi_channel_buffer;
+} mgi_channel_buffer;         // this struct should be usable in the shm and MPI cases
 
 #endif

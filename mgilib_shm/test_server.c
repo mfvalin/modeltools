@@ -26,7 +26,7 @@
 
 static mgi_channel_buffer *memptr;
 
-int MPI_Create_named_port(char *publish_name);
+int MPI_Create_named_port(char *publish_name, int shmid, int no_mpi_port);
 int MPI_Unpublish_named_port( char *service_name);
 int MPI_Close_named_port(char *publish_name);
 int MPI_Connect_to_named_port(char *publish_name, MPI_Comm *server, MPI_Comm *local);
@@ -81,7 +81,7 @@ int main( int argc, char **argv )
     memptr->out = 1;
     memptr->limit = 1024*1024;
 
-    MPI_Create_named_port(servicename);
+    MPI_Create_named_port(servicename,WITHOUT_SHM_PORT,WITH_MPI_PORT);
 
     MPI_Accept_on_named_port(servicename, &client1, &local1);
     MPI_Win_create(memptr, winsize, dispunit, MPI_INFO_NULL, local1, &window1);
