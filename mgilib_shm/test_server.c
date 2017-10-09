@@ -25,12 +25,12 @@
 #define FATAL 1
 
 static mgi_channel_buffer *memptr;
-
+/*
 int MPI_Create_named_port(char *publish_name, int shmid, int no_mpi_port);
 int MPI_Unpublish_named_port( char *service_name);
 int MPI_Close_named_port(char *publish_name);
 int MPI_Connect_to_named_port(char *publish_name, MPI_Comm *server, MPI_Comm *local);
-int MPI_Accept_on_named_port(char *publish_name, MPI_Comm *client, MPI_Comm *local);
+int MPI_Accept_on_named_port(char *publish_name, MPI_Comm *client, MPI_Comm *local);*/
 
 int main( int argc, char **argv ) 
 { 

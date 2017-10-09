@@ -10,7 +10,7 @@
 
 #ifndef FALSE
 #define FALSE            0
-#define TRUE        !FALSE
+#define TRUE             1
 #endif
 
 #define MGI_SHM_IDLE     -2
@@ -65,5 +65,11 @@ typedef struct{
   int limit;         // end of buffer + 1  [index]
   unsigned int data[1];       // place holder, start of data buffer
 } mgi_channel_buffer;         // this struct should be usable in the shm and MPI cases
+
+int MPI_Create_named_port(char *publish_name, int shmid, int no_mpi_port);
+int MPI_Unpublish_named_port( char *service_name);
+int MPI_Close_named_port(char *publish_name);
+int MPI_Connect_to_named_port(char *publish_name, MPI_Comm *server, MPI_Comm *local);
+int MPI_Accept_on_named_port(char *publish_name, MPI_Comm *client, MPI_Comm *local);
 
 #endif

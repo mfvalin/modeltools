@@ -18,6 +18,7 @@
  */
 
 #include <mpi.h>
+#include "mgi.h"
 #define MPI_ERROR MPI_ERR_LASTCODE
 
 #include <stdio.h>
@@ -29,9 +30,21 @@
 #include <fcntl.h>
 
 #define MAX_NAMES 128
-static int last_name=-1;
+typedef struct{
+  char *name;     // published name
+  char *port;     // MPI port name
+  void *addr;     // address in shared memory
+  int  mem_id;    // shared memory id
+  int  pub;       // published flag
+} name_entry;
+static name_entry name_table[MAX_NAMES];  // name and attributes table
+
+static int last_name=-1;                  // index of last published name
+
 static char *public_names[MAX_NAMES];
 static char *port_names[MAX_NAMES];
+static void *memaddr[MAX_NAMES];
+static int shmem_id[MAX_NAMES];
 static char is_published[MAX_NAMES];
 
 static int name_lookup(const char *public_name){
@@ -40,7 +53,7 @@ static int name_lookup(const char *public_name){
   for (i=0 ; i<=last_name ; i++) {
     if(public_names[i] == NULL) continue;
     if(strcmp(public_name,public_names[i]) == 0) {
-      printf("DEBUG: %s found in slot %d\n",public_name,i);
+      printf("DEBUG: '%s' found in slot %d\n",public_name,i);
       return(i);
     }
   }
@@ -54,6 +67,10 @@ static int name_insert(const char *public_name,const char *port_name){
   char *str2;
 
   if(last_name+1 >= MAX_NAMES) return -1;
+  if(name_lookup(public_name) >= 0) {
+    printf("ERROR (name_insert): '%s' found when it should not be\n");
+    return -1; // already in tables
+  }
 
   str1 = malloc(10+strnlen(public_name,maxlen));
   str2 = malloc(10+strnlen(port_name  ,maxlen));
@@ -68,15 +85,36 @@ static int name_insert(const char *public_name,const char *port_name){
   while(*port_name)   { *str2++ = *port_name++   ; } ; *str2 = '\0';
 
   is_published[last_name] = 1;
+  shmem_id[last_name]     = -1;
+  memaddr[last_name]      = NULL;
 
   return last_name;
 }
 
+static int build_gossip_name(char *buf, int bufmax, const char *name, const char *extension, int mkdirs)
+{
+  char *gossipdir = getenv("GOSSIP_MPI_DIR");
+  char *ext = (char *)extension ;
+
+  if(ext == NULL) ext = "";   // no extension (.xxx .yyy , etc..)
+
+  if(gossipdir == NULL) {   // default directories
+    if(mkdirs){   // make relevant directories in case they do not already exist
+      snprintf(buf,bufmax,"%s/%s",getenv("HOME"),".gossip");
+      mkdir(buf,0755);
+      snprintf(buf,bufmax,"%s/%s",getenv("HOME"),".gossip/MPI");
+      mkdir(buf,0755);
+    }
+    snprintf(buf,bufmax,"%s/%s/%s%s",getenv("HOME"),".gossip/MPI",name,ext);
+  }else{
+    snprintf(buf,bufmax,"%s/%s%s",gossipdir,name,ext);
+  }
+}
 int MPI_Unpublish_name(const char *service_name, MPI_Info info, const char *port_name)
 {
   char filename[4096];
-  char *home = getenv("HOME");
-  char *gossipdir = getenv("GOSSIP_MPI_DIR");
+//   char *home = getenv("HOME");
+//   char *gossipdir = getenv("GOSSIP_MPI_DIR");
   int target = name_lookup(service_name);
 
   if(target != -1) {
@@ -87,11 +125,12 @@ int MPI_Unpublish_name(const char *service_name, MPI_Info info, const char *port
     is_published[target] = 0;
   }
 
-  if(gossipdir == NULL) {
-    snprintf(filename,4096,"%s/%s/%s",getenv("HOME"),".gossip/MPI",service_name);
-  }else{
-    snprintf(filename,4096,"%s/%s",gossipdir,service_name);
-  }
+  build_gossip_name(filename, sizeof(filename), service_name, NULL, 1);
+//   if(gossipdir == NULL) {
+//     snprintf(filename,4096,"%s/%s/%s",getenv("HOME"),".gossip/MPI",service_name);
+//   }else{
+//     snprintf(filename,4096,"%s/%s",gossipdir,service_name);
+//   }
   unlink(filename);
   printf("INFO: unpublished '%s' as '%s'\n",service_name,filename);
   return MPI_SUCCESS;
@@ -107,23 +146,25 @@ int MPI_Publish_name(const char *service_name, MPI_Info info, const char *port_n
   FILE *gossip;
   char filename[4096];
   char filenew[4096];
-  char *home = getenv("HOME");
-  char *gossipdir = getenv("GOSSIP_MPI_DIR");
+//   char *home = getenv("HOME");
+//   char *gossipdir = getenv("GOSSIP_MPI_DIR");
   int target = name_lookup(service_name);
 
   if(target != -1) return MPI_SUCCESS; // already published
 
-  if(gossipdir == NULL) {
-    snprintf(filename,4096,"%s/%s",getenv("HOME"),".gossip");
-    mkdir(filename,0755);
-    snprintf(filename,4096,"%s/%s",getenv("HOME"),".gossip/MPI");
-    mkdir(filename,0755);
-    snprintf(filename,4096,"%s/%s/%s.new",getenv("HOME"),".gossip/MPI",service_name);
-    snprintf(filenew,4096,"%s/%s/%s"     ,getenv("HOME"),".gossip/MPI",service_name);
-  }else{
-    snprintf(filename,4096,"%s/%s.new",gossipdir,service_name);
-    snprintf(filenew,4096,"%s/%s"     ,gossipdir,service_name);
-  }
+  build_gossip_name(filename, sizeof(filename), service_name, ".new", 1);
+  build_gossip_name(filenew , sizeof(filenew ), service_name,   NULL, 0);
+//   if(gossipdir == NULL) {
+//     snprintf(filename,4096,"%s/%s",getenv("HOME"),".gossip");
+//     mkdir(filename,0755);
+//     snprintf(filename,4096,"%s/%s",getenv("HOME"),".gossip/MPI");
+//     mkdir(filename,0755);
+//     snprintf(filename,4096,"%s/%s/%s.new",getenv("HOME"),".gossip/MPI",service_name);
+//     snprintf(filenew,4096,"%s/%s/%s"     ,getenv("HOME"),".gossip/MPI",service_name);
+//   }else{
+//     snprintf(filename,4096,"%s/%s.new",gossipdir,service_name);
+//     snprintf(filenew,4096,"%s/%s"     ,gossipdir,service_name);
+//   }
   unlink(filename);
   unlink(filenew);
 
@@ -148,14 +189,15 @@ int MPI_Lookup_name(const char *service_name, MPI_Info info, char *port_name)
   char filename[4096];
   int fd, nc;
   int wait=0;
-  char *home = getenv("HOME");
-  char *gossipdir = getenv("GOSSIP_MPI_DIR");
+//   char *home = getenv("HOME");
+//   char *gossipdir = getenv("GOSSIP_MPI_DIR");
 
-  if(gossipdir == NULL) {
-    snprintf(filename,4096,"%s/%s/%s",getenv("HOME"),".gossip/MPI",service_name);
-  }else{
-    snprintf(filename,4096,"%s/%s",gossipdir,service_name);
-  }
+  build_gossip_name(filename, sizeof(filename), service_name, NULL, 1);
+//   if(gossipdir == NULL) {
+//     snprintf(filename,4096,"%s/%s/%s",getenv("HOME"),".gossip/MPI",service_name);
+//   }else{
+//     snprintf(filename,4096,"%s/%s",gossipdir,service_name);
+//   }
 
   while( (fd=open(filename,0)) < 0) { wait++ ; usleep(1000); }
   nc=read(fd,port_name,MPI_MAX_PORT_NAME);
@@ -180,7 +222,8 @@ int MPI_Create_named_port(char *publish_name, int shmid, int no_mpi_port)
   int len;
   int hostid;
 
-  port_name[0] = '\0';
+  snprintf(&port_name[0], sizeof(port_name),"%s\n","/dev/null");  // in case no MPI port is requested
+  port_name[sizeof(port_name)-1] = '\0';                         // guaranteed null byte
   if(! no_mpi_port) MPI_Open_port(MPI_INFO_NULL, port_name);
   len = strnlen(port_name, sizeof(port_name));
 
@@ -200,6 +243,10 @@ int MPI_Connect_to_named_port(char *publish_name, MPI_Comm *server, MPI_Comm *lo
   int localrank, localsize;
   int tag = 123456;
   MPI_Status status; 
+  char filereq[4096];
+
+  build_gossip_name(filereq, sizeof(filereq), publish_name, ".req", 0);  // request for connection
+  // try to create file, loop until successful which means that connection can be accepted
 
   MPI_Lookup_name(publish_name, MPI_INFO_NULL, &port_name[0]);
   printf("INFO: connecting to server at '%s'\n",port_name); 
@@ -231,6 +278,11 @@ int MPI_Accept_on_named_port(char *publish_name, MPI_Comm *client, MPI_Comm *loc
   int localrank, localsize;
   int tag = 123456;
   MPI_Status status; 
+  char filereq[4096];
+
+  build_gossip_name(filereq, sizeof(filereq), publish_name, ".req", 0);  // request for connection
+  // loop until filereq appears, remove it, then accept
+  // a timeout could be implemented here
 
   MPI_Lookup_name(publish_name, MPI_INFO_NULL, &port_name[0]);
   printf("INFO: server at '%s' accepting connection\n",port_name); 
