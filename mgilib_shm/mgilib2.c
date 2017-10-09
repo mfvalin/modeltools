@@ -207,7 +207,6 @@ static long long wait_write = 0;     /* time spent waiting on a write (approxima
 static channel chn[MAX_CHANNELS];
 
 static int ichan = 0;
-static int init = 0;
 static int SIG_ACTIVE = 1;
 
 #if defined(NOT_USED)
@@ -385,7 +384,7 @@ static int Mpi_Mgi_Shm_Init(int mode){        // setup/cleanup for all shared me
     cfg++;  // skip :
     temp = 0 ; sscanf(cfg,"%32s%d",&name[0],&temp) ; memsiz = temp;       // get channel name and size (in MBytes)
 
-    if(mode == 0) {                            // init mode
+    if(mode == 0) {                            // initialize mode
       if( MGI_Shm_Can_Publish_name(name,0) == 0 ){  // check if already published
         memsiz = memsiz * 1024 * 1024 ;             // size in Bytes
         shmid = shmget(IPC_PRIVATE,memsiz,IPC_CREAT | 0600) ;   // create shared memory segment
@@ -580,6 +579,14 @@ static int validchan( int chan )
   return(-1);
 }
 /***********************************************************************************************/
+int MGI_Set_timeout(int channel, int timeout)   // new function replacing f77_name (mgi_set_timeout)
+{
+  if(validchan(channel) != 0) return -1; /* invalid channel */
+#if ! defined(WITHOUT_GOSSIP)
+  set_client_timeout(chn[channel].gchannel, timeout);
+#endif
+  chn[channel].timeout = timeout;  /* timeout value useful locally for shared memory communications */
+}
 
 void f77_name (mgi_set_timeout) (ftnword *chan, ftnword *timeout)
 {
@@ -591,7 +598,6 @@ void f77_name (mgi_set_timeout) (ftnword *chan, ftnword *timeout)
 #endif
   chn[channel].timeout = *timeout;  /* timeout value useful locally for shared memory communications */
 }
-
 static void strcopy( char *s, char *t, F2Cl charlen )
 /* to copy a string given by a fortran routine and place the NULL
  *        character at the end of the true (charlen) length of the string */
@@ -922,11 +928,6 @@ ftnword f77_name (mgi_init) (char *channel_name, F2Cl lname)
   char shm_fil_name[1024];
   char *env_var_value;
   FILE *FD;
-
-  if (init == 0)
-    {
-      init = 1;
-    }
 
 #if defined(DEBUG)
   fprintf(stderr,"MGI_INIT ** \n");
