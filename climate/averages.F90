@@ -1,4 +1,6 @@
-#define VERSION '1.0_rc15'
+#define VERSION '1.0_rc16'
+#define AVG_MARKER '/'
+#define VAR_MARKER '%'
   module averages_common   ! tables and table management routines
     use iso_c_binding
     implicit none
@@ -221,7 +223,7 @@
       real, dimension(ni,nj), intent(IN) :: z
       integer :: ix
 
-      integer :: i, j, pg, slot, sample
+      integer :: i, j, pg, slot, sample, it1, it2, it3
       integer*8 :: date_lo, date_hi, dnp
       type(field), pointer :: p
       real :: weight
@@ -241,14 +243,20 @@
 !         weight = (dnp) / (3600.0 * time_weight)
 !       endif
 !       if(weight_abs .and. (.not. is_special)) weight = time_weight                  ! explicit wright
-      sample = 0
+      sample = 0  ! "instantaneous" sample
+      if((ishft(ip2,-24) == 10) .and. (ishft(ip3,-24) == 10))then  ! both ip2 and ip2 are time tags
+        it2 = iand(ip2,Z'00FFFFFF')
+        it3 = iand(ip3,Z'00FFFFFF')
+        sample = 3600*ABS(it2 - it3)   ! sample interval in seconds
+        if(verbose > 4) print *,'DEBUG: sample =',sample
+      endif
       if(is_special) then
         date_lo = 0
         date_hi = 0
       else
-        if( weight_ip3 .or. (trim(typvar) .eq. 'MN') ) then ! weight is IP3 (number of samples)
+        if( weight_ip3 .or. typvar(2:2) .eq. AVG_MARKER ) then ! weight is IP3 (number of samples)
           i = ip3
-          if(ishft(i,-24) == 15) i = iand(ip3,Z'00FFFFFF')   ! keep lower 24 bits (type 15)
+          if(ishft(ip3,-24) == 15) i = iand(ip3,Z'00FFFFFF')   ! keep lower 24 bits (type 15)
           weight = max(1,i)
         endif
         if(weight_time) then                                 ! time weight
@@ -279,10 +287,13 @@
         if(is_special)then
           if(p%ip2 .ne. ip2 .or. p%ip3 .ne. ip3) cycle
         else
-          if( (ishft(ip1,-24) == ishft(ip2,-24)) .and. (p%ip2 .ne. ip2) ) cycle ! level interval and not identical
+          it1 = ishft(ip1,-24)
+          it2 = ishft(ip2,-24)
+          if(ip2 > 32768 .and. it2 > 0 .and. it2 == it1 .and. (p%ip2 .ne. ip2) ) cycle
+!           if( (ishft(ip1,-24) == ishft(ip2,-24)) .and. (p%ip2 .ne. ip2) ) cycle ! level interval and not identical
         endif
-        if(trim(p%typvar) .eq. 'MN') p%typvar = trim(typvar)  ! force typvar into p%typvar if MN
-        if(trim(p%typvar) .ne. trim(typvar)) cycle
+        if(p%typvar(2:2) .eq. AVG_MARKER) p%typvar = trim(typvar)  ! force typvar into p%typvar if average
+        if(p%typvar(1:1) .ne. typvar(1:1)) cycle                   ! check first character of typvar
         if(sample .ne. p%sample .and. weight == 1.0) then
            if(verbose > 1) print *,'WARNING: sample interval mismatch, got',sample,' expected',p%sample
            if(strict) call f_exit(1)    ! abort if strict mode
@@ -332,7 +343,7 @@
       enddo
     end function process_entry
   end module averages_common
-
+!================================================================================================================
   subroutine print_usage(name)
     implicit none
     character(len=*) :: name
@@ -713,6 +724,16 @@
       return
     endif
 
+    if(typvar(2:2) == VAR_MARKER) then  ! cannot process variance records
+      if(verbose > 2) print *,"INFO: skipping variance record"
+      return
+    endif
+
+    if(typvar(2:2) .ne. " " .and.typvar(2:2) .ne.AVG_MARKER ) then  ! typvar(2:2) ignored except AVG_MARKER (averages)
+      if(verbose > 3) print *,"NOTE: type '"//typvar//"' processed as type '"//typvar(1:1)//"'"
+      typvar(2:2) = " "
+    endif
+
     if(nbits > 32) then
       if(verbose > 3) print *,'NOTE: skipping record (nbits > 32)'
       return
@@ -847,21 +868,23 @@
 !       if(verbose > 2) print *,'INFO: ',p%nsamples,' '//p%nomvar//' "samples" every',p%sample/3600.0,' hours'
       if(verbose > 2) print *,'INFO: ',p%nsamples,' '//p%nomvar//' "samples"'
       if(newtags) then ! new tagging style (work in progress)
-        r4 = ip3       ! change ip3 to new style coding
+        r4 = ip3       ! force ip3 to new style coding
         call convip_plus( ip3, r4, 15, 2, string, .false. ) ! ip kind 15,  number of samples
 !         r4 = ip2
         call difdatr(new_dateo,p%dateo,hours)   ! ip2 = hours from start of model run
-        r4 = hours       ! change ip2 to new style coding
+        r4 = hours       ! force ip2 to new style coding
         call convip_plus( ip2, r4, 10, 2, string, .false. ) ! ip kind 10,  hours
-        ! if ip2 was a level tag, code as a level tag
-        if( ishft(p%ip2,-24) == ishft(p%ip2,-24) ) ip2 = p%ip2
+        ! if ip2 was a level tag, use it for output instead of hours since beginning of integration
+        if( ishft(p%ip1,-24) == ishft(p%ip2,-24) .and. ishft(p%ip1,-24) > 0 ) ip2 = p%ip2
       endif
+      p%typvar(2:2) = AVG_MARKER
       call fstecr(z,z,-32,fstdmean, &
-                  new_dateo,deet,npas,p%ni,p%nj,1,ip1,ip2,ip3,"MN",p%nomvar,p%etiket, &
+                  new_dateo,deet,npas,p%ni,p%nj,1,ip1,ip2,ip3,p%typvar,p%nomvar,p%etiket, &
                   p%grtyp,p%ig1,p%ig2,p%ig3,p%ig4,128+5,.false.)
       if(variance) then            ! use IEEE 64 bit format for variances
         call fst_data_length(8)    ! 64 bit format
-        call fstecr(p%stats(1,1,2),p%stats(1,1,2),-64,fstdvar, &
+        p%typvar(2:2) = VAR_MARKER
+        call fstecr(p%stats(1,1,2),p%stats(1,1,2),-64,p%typvar, &
                     new_dateo,deet,npas,p%ni,p%nj,1,ip1,ip2,ip3,vartag,p%nomvar,p%etiket, &
                     p%grtyp,p%ig1,p%ig2,p%ig3,p%ig4,5,.false.)
       endif
