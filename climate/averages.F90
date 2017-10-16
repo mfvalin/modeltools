@@ -1,4 +1,4 @@
-#define VERSION '1.0_rc16'
+#define VERSION '1.0_rc17'
 #define AVG_MARKER '/'
 #define VAR_MARKER '%'
   module averages_common   ! tables and table management routines
@@ -20,6 +20,7 @@
 !       integer :: npas_min, npas_max                ! lowest and highest time step collected
       integer :: ip1, ip2, ip3, dateo, deet        ! from field's standard file parameters
       integer :: ig1, ig2, ig3, ig4                ! grid
+      integer :: level2                            ! second level if 2 level data
       character(len=12) :: etiket                  ! from field's standard file parameters
       character(len=4)  :: nomvar                  ! from field's standard file parameters
       character(len=2)  :: typvar                  ! from field's standard file parameters
@@ -127,6 +128,7 @@
       ptab(pg)%p(slot)%sample = 0
       ptab(pg)%p(slot)%deet = -1
       ptab(pg)%p(slot)%ip1 = -1
+      ptab(pg)%p(slot)%level2 = -1
       ptab(pg)%p(slot)%ip2 = -1
       ptab(pg)%p(slot)%ip3 = -1
       ptab(pg)%p(slot)%ig1 = -1
@@ -223,41 +225,44 @@
       real, dimension(ni,nj), intent(IN) :: z
       integer :: ix
 
-      integer :: i, j, pg, slot, sample, it1, it2, it3
+      integer :: i, j, pg, slot, sample, it1, it2, it3, level2
       integer*8 :: date_lo, date_hi, dnp
       type(field), pointer :: p
-      real :: weight
+      real :: weight, r1, r2, r3
       logical :: is_special
+      character(len=128) :: string
 
       ix = -1
+      level2 = -1  ! a priori, one level data
+      call convip_plus( ip1, r1, it1, -1, string, .false. )    ! convert ip1
+      if(ip3 == 0 .and. ip2 < 1000000) then    ! special "old style coding" for time in hours
+        it2 = 10
+        r2 = ip2
+      else
+	call convip_plus( ip2, r2, it2, -1, string, .false. )  ! convert ip2
+      endif
+      call convip_plus( ip3, r3, it3, -1, string, .false. )    ! convert ip3
+
+      if( (it1 == it3) .and. (ip1 > 0) .and. (ip3 > 0) ) level2 = ip3   ! 2 level data
+      if( (it1 == it2) .and. (ip1 > 0) .and. (ip2 > 0) ) level2 = ip2   ! 2 level data
+
       dnp = npas
       dnp = dnp * deet
       is_special = any(nomvar == specials(1:nspecials))
       weight = 1.0
-!       if(weight_ip3 .and. (.not. is_special)) then         ! weight is IP3 (number of samples)
-!         i = ip3
-!         if(ishft(i,-24) == 15) i = iand(ip3,Z'00FFFFFF')   ! keep lower 24 bits (type 15)
-!         weight = max(1,i)
-!       endif
-!       if(weight_time .and. (.not. is_special)) then                                 ! time weight
-!         weight = (dnp) / (3600.0 * time_weight)
-!       endif
-!       if(weight_abs .and. (.not. is_special)) weight = time_weight                  ! explicit wright
       sample = 0  ! "instantaneous" sample
-      if((ishft(ip2,-24) == 10) .and. (ishft(ip3,-24) == 10))then  ! both ip2 and ip2 are time tags
-        it2 = iand(ip2,Z'00FFFFFF')
-        it3 = iand(ip3,Z'00FFFFFF')
-        sample = 3600*ABS(it2 - it3)   ! sample interval in seconds
+      if((it2 == 10) .and. (it3 == 10))then  ! both ip2 and ip3 are time tags
+        sample = 3600*ABS(r2 - r3)           ! sample interval in seconds
         if(verbose > 4) print *,'DEBUG: sample =',sample
       endif
-      if(is_special) then
+      if(is_special) then   !  special names
         date_lo = 0
         date_hi = 0
-      else
-        if( weight_ip3 .or. typvar(2:2) .eq. AVG_MARKER ) then ! weight is IP3 (number of samples)
+      else                  ! regular data / averages
+        if( weight_ip3 .or. typvar(2:2) .eq. AVG_MARKER ) then ! weight is IP3 or number of samples in IP3
           i = ip3
-          if(ishft(ip3,-24) == 15) i = iand(ip3,Z'00FFFFFF')   ! keep lower 24 bits (type 15)
-          weight = max(1,i)
+          if(ishft(ip3,-24) == 15) i = iand(ip3,Z'000FFFFF')   ! keep lower 20 bits (type 15)
+          weight = max(1,i)     ! number of samples
         endif
         if(weight_time) then                                 ! time weight
           weight = (dnp) / (3600.0 * time_weight)
@@ -268,9 +273,9 @@
         date_lo = date_stamp_64(dateo)      ! compute 64 bit date_lo from dateo
         date_hi = date_lo + dnp             ! date of validity of sample
         if(weight == 1.0) then
-          date_lo = date_hi
+          date_lo = date_hi                 ! one date kept (date of validity)
         else
-          sample = (date_hi - date_lo)      ! seconds
+          sample = (date_hi - date_lo)      ! interval in seconds between the 2 dates
           if(weight_ip3) sample = nint( (date_hi - date_lo) / (weight-1.0) )
         endif
       endif
@@ -278,22 +283,18 @@
         slot = iand(i,ENTRY_MASK)   ! slot from index
         pg = ishft(i,PAGE_SHIFT)    ! page from index
         p => ptab(pg)%p(slot)       ! pointer to data
-        if(p%ip1 .ne. ip1) cycle    ! test most probable / cheapest differencing criteria first
-        if(p%ni .ne. ni .or. p%nj .ne. nj) cycle
-        if(trim(p%nomvar) .ne. trim(nomvar)) cycle
-        if(trim(p%grtyp) .ne. trim(grtyp)) cycle
-        if(trim(p%etiket) .ne. trim(etiket)) cycle
-        if((p%dateo .ne. dateo) .and. check_dateo) cycle   ! dateo verification is optional
+        if(p%ip1 .ne. ip1 .or. p%level2 .ne. level2) cycle    ! not same level(s)
+        if(p%ni .ne. ni .or. p%nj .ne. nj) cycle              ! not same dimensions
+        if(trim(p%nomvar) .ne. trim(nomvar)) cycle            ! not same name
+        if(trim(p%grtyp) .ne. trim(grtyp)) cycle              ! not same grid type
+        if((p%ig1 .ne. ig1) .or. (p%ig2 .ne. ig2) .or. (p%ig3 .ne. ig3) .or. (p%ig4 .ne. ig4) ) cycle  ! not same grid
+        if(trim(p%etiket) .ne. trim(etiket)) cycle            ! not same experiment
+        if((p%dateo .ne. dateo) .and. check_dateo) cycle      ! dateo verification is optional
         if(is_special)then
-          if(p%ip2 .ne. ip2 .or. p%ip3 .ne. ip3) cycle
-        else
-          it1 = ishft(ip1,-24)
-          it2 = ishft(ip2,-24)
-          if(ip2 > 32768 .and. it2 > 0 .and. it2 == it1 .and. (p%ip2 .ne. ip2) ) cycle
-!           if( (ishft(ip1,-24) == ishft(ip2,-24)) .and. (p%ip2 .ne. ip2) ) cycle ! level interval and not identical
+          if(p%ip2 .ne. ip2 .or. p%ip3 .ne. ip3) cycle        ! special records must have same ip1/ip2/ip3
         endif
         if(p%typvar(2:2) .eq. AVG_MARKER) p%typvar = trim(typvar)  ! force typvar into p%typvar if average
-        if(p%typvar(1:1) .ne. typvar(1:1)) cycle                   ! check first character of typvar
+        if(p%typvar(1:1) .ne. typvar(1:1)) cycle               ! check first character of typvar
         if(sample .ne. p%sample .and. weight == 1.0) then
            if(verbose > 1) print *,'WARNING: sample interval mismatch, got',sample,' expected',p%sample
            if(strict) call f_exit(1)    ! abort if strict mode
@@ -318,6 +319,7 @@
         p%sample = sample
         p%deet = deet
         p%ip1 = ip1
+        p%level2 = level2
         p%ip2 = ip2
         p%ip3 = ip3
         p%ig1 = ig1
@@ -328,8 +330,10 @@
         p%nj = nj
         p%nsamples = 0
         p%special = is_special
+!         print *,'DEBUG: dateo, deet,npas =',dateo, deet,npas,date_lo
       endif
       p%nsamples = p%nsamples + weight ! add weight to number of samples
+!       if(p%nsamples == 48) print *,'DEBUG: dateo, deet,npas =',dateo, deet,npas,p%date_lo,date_hi
       if(is_special) return  ! no stats for special records, just add one to sample count
 !       p%npas_max = max(p%npas_max,npas)
 !       p%npas_min = min(p%npas_min,npas)
@@ -678,7 +682,7 @@
     integer :: status
 
     integer, external :: fstluk
-    real, dimension(lni,lnj,2) :: z      ! in case data needs 64 bits
+    real, dimension(lni,lnj,2) :: z      ! in case data type needs 64 bits
     integer :: ni, nj, nk
     integer :: nbits,datyp,ip1,ip2,ip3,dateo,deet,npas
     integer :: ig1,ig2,ig3,ig4,swa,lng,dltf,ubc,extra1,extra2,extra3
@@ -789,6 +793,7 @@
     character(len=16) :: string
     real :: r4
     integer :: my_kind
+    integer :: wtype
 
     if(fstdmean == 0 .and. fstdvar == 0) then  ! first call just opens the files
 
@@ -844,18 +849,10 @@
       enddo
       enddo
 
-      hours = p%deet
-      hours = hours / 3600             ! p%deet in hours
-!       hours_min = hours * p%npas_min   ! start of period = p%dateo + hours_min
-!       call incdatr(new_dateo,p%dateo,hours_min) ! start of period timestamp
-!       hours_max = hours * p%npas_max   ! end   of period = p%dateo + hours_max
-!       call incdatr(datev,p%dateo,hours_max)  ! datev = p%dateo + hours_max
-
       new_dateo = date_stamp_32(p%date_lo)
       datev = date_stamp_32(p%date_hi)
-!      hours = (p%npas_max - p%npas_min) * hours   ! span in hours of period
-      hours = (p%date_hi - p%date_lo) / 3600
-!      print *,'DEBUG: HOURS',hours,hours2,hours2-hours,p%date_hi,p%date_lo
+      hours = (p%date_hi - p%date_lo)
+      hours = hours / 3600.0
       deet = 3600                      ! deet of written records forced to 1 hour
       npas = nint(hours)
       ip2 = npas                       ! to be adjusted if period does not start at 00Z
@@ -868,19 +865,28 @@
 !       if(verbose > 2) print *,'INFO: ',p%nsamples,' '//p%nomvar//' "samples" every',p%sample/3600.0,' hours'
       if(verbose > 2) print *,'INFO: ',p%nsamples,' '//p%nomvar//' "samples"'
       if(newtags) then ! new tagging style (work in progress)
+        if(p%sample > 0) then
+          deet = p%sample
+        else
+          deet = (p%date_hi - p%date_lo) / (p%nsamples - 1)
+        endif
+	npas = nint(hours*3600/deet)
         r4 = ip3       ! force ip3 to new style coding
         call convip_plus( ip3, r4, 15, 2, string, .false. ) ! ip kind 15,  number of samples
-!         r4 = ip2
-        call difdatr(new_dateo,p%dateo,hours)   ! ip2 = hours from start of model run
-        r4 = hours       ! force ip2 to new style coding
-        call convip_plus( ip2, r4, 10, 2, string, .false. ) ! ip kind 10,  hours
-        ! if ip2 was a level tag, use it for output instead of hours since beginning of integration
-        if( ishft(p%ip1,-24) == ishft(p%ip2,-24) .and. ishft(p%ip1,-24) > 0 ) ip2 = p%ip2
+        if( p%level2 > 0 ) then   ! 2 level data, put level2 in ip2 for output instead of hours since beginning of integration
+          ip2 = p%level2
+        else
+	  call difdatr(new_dateo,p%dateo,hours)   ! ip2 = hours from start of model run
+	  r4 = hours       ! force ip2 to new style coding
+	  call convip_plus( ip2, r4, 10, 2, string, .false. ) ! ip kind 10,  hours
+        endif
       endif
       p%typvar(2:2) = AVG_MARKER
+      wtype = 5   ! E32
+      if(p%ni > 16 .and. p%nj > 16) wtype = wtype + 128   ! activate E32 compression for averages
       call fstecr(z,z,-32,fstdmean, &
                   new_dateo,deet,npas,p%ni,p%nj,1,ip1,ip2,ip3,p%typvar,p%nomvar,p%etiket, &
-                  p%grtyp,p%ig1,p%ig2,p%ig3,p%ig4,128+5,.false.)
+                  p%grtyp,p%ig1,p%ig2,p%ig3,p%ig4,wtype,.false.)
       if(variance) then            ! use IEEE 64 bit format for variances
         call fst_data_length(8)    ! 64 bit format
         p%typvar(2:2) = VAR_MARKER
