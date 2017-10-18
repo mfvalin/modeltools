@@ -2,6 +2,7 @@ program print_date_range
   use ISO_C_BINDING
   implicit none
 #include "clib_interface.cdk"
+#define CLIB_OK 1
   integer, external :: newdate
   integer :: stamp, p1, p2, stamp1, stamp2, p3, p4, stamp3
   integer, dimension(2) :: printable1, printable2, printable3
@@ -17,7 +18,7 @@ program print_date_range
   logical :: use_anal, first_in_month
   integer :: cur_arg, nargs, arg_len, ntimes
   integer :: month_is_file = 0
-  character(len=128) :: version = 'version 1.0.4a 2017/09/05'
+  character(len=128) :: version = 'version 1.0.4b 2017/10/18'
   integer, parameter :: MAXGLOB=2
   character(len=4096), dimension(MAXGLOB) :: globs
   integer :: nglob, arg2_nc
@@ -148,7 +149,7 @@ program print_date_range
   do while(diff >= 0)                                 ! end date - next date
     status = newdate(stamp1,p1,p2,-3)                 ! convert to printable
     p3 = p1                                           ! YYYYMMDD
-    if(p2 == 0) then                                  ! hhmmss = 0, use previous day
+    if(p2 == 0 .and. (.not. use_anal)) then           ! hhmmss = 0, use previous day, except if use_anal is true
       call incdatr(stamp3,stamp1,-24.0_8)
       status = newdate(stamp3,p3,p4,-3)
     endif
