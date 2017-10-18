@@ -18,7 +18,7 @@ program print_date_range
   logical :: use_anal, first_in_month
   integer :: cur_arg, nargs, arg_len, ntimes
   integer :: month_is_file = 0
-  character(len=128) :: version = 'version 1.0.4b 2017/10/18'
+  character(len=128) :: version = 'version 1.0.5 2017/10/18'
   integer, parameter :: MAXGLOB=2
   character(len=4096), dimension(MAXGLOB) :: globs
   integer :: nglob, arg2_nc
@@ -202,7 +202,7 @@ program print_date_range
         endif
         oldpath = trim(month_name) // '/' // trim(set_pattern) // arg2(1:arg2_nc)    ! look for 'pattern'YYYYMMDD file name ( default is *YYYYMMDD )
         globs(1) = 'UnknownFile'
-          write(0,*),'INFO: looking for '//trim(oldpath)
+!         write(0,*),'INFO: looking for '//trim(oldpath)
         status = clib_glob(globs,nglob,trim(oldpath),MAXGLOB)            ! find file name match(es)
         if(status .ne. CLIB_OK .or. nglob > 1) then                      ! there must be one and only one match
            write(0,*),'ERROR: '//trim(oldpath)//' is ambiguous or does not exist'
