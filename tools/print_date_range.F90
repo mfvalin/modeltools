@@ -193,6 +193,7 @@ program print_date_range
       else    ! same month, another day
         if(first_in_month) then  ! see if name ends in YYYYMMDDhh, if so use 10 chars from arg2
           oldpath = month_name // '/' // trim(set_pattern) // arg2(1:10)   ! look for 'pattern'YYYYMMDDhh filename
+          write(0,*),'INFO: looking for '//trim(oldpath)
           status = clib_glob(globs,nglob,trim(oldpath),MAXGLOB)            ! find file name match(es)
           if(status == CLIB_OK .and. nglob == 1) then                      ! one match found
             arg2_nc = 10   ! name ends in YYYYMMDDhh
