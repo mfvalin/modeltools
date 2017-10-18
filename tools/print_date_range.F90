@@ -222,6 +222,7 @@ program print_date_range
     call difdatr(stamp2,stamp1,diff)                  ! end date - next date
 
     first_in_month = .false.
+    if(use_anal) first_in_month = .true.
     use_anal = .false.                                ! use_anal can only be true for the first time frame
     ntimes = ntimes + 1                               ! counter for time frames
   enddo
