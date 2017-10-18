@@ -193,7 +193,6 @@ program print_date_range
       else    ! same month, another day
         if(first_in_month) then  ! see if name ends in YYYYMMDDhh, if so use 10 chars from arg2
           oldpath = trim(month_name) // '/' // trim(set_pattern) // arg2(1:10)   ! look for 'pattern'YYYYMMDDhh filename
-          write(0,*),'INFO: looking for '//trim(oldpath)
           status = clib_glob(globs,nglob,trim(oldpath),MAXGLOB)            ! find file name match(es)
           if(status == CLIB_OK .and. nglob == 1) then                      ! one match found
             arg2_nc = 10   ! name ends in YYYYMMDDhh
@@ -201,8 +200,9 @@ program print_date_range
             arg2_nc = 8    ! name ends in YYYYMMDD
           endif
         endif
-        oldpath = month_name // '/' // trim(set_pattern) // arg2(1:arg2_nc)    ! look for 'pattern'YYYYMMDD file name ( default is *YYYYMMDD )
+        oldpath = trim(month_name) // '/' // trim(set_pattern) // arg2(1:arg2_nc)    ! look for 'pattern'YYYYMMDD file name ( default is *YYYYMMDD )
         globs(1) = 'UnknownFile'
+          write(0,*),'INFO: looking for '//trim(oldpath)
         status = clib_glob(globs,nglob,trim(oldpath),MAXGLOB)            ! find file name match(es)
         if(status .ne. CLIB_OK .or. nglob > 1) then                      ! there must be one and only one match
            write(0,*),'ERROR: '//trim(oldpath)//' is ambiguous or does not exist'
