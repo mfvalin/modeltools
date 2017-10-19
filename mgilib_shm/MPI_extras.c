@@ -47,6 +47,8 @@ static void *memaddr[MAX_NAMES];
 static int shmem_id[MAX_NAMES];
 static char is_published[MAX_NAMES];
 
+static char *world_name = NULL;
+
 static int name_lookup(const char *public_name){
   int i;
 
@@ -61,14 +63,14 @@ static int name_lookup(const char *public_name){
 }
 
 static int name_insert(const char *public_name,const char *port_name){
-  size_t maxlen = MPI_MAX_PORT_NAME;
+  size_t maxlen = MPI_MAX_PORT_NAME+128;
   size_t stlen;
   char *str1;
   char *str2;
 
   if(last_name+1 >= MAX_NAMES) return -1;
   if(name_lookup(public_name) >= 0) {
-    printf("ERROR (name_insert): '%s' found when it should not be\n");
+    printf("ERROR (name_insert): '%s' already defined\n",public_name);
     return -1; // already in tables
   }
 
@@ -189,6 +191,7 @@ int MPI_Lookup_name(const char *service_name, MPI_Info info, char *port_name)
   char filename[4096];
   int fd, nc;
   int wait=0;
+  char *t;
 //   char *home = getenv("HOME");
 //   char *gossipdir = getenv("GOSSIP_MPI_DIR");
 
@@ -200,9 +203,14 @@ int MPI_Lookup_name(const char *service_name, MPI_Info info, char *port_name)
 //   }
 
   while( (fd=open(filename,0)) < 0) { wait++ ; usleep(1000); }
-  nc=read(fd,port_name,MPI_MAX_PORT_NAME);
+  nc=read(fd,port_name,MPI_MAX_PORT_NAME+128);
   close(fd);
   port_name[nc]='\0';
+  t = port_name;
+  while( *t != '\0' ) {
+    if(*t == '\n') *t = '\0' ;  // replace newlines in string with nulls (the string really ends at @@)
+    t++;
+  }
   printf("MPI_Lookup_name: wait time = %d msec\n",wait);
 
   return MPI_SUCCESS;
@@ -210,7 +218,7 @@ int MPI_Lookup_name(const char *service_name, MPI_Info info, char *port_name)
 
 int MPI_Close_named_port(char *publish_name)
 {
-  char port_name[MPI_MAX_PORT_NAME];
+  char port_name[MPI_MAX_PORT_NAME+128];
   MPI_Lookup_name(publish_name, MPI_INFO_NULL, &port_name[0]);
   MPI_Close_port(port_name);
   printf("INFO: named port '%s' closed\n",publish_name);
@@ -218,37 +226,74 @@ int MPI_Close_named_port(char *publish_name)
 
 int MPI_Create_named_port(char *publish_name, int shmid, int no_mpi_port)
 {
-  char port_name[MPI_MAX_PORT_NAME+32];   // enough room to add hostid and shmid if necessary
+  char port_name[MPI_MAX_PORT_NAME+128];   // enough room to add hostid, shmid and rank in MPI_COMM_WORLD
   int len;
   int hostid;
+  int rank_in_world = -1;
 
-  snprintf(&port_name[0], sizeof(port_name),"%s\n","/dev/null");  // in case no MPI port is requested
-  port_name[sizeof(port_name)-1] = '\0';                         // guaranteed null byte
+  if(world_name == NULL) world_name = getenv("MPI_WORLD_UNIQUE_NAME");
+  if(world_name == NULL) world_name = "?";   // no name found
+
+  snprintf(&port_name[0], sizeof(port_name),"%s","/dev/null");  // in case no MPI port is requested
+  port_name[sizeof(port_name)-1] = '\0';                        // guaranteed null byte
+
   if(! no_mpi_port) MPI_Open_port(MPI_INFO_NULL, port_name);
   len = strnlen(port_name, sizeof(port_name));
 
-  if(shmid != -1) {   // valid shared memory id, publish it along with host id
-    hostid = gethostid();
-    snprintf(&port_name[len], sizeof(port_name)-len, "\n%d %d\n", hostid, shmid);
-  }
+  MPI_Comm_rank(MPI_COMM_WORLD,&rank_in_world);
+  snprintf(&port_name[len], sizeof(port_name)-len, "\n%s %d\n", world_name, rank_in_world); // world name and rank
+  len = strnlen(port_name, sizeof(port_name));
+
+  hostid = gethostid();   // publish shared memory id, along with host id
+  snprintf(&port_name[len], sizeof(port_name)-len, " %d %d\n@@", hostid, shmid);
+
   printf("INFO: named port '%s' available at %s\n",publish_name,port_name); 
   return(MPI_Publish_name(publish_name, MPI_INFO_NULL, &port_name[0]));
 }
 
+static int MPI_split_port_name(char *port_name, int *shmid, int *rank){  // split 3 line token returned by lookup
+  char worldname[MPI_MAX_PORT_NAME];
+  char *t = port_name;
+  int nitems;
+  int hid;
+
+  *shmid = -1;
+  *rank = -1;
+
+  while(*t == '\0') t++;
+  nitems = sscanf(port_name,"%s %d",worldname,rank);
+  if(worldname[0] == '?' || strncmp(worldname,world_name,MPI_MAX_PORT_NAME) != 0 ) *rank = -1;
+
+  while(*t == '\0') t++;
+  nitems = sscanf(port_name,"%d %d",&hid,shmid);
+  if(hid != gethostid()) *shmid = -1;
+  
+}
+
+static int MPI_Request_accept_on_named_port(char *publish_name)  // request accept for future connect
+{
+  char filereq[4096];
+
+  build_gossip_name(filereq, sizeof(filereq), publish_name, ".req", 0);  // request for connection
+  // try to create file, loop until successful which means that connection can be accepted
+}
+
 int MPI_Connect_to_named_port(char *publish_name, MPI_Comm *server, MPI_Comm *local)  // connect to published port and verify connection
 {
-  char port_name[MPI_MAX_PORT_NAME];
+  char port_name[MPI_MAX_PORT_NAME+128];
   int handshake = 1;  // client sends 1, expects to receive 0
   int answer = -1;
   int localrank, localsize;
   int tag = 123456;
   MPI_Status status; 
   char filereq[4096];
-
-  build_gossip_name(filereq, sizeof(filereq), publish_name, ".req", 0);  // request for connection
-  // try to create file, loop until successful which means that connection can be accepted
+  int shmid, rank;
 
   MPI_Lookup_name(publish_name, MPI_INFO_NULL, &port_name[0]);
+
+  MPI_split_port_name(port_name, &shmid, &rank);
+  if(shmid < 0 && rank <0) MPI_Request_accept_on_named_port(publish_name);  // request for connection accept if no other choice
+
   printf("INFO: connecting to server at '%s'\n",port_name); 
   MPI_Comm_connect( port_name, MPI_INFO_NULL, 0, MPI_COMM_SELF, server ); 
   printf("INFO: connected to server at '%s'\n",port_name); 
@@ -272,7 +317,7 @@ int MPI_Connect_to_named_port(char *publish_name, MPI_Comm *server, MPI_Comm *lo
 
 int MPI_Accept_on_named_port(char *publish_name, MPI_Comm *client, MPI_Comm *local)  // accept on published port and verify connection
 {
-  char port_name[MPI_MAX_PORT_NAME];
+  char port_name[MPI_MAX_PORT_NAME+128];
   int handshake = 0;  // server sends 0, expects to receive 1
   int answer = -1;
   int localrank, localsize;
