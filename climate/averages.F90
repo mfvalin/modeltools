@@ -1,4 +1,4 @@
-#define VERSION '1.0_rc17'
+#define VERSION '1.0_rc18 2017/10/24'
 #define AVG_MARKER '/'
 #define VAR_MARKER '%'
   module averages_common   ! tables and table management routines
@@ -52,6 +52,7 @@
     logical, save :: weight_abs = .false.  ! use a specific constant weight
     integer, save :: time_weight = 24      ! weight is in days, set to 1 for weight in hours
     logical, save :: strict = .false.      ! non strict mode by default
+    logical, save :: select_etiket = .false. ! etiket 1s a significant item if .true.
 
     character(len=4), dimension(1024), save :: specials
     integer, save :: nspecials=0
@@ -288,7 +289,7 @@
         if(trim(p%nomvar) .ne. trim(nomvar)) cycle            ! not same name
         if(trim(p%grtyp) .ne. trim(grtyp)) cycle              ! not same grid type
         if((p%ig1 .ne. ig1) .or. (p%ig2 .ne. ig2) .or. (p%ig3 .ne. ig3) .or. (p%ig4 .ne. ig4) ) cycle  ! not same grid
-        if(trim(p%etiket) .ne. trim(etiket)) cycle            ! not same experiment
+        if(trim(p%etiket) .ne. trim(etiket) .and. select_etiket) cycle            ! not same experiment
         if((p%dateo .ne. dateo) .and. check_dateo) cycle      ! dateo verification is optional
         if(is_special)then
           if(p%ip2 .ne. ip2 .or. p%ip3 .ne. ip3) cycle        ! special records must have same ip1/ip2/ip3
@@ -353,7 +354,7 @@
     character(len=*) :: name
     print *,'USAGE: '//trim(name)//' [-h|--help] [-version] [-newtags] [-strict] [-novar] [-stddev] [-tag nomvar] \'
     print *,'           [-npas0] [-dateo] [-mean mean_out] [-var var_out] [-weight ip3|time|hours|days|nnn] \'
-    print *,'           [-status path/to/status/file] [-test] [-q[q]] [-v[v][v]] [--|-f] \'
+    print *,'           [-etiket] [-status path/to/status/file] [-test] [-q[q]] [-v[v][v]] [--|-f] \'
     print *,'           [mean_out] [var_out] in_1 ... in_n'
     print *,'        var_out  MUST NOT be present if -novar or -var is used'
     print *,'        mean_out MUST NOT be present if -mean is used'
@@ -361,6 +362,7 @@
     print *,'        options are order independent but -- or -f MUST BE THE LAST ONE'
     print *,"        default special tag names = '>>  ', '^^  ', '!!  ', 'HY  '"
     print *,'        the -tag option may be used than once to add to this list'
+    print *,'        etiket is ignored except if -etiket used on the command line'
     print *,'example :'
     print *,"  "//trim(name)//" -status stat.dot -vv -mean mean.fst -var var.fst -tag HY -tag '>>' my_dir/dm*"
     return
@@ -437,6 +439,9 @@
 
       else if( option == '-strict' ) then   ! set strict mode
         strict = .true.                     ! abort on ERROR 
+
+      else if( option == '-etiket' ) then
+        select_etiket = .true.
 
       else if( option == '-weight' ) then     ! -mean file_for_averages
         if(curarg > arg_count) then
