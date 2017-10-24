@@ -728,5 +728,9 @@ function is_level_kind(kind) result(status)  ! is this kind a level ?
   implicit none
   logical :: status
   integer, intent(IN) :: kind
-  status = is_level(kind)
+  if(is_invalid_kind(kind) .or. (kind>Max_Kind)) then
+    status = .false.
+  else
+    status = is_level(kind)
+  endif
 end function is_level_kind
