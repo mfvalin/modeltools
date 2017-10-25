@@ -18,7 +18,7 @@ program print_date_range
   logical :: use_anal, first_in_month
   integer :: cur_arg, nargs, arg_len, ntimes
   integer :: month_is_file = 0
-  character(len=128) :: version = 'version 1.0.5 2017/10/18'
+  character(len=128) :: version = 'version 1.0.5a 2017/10/25'
   integer, parameter :: MAXGLOB=2
   character(len=4096), dimension(MAXGLOB) :: globs
   integer :: nglob, arg2_nc
@@ -93,7 +93,7 @@ program print_date_range
     else if(option(1:11) == '--set_pattern=' ) then      ! disambiguation pattern for file "globbing", default is '*'
       set_name = option(15:4096)
     else if(option(1:7)  == '--year=' ) then             ! calendar option (optional)
-      call NewDate_Options(trim(option(8:4096)),'set')       ! set calendar option
+      call NewDate_Options(trim(option(3:4096)),'set')       ! set calendar option
       write(0,*),'INFO: using calendar option '//trim(option)
     else if(option(1:9)  == '--version' ) then              ! version option
       write(0,*),version
