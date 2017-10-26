@@ -5,12 +5,13 @@
 // expects 1 process
 // mpirun -n 1 server
 // aprun  -n 1 server
-// the port string will be printed and will be given to the client
+// the port string will be printed and output to a file
 int main( int argc, char **argv ) 
 { 
   MPI_Comm server, client1, client2, local, local1, local2;
   int size, rank;
   char port_name[MPI_MAX_PORT_NAME];
+  FILE *out;
 
   MPI_Init( &argc, &argv ); 
   MPI_Comm_size(MPI_COMM_WORLD, &size); 
@@ -22,23 +23,26 @@ int main( int argc, char **argv )
     exit(0);
   }
 
+  MPI_Open_port(MPI_INFO_NULL, port_name);
+  printf("server: port name = '%s'\n",port_name);
 
-    MPI_Open_port(MPI_INFO_NULL, port_name);
-    printf("server: port name = '%s'\n",port_name);
+  out = fopen("DemoClientServerPort","w");
+  fprintf(out,"%s",port_name);
+  fclose(out);
 
-    MPI_Comm_accept( port_name, MPI_INFO_NULL, 0, MPI_COMM_SELF, &client1 );  // accept connection from client1
-    MPI_Comm_accept( port_name, MPI_INFO_NULL, 0, MPI_COMM_SELF, &client2 );  // accept connection from client2
+  MPI_Comm_accept( port_name, MPI_INFO_NULL, 0, MPI_COMM_SELF, &client1 );  // accept connection from client1
+  MPI_Comm_accept( port_name, MPI_INFO_NULL, 0, MPI_COMM_SELF, &client2 );  // accept connection from client2
 
-    printf("before barrier(client1)\n");
-    MPI_Barrier(client1);
-    MPI_Comm_disconnect( &client1 );
+  printf("before barrier(client1)\n");
+  MPI_Barrier(client1);
+  MPI_Comm_disconnect( &client1 );
 
-    printf("before barrier(client2)\n");
-    MPI_Barrier(client2);
-    MPI_Comm_disconnect( &client2 );
- 
-    MPI_Close_port(port_name);
-    printf("INFO: server shutting down\n");
+  printf("before barrier(client2)\n");
+  MPI_Barrier(client2);
+  MPI_Comm_disconnect( &client2 );
+
+  MPI_Close_port(port_name);
+  printf("INFO: server shutting down\n");
 
   MPI_Finalize(); 
 } 
