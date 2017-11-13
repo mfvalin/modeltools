@@ -18,7 +18,7 @@ program print_date_range
   logical :: use_anal, first_in_month
   integer :: cur_arg, nargs, arg_len, ntimes
   integer :: month_is_file = 0
-  character(len=128) :: version = 'version 1.0.5a 2017/10/25'
+  character(len=128) :: version = 'version 1.0.6 2017/11/13'
   integer, parameter :: MAXGLOB=2
   character(len=4096), dimension(MAXGLOB) :: globs
   integer :: nglob, arg2_nc
@@ -68,12 +68,20 @@ program print_date_range
 
   do while(cur_arg <= nargs)      ! process command line options
     call get_command_argument(cur_arg,option,arg_len,status)
-    if(option(1:13)      == '--start_date=' ) then       ! YYYYMMDD.HHMMSS
+    if(option(1:13)      == '--start_date=' ) then       ! YYYYMMDD.HHMMSS or YYYYMMDDHHMMSS
       date1 = trim(option(14:4096))//'000000'
-      read(date1,11,err=777)printable1(1),printable1(2)  ! start date in YYYYMMDD format
-    else if(option(1:11) == '--end_date=' ) then         ! YYYYMMDD.HHMMSS
+      if(date1(9:9) == '.') then
+        read(date1,11,err=777)printable1(1),printable1(2)  ! start date in YYYYMMDD format
+      else
+        read(date1,12,err=777)printable1(1),printable1(2)  ! start date in YYYYMMDD format
+      endif
+    else if(option(1:11) == '--end_date=' ) then         ! YYYYMMDD.HHMMSS or YYYYMMDDHHMMSS
       date2 = trim(option(12:4096))//'000000'
-      read(date2,11,err=777)printable2(1),printable2(2)  ! end date in YYYYMMDD format
+      if(date2(9:9) == '.') then
+        read(date2,11,err=777)printable2(1),printable2(2)  ! end date in YYYYMMDD format
+      else
+        read(date2,12,err=777)printable2(1),printable2(2)  ! end date in YYYYMMDD format
+      endif
     else if(option(1:9)  == '--nhours=' ) then           ! hours
       interval = option(10:4096)
       read(interval,*,err=777)delta                      ! interval in hours
@@ -81,9 +89,13 @@ program print_date_range
       interval = option(12:4096)
       read(interval,*,err=777)delta                      ! interval in seconds
       delta = delta/3600.0                               ! interval in hours
-    else if(option(1:12) == '--start_sym=' ) then        ! YYYYMMDD.HHMMSS
+    else if(option(1:12) == '--start_sym=' ) then        ! YYYYMMDD.HHMMSS or YYYYMMDDHHMMSS
       sym = trim(option(13:4096))//'000000'
-      read(sym,11,err=777)printable3(1),printable3(2)    ! start of simulation in YYYYMMDD format
+      if(sym(9:9) == '.') then
+        read(sym,11,err=777)printable3(1),printable3(2)  ! start of simulation in YYYYMMDD format
+      else
+        read(sym,12,err=777)printable3(1),printable3(2)  ! start of simulation in YYYYMMDD format
+      endif
     else if(option(1:13) == '--start_anal=' ) then       ! initial analysis (only necessary if start_sym == start_date)
       anal = option(14:4096)
     else if(option(1:13) == '--pilot_data=' ) then       ! directory for boundary conditions
@@ -91,7 +103,7 @@ program print_date_range
     else if(option(1:11) == '--set_name=' ) then         ! experiment name
       set_name = option(12:4096)
     else if(option(1:11) == '--set_pattern=' ) then      ! disambiguation pattern for file "globbing", default is '*'
-      set_name = option(15:4096)
+      set_pattern = option(15:4096)
     else if(option(1:7)  == '--year=' ) then             ! calendar option (optional)
       call NewDate_Options(trim(option(3:4096)),'set')       ! set calendar option
       write(0,*),'INFO: using calendar option '//trim(option)
@@ -192,15 +204,39 @@ program print_date_range
         oldpath = month_name
       else    ! same month, another day
         if(first_in_month) then  ! see if name ends in YYYYMMDDhh, if so use 10 chars from arg2
-          oldpath = trim(month_name) // '/' // trim(set_pattern) // arg2(1:10)   ! look for 'pattern'YYYYMMDDhh filename
-          status = clib_glob(globs,nglob,trim(oldpath),MAXGLOB)            ! find file name match(es)
-          if(status == CLIB_OK .and. nglob == 1) then                      ! one match found
-            arg2_nc = 10   ! name ends in YYYYMMDDhh
-          else
-            arg2_nc = 8    ! name ends in YYYYMMDD
+          arg2_nc = 8
+          do while(arg2_nc <= 14)
+            oldpath = trim(month_name) // '/' // trim(set_pattern) // arg2(1:arg2_nc)   ! look for 'pattern'YYYYMMDD[hh][mm][ss] file name
+            status = clib_glob(globs,nglob,trim(oldpath),MAXGLOB)            ! find file name match(es)
+            if(status == CLIB_OK .and. nglob == 1) exit                      ! found unique match , exit loop
+            arg2_nc = arg2_nc + 2                                            ! try longer match
+          enddo
+          if(arg2_nc > 14) then  ! OOPS
+            write(0,*),'ERROR: cannot determine file name pattern for ' // trim(month_name)
+            stop
           endif
+!           oldpath = trim(month_name) // '/' // trim(set_pattern) // arg2(1:8)   ! look for 'pattern'YYYYMMDD file name
+!           status = clib_glob(globs,nglob,trim(oldpath),MAXGLOB)            ! find file name match(es)
+!           if(status == CLIB_OK .and. nglob == 1) then                      ! one match found
+!             arg2_nc = 8   ! file names should end in YYYYMMDD
+!           else
+!             oldpath = trim(month_name) // '/' // trim(set_pattern) // arg2(1:10)   ! look for 'pattern'YYYYMMDDhh file name
+!             status = clib_glob(globs,nglob,trim(oldpath),MAXGLOB)            ! find file name match(es)
+!             if(status == CLIB_OK .and. nglob == 1) then                      ! one match found
+!               arg2_nc = 10   ! file names should end in YYYYMMDDhh
+!             else
+!               oldpath = trim(month_name) // '/' // trim(set_pattern) // arg2(1:10)   ! look for 'pattern'YYYYMMDDhhmmss file name
+!               status = clib_glob(globs,nglob,trim(oldpath),MAXGLOB)            ! find file name match(es)
+!               if(status == CLIB_OK .and. nglob == 1) then                      ! one match found
+!                 arg2_nc = 14    ! file names should end in YYYYMMDDhhmmss
+!               else
+!                 write(0,*),'ERROR: cannot determine file name pattern for ' // trim(month_name)
+!                 stop     ! error, file name pattern not supported
+!               endif
+!             endif
+!           endif
         endif
-        oldpath = trim(month_name) // '/' // trim(set_pattern) // arg2(1:arg2_nc)    ! look for 'pattern'YYYYMMDD file name ( default is *YYYYMMDD )
+        oldpath = trim(month_name) // '/' // trim(set_pattern) // arg2(1:arg2_nc) ! look for 'pattern'YYYYMMDD[hh[mmdd]]  ( default pattern is * )
         globs(1) = 'UnknownFile'
 !         write(0,*),'INFO: looking for '//trim(oldpath)
         status = clib_glob(globs,nglob,trim(oldpath),MAXGLOB)            ! find file name match(es)
@@ -230,16 +266,17 @@ program print_date_range
   write(0,*),"INFO: ",ntimes," directory/link sets created"
   stop
 11  format(I8,1x,I6)
+12  format(I8,I6)
 777 continue
   write(0,*),'USAGE: '//trim(name)//' [-h|--help] --start_date= --end_date= --nhours= --nseconds= [--start_sym=] \'
   write(0,*),'        [--version] [--start_anal=] --pilot_data= --set_name= [--set_pattern] [--year=gregorian|360_day|365_day]'
   write(0,*),'       '//version
   write(0,*),''
-  write(0,*),'       start_date : YYYYMMDD.HHMMSS , start of this simulation slice'
-  write(0,*),'       end_date   : YYYYMMDD.HHMMSS , end of this simulation slice'
+  write(0,*),'       start_date : YYYYMMDD.HHMMSS or YYYYMMDDHHMMSS , start of this simulation slice'
+  write(0,*),'       end_date   : YYYYMMDD.HHMMSS or YYYYMMDDHHMMSS , end of this simulation slice'
   write(0,*),'       nseconds   : interval in seconds between boundary condition files'
   write(0,*),'       nhours     : interval in hours between boundary condition files'
-  write(0,*),'       start_sym  : YYYYMMDD.HHMMSS , start of entire simulation'
+  write(0,*),'       start_sym  : YYYYMMDD.HHMMSS or YYYYMMDDHHMMSS , start of entire simulation'
   write(0,*),'       start_anal : initial conditions (only used if start_date == start_sym)'
   write(0,*),'       pilot_data : directory containing the boundary condition files'
   write(0,*),'       set_name   : dataset/experiment name'
@@ -247,5 +284,6 @@ program print_date_range
   write(0,*),'       year=...   : (optional) argument ,  calendar to be used (gregorian by default)'
   write(0,*),'       arguments between [] are optional'
   write(0,*),'       one of nhours/nseconds is necessary'
+  write(0,*),'       for date parameters, the trailing 0s in the HHMMSS part can be omitted'
   stop
 end program

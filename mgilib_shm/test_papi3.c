@@ -4,29 +4,31 @@
 
 #define NUM_FLOPS 10000
 
-void handle_error (int retval)
+static void handle_error (int retval)
 {
     /* print error to stderr and exit */
     PAPI_perror("ERROR: ");
     exit(retval);
 }
 
-void Handle_error(int code){
+static void Handle_error(int code){
   printf("ERROR %d\n", code);
   exit(1);
 }
 
-void do_flops8(int n){
+static double do_flops8(int n){
   double x=1.001;
   while(n-- > 0) x *= 1.000001;
-  printf("x = %f\n",x);
+  return(x);
+//   printf("x = %f\n",x);
 }
 
-void do_flops(int n){
+static float do_flops(int n){
   float x=1.001;
   float mult = 1.00001;
   while(n-- > 0) x *= mult;
-  printf("x = %f\n",x);
+  return(x);
+//   printf("x = %f\n",x);
 }
 #define NUM_EVENTS 3
 main()
