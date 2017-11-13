@@ -18,10 +18,11 @@ program print_date_range
   logical :: use_anal, first_in_month
   integer :: cur_arg, nargs, arg_len, ntimes
   integer :: month_is_file = 0
-  character(len=128) :: version = 'version 1.0.6 2017/11/13'
+  character(len=128) :: version = 'version 1.0.6a 2017/11/13'
   integer, parameter :: MAXGLOB=2
   character(len=4096), dimension(MAXGLOB) :: globs
   integer :: nglob, arg2_nc
+  character(len=16) :: template
 
   interface
     function f_mkdir(path,mode) result(status) bind(C,name='mkdir')   ! interface to libc mkdir
@@ -65,6 +66,7 @@ program print_date_range
   nest_rept = ''
   arg2_nc = 8
   first_in_month = .true.
+  template = 'YYYYMM????????'
 
   do while(cur_arg <= nargs)      ! process command line options
     call get_command_argument(cur_arg,option,arg_len,status)
@@ -193,7 +195,7 @@ program print_date_range
           write(0,*),'ERROR: '//trim(oldmonth)//' is neither a directory nor a file, ABORTING'
           stop
         endif
-        write(0,*),'INFO: using monthly boundary files directory '//trim(oldmonth)
+!         write(0,*),'INFO: using monthly boundary files directory '//trim(oldmonth)
       endif
     endif
 
@@ -207,34 +209,16 @@ program print_date_range
           arg2_nc = 8
           do while(arg2_nc <= 14)
             oldpath = trim(month_name) // '/' // trim(set_pattern) // arg2(1:arg2_nc)   ! look for 'pattern'YYYYMMDD[hh][mm][ss] file name
+!              write(0,*),'DEBUG: trying ' // trim(oldpath)
             status = clib_glob(globs,nglob,trim(oldpath),MAXGLOB)            ! find file name match(es)
             if(status == CLIB_OK .and. nglob == 1) exit                      ! found unique match , exit loop
             arg2_nc = arg2_nc + 2                                            ! try longer match
           enddo
+          write(0,*),'INFO: using boundary files pattern '//trim(oldmonth)//'/'//trim(set_pattern)//arg2(1:6)//template(7:arg2_nc)
           if(arg2_nc > 14) then  ! OOPS
             write(0,*),'ERROR: cannot determine file name pattern for ' // trim(month_name)
             stop
           endif
-!           oldpath = trim(month_name) // '/' // trim(set_pattern) // arg2(1:8)   ! look for 'pattern'YYYYMMDD file name
-!           status = clib_glob(globs,nglob,trim(oldpath),MAXGLOB)            ! find file name match(es)
-!           if(status == CLIB_OK .and. nglob == 1) then                      ! one match found
-!             arg2_nc = 8   ! file names should end in YYYYMMDD
-!           else
-!             oldpath = trim(month_name) // '/' // trim(set_pattern) // arg2(1:10)   ! look for 'pattern'YYYYMMDDhh file name
-!             status = clib_glob(globs,nglob,trim(oldpath),MAXGLOB)            ! find file name match(es)
-!             if(status == CLIB_OK .and. nglob == 1) then                      ! one match found
-!               arg2_nc = 10   ! file names should end in YYYYMMDDhh
-!             else
-!               oldpath = trim(month_name) // '/' // trim(set_pattern) // arg2(1:10)   ! look for 'pattern'YYYYMMDDhhmmss file name
-!               status = clib_glob(globs,nglob,trim(oldpath),MAXGLOB)            ! find file name match(es)
-!               if(status == CLIB_OK .and. nglob == 1) then                      ! one match found
-!                 arg2_nc = 14    ! file names should end in YYYYMMDDhhmmss
-!               else
-!                 write(0,*),'ERROR: cannot determine file name pattern for ' // trim(month_name)
-!                 stop     ! error, file name pattern not supported
-!               endif
-!             endif
-!           endif
         endif
         oldpath = trim(month_name) // '/' // trim(set_pattern) // arg2(1:arg2_nc) ! look for 'pattern'YYYYMMDD[hh[mmdd]]  ( default pattern is * )
         globs(1) = 'UnknownFile'
