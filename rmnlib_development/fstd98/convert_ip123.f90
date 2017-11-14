@@ -231,7 +231,8 @@ function is_invalid_kind(kind) result(status) ! is this kind invalid ?
   integer, intent(IN) :: kind
   status=.false.
   if(kind<0) status=.true.
-  if(kind>Max_Kind .and. iand(kind,15)/=15) status=.true.
+  if(kind>Max_Kind) status=.true.
+!   if(kind>Max_Kind .and. iand(kind,15)/=15) status=.true.
 end function is_invalid_kind
 !===============================================================================================
 subroutine swapi(a,b)  ! swap a pair of integer values
@@ -733,7 +734,7 @@ function is_level_kind(kind) result(status)  ! is this kind a level ?
   implicit none
   logical :: status
   integer, intent(IN) :: kind
-  if(is_invalid_kind(kind) .or. (kind>Max_Kind)) then
+  if(is_invalid_kind(kind)) then
     status = .false.
   else
     status = is_level(kind)
