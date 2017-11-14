@@ -392,23 +392,6 @@ function decode_ip_0(RP1,RP2,RP3,IP1V,IP2V,IP3V) result(status) BIND (C,name='De
   if(0 < IP1 .and. IP1 < 32768) status = ior(status , CONVERT_GOOD_GUESS)  ! reasonable guess if old style level > 0 (0 is considered NOT_A_GUESS)
   RP1%lo=P(1) ; RP1%hi=P(1) ; RP1%kind=kind(1)
   
-  if(IP2 < 32768 .or. (ip3 == 0 .and. IP2 < 999999)) then                          ! IP2 is old style, probably a time value
-    RP2%lo = IP2 ; RP2%hi = IP2 ; 
-    RP2%kind = KIND_HOURS                        ! time in hours ?
-    status = ior(status , CONVERT_GOOD_GUESS)    ! reasonable guess
-  else
-    call convip_plus(IP2,P(2),kind(2),-1,dummy,.false.)  ! kind of ip2 should be new style time
-    if(kind(2) == KIND_HOURS) then
-      RP2%lo=P(2) ; RP2%hi=P(2) ; RP2%kind=kind(2)
-    else
-      if(is_level(kind(2)) .and. kind(2) == kind(1) .and. kind(3) == KIND_SAMPLES) then
-        RP1%hi=P(2)
-      else
-        goto 777            ! ip2 not a time (or a level if ip3 is a nb of samples)
-      endif
-    endif    
-  endif
-
   if(0 < IP3 .and. IP3 < 32768) then            ! IP3 is old style (0 is considered "new style")
     RP3%lo = IP3 ; RP3%hi = IP3
     if(IP3 <= 240) then                         ! time in hours ?
@@ -418,12 +401,32 @@ function decode_ip_0(RP1,RP2,RP3,IP1V,IP2V,IP3V) result(status) BIND (C,name='De
       RP3%kind = KIND_ARBITRARY
       status = ior(status,CONVERT_TERRIBLE_GUESS)  ! highly unreliable guess
     endif
+    kind(3) = RP3%kind
   else
     call convip_plus(IP3,P(3),kind(3),-1,dummy,.false.)  ! kind of ip3 may be anything new style
     if(kind(3)==-1) goto 777
     RP3%lo=P(3) ; RP3%hi=P(3) ; RP3%kind=kind(3)
   endif
   
+  if(IP2 < 32768 .or. (ip3 == 0 .and. IP2 < 999999)) then                          ! IP2 is old style, probably a time value
+    RP2%lo = IP2 ; RP2%hi = IP2
+    RP2%kind = KIND_HOURS                        ! time in hours ?
+    status = ior(status , CONVERT_GOOD_GUESS)    ! reasonable guess
+  else
+    call convip_plus(IP2,P(2),kind(2),-1,dummy,.false.)  ! kind of ip2 should be new style time
+    if(kind(2) == KIND_HOURS) then
+      RP2%lo=P(2) ; RP2%hi=P(2) ; RP2%kind=kind(2)
+    else
+      if(is_level(kind(2)) .and. kind(2) == kind(1) .and. kind(3) == KIND_SAMPLES) then
+        RP1%hi=P(2)
+        RP2%lo=P(3) ; RP2%hi=P(3) ; RP2%kind=kind(3)
+        RP3%kind=-1
+      else
+        goto 777            ! ip2 not a time (or a level if ip3 is a nb of samples)
+      endif
+    endif    
+  endif
+
   if(kind(3) == KIND_HOURS .and. kind(2) == kind(3)) then   ! time in ip2 and ip3
     RP2%hi=P(3)
     RP3%lo=0.0 ; RP3%hi=0.0 ; RP3%kind=-1
@@ -438,9 +441,9 @@ function decode_ip_0(RP1,RP2,RP3,IP1V,IP2V,IP3V) result(status) BIND (C,name='De
     if(RP1%hi > RP1%lo .and. descending(kind(2))) call swap(RP1%lo,RP1%hi)
   endif
 
-  if( .not. is_level(kind(1)) )  status=ior(status,CONVERT_ERROR)     ! ip1 must be a level code
+  if( .not. is_level(kind(1)) ) status=ior(status,CONVERT_ERROR)     ! ip1 must be a level code
   if( is_level(kind(2)) .and. kind(1) /= kind(2) .and. ip2 /= 0 ) status=ior(status,CONVERT_ERROR) ! invalid level pair
-  if( is_level(kind(3)) .and. kind(1) /= kind(3) .and. ip3 /= 0 ) status=ior(status,CONVERT_ERROR)  ! invalid level pair
+  if( is_level(kind(3)) .and. kind(1) /= kind(3) .and. ip3 /= 0 ) status=ior(status,CONVERT_ERROR) ! invalid level pair
   if(kind(2) /= KIND_HOURS) then                        ! ip2 should be a time (ip2 level, ip3 nb of samples is also OK)
     if(.not. (is_level(kind(2)) .and. kind(3) == KIND_SAMPLES)) status=ior(status,CONVERT_ERROR)
   endif
@@ -558,7 +561,7 @@ implicit none  ! explicit, almost independent (rp,kind) to (ip) conversion
   call convip_plus(IP3,RP3,kind3,+2,dummy,.false.)
 
   if(kind1 == kind2 .and. kind3 == KIND_HOURS) then  ! level/level/time
-    call swapi(ip2,ip3)  ! second level into ip3, time flag into ip2
+    call swapi(ip2,ip3)  ! second level goes into ip3 and time value into ip2
     call swap(rp2,rp3)
     if(rp1>rp3 .and.  ascending(kind1)) call swapi(ip1,ip3)  ! ip1, ip3 in atmospheric ascending order
     if(rp1<rp3 .and. descending(kind1)) call swapi(ip1,ip3)
@@ -619,7 +622,7 @@ implicit none
   if(ip1 < 0 .or. ip2 < 0 .or. ip3 < 0 ) goto 777
 
   call convip_plus(IP1,RP1,kind1,-1,dummy,.false.)   ! IP1 old style translation should be a safe bet
-  if(kind1 == KIND_HOURS) then ! try to swap with ip2 is ip1 is time
+  if(kind1 == KIND_HOURS) then ! try to swap with ip2 if ip1 is time
     call swapi(ip1,ip2)
     call convip_plus(IP1,RP1,kind1,-1,dummy,.false.)
     status = ior(status,CONVERT_WARNING)
@@ -627,6 +630,20 @@ implicit none
   if(is_invalid_kind(kind1)) goto 777  ! bad kind
   if(0 < IP1 .and. IP1 < 32768) status = ior(status,CONVERT_GOOD_GUESS)
   if( .not. is_level(kind1)) goto 777           ! ip1 must be a level
+
+  if(0 < IP3 .and. IP3 < 32768) then            ! IP3 is old style, (0 considered "new style")
+    RP3 = IP3
+    if(IP3 <= 240) then                         ! time in hours ?
+      kind3 = KIND_HOURS 
+      status = ior(status,CONVERT_BAD_GUESS)    ! unreliable guess
+    else                                        ! arbitraty value ?
+      kind3 = 3
+      status = ior(status,CONVERT_TERRIBLE_GUESS) ! highly unreliable guess
+    endif
+  else
+    call convip_plus(IP3,RP3,kind3,-1,dummy,.false.)
+    if(is_invalid_kind(kind3)) goto 777  ! bad kind
+  endif
 
   if(IP2 < 32768 .or. (ip3 == 0 .and. IP2 < 999999)) then                          ! IP2 is old style, probably a time value
     RP2 = IP2
@@ -643,19 +660,7 @@ implicit none
       endif
     endif
   endif
-  if(0 < IP3 .and. IP3 < 32768) then            ! IP3 is old style, (0 considered "new style")
-    RP3 = IP3
-    if(IP3 <= 240) then                         ! time in hours ?
-      kind3 = KIND_HOURS 
-      status = ior(status,CONVERT_BAD_GUESS)    ! unreliable guess
-    else                                        ! arbitraty value ?
-      kind3 = 3
-      status = ior(status,CONVERT_TERRIBLE_GUESS) ! highly unreliable guess
-    endif
-  else
-    call convip_plus(IP3,RP3,kind3,-1,dummy,.false.)
-    if(is_invalid_kind(kind3)) goto 777  ! bad kind
-  endif
+
   if(kind1 == kind2 .and. kind3 == KIND_HOURS) then   ! level/level/time in ip1/ip2/ip3
     call swap(RP2,RP3)       ! level/time/level now
     call swapi(kind2,kind3)
