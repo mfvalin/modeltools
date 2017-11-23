@@ -313,8 +313,8 @@ program test_interp
   integer, parameter :: NJ=27
   integer, parameter :: NK=81
   integer, parameter :: NP=4
-  integer, parameter :: HX=2
-  integer, parameter :: HY=2
+  integer, parameter :: HX=3
+  integer, parameter :: HY=3
   integer, parameter :: NR=25
   real(C_FLOAT), dimension(1-HX:NI+HX , 1-HY:NJ+HY , NK) :: f
   real(C_FLOAT), dimension(NP,NK) :: r
@@ -391,7 +391,7 @@ program test_interp
   do j = 5, 1-hy, -1
     print 102,f(1-hx:5,j,NK)
   enddo
-  print *,'MONO: limit (min, max)'
+!  print *,'MONO: limit (min, max)'
   do i = 1 , NP
     i0 = x(i)
     j0 = y(i)
@@ -400,17 +400,17 @@ program test_interp
     xmin2(i) = minval(f(i0:i0+1,j0:j0+1,NK))
     xmax2(i) = maxval(f(i0:i0+1,j0:j0+1,NK))
   enddo
-  print 102,xmin(:) , xmin2(:)
-  print 102,xmax(:) , xmax2(:)
-  print *,'MONO: expected'
-  print 102,FXY(x(:),y(:),1), FXY(x(:),y(:),NK)
+!  print 102,xmin(:) , xmin2(:)
+!  print 102,xmax(:) , xmax2(:)
+!  print *,'MONO: expected'
+!  print 102,FXY(x(:),y(:),1), FXY(x(:),y(:),NK)
 !  print 102,x(:)+y(:)+1, x(:)+y(:)+NK
-  print *,' got'
-  print 102,r(:,1),r(:,NK)
-  print *,' delta'
-  print 102,(r(:,1)-FXY(x(:),y(:),1)),(r(:,NK)-FXY(x(:),y(:),NK))
-  print 103,(r(:, 1)-FXY(x(:),y(:), 1))  / FXY(x(:),y(:), 1) , & 
-            (r(:,NK)-FXY(x(:),y(:),NK))  / FXY(x(:),y(:),NK)
+!  print *,' got'
+!  print 102,r(:,1),r(:,NK)
+!  print *,' delta'
+!  print 102,(r(:,1)-FXY(x(:),y(:),1)),(r(:,NK)-FXY(x(:),y(:),NK))
+!  print 103,(r(:, 1)-FXY(x(:),y(:), 1))  / FXY(x(:),y(:), 1) , & 
+!            (r(:,NK)-FXY(x(:),y(:),NK))  / FXY(x(:),y(:),NK)
 
   do i = 1 , NP
     call intrp_biquint_yx( f(1,1,1), r(i,1), nidim, ninjdim, NK, NP, x(i), y(i) )
