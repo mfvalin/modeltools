@@ -340,7 +340,7 @@ program test_interp
       integer(C_INT), intent(IN), value :: ni, ninj, nk, np                                       !InTf!
     end subroutine intrp_biquint_yx_mono                                                            !InTf!
   end interface
-#define FXY(A,B,C) (1.3*(A)**3 + 1.4*(A)**2 + (A)*1.5 + 2.3*(B)**3 + 2.4*(B)**2 + (B)*2.5 + (C))
+#define FXY(A,B,C) (1.1*(A)**5 + 1.2*(A)**4 + 1.3*(A)**3 + 1.4*(A)**2 + (A)*1.5 + 2.1*(B)**5 + 2.2*(B)**4 + 2.3*(B)**3 + 2.4*(B)**2 + (B)*2.5 + (C))
 
   r = 9999.99
   do k = 1 , NK
@@ -371,13 +371,6 @@ program test_interp
     enddo
     t2 = rdtsc()
     tmg1(j) = t2 - t1
-!    print *,'time=',t2-t1,' cycles for',NP*NK*35,' values'
-    t1 = rdtsc()
-    do i = 1 , NP
-      call intrp_biquint_yx_mono( f(1,1,1), r(i,1), nidim, ninjdim, NK, NP, x(i), y(i) )
-    enddo
-    t2 = rdtsc()
-    tmg2(j) = t2 - t1
 !    print *,'time=',t2-t1,' cycles for',NP*NK*35,' values'
   enddo
   print 100,'direct =',tmg1
