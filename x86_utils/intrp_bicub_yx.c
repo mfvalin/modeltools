@@ -86,7 +86,7 @@ void intrp_bicub_yx(float *f, float *r, int ni, int ninj, int nk, int np, double
   __m128  fr0, fr1, fr2, fr3, frt ;
   __m128d ft0, ft1;
 #else
-  double fd0[4], fd1[4], fd2[4], fd3[0] ;
+  double fd0[4], fd1[4], fd2[4], fd3[4] ;
 #endif
   double  wx[4], wy[4] ;
   double  x, y;
@@ -190,9 +190,9 @@ void intrp_bicub_yx_mono(float *f, float *r, int ni, int ninj, int nk, int np, d
   __m256d fd0, fd1, fd2, fd3, fwx, fwy0, fwy1, fwy2, fwy3, fdt, fmi, fma ;
   __m128  fr0, fr1, fr2, fr3, frt ;   // frt is used as a scalar, fr0->fr3 are 128 bit aliases for fd0->fd3
   __m128d ft0, ft1, smi, sma ;        // smi, sma are used as scalars (reduction of fmi, fma)
-  double dd0[4], dd1[4], dd2[4], dd3[0] ;
+  double dd0[4], dd1[4], dd2[4], dd3[4] ;
 #else
-  double fd0[4], fd1[4], fd2[4], fd3[0] ;
+  double fd0[4], fd1[4], fd2[4], fd3[4] ;
 #endif
   double  wx[4], wy[4] ;
   double  x, y, minval, maxval;
