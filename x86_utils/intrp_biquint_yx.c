@@ -374,9 +374,12 @@ program test_interp
 !    print *,'time=',t2-t1,' cycles for',NP*NK*35,' values'
   enddo
   print 100,'direct =',tmg1
-  print 100,'mono   =',tmg2
-  print 100,'flops  =',NP*NK*35
+!   print 100,'mono   =',tmg2
+  print 100,'flops  =',NP*NK*77
+  print 104,'flops/cycle  =',NP*NK*77. / tmg1
+  print 104,'bytes/cycle  =',NP*NK*36*4. / tmg1
 100 format(A,40I6)
+104 format(A,40f6.2)
 !  print 102,f(nint(x(1)),nint(y(1)),1),f(nint(x(2)),nint(y(2)),1),f(nint(x(1)),nint(y(1)),NK),f(nint(x(2)),nint(y(2)),NK)
 !  print 102,x(1)+y(1)+1,x(2)+y(2)+1,x(1)+y(1)+NK,x(2)+y(2)+NK
   print *,'X coordinates'
