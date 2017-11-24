@@ -90,7 +90,7 @@ void intrp_biquint_yx(float *f, float *r, int ni, int ninj, int nk, int np, doub
   __m128  fr0, fr1, fr2, fr3, fr4, fr5, frt ;
   __m128d ft0, ft1;
 #else
-  double fd0[6], fd1[6], fd2[6], fd3[6] ;
+  double fd0[6], fd1[6], fd2[6], fd3[6], fd4[6], fd5[6] ;
 #endif
   float *f2;
   double  wx[6], wy[6] ;
@@ -257,10 +257,10 @@ void intrp_biquint_yx(float *f, float *r, int ni, int ninj, int nk, int np, doub
   _mm_store_ss(r,frt) ;                   // store float
 #else
   for(k=0 ; k<nk ; k++){
-    for(i=0 ; i<4 ; i++){                   // easily vectorizable form
-      fd0[i] = ( f[i]*wy[0] + f[i+ni]*wy[1] + f[i+ni2]*wy[2] + f[i+ni3]*wy[3] ) * wx[i];
+    for(i=0 ; i<6 ; i++){                   // easily vectorizable form
+      fd0[i] = ( f[i]*wy[0] + f[i+ni]*wy[1] + f[i+ni2]*wy[2] + f[i+ni3]*wy[3] + f[i+ni4]*wy[4] + f[i+ni5]*wy[5] ) * wx[i];
     }
-    r[0] = fd0[0] + fd0[1] + fd0[2] + fd0[3];
+    r[0] = fd0[0] + fd0[1] + fd0[2] + fd0[3] + fd0[4] + fd0[5];
     f+= ninj;
     r += np;
   }
