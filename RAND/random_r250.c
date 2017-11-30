@@ -625,8 +625,10 @@ int main(int argc, char **argv){
   unsigned long long *idmax, *idmin ;
   unsigned int maxpos, maxneg;
   r250_state *R250 = &r250;
+  generic_state *gen = NULL;
   int gaussdist[10];
   int index;
+  int mySeed;
 
   MPI_Init(&argc,&argv);
   for(i=0 ; i<1200000 ; i++) ranbuf[i] = 0;
@@ -662,6 +664,15 @@ exit(0);
   FillBuffer_R250_stream(&r250); 
   FillBuffer_R250_stream(&r250); 
   FillBuffer_R250_stream(&r250);
+
+  mySeed = 123456;
+  gen = Ran_R250_new_stream(NULL, &mySeed, 1);
+  for( i=0 ; i < 1000000 ; i++) lr = IRan_generic_stream(gen);
+  MPI_Barrier(MPI_COMM_WORLD);
+  t0 = MPI_Wtime();
+  for( i=0 ; i < 1000000000 ; i++) lr = IRan_generic_stream(gen);
+  t1 = MPI_Wtime();
+  printf("time for 1E+9 x 1 random generic integer value = %6.3f \n",t1-t0);
 
   for( i=0 ; i < 1000000 ; i++) lr = IRan_R250_stream(R250);  // IRan_R250();
   MPI_Barrier(MPI_COMM_WORLD);
