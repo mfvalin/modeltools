@@ -16,6 +16,17 @@
  * Free Software Foundation, Inc., 59 Temple Place - Suite 330,
  * Boston, MA 02111-1307, USA.
  */
+#if defined(ALWAYS_COMPILE_DOCUMENTATION)
+  the following environment variables are used in this package 
+
+  GOSSIP_MPI_TIMEOUT    : timeout in seconds when accepting/requesting connection
+  GOSSIP_MPI_DIR        : base directory for GOSSIP files
+  HOME
+  MPI_WORLD_NAME        : "name" assigned to this MPI world (normally set by r.run_in_parallel or equivalent)
+
+  extra MPI helper routines dealing with connections
+
+#endif
 
 #include <mpi.h>
 
@@ -34,33 +45,39 @@
 #include <fcntl.h>
 #include <sys/shm.h>
 
+#if defined(DEBUG)
+#define DEBUG_(a)    a
+#else
+#define DEBUG_(a)    ;
+#endif
+
 #define MAX_NAMES 128
-typedef struct{
-  char *name;     // published name
-  char *wname;    // MPI world name "UnKnOwN" by default
-  char *port;     // MPI port name
-  void *addr;     // address in shared memory
-  int  hostid;    // host id
-  int  memid;     // shared memory id
-  int  rank;      // rank in MPI world
-  int  pub;       // published flag
-} name_entry;
-static name_entry name_table[MAX_NAMES];  // name and attributes table
+// typedef struct{
+//   char *name;     // published name
+//   char *wname;    // MPI world name "UnKnOwN" by default
+//   char *port;     // MPI port name
+//   void *addr;     // address in shared memory
+//   int  hostid;    // host id
+//   int  memid;     // shared memory id
+//   int  rank;      // rank in MPI world
+//   int  pub;       // published flag
+// } name_entry;
+// static name_entry name_table[MAX_NAMES];  // name and attributes table
 
 static int last_name=-1;                  // index of last published name
 
-static char *public_names[MAX_NAMES];
-static char *port_names[MAX_NAMES];
+static char *public_names[MAX_NAMES];     // published name
+static char *port_names[MAX_NAMES];       // MPI port name
 static void *memaddr[MAX_NAMES];
 static int  shmem_id[MAX_NAMES];
 static char is_published[MAX_NAMES];
 
-static char *world_name = NULL;        // name associated with this MPI world (normally set by r.run_in_parallel)
+static char *world_name = NULL;        // name associated with this MPI world (normally set by r.run_in_parallel or equivalent)
 static char *gossip_dir = NULL;        // base gossip directory (NULL means use default value)
 static char *home_dir = NULL;          // user's home directory
-static long host_id = 0;
+static long host_id = 0;               // machine host id
 static int rank_in_world = -1;         // rank in MPI_COMM_WORLD
-static int must_init = 1;
+static int must_init = 1;              // if nonzero, package is not initialized and init_vars() should be called
 static int maxwait = 100;              //  accept connection timeout 100 seconds by default
 
 static void init_vars(){  // initialize some basic strings and variables
@@ -76,49 +93,62 @@ static void init_vars(){  // initialize some basic strings and variables
   must_init = 0;
 }
 
+// build_gossip_name : internal service routine used to build file names for GOSSIP MPI routines
+//
+// char buf[bufmax] will contain the relevant file name
+// prefix is only used if environment variable GOSSIP_MPI_DIR is not defined (and should start with / if not blank)
+// name : basename for file name
+// ext  : file name extension (should start with .)
+//
 static int build_gossip_name(char *buf, int bufmax, const char *prefix, const char *name, const char *ext, int mkdirs)
 {
   if(must_init) init_vars() ;
 
-  if(gossip_dir == NULL) {   // use default directory names
-    if(mkdirs){              // make relevant directories in case they do not already exist
+  if(gossip_dir == NULL) {   // use default directory names, environment variable GOSSIP_MPI_DIR was not defined
+    if(mkdirs){              // create relevant directories in case they do not already exist
       snprintf(buf,bufmax,"%s/%s",home_dir,".gossip");  // $HOME/.gossip
       mkdir(buf,0755);
       snprintf(buf,bufmax,"%s/%s%s",home_dir,".gossip",prefix);  // prefix should start with / if not ""
       mkdir(buf,0755);
     }
     snprintf(buf,bufmax,"%s/%s/%s%s%s",home_dir,".gossip",prefix,name,ext ? ext : "");  // ext should start with .
-  }else{                     // use value from environment variable GOSSIP_MPI_DIR
-//     if(mkdirs) mkdir(gossip_dir,0755);  // make directory in case it does not already exist
+  }else{                     // use value from environment variable GOSSIP_MPI_DIR, directory MUST exist
     snprintf(buf,bufmax,"%s/%s%s",gossip_dir,name,ext ? ext : "");
   }
 }
 
-static int name_lookup(const char *public_name){    // find name in public_names table
+// name_lookup : internal service routine to find a name in the internal name cache table
+static int name_lookup(const char *public_name){
   int i;
 
   for (i=0 ; i<=last_name ; i++) {
-    if(public_names[i] == NULL) continue;
+    if(public_names[i] == NULL) continue;                           // blank or suppressed entry
     if(strcmp(public_name,public_names[i]) == 0) {
-      printf("DEBUG: '%s' found in slot %d\n",public_name,i);
-      return(i);  // return index to name
+      DEBUG_( printf("DEBUG: '%s' found in slot %d\n",public_name,i) ) ;
+      return(i);  // return index to published name
     }
   }
   return -1;   // not found
 }
 
-static int name_insert(const char *public_name,const char *port_name){  // insert name into public_names table
+// name_insert :  insert a new (name value) pair into the internal name cache table
+// port_name can be a multi line collection of items
+static int name_insert(const char *public_name,const char *port_name){
   size_t maxlen = MPI_MAX_PORT_NAME + 128;  // add room for host id, host name, MPI world name, memory id, and MPI rank
   char *str1;
   char *str2;
 
-  if(last_name+1 >= MAX_NAMES) return -1;
+  if(last_name+1 >= MAX_NAMES) {
+    printf("ERROR (name_insert): name cache table is full (max size = %d)\n",MAX_NAMES);
+    return -1;
+  }
+
   if(name_lookup(public_name) >= 0) {
     printf("ERROR (name_insert): '%s' already defined\n",public_name);
     return -1; // already in tables
   }
 
-  str1 = malloc(10+strnlen(public_name,maxlen));
+  str1 = malloc(10+strnlen(public_name,maxlen));   // allocate space for names
   if(str1 == NULL) return -1;
   str2 = malloc(10+strnlen(port_name  ,maxlen));
   if(str2 == NULL) {
@@ -126,47 +156,56 @@ static int name_insert(const char *public_name,const char *port_name){  // inser
     return -1;
   }
 
-  last_name++;
+  last_name++;    // bump table size index
 
   public_names[last_name] = str1;
-  while(*public_name) { *str1++ = *public_name++ ; } ; *str1 = '\0';
+  while(*public_name) { *str1++ = *public_name++ ; } ; *str1 = '\0';  // copy published name
 
   port_names[last_name] = str2;
-  while(*port_name)   { *str2++ = *port_name++   ; } ; *str2 = '\0';
+  while(*port_name)   { *str2++ = *port_name++   ; } ; *str2 = '\0';  // copy composite 'port name'
 
-  is_published[last_name] = 1;
-  shmem_id[last_name]     = -1;
-  memaddr[last_name]      = NULL;
+  is_published[last_name] = 1;          // name is published
+  shmem_id[last_name]     = -1;         // no shared memory tag is associated with name
+  memaddr[last_name]      = NULL;       // no shared memory region is associated with name
 
-  return last_name;  // return index to name
+  return last_name;  // return index to published name
 }
 
+// remove a name from the internal name cache table and "unpublish" it
+// this function OVERLOADS the MPI library function MPI_Unpublish_name
+// arguments info and port_name are there for compatibility with the MPI library function
+// and are not used
 int MPI_Unpublish_name(constchar *service_name, MPI_Info info, constchar *port_name)
 {
   char filename[4096];
 
-  int target = name_lookup(service_name);
+  int target = name_lookup(service_name);   // is service_name already published
 
-  if(target != -1) {
-    if(is_published[target] == 0) {
+  if(target != -1) {                        // name exists
+    if(is_published[target] == 0) {         // and already unpublished
       printf("WARNING: '%s' already unpublished\n",service_name);
       return MPI_SUCCESS;   // already unpublished
     }
     is_published[target] = 0;
   }
 
-  build_gossip_name(filename, sizeof(filename), "/MPI", service_name, NULL, 1);
-  unlink(filename);
+  build_gossip_name(filename, sizeof(filename), "/MPI", service_name, NULL, 1);   // file used to publish 'service_name'
+  unlink(filename);                                                               // remove file
   printf("INFO: unpublished '%s' as '%s'\n",service_name,filename);
 
   return MPI_SUCCESS;
 }
 
+// remove a name from the internal name cache table
+// calls MPI_Unpublish_name with appropriate extra arguments
 int MPI_Unpublish_named_port(const char *service_name)
 {
   return MPI_Unpublish_name((constchar *) service_name,MPI_INFO_NULL,"Not Used");
 }
 
+// add a name from the internal name cache table and "publish" it
+// this function OVERLOADS the MPI library function MPI_Publish_name
+// argument info is there for compatibility with the MPI library function and is not used
 int MPI_Publish_name(constchar *service_name, MPI_Info info, constchar *port_name)
 {
   FILE *gossip;
@@ -178,19 +217,19 @@ int MPI_Publish_name(constchar *service_name, MPI_Info info, constchar *port_nam
   if(target != -1) return MPI_SUCCESS; // already published
 
   build_gossip_name(filename, sizeof(filename), "/MPI", service_name, ".new", 1);
-  build_gossip_name(filenew , sizeof(filenew ), "/MPI", service_name,   NULL, 0);
+  build_gossip_name(filenew , sizeof(filenew ), "/MPI", service_name,   NULL, 0);   // file used to publish 'service_name'
   unlink(filename);   // in case there is an old file with this name
   unlink(filenew);
 
-  gossip = fopen(filename,"w");
+  gossip = fopen(filename,"w");       // write port_name into file used to publish (temporary name)
   fprintf(gossip,"%s",port_name);
   fclose(gossip);
 
-  link(filename,filenew);   // mv filename filenew
+  link(filename,filenew);             // atomic creation of file used to publish
   unlink(filename);
 
-  target = name_insert(service_name, port_name);
-// printf("DEBUG: after name_insert\n");
+  target = name_insert(service_name, port_name);    // insert into name cache table
+// DEBUG_( printf("DEBUG: after name_insert\n") ) ;
   if(target == -1) {
     printf("WARNING: cache table for named ports is full\n");
   }
@@ -198,12 +237,16 @@ int MPI_Publish_name(constchar *service_name, MPI_Info info, constchar *port_nam
   return MPI_SUCCESS;
 }
 
-int MPI_Publish_named_port(const char *service_name, MPI_Info info, const char *port_name)
+// add a name into the internal name cache table and "publish" it
+// calls MPI_Publish_name with appropriate extra argument
+int MPI_Publish_named_port(const char *service_name, const char *port_name)
 {
-  return MPI_Publish_name((constchar *) service_name, info, (constchar *) port_name);
+  return MPI_Publish_name((constchar *) service_name, MPI_INFO_NULL, (constchar *) port_name);
 }
 
-
+// get port_name string associated with name service_name
+// this function OVERLOADS the MPI library function MPI_Lookup_name
+// argument info is there for compatibility with the MPI library function and is not used
 int MPI_Lookup_name(constchar *service_name, MPI_Info info, char *port_name)
 {
   char filename[4096];
@@ -213,6 +256,7 @@ int MPI_Lookup_name(constchar *service_name, MPI_Info info, char *port_name)
 
   build_gossip_name(filename, sizeof(filename), "/MPI", service_name, NULL, 1);
 
+  port_name[0] = '\0' ;
   while( (fd=open(filename,0)) < 0) { wait++ ; usleep(1000); }  // microsleep 1 millisecond
   nc=read(fd,port_name,MPI_MAX_PORT_NAME_PLUS-3);
   close(fd);
@@ -229,13 +273,15 @@ int MPI_Lookup_name(constchar *service_name, MPI_Info info, char *port_name)
   return MPI_SUCCESS;
 }
 
+// close MPI port published under name 'publish_name' if it exists
 int MPI_Close_named_port(const char *publish_name)
 {
   char port_name[MPI_MAX_PORT_NAME_PLUS];
   char *t = port_name;
 
+  port_name[0] = '\0';
   MPI_Lookup_name((constchar *) publish_name, MPI_INFO_NULL, port_name);  // get MPI port name
-  MPI_Close_port(port_name);
+  if(port_name[0] != '\0') MPI_Close_port(port_name);
   printf("INFO: named port '%s' closed\n",publish_name);
 }
 
@@ -266,7 +312,7 @@ int MPI_Create_named_port(const char *publish_name, int shmid, int no_mpi_port)
 }
 
 // split 3 line token returned by MPI_Lookup_name() into MPI port name, shared memory tag, rank in WORLD
-// if not in right MPI world, rank = -1
+// if not in same MPI world, rank = -1
 // if not on same host, shared memory tag = -1
 static int MPI_split_port_name(char *port_name, int *shmid, int *rank){  
   char worldname[MAX_PORT_EXTRA];
@@ -289,8 +335,11 @@ static int MPI_split_port_name(char *port_name, int *shmid, int *rank){
   
 }
 
-// returns 0 if OK, -1 if error
-static int MPI_Request_accept_on_named_port(const char *publish_name)  // post a request for connection to "publish_name"
+// post a request for connection to "publish_name"
+// request includes MPI world name , machine host id, and rank in MPI world
+//
+// returns 0 if OK, -1 if error or timeout
+static int MPI_Request_accept_on_named_port(const char *publish_name)
 {
   char filereq[4096];
   char filenam[4096];
@@ -305,15 +354,15 @@ static int MPI_Request_accept_on_named_port(const char *publish_name)  // post a
 
   snprintf(buffer,sizeof(buffer),"%32s %d %d\n",world_name,host_id,rank_in_world); // name of MPI world, host id, rank in MPI world
   
-  while( (fd = open(filenam,O_WRONLY+O_CREAT+O_EXCL,0700)) == -1) {  // try to create filenam
+  while( (fd = open(filenam,O_WRONLY+O_CREAT+O_EXCL,0700)) == -1) {  // try to create temporary file
     if(wait*10 >= maxwait) return -1; // timeout (default 100 seconds)
     wait++;
     usleep(100000);  // wait 100 msec
   }
-  write(fd,buffer,strnlen(buffer,MAX_PORT_EXTRA));  // write request into filenam
+  write(fd,buffer,strnlen(buffer,MAX_PORT_EXTRA));  // write request into temporary file
   close(fd);
 
-  while((fd = open(filereq,O_RDONLY)) >= -1) {  // wait until filereq ceases to exist
+  while((fd = open(filereq,O_RDONLY)) >= -1) {  // wait until filereq ceases to exist (previous request has been accepted by server)
     close(fd);
     if(wait*10 >= maxwait) {
       unlink(filenam);    // cancel tentative request
@@ -323,11 +372,11 @@ static int MPI_Request_accept_on_named_port(const char *publish_name)  // post a
     usleep(100000);       // wait 100 msec
   }
   
-  link(filenam,filereq);
-  unlink(filenam);
+  link(filenam,filereq);  // atomic move of temporary file to request file
+  unlink(filenam);        // remove temporary file
 
   wait = 0;
-  while((fd = open(filereq,O_RDONLY)) >= -1) {  // wait until filereq ceases to exist (request has been accepted)
+  while((fd = open(filereq,O_RDONLY)) >= -1) {  // wait until filereq ceases to exist (request has been accepted by server)
     close(fd);
     if(wait*10 >= maxwait) {
       unlink(filereq);    // cancel tentative request
@@ -337,15 +386,16 @@ static int MPI_Request_accept_on_named_port(const char *publish_name)  // post a
     usleep(100000);       // wait 100 msec
   }
 
-  return(0);   // request has been posted and accepted
+  return(0);   // request has been posted and accepted, MPI_Connect_to_named_port should succeed
 }
 
 // returns
 // -1 if error
 //  0 if timeout
 //  2 if link established
-//    *arena == NULL + local and client not MPI_COMM_NULL  : MPI communicator link (one or two MPI worlds)
-//    *arena != NULL + local and client both MPI_COMM_NULL : shared memory link
+//    *arena == NULL , local and client not MPI_COMM_NULL  : MPI communicator link (one or two MPI worlds)
+//    *arena != NULL , local and client both MPI_COMM_NULL : shared memory link, arena points to local address of shared memory area
+//    *arena == NULL , local and client both MPI_COMM_NULL : we have a problem
 // 
 int MPI_Connect_to_named_port(const char *publish_name, MPI_Comm *server, MPI_Comm *local, void **arena)  // connect to published port and verify connection
 {
@@ -410,8 +460,9 @@ int MPI_Connect_to_named_port(const char *publish_name, MPI_Comm *server, MPI_Co
 // -1 if error
 //  0 if timeout
 //  2 if link established
-//    *arena == NULL + local and client not MPI_COMM_NULL  : MPI communicator link (one or two MPI worlds)
-//    *arena != NULL + local and client both MPI_COMM_NULL : shared memory link
+//    *arena == NULL , local and client not MPI_COMM_NULL  : MPI communicator link (one or two MPI worlds)
+//    *arena != NULL , local and client both MPI_COMM_NULL : shared memory link
+//    *arena == NULL , local and client both MPI_COMM_NULL : we have a problem
 int MPI_Accept_on_named_port(const char *publish_name, MPI_Comm *client, MPI_Comm *local, void **arena)  // accept on published port and verify connection
 {
   char port_name[MPI_MAX_PORT_NAME_PLUS];
@@ -475,6 +526,12 @@ int MPI_Accept_on_named_port(const char *publish_name, MPI_Comm *client, MPI_Com
   return 2 ;
 }
 
+// data         : where to store data
+// n            : number of data words
+// disp         : offset into the remote window (in words)
+// rankoftarget : rank of target process in communicator associated with window
+// window       : MPI window
+// lock         : a 'lock' is needed (single request)
 int MPI_Get_words_simple(void *data, int n, int disp, int rankoftarget, MPI_Win window, int lock){   // get 4 byte words from remote window
   MPI_Aint TargetDisp = disp;
   int value;
@@ -484,7 +541,13 @@ int MPI_Get_words_simple(void *data, int n, int disp, int rankoftarget, MPI_Win 
   return value;
 }
 
-int MPI_Put_words_simple(void *data, int n, int disp, int rankoftarget, MPI_Win window, int lock){   // put 4 byte words from remote window
+// data         : where to fetch data from
+// n            : number of data words
+// disp         : offset into the remote window (in words)
+// rankoftarget : rank of target process in communicator associated with window
+// window       : MPI window
+// lock         : a 'lock' is needed (single request)
+int MPI_Put_words_simple(void *data, int n, int disp, int rankoftarget, MPI_Win window, int lock){   // put 4 byte words into remote window
   MPI_Aint TargetDisp = disp;
   int value;
   if(lock) MPI_Win_lock(MPI_LOCK_SHARED, rankoftarget, 0, window);
@@ -493,6 +556,13 @@ int MPI_Put_words_simple(void *data, int n, int disp, int rankoftarget, MPI_Win 
   return value;
 }
 
+// dst          : remote value BEFORE op
+// src          : value to "op" at destination
+// disp         : offset into the remote window (in words)
+// rankoftarget : rank of target process in communicator associated with window
+// window       : MPI window
+// op           : MPI operator to apply at remote destination (add, min, max, ...)
+// lock         : a 'lock' is needed (single request)
 int MPI_Fetch_and_op_int_simple(void *src, void *dst, int disp, int rankoftarget, MPI_Win window, MPI_Op op, int lock){  // fetch and op, 1 integer
   MPI_Aint TargetDisp = disp;
   int value;
