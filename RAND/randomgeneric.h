@@ -71,4 +71,4 @@ typedef struct{
   unsigned int *gauss;
   int ngauss;
 } generic_state;               // generic part, identical at start of all stream control structures
-
+#include <randomfunctions.h>

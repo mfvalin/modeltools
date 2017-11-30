@@ -1,9 +1,16 @@
+void RanSetSeed_generic_stream(void *stream, unsigned int *piSeed, int cSeed)  ;
+unsigned int IRan_generic_stream(void *stream)       ;
+double DRan_generic_stream(void *stream)       ;
+double DRanS_generic_stream(void *stream)       ;
+void VecIRan_generic_stream(void *stream, unsigned int *ranbuf, int n)       ;
+void VecDRan_generic_stream(void *stream, double *ranbuf, int n)       ;
+void VecDRanS_generic_stream(void *stream, double *ranbuf, int n)       ;
 void RanSetSeed_R250_static(unsigned int *piSeed, int cSeed)  ;
 unsigned int IRan_R250_static()	  ;
 void VecIRan_R250_static(unsigned int *ranbuf, int n)  ;
 void RanSetSeed_R250_stream(void *stream, unsigned int *piSeed, int cSeed)  ;
 void *Ran_R250_new_stream(void *clone_in, unsigned int *piSeed, int cSeed)   ;
-unsigned int IRan_R250_stream(void *stream)	  ;
+unsigned int IRan_R250_stream(void *stream)       ;
 double DRan_R250_stream(void *stream)	  ;
 double DRanS_R250_stream(void *stream)	  ;
 void VecIRan_R250_stream(void *stream, unsigned int *ranbuf, int n)  ;
