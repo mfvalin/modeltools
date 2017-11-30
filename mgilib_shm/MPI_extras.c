@@ -456,14 +456,19 @@ int MPI_Connect_to_named_port(const char *publish_name, MPI_Comm *server, MPI_Co
   return 2 ;
 }
 
-// returns number of partners
+// returns number of partners (normally 2, 1 client + 1 server)
 // -1 if error
-//  0 if timeout
+//  0 if timeout (no request for connection after 100 msec)
 //  2 if link established
 //    *arena == NULL , local and client not MPI_COMM_NULL  : MPI communicator link (one or two MPI worlds)
 //    *arena != NULL , local and client both MPI_COMM_NULL : shared memory link
 //    *arena == NULL , local and client both MPI_COMM_NULL : we have a problem
-int MPI_Accept_on_named_port(const char *publish_name, MPI_Comm *client, MPI_Comm *local, void **arena)  // accept on published port and verify connection
+//  publish_name : name under which the connection has been published (in)
+//  client       : intercommunicator (out)
+//  local        : intracommunicator (out) (will be used to communicate with client)
+//  arena        : address in memory of communication buffer if applicable (out)
+//  timeout      : timeout in milliseconds (max 1000 seconds) (in)
+int MPI_Accept_on_named_port(const char *publish_name, MPI_Comm *client, MPI_Comm *local, void **arena, int timeout)  // accept on published port and verify connection
 {
   char port_name[MPI_MAX_PORT_NAME_PLUS];
   int handshake = 0;  // server sends 0, expects to receive 1
@@ -482,12 +487,12 @@ int MPI_Accept_on_named_port(const char *publish_name, MPI_Comm *client, MPI_Com
   *local  = MPI_COMM_NULL;
 
   build_gossip_name(filereq, sizeof(filereq), "/MPI", publish_name, ".req", 0);  // request for connection
-  req = NULL;
-  while(req == NULL){  // loop until filereq appears, then remove it
-    req = fopen(filereq,"r");
-    if(wait*10 >= maxwait) return 0; // timeout (default 100 seconds)
+  req = fopen(filereq,"r");
+  while(req == NULL){  // loop until filereq appears, then remove it (timeout may cause a premature return)
+    if(wait > 0 || timeout == 0) return 0; // timeout
     wait++;
-    usleep(100000);  // wait 100 msec
+    req = fopen(filereq,"r");
+    usleep(timeout*1000);  // wait 100 msec
   }
   nc = fscanf(req,"%32s%d%d%d",worldname,&rank,&hid,&shmid);  // get world name, rank, hostid, and shared memory tag
   fclose(req);

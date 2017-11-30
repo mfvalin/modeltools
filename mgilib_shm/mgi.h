@@ -83,7 +83,7 @@ int MPI_Create_named_port(const char *publish_name, int shmid, int no_mpi_port);
 int MPI_Unpublish_named_port(const char *service_name);
 int MPI_Close_named_port(const char *publish_name);
 int MPI_Connect_to_named_port(const char *publish_name, MPI_Comm *server, MPI_Comm *local, void **arena);
-int MPI_Accept_on_named_port(const char *publish_name, MPI_Comm *client, MPI_Comm *local, void **arena);
+int MPI_Accept_on_named_port(const char *publish_name, MPI_Comm *client, MPI_Comm *local, void **arena, int timeout);
 int MPI_Publish_named_port(const char *service_name, const char *port_name);
 int MPI_Get_words_simple(void *data, int n, int disp, int rankoftarget, MPI_Win window, int lock);
 int MPI_Put_words_simple(void *data, int n, int disp, int rankoftarget, MPI_Win window, int lock);
