@@ -268,7 +268,7 @@ void RanSetSeed_R250_stream(void *stream, unsigned int *piSeed, int cSeed)  // !
   if (cSeed == 250 && piSeed != NULL) {
     for(i=0 ; i<250; i++) r250_buffer[ i ] = piSeed[ i ] ;
   }else{
-    seed = piSeed && (cSeed > 0) ? piSeed[0] : 0 ;
+    seed = ( piSeed && (cSeed > 0) ) ? piSeed[0] : 0 ;
     for (i = 0 ; i < 250 ; ) {   /* see Knuth p.106, Table 1(16) and Numerical Recipes p.284 (ranqd1)*/
       seed = 1664525 * seed + 1013904223 ;
       if (seed <= 0) continue ;
