@@ -169,7 +169,7 @@ static r250_state r250 = {
   }
 };
 
-void FillBuffer_R250_static(){
+static void FillBuffer_R250_static(){
   int i;
   unsigned int *r250_buffer = r250.buffer ;
   int r250_index = r250.index;

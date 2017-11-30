@@ -138,14 +138,16 @@ static double gauss1[NBOXES1+1] ;  // exp ( -.5 * (redge[i] * redge[i]) )
 static int init1 = 0;
 
 // initialize ziggurat algorithm tables (256 boxes)
-static void InitZigguratMethodTables256(void){
+static void InitZigguratMethodTables256(void)
+{
   int i;
   double p;
   InitZigguratMethodTables(redge1,gauss1,NBOXES1,TAIL1,BOXAREA1);
 }
 
 // this function MUST be called at least once BEFORE calling DRan_NormalZig_stream
-void RanNormalZigSetSeed(void *stream, void *values, int nvalues){
+void RanNormalZigSetSeed(void *stream, void *values, int nvalues)  // !InTc!
+{
   generic_state *zig = stream ;
 
   InitZigguratMethodTables256() ;
@@ -159,7 +161,8 @@ void RanNormalZigSetSeed(void *stream, void *values, int nvalues){
 // get a gaussian distributed random number (only 32 significant bits in mantissa)
 // this function will FAIL if RanNormalZigSetSeed has not been called to initialize the 
 // stream and the base tables
-double DRan_NormalZig_stream(void *stream){
+double DRan_NormalZig_stream(void *stream)  // !InTc!
+{
   generic_state *zig = stream ;
   double g, x, y, f0, f1, f2;
   int navail;
@@ -218,7 +221,8 @@ double DRan_NormalZig_stream(void *stream){
 // get a gaussian distributed random number (52 significant bits in mantissa)
 // this function will FAIL if RanNormalZigSetSeed has not been called to initialize the 
 // stream and the base tables
-double D64Ran_NormalZig_stream(void *stream){
+double D64Ran_NormalZig_stream(void *stream)  // !InTc!
+{
   generic_state *zig = stream ;
   double g, x, y, f0, f1, f2;
   int navail;
@@ -285,14 +289,16 @@ static double gauss0[NBOXES0+1] ;  // exp ( -.5 * (redge[i] * redge[i]) )
 static int init0 = 0;
 
 // initialize ziggurat algorithm tables (128 boxes)
-static void InitZigguratMethodTables128(void){
+static void InitZigguratMethodTables128(void)
+{
   int i;
   double p;
   InitZigguratMethodTables(redge0,gauss0,NBOXES0,TAIL0,BOXAREA0);
 }
 
 // this function MUST be called at least once BEFORE calling DRan_NormalZig_stream
-void RanNormalZigSetSeed(void *stream, void *values, int nvalues){
+void RanNormalZigSetSeed(void *stream, void *values, int nvalues)
+{
   generic_state *zig = stream ;
   InitZigguratMethodTables128() ;
   if(zig->gauss == NULL) {   // allocate stream buffer for uniform numbers if not already done
@@ -305,7 +311,8 @@ void RanNormalZigSetSeed(void *stream, void *values, int nvalues){
 // get a gaussian distributed random number (only 32 significant bits in mantissa)
 // this function will FAIL if RanNormalZigSetSeed has not been called to initialize the 
 // stream and the base tables
-double DRan_NormalZig_stream(void *stream){
+double DRan_NormalZig_stream(void *stream)
+{
   generic_state *zig = stream ;
   double g, x, y, f0, f1, f2;
   int navail;
@@ -359,7 +366,8 @@ double DRan_NormalZig_stream(void *stream){
 // get a gaussian distributed random number (52 significant bits in mantissa)
 // this function will FAIL if RanNormalZigSetSeed has not been called to initialize the 
 // stream and the base tables
-double D64Ran_NormalZig_stream(void *stream){
+double D64Ran_NormalZig_stream(void *stream)
+{
   generic_state *zig = stream ;
   double g, x, y, f0, f1, f2;
   int navail;
@@ -413,7 +421,8 @@ double D64Ran_NormalZig_stream(void *stream){
 
 #endif
 // get a gaussian distributed random number (full 52 bit mantissa) (deferred inplementation)
-double D64RanNormalFun(void *stream){
+double D64RanNormalFun(void *stream)  // !InTc!
+{
   return(D64Ran_NormalZig_stream(stream));
 }
 

@@ -1,0 +1,15 @@
+void RanSetSeed_R250_static(unsigned int *piSeed, int cSeed)  ;
+unsigned int IRan_R250_static()	  ;
+void VecIRan_R250_static(unsigned int *ranbuf, int n)  ;
+void RanSetSeed_R250_stream(void *stream, unsigned int *piSeed, int cSeed)  ;
+void *Ran_R250_new_stream(void *clone_in, unsigned int *piSeed, int cSeed)   ;
+unsigned int IRan_R250_stream(void *stream)	  ;
+double DRan_R250_stream(void *stream)	  ;
+double DRanS_R250_stream(void *stream)	  ;
+void VecIRan_R250_stream(void *stream, unsigned int *ranbuf, int n)  ;
+void VecDRan_R250_stream(void *stream, double *ranbuf, int n)  ;
+void VecDRanS_R250_stream(void *stream, double *ranbuf, int n)  ;
+void RanNormalZigSetSeed(void *stream, void *values, int nvalues)  ;
+double DRan_NormalZig_stream(void *stream)  ;
+double D64Ran_NormalZig_stream(void *stream)  ;
+double D64RanNormalFun(void *stream)  ;
