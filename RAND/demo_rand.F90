@@ -37,7 +37,8 @@ program demo
   do j = 1,NSTREAMS
    do k = 1, NREP
     do i = 1, LSTREAMS
-      g(i,j) = DRanS_R250_stream(stream(j)) * 5.5   ! (-5.5 , 5.5) range
+!       g(i,j) = DRanS_R250_stream(stream(j)) * 5.5   ! (-5.5 , 5.5) range
+      g(i,j) = DRanS_generic_stream(stream(j)) * 5.5   ! (-5.5 , 5.5) range
       indx =nint( g(i,j) )
       dist(indx,j) = dist(indx,j)+1
     enddo
