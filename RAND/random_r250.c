@@ -274,7 +274,16 @@ void VecIRan_R250_stream(void *stream, unsigned int *ranbuf, int n);
 static void FillBuffer_R250_stream(r250_state *R250);
 
 static r250_state r250 = {
-  (REFILLBUFFUN) FillBuffer_R250_stream, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, 0,
+  (REFILLBUFFUN) FillBuffer_R250_stream, 
+  (RANSETSEEDFUN) RanSetSeed_R250_stream, 
+  (IRANFUN) IRan_R250_stream, 
+  (DRANFUN) DRan_R250_stream, 
+  (DRANSFUN) DRanS_R250_stream, 
+  (IVECRANFUN) VecIRan_R250_stream, 
+  (DVECRANFUN) VecDRan_R250_stream, 
+  (DVECSRANFUN) VecDRanS_R250_stream, 
+  NULL, 
+  0,
   0 , 
   250,
   {
@@ -666,7 +675,8 @@ exit(0);
   FillBuffer_R250_stream(&r250);
 
   mySeed = 123456;
-  gen = Ran_R250_new_stream(NULL, &mySeed, 1);
+//   gen = Ran_R250_new_stream(NULL, &mySeed, 1);
+  gen = (generic_state *) R250;
   for( i=0 ; i < 1000000 ; i++) lr = IRan_generic_stream(gen);
   MPI_Barrier(MPI_COMM_WORLD);
   t0 = MPI_Wtime();
