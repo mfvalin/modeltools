@@ -704,7 +704,7 @@ int main()
     sizeof(expected)/sizeof(expected[0]), seed);
 
   for ( n=0; n<sizeof(expected)/sizeof(expected[0]); ++n ) {
-    uint32_t r = IRan_MT19937_stream((generic_state *)state);
+    uint32_t r = IRan_generic_stream((generic_state *)state);
 
     error = r != expected[n];
     if ( error ) ++errors;
