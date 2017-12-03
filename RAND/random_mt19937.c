@@ -717,7 +717,7 @@ int main()
 
     printf("%10u%c%c", r,
       error? '*' : ' ',
-      n % 5 == 4 ? '\n' : ' ');
+      n % 10 == 9 ? '\n' : ' ');
     fflush(stdout);
   }
 
