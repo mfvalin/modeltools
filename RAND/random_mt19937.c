@@ -246,20 +246,22 @@ void VecIRan_MT19937_stream(generic_state *stream, uint32_t *ranbuf, int n)  // 
   mt19937_state *MT19937 = (mt19937_state *) stream ; //
   unsigned int *mt2 = MT19937->mt2 ;
   int index = MT19937->index ;
-  int i, navail;
+  int i, navail, ndone;
 
+  ndone = 0;
   while(n > 0) {
     if (index >= MT_SIZE) FillBuffer_MT19937_stream((mt19937_state *)MT19937);
     index = MT19937->index ;
     navail = MT_SIZE - index;
     if(navail >= n){
-      for(i=0 ; i<n ; i++) ranbuf[i] = mt2[index+i] ;
+      for(i=0 ; i<n ; i++) ranbuf[ndone+i] = mt2[index+i] ;
       MT19937->index = index + n;
       return;
     }else{
-      for(i=0 ; i<navail ; i++) ranbuf[i] = mt2[index+i] ;
+      for(i=0 ; i<navail ; i++) ranbuf[ndone+i] = mt2[index+i] ;
       index = MT_SIZE;
       n -= navail;
+      ndone += navail;
     }
   }
 }
@@ -269,20 +271,22 @@ void VecDRan_MT19937_stream(generic_state *stream, double *ranbuf, int n)  // !I
   mt19937_state *MT19937 = (mt19937_state *) stream ; //
   unsigned int *mt2 = MT19937->mt2 ;
   int index = MT19937->index ;
-  int i, navail;
+  int i, navail, ndone;
 
+  ndone = 0;
   while(n > 0) {
     if (index >= MT_SIZE) FillBuffer_MT19937_stream((mt19937_state *)MT19937);
     index = MT19937->index ;
     navail = MT_SIZE - index;
     if(navail >= n){
-      for(i=0 ; i<n ; i++) ranbuf[i] = CVTDBL_32(mt2[index+i]) ;
+      for(i=0 ; i<n ; i++) ranbuf[ndone+i] = CVTDBL_32(mt2[index+i]) ;
       MT19937->index = index + n;
       return;
     }else{
-      for(i=0 ; i<navail ; i++) ranbuf[i] = CVTDBL_32(mt2[index+i]) ;
+      for(i=0 ; i<navail ; i++) ranbuf[ndone+i] = CVTDBL_32(mt2[index+i]) ;
       index = MT_SIZE;
       n -= navail;
+      ndone += navail;
     }
   }
 }
@@ -292,20 +296,22 @@ void VecDRanS_MT19937_stream(generic_state *stream, double *ranbuf, int n)  // !
   mt19937_state *MT19937 = (mt19937_state *) stream ; //
   unsigned int *mt2 = MT19937->mt2 ;
   int index = MT19937->index ;
-  int i, navail;
+  int i, navail, ndone;
 
+  ndone = 0;
   while(n > 0) {
     if (index >= MT_SIZE) FillBuffer_MT19937_stream((mt19937_state *)MT19937);
     index = MT19937->index ;
     navail = MT_SIZE - index;
     if(navail >= n){
-      for(i=0 ; i<n ; i++) ranbuf[i] = CVTDBLS_32(mt2[index+i]) ;
+      for(i=0 ; i<n ; i++) ranbuf[ndone+i] = CVTDBLS_32(mt2[index+i]) ;
       MT19937->index = index + n;
       return;
     }else{
-      for(i=0 ; i<navail ; i++) ranbuf[i] = CVTDBLS_32(mt2[index+i]) ;
+      for(i=0 ; i<navail ; i++) ranbuf[ndone+i] = CVTDBLS_32(mt2[index+i]) ;
       index = MT_SIZE;
       n -= navail;
+      ndone += navail;
     }
   }
 }

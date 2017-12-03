@@ -31,7 +31,7 @@ int main(int argc, char **argv){
   }
   if(irep == 0) {
     printf("\n\n\n ========= MT19937 test =========\n");
-    piSeed = 123456789;
+    piSeed = 1;
     shr3 = Ran_MT19937_new_stream(NULL, &piSeed, 1);
   }
 
@@ -75,7 +75,6 @@ int main(int argc, char **argv){
   for (j=0 ; j<100 ; j++) {
     VecIRan_generic_stream(shr3, ranbuf, 1000000) ;
     mask = 1 ;
-//     mask = 0x80000000 ;
     while (mask) {
       pos = 0 ; neg = 0 ; 
       for( i=0 ; i < 1000000 ; i++) if(ranbuf[i] & mask) pos++ ; else neg++  ; 
