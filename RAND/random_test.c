@@ -23,10 +23,12 @@ int main(int argc, char **argv){
   for(irep=0 ; irep <3 ; irep++){
   if(irep == 2) {
     printf("\n\n\n ========= SHR3 test =========\n");
+    piSeed = 123456789;
     shr3 = Ran_SHR3_new_stream(NULL, &piSeed, 1);
   }
   if(irep == 1) {
     printf("\n\n\n ========= R250 test =========\n");
+    piSeed = 123456789;
     shr3 = Ran_R250_new_stream(NULL, &piSeed, 1);
   }
   if(irep == 0) {
