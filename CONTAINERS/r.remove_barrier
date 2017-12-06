@@ -1,0 +1,9 @@
+#!/bin/bash
+[[ -n "${BARRIER_DIR}" ]] || { echo "ERROR: environment variable BARRIER_DIR is not defined" ; exit 1 ; }
+[[ -d ${BARRIER_DIR:-IEnAPasDuTout} ]] || { echo "ERROR: barrier directory BARRIER_DIR='${BARRIER_DIR}' not found" ; exit 1  ; }
+#
+rm ${BARRIER_DIR}/ID.[0-9]* ${BARRIER_DIR}/in.[0-9]* ${BARRIER_DIR}/out.[0-9]* && \
+   echo "INFO: successfully removed contents of barrier directory ${BARRIER_DIR}" && \
+   exit 0
+echo "ERROR: removal of contents of barrier directory ${BARRIER_DIR} failed"
+exit 1
