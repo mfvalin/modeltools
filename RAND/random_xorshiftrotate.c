@@ -1,4 +1,3 @@
-#if defined(ROTATE)
 /*  Written in 2016 by David Blackman and Sebastiano Vigna (vigna@acm.org)
     minor revision Dec 2017 M.Valin (mfvalin@gmail.com)
 
@@ -9,6 +8,13 @@ worldwide. This software is distributed without any warranty.
 See <http://creativecommons.org/publicdomain/zero/1.0/>. */
 
 #include <stdint.h>
+#include <string.h>
+
+#if ! defined(TIMING_TEST)
+#define STATIC static
+#else
+#define STATIC
+#endif
 
 /* This is the successor to xorshift128+. It is the fastest full-period
    generator passing BigCrush without systematic failures, but due to the
@@ -34,16 +40,19 @@ See <http://creativecommons.org/publicdomain/zero/1.0/>. */
    a 64-bit seed, we suggest to seed a splitmix64 generator and use its
    output to fill s. */
 
-static uint64_t s[2];
 #define RES_SIZE 256
+#define RES_SIZE2 128
 #define RES_MASK 255
 static uint32_t res[RES_SIZE] ;
+static uint64_t *res64 = (uint64_t *) res;
 static uint32_t res_index=0;
+
+STATIC uint64_t s128[2];
 
 static inline uint64_t rotl(const uint64_t x, int k) {
   return (x << k) | (x >> (64 - k));
 }
-uint32_t next(void) {       // revision Dec 2017 M.Valin (introduce a "reservoir")
+uint32_t next128r(void) {       // revision Dec 2017 M.Valin (introduce a "reservoir")
   uint64_t s0;
   uint64_t s1;
   uint64_t result;
@@ -51,8 +60,8 @@ uint32_t next(void) {       // revision Dec 2017 M.Valin (introduce a "reservoir
   int i;
 
   if(res_index == 0){  // buffer is empty
-    s0 = s[0];
-    s1 = s[1];
+    s0 = s128[0];
+    s1 = s128[1];
     for(i=0 ; i<RES_SIZE2 ; i++){
       result = s0 + s1;
       res64[i] = result;
@@ -60,22 +69,33 @@ uint32_t next(void) {       // revision Dec 2017 M.Valin (introduce a "reservoir
       s0 = rotl(s0, 55) ^ s1 ^ (s1 << 14); // a, b
       s1 = rotl(s1, 36); // c
     }
-    s[0] = s0;
-    s[1] = s1;
+    s128[0] = s0;
+    s128[1] = s1;
   }
   result32 = res[res_index];
   res_index = (res_index+1) & RES_MASK;
   return result32;
 }
+void Vnext128r(uint32_t *dst, int n){
+  int i;
+  for(i=0 ; i<n ; i++){
+    if(res_index < RES_SIZE){
+      dst[i] = res[res_index++];
+    }else{
+      res_index = 0;
+       dst[i] = next128r();
+    }
+  }
+}
 
-static uint64_t next_orig(void) {
-  const uint64_t s0 = s[0];
-  uint64_t s1 = s[1];
+STATIC uint64_t next_orig(void) {
+  const uint64_t s0 = s128[0];
+  uint64_t s1 = s128[1];
   const uint64_t result = s0 + s1;
 
   s1 ^= s0;
-  s[0] = rotl(s0, 55) ^ s1 ^ (s1 << 14); // a, b
-  s[1] = rotl(s1, 36); // c
+  s128[0] = rotl(s0, 55) ^ s1 ^ (s1 << 14); // a, b
+  s128[1] = rotl(s1, 36); // c
 
   return result;
 }
@@ -85,26 +105,25 @@ static uint64_t next_orig(void) {
    to 2^64 calls to next(); it can be used to generate 2^64
    non-overlapping subsequences for parallel computations. */
 
-void jump(void) {
+void jump128r(void) {
   static const uint64_t JUMP[] = { 0xbeac0467eba5facb, 0xd86b048b86aa9922 };
 
   uint64_t s0 = 0;
   uint64_t s1 = 0;
-  for(int i = 0; i < sizeof JUMP / sizeof *JUMP; i++)
-    for(int b = 0; b < 64; b++) {
+  int i, b;
+  for(i = 0; i < sizeof JUMP / sizeof *JUMP; i++)
+    for(b = 0; b < 64; b++) {
       if (JUMP[i] & UINT64_C(1) << b) {
-        s0 ^= s[0];
-        s1 ^= s[1];
+        s0 ^= s128[0];
+        s1 ^= s128[1];
       }
-      next();
+      next128r();
     }
 
-  s[0] = s0;
-  s[1] = s1;
+  s128[0] = s0;
+  s128[1] = s1;
 }
-#else
 
-#if defined(USE1024)
 /*  Written in 2017 by Sebastiano Vigna (vigna@acm.org)
 
 To the extent possible under law, the author has dedicated all copyright
@@ -112,9 +131,6 @@ and related and neighboring rights to this software to the public domain
 worldwide. This software is distributed without any warranty.
 
 See <http://creativecommons.org/publicdomain/zero/1.0/>. */
-
-#include <stdint.h>
-#include <string.h>
 
 /* NOTE: as of 2017-10-08, this generator has a different multiplier (a
    fixed-point representation of the golden ratio), which eliminates
@@ -137,15 +153,15 @@ See <http://creativecommons.org/publicdomain/zero/1.0/>. */
    a 64-bit seed, we suggest to seed a splitmix64 generator and use its
    output to fill s. */
 
-uint64_t s[16]; 
-int p;
+STATIC uint64_t s1k[16]; 
+static int p = 0;
 
-uint64_t next(void) {
-  const uint64_t s0 = s[p];
-  uint64_t s1 = s[p = (p + 1) & 15];
+uint64_t next1024(void) {
+  const uint64_t s0 = s1k[p];
+  uint64_t s1 = s1k[p = (p + 1) & 15];
   s1 ^= s1 << 31; // a
-  s[p] = s1 ^ s0 ^ (s1 >> 11) ^ (s0 >> 30); // b,c
-  return s[p] * 0x9e3779b97f4a7c13;
+  s1k[p] = s1 ^ s0 ^ (s1 >> 11) ^ (s0 >> 30); // b,c
+  return s1k[p] * 0x9e3779b97f4a7c13;
 }
 
 
@@ -153,7 +169,7 @@ uint64_t next(void) {
    to 2^512 calls to next(); it can be used to generate 2^512
    non-overlapping subsequences for parallel computations. */
 
-void jump(void) {
+void jump1024(void) {
   static const uint64_t JUMP[] = { 0x84242f96eca9c41d,
     0xa3c65b8776f96855, 0x5b34a39f070b5837, 0x4489affce4f31a1e,
     0x2ffeeb0a48316f40, 0xdc2d9891fe68c022, 0x3659132bb12fea70,
@@ -161,23 +177,21 @@ void jump(void) {
     0x691548c86c1bd540, 0x7910c41d10a1e6a5, 0x0b5fc64563b3e2a8,
     0x047f7684e9fc949d, 0xb99181f2d8f685ca, 0x284600e3f30e38c3
   };
+  int i, b, j;
 
   uint64_t t[16] = { 0 };
-  for(int i = 0; i < sizeof JUMP / sizeof *JUMP; i++)
-    for(int b = 0; b < 64; b++) {
+  for(i = 0; i < sizeof JUMP / sizeof *JUMP; i++)
+    for(b = 0; b < 64; b++) {
       if (JUMP[i] & UINT64_C(1) << b)
-        for(int j = 0; j < 16; j++)
-          t[j] ^= s[(j + p) & 15];
-      next();
+        for(j = 0; j < 16; j++)
+          t[j] ^= s1k[(j + p) & 15];
+      next1024();
     }
 
-  for(int j = 0; j < 16; j++)
-    s[(j + p) & 15] = t[j];
+  for(j = 0; j < 16; j++)
+    s1k[(j + p) & 15] = t[j];
 }
 
-#else
-
-#if defined(USE64)
 /*  Written in 2015 by Sebastiano Vigna (vigna@acm.org)
 
 To the extent possible under law, the author has dedicated all copyright
@@ -185,8 +199,6 @@ and related and neighboring rights to this software to the public domain
 worldwide. This software is distributed without any warranty.
 
 See <http://creativecommons.org/publicdomain/zero/1.0/>. */
-
-#include <stdint.h>
 
 /* This is a fixed-increment version of Java 8's SplittableRandom generator
    See http://dx.doi.org/10.1145/2714064.2660195 and 
@@ -198,16 +210,14 @@ See <http://creativecommons.org/publicdomain/zero/1.0/>. */
    computations) or xorshift1024* (for massively parallel computations)
    generator. */
 
-uint64_t x; /* The state can be seeded with any value. */
+static uint64_t x64 = 123456; /* The state can be seeded with any value. */
 
-uint64_t next() {
-  uint64_t z = (x += 0x9e3779b97f4a7c15);
+uint64_t next64() {
+  uint64_t z = (x64 += 0x9e3779b97f4a7c15);
   z = (z ^ (z >> 30)) * 0xbf58476d1ce4e5b9;
   z = (z ^ (z >> 27)) * 0x94d049bb133111eb;
   return z ^ (z >> 31);
 }
-
-#else
 
 /*  Written in 2014-2016 by Sebastiano Vigna (vigna@acm.org)
 
@@ -216,8 +226,6 @@ and related and neighboring rights to this software to the public domain
 worldwide. This software is distributed without any warranty.
 
 See <http://creativecommons.org/publicdomain/zero/1.0/>. */
-
-#include <stdint.h>
 
 /* This generator has been replaced by xoroshiro128plus, which is
    significantly faster and has better statistical properties.
@@ -246,9 +254,9 @@ See <http://creativecommons.org/publicdomain/zero/1.0/>. */
    internal parallelization from the CPU. The resulting streams are off by
    one step. */
 
-uint64_t s[2];
+STATIC uint64_t s[2];
 
-uint64_t next(void) {
+uint64_t next128(void) {
   uint64_t s1 = s[0];
   const uint64_t s0 = s[1];
   const uint64_t result = s0 + s1;
@@ -263,26 +271,22 @@ uint64_t next(void) {
    to 2^64 calls to next(); it can be used to generate 2^64
    non-overlapping subsequences for parallel computations. */
 
-void jump(void) {
+void jump128(void) {
   static const uint64_t JUMP[] = { 0x8a5cd789635d2dff, 0x121fd2155c472f96 };
 
   uint64_t s0 = 0;
   uint64_t s1 = 0;
-  for(int i = 0; i < sizeof JUMP / sizeof *JUMP; i++){
-    for(int b = 0; b < 64; b++) {
+  int i, b;
+  for(i = 0; i < sizeof JUMP / sizeof *JUMP; i++){
+    for(b = 0; b < 64; b++) {
       if (JUMP[i] & UINT64_C(1) << b) {
         s0 ^= s[0];
         s1 ^= s[1];
       }
-      next();
+      next128();
     }
   }
 
   s[0] = s0;
   s[1] = s1;
 }
-#endif
-
-#endif
-
-#endif
