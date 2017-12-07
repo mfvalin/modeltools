@@ -69,6 +69,7 @@ subroutine main_mgi_test
 ! usage: f_mgi_test shared_memory_id R|W scenario_file
   use ISO_C_BINDING
   implicit none
+  include 'mgilibf.inc'
 !
   interface
     subroutine sleep_a_bit(duration) bind(C,name='sleep')
@@ -79,7 +80,6 @@ subroutine main_mgi_test
   end interface
 !
   integer status, status_r, status_w
-  integer, external :: mgi_open, mgi_init, mgi_clos, mgi_term
   character(len=1) :: testmode_r, testmode_w
   character(len=1024) :: string, testfile
   integer :: iostat, nargs, channel_r, channel_w, i, minargs
@@ -187,7 +187,7 @@ subroutine main_mgi_test
   if(testmode_r=='R') status_r = mgi_clos(channel_r)
   if(testmode_w=='W') status_w = mgi_clos(channel_w)
   call sleep_a_bit(1)
-  status = mgi_term()
+  call mgi_term()
   return
 end subroutine main_mgi_test
 
@@ -195,6 +195,7 @@ subroutine model(channel_name_r,channel_name_w)
 ! usage: f_mgi_test shared_memory_id R|W scenario_file
   use ISO_C_BINDING
   implicit none
+  include 'mgilibf.inc'
   interface
     subroutine sleep_a_bit(duration) bind(C,name='sleep')
     use ISO_C_BINDING
@@ -204,7 +205,6 @@ subroutine model(channel_name_r,channel_name_w)
   end interface
 
   integer :: status, status_r, status_w
-  integer, external :: mgi_open, mgi_init, mgi_clos, mgi_term
   integer :: iostat, channel_r, channel_w, i
   character(len=*), intent(IN) :: channel_name_r
   character(len=*), intent(IN) :: channel_name_w
@@ -254,7 +254,7 @@ subroutine model(channel_name_r,channel_name_w)
   status_r = mgi_clos(channel_r)
   status_w = mgi_clos(channel_w)
   call sleep_a_bit(1)
-  status = mgi_term()
+  call mgi_term()
   return
 end subroutine model
 

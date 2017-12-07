@@ -36,71 +36,71 @@ module c_mgi_interfaces
   end interface
 end module c_mgi_interfaces
 
-function mgi_init(name) result(status)
+function mgi_init(name) result(status)         !InTf!
   use c_mgi_interfaces
   implicit none
-  character(len=*), intent(IN) :: name
-  integer :: status
+  character(len=*), intent(IN) :: name         !InTf!
+  integer :: status                            !InTf!
 
   character(len=1), dimension(128) :: temp
   integer :: l
 
   l = len(trim(name))
-  temp(1:l+1) = transfer( trim(name)//achar(0) , temp)
+  temp(1:l+1) = transfer( trim(name)//achar(0) , temp)  ! Fortran string to C string translation
 
   status = c_mgi_init(temp)
 
-end function mgi_init
+end function mgi_init                          !InTf!
 
-function mgi_open(channel, mode) result(status)
+function mgi_open(channel, mode) result(status) !InTf!
   use c_mgi_interfaces
   implicit none
-  integer, intent(IN) :: channel
-  character(len=*), intent(IN) :: mode
-  integer :: status
+  integer, intent(IN) :: channel                !InTf!
+  character(len=*), intent(IN) :: mode          !InTf!
+  integer :: status                             !InTf!
 
   status = c_mgi_open(channel, mode(1:1))
 
-end function mgi_open
+end function mgi_open                           !InTf!
 
-function mgi_clos(channel) result(status)
+function mgi_clos(channel) result(status)       !InTf!
   use c_mgi_interfaces
   implicit none
-  integer, intent(IN) :: channel
-  integer :: status
+  integer, intent(IN) :: channel                !InTf!
+  integer :: status                             !InTf!
 
   status = c_mgi_clos(channel)
 
-end function mgi_clos
+end function mgi_clos                           !InTf!
 
-function mgi_read(channel, data, n, typ) result(status)
+function mgi_read(channel, data, n, typ) result(status) !InTf!
   use c_mgi_interfaces
   implicit none
-  integer, intent(IN) :: channel, n
-  integer, dimension(*), intent(OUT) :: data
-  character(len=*), intent(IN) :: typ
-  integer :: status
+  integer, intent(IN) :: channel, n                     !InTf!
+  integer, dimension(*), intent(OUT) :: data            !InTf!
+  character(len=*), intent(IN) :: typ                   !InTf!
+  integer :: status                                     !InTf!
 
   status = c_mgi_read(channel, data, n, typ(1:1))
 
-end function mgi_read
+end function mgi_read                                   !InTf!
 
-function mgi_write(channel, data, n, typ) result(status)
+function mgi_write(channel, data, n, typ) result(status)  !InTf!
   use c_mgi_interfaces
   implicit none
-  integer, intent(IN) :: channel, n
-  integer, dimension(*), intent(IN) :: data
-  character(len=*), intent(IN) :: typ
-  integer :: status
+  integer, intent(IN) :: channel, n                       !InTf!
+  integer, dimension(*), intent(IN) :: data               !InTf!
+  character(len=*), intent(IN) :: typ                     !InTf!
+  integer :: status                                       !InTf!
 
   status = c_mgi_write(channel, data, n, typ(1:1))
 
-end function mgi_write
+end function mgi_write                                    !InTf!
 
-subroutine mgi_term()
+subroutine mgi_term()     !InTf!
   use c_mgi_interfaces
   implicit none
 
   call c_mgi_term()
 
-end subroutine mgi_term
+end subroutine mgi_term   !InTf!
