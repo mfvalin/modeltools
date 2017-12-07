@@ -11,6 +11,8 @@ main(int argc, char **argv){
   double MPI_Wtime();
   uint32_t buffer[1000];
 
+  MPI_Init(&argc, &argv);
+
   s128[0] = 123456 ; s128[1] = 456789;
   s[0] = 123456 ; s[1] = 456789;
   for(i=0 ; i<16 ; i++) s1k[i] = 2*i + 125;
@@ -86,5 +88,6 @@ main(int argc, char **argv){
   for(i=0 ; i<1000000000 ; i++) val64 = next64();
   t2 = MPI_Wtime();
   printf("val = %ld, next64 time = %f\n",val64,t2-t1);
+  MPI_Finalize();
 }
 
