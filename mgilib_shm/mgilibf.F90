@@ -8,27 +8,27 @@ module c_mgi_interfaces
     end function c_mgi_init
     function c_mgi_open(channel, mode) result(status) BIND(C,name='MGI_Open')
       import :: C_INT
-      integer(C_INT), intent(IN) :: channel
-      character(len=1), intent(IN) :: mode
+      integer(C_INT), intent(IN), value :: channel
+      character(len=1), intent(IN), value :: mode
       integer(C_INT) :: status
     end function c_mgi_open
     function c_mgi_clos(channel) result(status) BIND(C,name='MGI_Clos')
       import :: C_INT
-      integer(C_INT), intent(IN) :: channel
+      integer(C_INT), intent(IN), value :: channel
       integer(C_INT) :: status
     end function c_mgi_clos
     function c_mgi_read(channel, data, n, typ) result(status) BIND(C,name='MGI_Read')
       import :: C_INT
-      integer(C_INT), intent(IN) :: channel, n
+      integer(C_INT), intent(IN), value :: channel, n
       integer(C_INT), dimension(*), intent(OUT) :: data
-      character(len=1), intent(IN) :: typ
+      character(len=1), intent(IN), value :: typ
       integer(C_INT) :: status
     end function c_mgi_read
     function c_mgi_write(channel, data, n, typ) result(status) BIND(C,name='MGI_Write')
       import :: C_INT
-      integer(C_INT), intent(IN) :: channel, n
+      integer(C_INT), intent(IN), value :: channel, n
       integer(C_INT), dimension(*), intent(IN) :: data
-      character(len=1), intent(IN) :: typ
+      character(len=1), intent(IN), value :: typ
       integer(C_INT) :: status
     end function c_mgi_write
     subroutine c_mgi_term() BIND(C,name='MGI_Term')
