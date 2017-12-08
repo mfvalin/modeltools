@@ -83,12 +83,12 @@ void Vnext128r(uint32_t *dst, int n){
       dst[i] = res[res_index++];
     }else{
       res_index = 0;
-       dst[i] = next128r();
+      dst[i] = next128r();
     }
   }
 }
 
-STATIC uint64_t next_orig(void) {
+static inline uint64_t advance128r(uint64_t *s128) {
   const uint64_t s0 = s128[0];
   uint64_t s1 = s128[1];
   const uint64_t result = s0 + s1;
@@ -105,7 +105,7 @@ STATIC uint64_t next_orig(void) {
    to 2^64 calls to next(); it can be used to generate 2^64
    non-overlapping subsequences for parallel computations. */
 
-void jump128r(void) {
+void jump128r(uint64_t *s128) {
   static const uint64_t JUMP[] = { 0xbeac0467eba5facb, 0xd86b048b86aa9922 };
 
   uint64_t s0 = 0;
@@ -117,7 +117,7 @@ void jump128r(void) {
         s0 ^= s128[0];
         s1 ^= s128[1];
       }
-      next128r();
+      advance128r(s128);
     }
 
   s128[0] = s0;
