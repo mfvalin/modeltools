@@ -130,7 +130,7 @@ typedef struct{
   int ngauss;
   int index;
   int bufsz;
-  unsigned int buffer[250];
+  unsigned int buffer[251];
 }r250_state ;                  // R250 generator stream control structure
 
 void VecIRan_R250_stream(void *stream, unsigned int *ranbuf, int n);
@@ -174,7 +174,7 @@ static r250_state r250 = {
     0xfda21b64 ,0x3476f241 ,0x9aa5d95a ,0xef86ea14 ,0x8f3fce06 ,0x8bff6bfa ,0x706ab0a2 ,0x7322f175 ,0x4e8acb27 ,0x336889cc ,
     0x373ea2e0 ,0x0cc5f5ce ,0x35a5cc68 ,0x93169549 ,0xea31a7b1 ,0x6a6569bc ,0xa776f509 ,0x5b0f310e ,0x96322244 ,0x64568c56 ,
     0x08aa6767 ,0x491799f1 ,0x17735c88 ,0x71c32f7e ,0xed0a2ec6 ,0xebd94777 ,0x9b1e1086 ,0xdc740f7a ,0x03c48151 ,0xafcb9f88 ,
-    0xd835a40a ,0x21308fc2 ,0x0f459e5e ,0x0358b165 ,0x6422fa89 ,0xdd9cf11b ,0x03daccf5 ,0xec9e2bd9 ,0xe300013e ,0xa97d54e4 
+    0xd835a40a ,0x21308fc2 ,0x0f459e5e ,0x0358b165 ,0x6422fa89 ,0xdd9cf11b ,0x03daccf5 ,0xec9e2bd9 ,0xe300013e ,0xa97d54e4 , 0
   }
 };
 
@@ -252,6 +252,25 @@ void VecIRan_R250_static(unsigned int *ranbuf, int n)  // !InTc!
 }
 
 static void FillBuffer_R250_stream(r250_state *R250){
+  int i;
+  unsigned int *r250_buffer = R250->buffer ;
+  int r250_index = R250->index;
+
+  while(r250_index > 249) r250_index -= 250;
+  R250->index = r250_index;
+
+  for (i=0 ; i< 144 ; i++) {
+    r250_buffer[ i ] = r250_buffer[ i ] ^ r250_buffer[ i + 103 ];
+  }
+  r250_buffer[144] = r250_buffer[144] ^ r250_buffer[247];
+  r250_buffer[145] = r250_buffer[145] ^ r250_buffer[248];
+  r250_buffer[146] = r250_buffer[146] ^ r250_buffer[249];
+  for (i=147 ; i<251 ; i++) {
+    r250_buffer[ i ] = r250_buffer[ i ] ^ r250_buffer[ i - 147 ];
+  }
+}
+
+static void FillBuffer_R250_stream_old(r250_state *R250){
   int i;
   unsigned int *r250_buffer = R250->buffer ;
   int r250_index = R250->index;
