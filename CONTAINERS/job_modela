@@ -1,8 +1,14 @@
-. s.ssmuse.dot gemclim_3.3.3.1-dev ovbin
-cd ${HOME}/CONTAINERS
+. s.ssmuse.dot dev/intel pbs-ompi-sjob
+TEST_PRIV=${HOME}/CONTAINERS/$(hostname)_$$
+mkdir -p ${TEST_PRIV}
+cd ${TEST_PRIV} || exit 1
 which r.run_in_parallel
 export FLAGDIR=$(pwd -P)/$(hostname)_$$
 mkdir -p $FLAGDIR
-r.run_in_parallel -pgm  ./taskset.sh  -inorder -tag
+DEMOS=$(pbs-ompi-sjob-cfg.sh)
+[[ -d $DEMOS ]] && cp $DEMOS/* .
+r.run_in_parallel -pgm  ./who-where.sh -inorder -tag
 ls $FLAGDIR/FLAG*
+cd ${HOME}/CONTAINERS || exit 1
+rm -rf $(hostname)_$$
 sleep 10

@@ -70,7 +70,7 @@ mpiexec_Linux() {
       [[ "$bind" == bind ]] && \
         OPEN_MPI_PARMS="-bind-to-core ${OPEN_MPI_PARMS}"
       [[ "$bind" == none ]] && \
-        OPEN_MPI_PARMS="-bind-to-none ${OPEN_MPI_PARMS}"
+        OPEN_MPI_PARMS="-bind-to none ${OPEN_MPI_PARMS}"
       [[ -n "$ib" ]] && \
         OPEN_MPI_PARMS="--mca btl openib,sm,self ${OPEN_MPI_PARMS}"  # force use of infiniband
       [[ -n "$noib" ]] && \
@@ -178,11 +178,13 @@ mpiexec_Linux_launch() {
     sed -n ${FirstHost},${HostOffset}p ${MY_NODEFILE_ORI} >${MY_NODEFILE}
 #   transformer ${MY_NODEFILE} en map file pour OpenMPI et en host file pour Mpich2
     node_to_rank ${MY_NODEFILE} ${ThreadsInWorld[${MpiCommWorld}]} ${ThinBy} > ${MY_RANKFILE} || { LaunchStatus="$LaunchStatus ${MpiCommWorld}" ; break; }
+    EXTRA_MPI_PARMS=""
+    [[ -n $RANKFILE_PBS ]] && cp $RANKFILE_PBS ${MY_RANKFILE} && EXTRA_MPI_PARMS="${EXTRA_MPI_PARMS} --rankfile ${MY_RANKFILE}"
+    [[ -n $NODEFILE_PBS ]] && cp $NODEFILE_PBS ${MY_NODEFILE}
 #    cat ${MY_RANKFILE}
     echo "INFO: ===== $(cat ${MY_NODEFILE} | wc -l) host(s) in  ${Launcher} World $MpiCommWorld ====="
     cat ${MY_NODEFILE}
     list_message
-    EXTRA_MPI_PARMS=""
     if [[ $Launcher == OpenMPI ]] ; then #   pass environment variables (only names starting with letter or digit) (only for OpenMPI)
 #      EXTRA_MPI_PARMS="-cpus-per-proc ${ThreadsInWorld[${MpiCommWorld}]}"
       EXTRA_MPI_PARMS="${EXTRA_MPI_PARMS} $(s.prefix '-x ' $(env | grep -v "[']" | grep -v '"'  | grep -v '^BASH_'  | grep  '^[a-zA-Z0-9]' | sed 's/=.*//' | sort ))"
@@ -203,7 +205,6 @@ mpiexec_Linux_launch() {
       echo "INFO: ==== Launching ${Launcher} world ${MpiCommWorld} with ${PeInWorld[${MpiCommWorld}]} MPI tasks ===="
       [[ -n ${verbose} ]] && \
         echo "INFO: ${mpirun} ${EXTRA_MPI_PARMS} -machinefile ${MY_NODEFILE} -n ${PeInWorld[${MpiCommWorld}]} "$@" ${ParallelScript}.${MpiCommWorld}"
-#      set -x
       [[ -z ${dryrun} ]] && \
         ${mpirun} ${EXTRA_MPI_PARMS} -machinefile ${MY_NODEFILE} -n ${PeInWorld[${MpiCommWorld}]} "$@" ${ParallelScript}.${MpiCommWorld}
       set +x
@@ -594,8 +595,9 @@ wait_for() {
 #Version="1.1.29 2017/09/06"  # undo Cray listing optimizations (no gain observed), step 1 of AIX/POE removal, remove unused code
 #Version="1.1.29a 2017/09/07"  # added warning when cores per numa node not an integral multiple of OMP_NUM_THREADS
 #Version="1.1.29b 2017/09/14"  # cosmetic doc changes in cclargs call
+#Version="1.1.29X 2017/09/26"  #  added RANKFILE_PBS+NODEFILE_PBS recognition , changed syntax of bind to none
 true
-Version="1.1.29b 2017/09/14"  # cosmetic doc changes in cclargs call
+Version="1.1.29X 2017/09/26"  #  added RANKFILE_PBS+NODEFILE_PBS recognition , changed syntax of bind to none
 echo "INFO: ${0##*/} version $Version ( /bin/ksh93 )"
 MY_NODEFILE=${PARALLEL_NODEFILE:-${GECOSHEP_HOSTS_FILE:-${GECOSHEP_HOSTFILE:-${LOADL_HOSTFILE:-${PBS_NODEFILE:-${HOME}/.PBS_NODEFILE}}}}}
 [[ ! -f "${MY_NODEFILE}" ]] && \
