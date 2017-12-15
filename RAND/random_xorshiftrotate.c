@@ -40,52 +40,24 @@ See <http://creativecommons.org/publicdomain/zero/1.0/>. */
    a 64-bit seed, we suggest to seed a splitmix64 generator and use its
    output to fill s. */
 
-#define RES_SIZE 256
-#define RES_SIZE2 128
-#define RES_MASK 255
-static uint32_t res[RES_SIZE] ;
-static uint64_t *res64 = (uint64_t *) res;
-static uint32_t res_index=0;
+static uint64_t res128r = 0;
+static uint32_t part128r = 0;
 
-STATIC uint64_t s128[2];
+static uint64_t res128 = 0;
+static uint32_t part128 = 0;
+
+static uint64_t s128[2] = {123456, 456789 };
+
+static void jump128r(uint64_t *state);
+static void jump128(uint64_t *state);
 
 static inline uint64_t rotl(const uint64_t x, int k) {
   return (x << k) | (x >> (64 - k));
 }
-uint32_t next128r(void) {       // revision Dec 2017 M.Valin (introduce a "reservoir")
-  uint64_t s0;
-  uint64_t s1;
-  uint64_t result;
-  uint32_t result32;
-  int i;
 
-  if(res_index == 0){  // buffer is empty
-    s0 = s128[0];
-    s1 = s128[1];
-    for(i=0 ; i<RES_SIZE2 ; i++){
-      result = s0 + s1;
-      res64[i] = result;
-      s1 ^= s0;
-      s0 = rotl(s0, 55) ^ s1 ^ (s1 << 14); // a, b
-      s1 = rotl(s1, 36); // c
-    }
-    s128[0] = s0;
-    s128[1] = s1;
-  }
-  result32 = res[res_index];
-  res_index = (res_index+1) & RES_MASK;
-  return result32;
-}
-void Vnext128r(uint32_t *dst, int n){
-  int i;
-  for(i=0 ; i<n ; i++){
-    if(res_index < RES_SIZE){
-      dst[i] = res[res_index++];
-    }else{
-      res_index = 0;
-      dst[i] = next128r();
-    }
-  }
+void seed_xorshift128r( uint64_t *seed ){
+  s128[0] = seed[0];
+  s128[1] = seed[1];
 }
 
 static inline uint64_t advance128r(uint64_t *s128) {
@@ -99,13 +71,39 @@ static inline uint64_t advance128r(uint64_t *s128) {
 
   return result;
 }
+uint32_t next128r(void){
+  part128r = part128r ^ 1;         // complement previous residual flag
+  if(part128r) {                  // there was no previous residual
+    res128r = advance128r(s128);  // strore residual
+    return (res128r >> 32);       // return upper part
+  }else{                         // there was a previous residual, return lower part
+    return(res128r);
+  }
+}
+void Vnext128r(uint32_t *dst, int n){
+  int i ;
+  uint64_t t;
+
+  dst[0] = res128r;               // in case there was a previous residual, store lower part in dest
+  for(i = part128r ; i < (n-1) ; i+=2){
+    t = advance128r(s128);
+    dst[i] = (t >> 32);
+    dst[i+1] = t;
+  }
+  part128r = (i < n);
+  if(part128r){                   // there will be a residual, save it, store upper part in dest
+    t = advance128r(s128);
+    res128r = t;
+    dst[i] = (t >> 32);
+  }
+}
 
 
 /* This is the jump function for the generator. It is equivalent
    to 2^64 calls to next(); it can be used to generate 2^64
    non-overlapping subsequences for parallel computations. */
 
-void jump128r(uint64_t *s128) {
+static void jump128r(uint64_t *s128) {
   static const uint64_t JUMP[] = { 0xbeac0467eba5facb, 0xd86b048b86aa9922 };
 
   uint64_t s0 = 0;
@@ -153,8 +151,13 @@ See <http://creativecommons.org/publicdomain/zero/1.0/>. */
    a 64-bit seed, we suggest to seed a splitmix64 generator and use its
    output to fill s. */
 
-STATIC uint64_t s1k[16]; 
+static uint64_t s1k[16]; 
 static int p = 0;
+
+void seed_xorshift1024( uint64_t *seed ){
+  int i;
+  for(i=0 ; i<16 ; i++) s1k[i] = seed[i];
+}
 
 uint64_t next1024(void) {
   const uint64_t s0 = s1k[p];
@@ -169,7 +172,7 @@ uint64_t next1024(void) {
    to 2^512 calls to next(); it can be used to generate 2^512
    non-overlapping subsequences for parallel computations. */
 
-void jump1024(void) {
+static void jump1024(void) {
   static const uint64_t JUMP[] = { 0x84242f96eca9c41d,
     0xa3c65b8776f96855, 0x5b34a39f070b5837, 0x4489affce4f31a1e,
     0x2ffeeb0a48316f40, 0xdc2d9891fe68c022, 0x3659132bb12fea70,
@@ -254,9 +257,14 @@ See <http://creativecommons.org/publicdomain/zero/1.0/>. */
    internal parallelization from the CPU. The resulting streams are off by
    one step. */
 
-STATIC uint64_t s[2];
+static uint64_t s[2];
 
-uint64_t next128(void) {
+void seed_xorshift128( uint64_t *seed ){
+  s[0] = seed[0];
+  s[1] = seed[1];
+}
+
+static inline uint64_t advance128(uint64_t *s) {
   uint64_t s1 = s[0];
   const uint64_t s0 = s[1];
   const uint64_t result = s0 + s1;
@@ -266,12 +274,43 @@ uint64_t next128(void) {
   return result; 
 }
 
+uint32_t next128_64(void){
+  uint32_t t = advance128(s);
+  return t;
+}
+
+uint32_t next128(void){
+  part128 = part128 ^ 1;         // complement previous residual flag
+  if(part128) {                  // there was no previous residual
+    res128 = advance128(s);  // strore residual
+    return (res128 >> 32);       // return upper part
+  }else{                         // there was a previous residual, return lower part
+    return(res128);
+  }
+}
+void Vnext128(uint32_t *dst, int n){
+  int i ;
+  uint64_t t;
+
+  dst[0] = res128;               // in case there was a previous residual, store lower part in dest
+  for(i = part128 ; i < (n-1) ; i+=2){
+    t = advance128(s);
+    dst[i] = (t >> 32);
+    dst[i+1] = t;
+  }
+  part128 = (i < n);
+  if(part128){                   // there will be a residual, save it, store upper part in dest
+    t = advance128(s);
+    res128 = t;
+    dst[i] = (t >> 32);
+  }
+}
 
 /* This is the jump function for the generator. It is equivalent
    to 2^64 calls to next(); it can be used to generate 2^64
    non-overlapping subsequences for parallel computations. */
 
-void jump128(void) {
+static void jump128(uint64_t *s) {
   static const uint64_t JUMP[] = { 0x8a5cd789635d2dff, 0x121fd2155c472f96 };
 
   uint64_t s0 = 0;
@@ -283,7 +322,7 @@ void jump128(void) {
         s0 ^= s[0];
         s1 ^= s[1];
       }
-      next128();
+      advance128(s);
     }
   }
 

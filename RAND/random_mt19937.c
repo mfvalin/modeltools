@@ -163,7 +163,7 @@ static void FillBuffer_MT19937_stream(mt19937_state *stream)
     v = MT[i+MT_PERIOD] ^ (y >> 1);
 //     t = MATRIX[odd(y)]
     t2 = y ;
-    t2 = (t2 << 31) ;   // lower bit into signt bit position
+    t2 = (t2 << 31) ;   // lower bit into sign bit position
     t2 = t2 >> 31 ;     // propagate sign bit to all bits
     t = t2 ;
     t = t & MAGIC ;     // 0 if even, 0x9908b0df if odd
@@ -173,7 +173,8 @@ static void FillBuffer_MT19937_stream(mt19937_state *stream)
   for(i=MT_DIFF ; i<MT_SIZE-1 ; i++){     // 397 - 622
     y = (MT[i] & BIT31) | (MT[i+1] & B30_0);
     v = MT[i-MT_DIFF] ^ (y >> 1);
-//     t = MATRIX[odd(y)]
+//     t = MATRIX[odd(y)] ;
+//     t = (0 - (y & 1)) & MAGIC ;
     t2 = y ;
     t2 = (t2 << 31) ;
     t2 = t2 >> 31 ;
