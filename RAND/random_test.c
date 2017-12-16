@@ -17,12 +17,18 @@ int main(int argc, char **argv){
   int index;
   generic_state *shr3;
   unsigned int piSeed = 123456789;
+  uint64_t piSeeds[2] = {123456,456789};
   int irep = 0;
   int count[32];
 
   MPI_Init(&argc,&argv);
 
-  for(irep=0 ; irep <3 ; irep++){
+  for(irep=0 ; irep <4 ; irep++){
+  if(irep == 0) {
+    printf("\n\n\n ========= XSR128 test =========\n");
+    piSeeds[0] = 123456; piSeeds[1] = 456789;
+    shr3 = Ran_XSR128_new_stream(NULL, &piSeed, 4);
+  }
   if(irep == 2) {
     printf("\n\n\n ========= SHR3 test =========\n");
     piSeed = 123456789;
@@ -33,7 +39,7 @@ int main(int argc, char **argv){
     piSeed = 123456789;
     shr3 = Ran_R250_new_stream(NULL, &piSeed, 1);
   }
-  if(irep == 0) {
+  if(irep == 3) {
     printf("\n\n\n ========= MT19937 test =========\n");
     piSeed = 1;
     shr3 = Ran_MT19937_new_stream(NULL, &piSeed, 1);
