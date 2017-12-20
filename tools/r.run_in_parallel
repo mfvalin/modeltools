@@ -67,12 +67,8 @@ mpiexec_Linux() {
   [[ -n ${APRUN} ]] && RANK_VAR=ALPS_APP_PE                            # Cray XC alps
   case "$RANK_VAR" in
     OMPI_COMM_WORLD_RANK*)                                     # OpenMPI
-      [[ "$bind" == bind || "$bind" == socket ]] && \
-        OPEN_MPI_PARMS="-bind-to-socket ${OPEN_MPI_PARMS}"
-      [[ "$bind" == core ]] && \
-        OPEN_MPI_PARMS="-bind-to-core ${OPEN_MPI_PARMS}"
-      [[ "$bind" == none ]] && \
-        OPEN_MPI_PARMS="-bind-to none ${OPEN_MPI_PARMS}"
+    [[ "$bind" == bind ]] && bind=socket                     # For backward compatibility. Deprecated.
+    OPEN_MPI_PARMS="-bind-to${OpenmpiBindDash:--}${bind} ${OPEN_MPI_PARMS}"
       [[ -n "$ib" ]] && \
         OPEN_MPI_PARMS="--mca btl openib,sm,self ${OPEN_MPI_PARMS}"  # force use of infiniband
       [[ -n "$noib" ]] && \
@@ -639,7 +635,7 @@ MY_NODEFILE=${PARALLEL_NODEFILE:-${GECOSHEP_HOSTS_FILE:-${GECOSHEP_HOSTFILE:-${L
 eval `cclargs_lite -D "" $0 "[high level MPI launcher CRAY+OpenMPI]" \
     -alpspd "" "NoName" "[use Cray ALPS]" \
     -args "" "" "[arguments to the command]" \
-    -bind "none" "bind" "[]" \
+    -bind "none" "socket" "[Process binding (e.g. none, socket, core)]" \
     -coremap "NoNe" "NoNe" "[core affinity map]" \
     -ddt  "" "ddt" "[use Allinea ddt (only on XC40 for now)]" \
     -debug "" "5" "[]" \
@@ -734,7 +730,7 @@ fi
 [[ "$pernuma" == 9999 ]] && ((pernuma=CoresOnNode/OMP_NUM_THREADS/NumaNodes))
 ((corespernuma=CoresOnNode/NumaNodes))
 if(((corespernuma%OMP_NUM_THREADS)>0)) ; then
-  echo "WARNING: The number of OpenMP threads asked for (${OMP_NUM_THREADS}) is not efficient for the target architecture"
+  echo "WARNING: The number of OpenMP threads requested (${OMP_NUM_THREADS}) is not efficient for the target architecture"
   echo "WARNING: (it should be a divisor of ${corespernuma})"
 fi
 ((CoresOnNode<=0)) && CoresOnNode=1
