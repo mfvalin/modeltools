@@ -1,6 +1,7 @@
 #!/bin/ksh93
 # this script is the successor to the r.mpirun... series of scripts with expanded functionality
 # (stdout/stderr post processing and "launch in background" capability)
+export LANG=C
 #
 # commands used in the highly parallel area, we want to use the actual path
 # to avoid undue searches through the command path (involving shared filesystems)
@@ -68,7 +69,13 @@ mpiexec_Linux() {
   case "$RANK_VAR" in
     OMPI_COMM_WORLD_RANK*)                                     # OpenMPI
     [[ "$bind" == bind ]] && bind=socket                     # For backward compatibility. Deprecated.
-    OPEN_MPI_PARMS="-bind-to${OpenmpiBindDash:--}${bind} ${OPEN_MPI_PARMS}"
+
+    # OpenMPI mpirun version 1.6 requires -bind-to-none, later
+    # versions require -bind-to none.
+    token=' '
+    ${mpirun} --version 2>&1 | grep --quiet '1[.]6' && token='-'
+
+    OPEN_MPI_PARMS="-bind-to${token}${bind} ${OPEN_MPI_PARMS}"
       [[ -n "$ib" ]] && \
         OPEN_MPI_PARMS="--mca btl openib,sm,self ${OPEN_MPI_PARMS}"  # force use of infiniband
       [[ -n "$noib" ]] && \
@@ -616,15 +623,15 @@ wait_for() {
 #Version="1.1.28d 2017/08/01"  # Workaround for poor lustre performance by eliminating most of PATH and LD_LIBRARY_PATH
 #Version="1.1.28e 2017/08/24"  # listing collection optimization attempt
 #Version="1.1.28f 2017/08/24"  # listing collection optimization with fail recovery
-#Version="1.1.28g 2017/08/31"  # fixed redirection bug 
+#Version="1.1.28g 2017/08/31"  # fixed redirection bug
 #Version="1.1.28h 2017/08/31"  # auto adjust pernuma, pernode and smt, use depth by default for aprun
 #Version="1.1.29  2017/09/06"  # undo Cray listing optimizations (no gain observed), step 1 of AIX/POE removal, remove unused code
 #Version="1.1.29a 2017/09/07"  # added warning when cores per numa node not an integral multiple of OMP_NUM_THREADS
 #Version="1.1.29b 2017/09/14"  # cosmetic doc changes in cclargs call
 #Version="1.1.29X 2017/09/26"  #  added RANKFILE_PBS+NODEFILE_PBS recognition , changed syntax of bind to none
-#Version="1.1.30  2017/12/19"  # Add -ddt option for XC40. Improve infiniband performance
+#Version="1.1.30  2017/12/21"  # Add -ddt option for XC40. Improve infiniband performance
 true
-Version="1.1.30  2017/12/19"  # Add -ddt option for XC40. Improve infiniband performance
+Version="1.1.30  2017/12/21"  # Add -ddt option for XC40. Improve infiniband performance
 echo "INFO: ${0##*/} version $Version ( /bin/ksh93 )"
 MY_NODEFILE=${PARALLEL_NODEFILE:-${GECOSHEP_HOSTS_FILE:-${GECOSHEP_HOSTFILE:-${LOADL_HOSTFILE:-${PBS_NODEFILE:-${HOME}/.PBS_NODEFILE}}}}}
 [[ ! -f "${MY_NODEFILE}" ]] && \
@@ -1039,7 +1046,7 @@ export RPN_COMM_DIRS="${RPN_COMM_DIRS}"        # RPN_COMM_DIRS no longer needed 
 export WORLD_CHILD
 [[ -z "${nosep}" ]] &&
   [[ -n "${processorder}" ]] &&
-  /usr/bin/printf "============== stdout W:${MpiCommWorld}:%5.5d M:%5.5d-%5.5d Seq:%s ==============\n" \${RP_WorldChild} \${RP_Member} \${RP_MemberChild} \${MP_SeqNum}
+  /usr/bin/printf "============== stdout W:${MpiCommWorld}:%5.5d M:%5.5d-%5.5d Seq:%s (\$($CMD_hostname)) ==============\n" \${RP_WorldChild} \${RP_Member} \${RP_MemberChild} \${MP_SeqNum}
 source ./${MpiRunParms#${tmpdir}/}.${MpiCommWorld}
 PNames=(${ProgramNames[@]})
 DNames=(${DirNames[@]})
