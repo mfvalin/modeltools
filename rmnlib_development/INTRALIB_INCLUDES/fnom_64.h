@@ -36,6 +36,7 @@ int c_waopen2(int iun);
 void c_waclos(int iun);
 int c_waclos2(int iun);
 void c_wawrit(int iun,void *buf,unsigned int adr,int nmots);
+int c_wawrit64(int iun,void *buf,uint64_t adr64,int nmots, uint32_t options);
 int c_wawrit2(int iun,void *buf,unsigned int adr,int nmots);
 void c_waread(int iun,void *buf,unsigned int adr,int nmots);
 int c_waread2(int iun,void *buf,unsigned int adr,int nmots);

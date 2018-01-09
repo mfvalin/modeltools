@@ -1,5 +1,9 @@
 #include <rpnmacros.h>
+#undef word
+typedef uint32_t word;
+
 #include "../INTRALIB_INCLUDES/fnom_64.h"
+
 #define WRITE_PAGE(a,b,c)
 
 #define MODE3232
@@ -11,7 +15,7 @@
 #define MAX_PRIMARY_LNG 32      /* maximum length of primary keys */
 #define MAX_SECONDARY_LNG 16    /* maximum length of info keys */
 /* typedef unsigned long word;  unsigned machine longest integer word */
-typedef unsigned INT_32 word32; /* unsigned 32 bit word */
+typedef uint32_t word32; /* unsigned 32 bit word */
 #define WDTO64(nwds) (nwds>>1)  /* word to 64 bit word conversion */
 #define W64TOWD(nw64) (nw64<<1) /* 64 bit word to word conversion */
 #define W64TOwd(nw64) (nw64<<1) /* 64 bit word to 32 bit word conversion */
@@ -25,7 +29,7 @@ typedef unsigned INT_32 word32; /* unsigned 32 bit word */
 #define MAX_PRIMARY_LNG 16      /* maximum length of primary keys */
 #define MAX_SECONDARY_LNG 8     /* maximum length of info keys */
 /* typedef unsigned long long word; unsigned machine longest integer word */
-typedef unsigned INT_32 word32; /* unsigned 32 bit word */
+typedef uint32_t word32; /* unsigned 32 bit word */
 #define WDTO64(nwds) (nwds)     /* word to 64 bit word conversion */
 #define W64TOWD(nw64) (nw64<<1) /* 64 bit word to word conversion */
 #define W64TOwd(nw64) (nw64<<1) /* 64 bit word to 32 bit word conversion */
@@ -263,7 +267,7 @@ typedef struct {
  * entry:     (real allocated dimension will be ENTRIES_PER_PAGE * primary_len)
  */
 
-}xdf_64_dir_page;
+}xdf_dir_page;
 
 
 
@@ -291,7 +295,7 @@ typedef struct full_dir_page{
         struct full_dir_page *prev_page;
         int modified;
         int true_file_index;
-        xdf_64_dir_page dir;
+        xdf_dir_page dir;
 }full_dir_page;
 
 
@@ -306,7 +310,7 @@ typedef struct {
 #else
         word lng:24, idtyp:8, addr:32;
 #endif
-}xdf_64_record_header;
+}xdf_record_header;
 
 
 /* decription of a standard XDF data record */
@@ -663,6 +667,8 @@ typedef struct {
         word *cur_entry;              /* pointer to current directory entry */
         file_header *header;          /* pointer to file header */
         uint64_t nxtadr;              /* next write address (in word units) */
+        uint64_t cur_addr;            /* current address (WA, sequential xdf) */
+        uint64_t seq_bof;             /* address (WA) of first record (seq xdf) */
         int primary_len;
         /* length in 64 bit units of primary keys (including 64 bit header) */
         int info_len;                 /* length in 64 bit units of info keys */
@@ -679,10 +685,8 @@ typedef struct {
         int page_nrecords;            /* number of records in current page */
         int file_version;             /* version number  */
         int valid_target;             /* last search target valid flag */
-        int xdf_64_seq;                  /* file is sequential xdf */
+        int xdf_seq;                  /* file is sequential xdf */
         int valid_pos;                /* last position valid flag (seq only) */
-        uint64_t cur_addr;            /* current address (WA, sequential xdf) */
-        uint64_t seq_bof;             /* address (WA) of first record (seq xdf) */
         int fstd_vintage_89;          /* old standard file flag */
         max_dir_keys head_keys;       /* header & primary keys for last record */
         max_info_keys info_keys;      /* info for last read/written record */
@@ -736,7 +740,7 @@ typedef struct{
         uint32_t record_index;  /* starting position of record */
         int32_t iun;            /* associated unit number */
         uint32_t aux_index;     /* starting position of auxiliary keys */
-        uint64_t nbits64;       /* number of bits for entire record (40 bits) */
+        uint64_t nbits64;       /* number of bits for entire record (48 bits) */
         int32_t buf9;           /* not used in long records / huge files (standard files only for now) */
         int32_t data[1];        /* record data */
         }buffer_interface_64;   /* same length as buffer_interface */
@@ -747,17 +751,17 @@ file_table_entry_ptr file_table[MAX_XDF_FILES]; /* file table , exported symbol 
 
 char errmsg[1024];     /* buffer to format error messages */
 int msg_level=INFORM;  /* error tolerance before error message is issued */
-int xdf_64_toler=ERROR;   /* error tolerance before program is aborted */
-int xdf_64_stride=1;      /* stride */
-int xdf_64_double=0;      /* double float indicator */
-int xdf_64_short=0;       /* short integer indicator */
-int xdf_64_byte=0;        /* byte array indicator */
-int xdf_64_enforc8=0;     /* enforce 8 char for date specifications */
-int xdf_64_datatyp;       /* data type of last record read */
-int xdf_64_nsplit=1;      /* number of splited output files in xdfuse */
+int xdf_toler=ERROR;   /* error tolerance before program is aborted */
+int xdf_stride=1;      /* stride */
+int xdf_double=0;      /* double float indicator */
+int xdf_short=0;       /* short integer indicator */
+int xdf_byte=0;        /* byte array indicator */
+int xdf_enforc8=0;     /* enforce 8 char for date specifications */
+int xdf_datatyp;       /* data type of last record read */
+int xdf_nsplit=1;      /* number of splited output files in xdfuse */
 int FTN_Bitmot=8*bytesperword; /* number of bits per FORTRAN word */
 int image_mode_copy=0; /* no pack/unpack, used by editfst */
-int xdf_64_checkpoint=0;  /* chekcpoint mode, no closing of the file */
+int xdf_checkpoint=0;  /* chekcpoint mode, no closing of the file */
 int STDSEQ_opened=0;   /* if one std seq file is opened, the limit of opened files becomes 128 */
 key_descriptor stdfkeys[] = {
 #if !defined(Little_Endian)
@@ -810,16 +814,16 @@ extern file_table_entry_ptr file_table[MAX_XDF_FILES]; /* file table , exported 
 
 extern char errmsg[1024];     /* buffer to format error messages */
 extern int msg_level;         /* error tolerance before error message is issued */
-extern int xdf_64_toler;         /* error tolerance before program is aborted */
-extern int xdf_64_stride;        /* stride */
-extern int xdf_64_double;        /* double float indicator */
-extern int xdf_64_short;         /* short integer indicator */
-extern int xdf_64_byte;          /* byte, char array indicator */
-extern int xdf_64_datatyp;       /* data type of last record read */
-extern int xdf_64_enforc8;       /* enforce 8 char for date specifications */
+extern int xdf_toler;         /* error tolerance before program is aborted */
+extern int xdf_stride;        /* stride */
+extern int xdf_double;        /* double float indicator */
+extern int xdf_short;         /* short integer indicator */
+extern int xdf_byte;          /* byte, char array indicator */
+extern int xdf_datatyp;       /* data type of last record read */
+extern int xdf_enforc8;       /* enforce 8 char for date specifications */
 extern int FTN_Bitmot;        /* number of bits per FORTRAN word */
 extern int image_mode_copy;   /* no pack/unpack, used by editfst */
-extern int xdf_64_checkpoint;    /* chekcpoint mode, no closing of the file */
+extern int xdf_checkpoint;    /* chekcpoint mode, no closing of the file */
 extern int STDSEQ_opened;     /* if one std seq file is opened, the limit of opened files becomes 128 */
 extern key_descriptor stdfkeys[];
 extern key_descriptor stdf_info_keys[];
