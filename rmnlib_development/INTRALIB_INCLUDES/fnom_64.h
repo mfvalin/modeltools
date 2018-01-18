@@ -4,7 +4,7 @@ typedef struct {
   uint32_t 
      stream:1, std:1, burp:1, rnd:1, wa:1, ftn:1,
      unf:1, read_only:1, old:1, scratch:1, paged:1,
-     pipe:1, write_mode:1, remote:1, padding:18;
+     pipe:1, write_mode:1, remote:1, sparse:1, padding:17;
 } attributs;
 
 typedef struct {
@@ -52,7 +52,7 @@ void c_sqopen(int iun);
 void c_sqclos(int iun);
 void c_sqrew(int iun);
 void c_sqeoi(int iun);
-int c_sqgetw(int iun, word *bufptr, int nmots);
-int c_sqputw(int iun, word *bufptr, int nmots);
+int c_sqgetw(int iun, uint32_t *bufptr, int nmots);
+int c_sqputw(int iun, uint32_t *bufptr, int nmots);
 int c_sqgets(int iun, char *bufptr, int nchar);
 int c_sqputs(int iun, char *bufptr, int nchar);

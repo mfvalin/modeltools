@@ -22,9 +22,12 @@
   program self_test
     use ISO_C_BINDING
     implicit none
-    integer :: status, iun1, iun2, iun3, errors, nblks, fsize, nw
+    integer :: status, iun1, iun2, iun3, errors, nw
+    integer*8 :: nblks, fsize
     integer :: i
+    integer*8 :: wa8
     integer, external :: fnom, fclos, existe, wasize, numblks, waread2, wawrit2
+    integer*8, external :: numblks64, wasize64
     integer, dimension(4) :: buf
     integer, dimension(512) :: buf512
 
@@ -55,18 +58,21 @@
     print *,'iun, fclos(iun3), status =',iun3,status
 
     iun1 = 0
-    status = fnom(iun1,'./fortran_wa','RND',0)
+    status = fnom(iun1,'./fortran_wa','RND+SPARSE',0)
     print *,'iun1, fnom status(wa) =',iun1,status
     call waopen(iun1)
     buf = 1
     call wawrit(iun1,buf,1,4)
+    wa8 = 1024*1024
+    wa8 = 1024*wa8*4
+    call wawrit64(iun1,buf,wa8,4,0)  ! sparse write at very high address
     buf = 2
     nw = wawrit2(iun1,buf,6,4)
     if(nw == 4) print *,'wawrit2 OK at 4'
     call waclos(iun1)
     call waopen(iun1)
-    nblks = numblks(iun1)
-    fsize = wasize(iun1)
+    nblks = numblks64(iun1)
+    fsize = wasize64(iun1)
     print *,'iun1(fortran_wa), numblks, fsize =',iun1,  nblks, fsize
     call waclos(iun1)
 
@@ -744,21 +750,21 @@ function existe(name) result(status)  ! return 1 if file 'name' exits, 0 otherwi
   return
 end function existe
 
-! subroutine wawrit64(iun,buf,adr,nmots,partition)
-!   use ISO_C_BINDING
-!   implicit none
-!   interface
-!     subroutine cwawrit64(iun,buf,adr,nmots,partition) bind(C,name='c_wawrit64')
-!       import
-!       integer(C_INT), intent(IN), value :: iun, nmots, partition
-!       integer(C_LONG_LONG), intent(IN), value :: adr
-!       integer(C_INT), intent(IN), dimension(nmots) :: buf
-!     end subroutine cwawrit64
-!   end interface
-!   integer, intent(IN) :: iun, nmots, partition
-!   integer*8, intent(IN) :: adr
-!   integer, intent(IN), dimension(nmots) :: buf
-! 
-!   call cwawrit64(iun,buf,adr,nmots,partition)
-! end subroutine wawrit64
+subroutine wawrit64(iun,buf,adr,nmots,partition)
+  use ISO_C_BINDING
+  implicit none
+  interface
+    subroutine cwawrit64(iun,buf,adr,nmots,partition) bind(C,name='c_wawrit64')
+      import
+      integer(C_INT), intent(IN), value :: iun, nmots, partition
+      integer(C_LONG_LONG), intent(IN), value :: adr
+      integer(C_INT), intent(IN), dimension(nmots) :: buf
+    end subroutine cwawrit64
+  end interface
+  integer, intent(IN) :: iun, nmots, partition
+  integer*8, intent(IN) :: adr
+  integer, intent(IN), dimension(nmots) :: buf
+
+  call cwawrit64(iun,buf,adr,nmots,partition)
+end subroutine wawrit64
 

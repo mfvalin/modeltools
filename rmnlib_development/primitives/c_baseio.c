@@ -174,7 +174,7 @@ void static dump_file_entry(int i)
       fprintf(stderr,"FGFDT[%d] ",i);
       fprintf(stderr,"file_name=%s subname=%s file_type=%s\n",
               FGFDT[i].file_name,FGFDT[i].subname,FGFDT[i].file_type);
-      fprintf(stderr,"iun=%d,fd=%d,size=%ld,esize=%ld,lrec=%d,flags=%s%s%s%s%s%s%s%s%s%s%s%s\n",
+      fprintf(stderr,"iun=%d,fd=%d,size=%ld,esize=%ld,lrec=%d,flags=%s%s%s%s%s%s%s%s%s%s%s%s%s\n",
               FGFDT[i].iun,
               FGFDT[i].fd,
               FGFDT[i].file_size,
@@ -191,6 +191,7 @@ void static dump_file_entry(int i)
               FGFDT[i].attr.read_only?"+R/O":"+R/W",
               FGFDT[i].attr.old?"+OLD":"",
               FGFDT[i].attr.paged?"+PAGED":"+NOT PAGED",
+              FGFDT[i].attr.sparse?"+SPARSE":"+COMPACT",
               FGFDT[i].attr.scratch?"+SCRATCH":"");
       fprintf(stderr,"\n");
 }
@@ -257,6 +258,7 @@ static void reset_file_entry(int i){
    FGFDT[i].attr.old       = 0;
    FGFDT[i].attr.scratch   = 0;
    FGFDT[i].attr.paged     = 0;
+   FGFDT[i].attr.sparse    = 0;
    FGFDT[i].attr.write_mode= 0;
    FGFDT[i].attr.remote    = 0;    /* remote file, socket wa file */
 }
@@ -441,6 +443,7 @@ int c_fnom(int *iun,char *nom,char *type,int lrec)
   FGFDT[i].attr.read_only=0;
   FGFDT[i].attr.old=0;
   FGFDT[i].attr.paged=0;
+  FGFDT[i].attr.sparse=0;
   FGFDT[i].attr.scratch = 0;
   FGFDT[i].attr.pipe = 0;
   FGFDT[i].attr.remote=0;
@@ -467,6 +470,7 @@ int c_fnom(int *iun,char *nom,char *type,int lrec)
                                                        FGFDT[i].attr.rnd=1; }
   if (strstr(type,"SCRATCH") || strstr(type,"scratch")) FGFDT[i].attr.scratch=1;
   if (strstr(type,"PAGED")   || strstr(type,"paged"))   FGFDT[i].attr.paged=1;
+  if (strstr(type,"SPARSE")   || strstr(type,"sparse")) FGFDT[i].attr.sparse=1;
   if (strstr(type,"REMOTE") || strstr(type,"remote")) { FGFDT[i].attr.remote=1; }
     
   if (!FGFDT[i].attr.std && !FGFDT[i].attr.burp && 
@@ -980,19 +984,19 @@ int c_wawrit64(int iun,void *buf,uint64_t adr64,int nmots, uint32_t options)
                      iun,FGFDT[i].file_name);
       return(-1);
       }
-   if ( adr > FGFDT[i].file_size+WA_HOLE ) {
+   if ( (adr > FGFDT[i].file_size+WA_HOLE) && (FGFDT[i].attr.sparse == 0) ) {
       fprintf(stderr,"c_wawrit64 error: attempt to write beyond EOF+%d\n",WA_HOLE);
       fprintf(stderr,"                unit = %d, adr=%lu > file_size=%ld\n",
                      iun,adr,FGFDT[i].file_size);
       fprintf(stderr,"                filename=%s\n",FGFDT[i].file_name);
       exit(1);
       }
-   if ( adr > FGFDT[i].file_size+1 ){
+   if ( (adr > FGFDT[i].file_size+1) && (FGFDT[i].attr.sparse == 0) ){
       qqcwawr64(scrap,FGFDT[i].file_size+1,adr-FGFDT[i].file_size,i);
       }
-   if (*little_endian) swap_buffer_endianness(bufswap,nmots)  // skip this if options contains WA_NOSAVE
-   qqcwawr64((uint32_t *)buf,adr,nmots,i);
    if (*little_endian) swap_buffer_endianness(bufswap,nmots)
+   qqcwawr64((uint32_t *)buf,adr,nmots,i);
+   if (*little_endian) swap_buffer_endianness(bufswap,nmots)  // skip this if options contains WA_NOSAVE
    return( nmots>0 ? nmots : 0);
 }
 int c_wawrit2(int iun,void *buf,uint32_t adr,int nmots)
@@ -1142,7 +1146,7 @@ int32_t c_numblks(int iun)
 
    n = c_wasize(iun);
    if( n<0 ) return (n);
-   i = 512 ;
+   i = 512 / sizeof(uint32_t) ;
    return ( (n+i-1) / i );
 }
 
@@ -1153,7 +1157,7 @@ int64_t c_numblks64(int iun)
 
    n = c_wasize64(iun);
    if( n<0 ) return (n);
-   i = 512 ;
+   i = 512 / sizeof(uint32_t) ;
    return ( (n+i-1) / i );
 }
 
@@ -2486,7 +2490,7 @@ if (FGFDT[indf].attr.remote) {
   check_swap_records(demande,5,sizeof(int));
   nc=write_stream(FGFDT[indf].fd,demande,5*sizeof(int));
   if (nc != 0) {
-    fprintf(stderr,"socket qqcwawr error: wrote only %i bytes to server\n",nc);
+    fprintf(stderr,"socket qqcwawr error: wrote only %d bytes to server\n",nc);
     fflush(stderr);
     }
   nelm=write_stream(FGFDT[indf].fd,buf,lnmots*sizeof(int));
@@ -2504,13 +2508,13 @@ else {
     if(ladr!=0) WSEEK(lfd,ladr - 1, L_SET);
     if ((nwritten=write(lfd, buf, sizeof(int32_t) * lnmots)) != sizeof(int32_t) * lnmots)
         {
-          if (errno == 14)
+          if (errno == 14) // BAD ADDRESS
             {
               fprintf(stderr, "qqcwawr error: write error for file %s\n",FGFDT[indf].file_name);
               fprintf(stderr,"qqcwawr: filename=%s, buf=%p adr=%lu, nmots=%d, nwritten=%d, errno=%d\n",
                       FGFDT[indf].file_name,buf,ladr,lnmots,nwritten,errno);
               fprintf(stderr, "*** Contactez un membre de la section informatique de RPN ***\n");
-              fprintf(stderr, "*** Seek support from RPN informatic section ***\n");
+              fprintf(stderr, "*** Seek support from RPN informatics section ***\n");
               /*            memorymap(1); */
               perror("qqcwawr");
               exit(1);
@@ -2572,10 +2576,10 @@ else {
 // }
 
 /****************************************************************************
-*                              Q Q C W A R D                                *
+*                              Q Q C W A R D 6 4                            *
 *****************************************************************************
 *
-***function qqcward
+***function qqcward64
 *
 *OBJECT: Reads a word addressable file.
 *        Active part of c_waread2.
@@ -2589,7 +2593,7 @@ else {
 */
 static void qqcward64(uint32_t *buf,uint64_t ladr,int  lnmots,int indf)
 {
-int offset,i,wa0,lng,l,lastadr;
+uint64_t offset,i,wa0,lng,l,lastadr;
 uint64_t adr0;
 int npages,reste,ind;
 int lfd=FGFDT[indf].fd;
@@ -2626,14 +2630,14 @@ if (FGFDT[indf].attr.remote) {
     }
   nelm=read_stream(FGFDT[indf].fd,buf,lnmots*sizeof(int));
 #if defined (DEBUG)
-  printf("qqcward read %d bytes\n",nelm);
+  printf("qqcward remote read %d bytes\n",nelm);
 #endif
 } /* end remote */
 else {
   if (ladr != 0) 
     ladr += wafile[ind].offset;
 
-  if ((WA_PAGE_SIZE == 0) || (ladr == 0)) {
+  if ((WA_PAGE_SIZE == 0) || (ladr == 0)) {      // not page cached
     if(ladr!=0) WSEEK(lfd, ladr - 1, L_SET);
     reste=read(lfd, buf, sizeof(int32_t) * lnmots);
     if(reste != sizeof(int32_t)*lnmots) {
@@ -2644,7 +2648,7 @@ else {
         exit(1);
     }
     }
-  else {
+  else {                                         // file is page cached
     lng = lnmots;
     adr0 = ladr;
     offset = 0;
