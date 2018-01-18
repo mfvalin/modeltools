@@ -132,6 +132,15 @@ static char *AFSISIO=NULL;
 static char *ARMNLIB=NULL;
 static char *LOCALDIR="./";
 
+#if defined(TEST)
+int accept_from_sock(int a) { exit(1); return 0;}
+int bind_to_localport(void *a, void *b, int c) { exit(1); return 0;}
+void check_swap_records(void *a, int b, int c) { exit(1);}
+void tracebck_() { exit(1);}
+int write_stream(int fd,void *a, int n) { exit(1); return 0;}
+int read_stream(int fd,void *a, int n) { exit(1); return 0;}
+#endif
+
 /****************************************************************************
 *                   C _ F R E T O U R ,   F R E T O U R                     *
 *****************************************************************************
@@ -1093,17 +1102,35 @@ int32_t c_wasize(int iun)
    return(n);
 }
 
+int64_t c_wasize64(int iun)
+{
+   int i,ier;
+   int64_t n;
+
+   if ((i=find_file_entry("c_wasize64",iun)) < 0) return(i);
+
+   if (! FGFDT[i].open_flag) {
+      ier = qqcopen(i);
+      n = FGFDT[i].eff_file_size;
+      ier = qqcclos(i);
+      }
+   else
+      n = FGFDT[i].eff_file_size;
+
+   return(n);
+}
+
 /****************************************************************************
 *                    C _ N U M B L K S ,   N U M B L K S                    *
 *****************************************************************************
 *
 ***function c_numblks, numblks
 *
-*OBJECT: Returns the size of a file in kilobytes.
+*OBJECT: Returns the size of a file in units of 512 bytes.
 *
 *ARGUMENTS: in iun   unit number
 *
-*RETURNS: the size of a file in kilobytes.
+*RETURNS: the size of a file in units of 512 bytes.
 *
 *NOTE: It uses c_wasize.
 *
@@ -1115,7 +1142,18 @@ int32_t c_numblks(int iun)
 
    n = c_wasize(iun);
    if( n<0 ) return (n);
-   i = 1024 / sizeof(int32_t);
+   i = 512 ;
+   return ( (n+i-1) / i );
+}
+
+int64_t c_numblks64(int iun)
+{
+   int i,ier;
+   int64_t n;
+
+   n = c_wasize64(iun);
+   if( n<0 ) return (n);
+   i = 512 ;
    return ( (n+i-1) / i );
 }
 

@@ -162,7 +162,8 @@
   function fnom(iun, path, options, lrec) result(status)  ! moved from C to Fortran
     use ISO_C_BINDING
     implicit none
-    integer, intent(IN) :: iun, lrec
+    integer, intent(INOUT) :: iun          ! iun == 0 : return usable iun upon return
+    integer, intent(IN) :: lrec
     character(len=*), intent(IN) :: path, options
     integer :: status
 !
@@ -170,24 +171,23 @@
       function true_fnom(iun, path, options, lrec) result(status) bind(C,name='c_fnom')
       import :: C_INT, C_CHAR
       character(C_CHAR), dimension(*), intent(IN) :: path, options
-      integer(C_INT) :: iun
+      integer(C_INT), intent(INOUT) :: iun
       integer(C_INT), intent(IN), value :: lrec
       integer(C_INT) :: status
       end function true_fnom
     end interface
 !
-    character (C_CHAR), dimension(len(path)+1) :: my_path
+    character (C_CHAR), dimension(len(path)+1) :: my_path         ! add 1 position for the terminating null character
     character (C_CHAR), dimension(len(options)+1) :: my_options
 !
-    my_path = transfer(trim(path)//achar(0),my_path)
+    my_path = transfer(trim(path)//achar(0),my_path)              ! make null terminated C string from Fortran strings
     my_options = transfer(trim(options)//achar(0),my_options)
 !
-    status = true_fnom(iun, my_path, my_options, lrec)
+    status = true_fnom(iun, my_path, my_options, lrec)     ! call the C code after Fortran style to C style string conversion
 !
   end function
-!
-! TODO:L ajouter flags OLD R/O append scratch (passer les flags recus ?)
-!
+
+! this is called by the C code to set some Fortran I/O setup options
   FUNCTION qqqf7op_from_c(iun,path,options,lrec,rndflag,unfflag,lmult,lng_in) result(status) BIND(C,name='qqq_f90_options')
     use ISO_C_BINDING
     implicit none
@@ -254,13 +254,13 @@ print *,'recl =',lrec*lmult
       if(trim(fstat) == 'SCRATCH') then
         OPEN(iun,ACCESS='DIRECT',FORM='UNFORMATTED',STATUS='SCRATCH',ACTION=action,RECL=lrec*lmult,ERR=77)
       else
-        OPEN(iun,FILE=name(1:lng),ACCESS='DIRECT',FORM='UNFORMATTED',STATUS='UNKNOWN',ACTION=action,RECL=lrec*lmult,ERR=77)
+        OPEN(iun,FILE=name(1:lng),ACCESS='DIRECT',FORM='UNFORMATTED',STATUS=fstat,ACTION=action,RECL=lrec*lmult,ERR=77)
       endif
     else                   ! no recl if not random 77
       if(trim(fstat) == 'SCRATCH') then
         OPEN(iun,ACCESS='SEQUENTIAL',FORM=form,STATUS='SCRATCH',POSITION=position,ACTION=action,ERR=77)
       else
-        OPEN(iun,FILE=name(1:lng),ACCESS='SEQUENTIAL',FORM=form,STATUS='UNKNOWN',POSITION=position,ACTION=action,ERR=77)
+        OPEN(iun,FILE=name(1:lng),ACCESS='SEQUENTIAL',FORM=form,STATUS=fstat,POSITION=position,ACTION=action,ERR=77)
       endif
     endif
 !
@@ -271,7 +271,7 @@ print *,'error in qqqf7op_from_c'
     return
   end
 !
-  function fclos(iun) result(status)
+  function fclos(iun) result(status)    ! "close" file opened with fnom, makes iun usable again
     use ISO_C_BINDING
     implicit none
     integer, intent(IN) :: iun
@@ -289,7 +289,7 @@ print *,'closing unit =',iun
     status = fclose(iun)
   end function
 !
-  FUNCTION ftnclos(iun) result(status) BIND(C,name='ftn_clos')
+  FUNCTION ftnclos(iun) result(status) BIND(C,name='ftn_clos')   ! actual Fortran close (called from C)
     use ISO_C_BINDING
     implicit none
     integer(C_INT), value :: iun
@@ -326,7 +326,7 @@ integer function fretour(iun)
   return
 end
 !
-function getfdsc(iun) result(i)
+function getfdsc(iun) result(i)  ! Get file descriptor associated to unit iun
   use ISO_C_BINDING
   implicit none
   interface
@@ -342,7 +342,7 @@ function getfdsc(iun) result(i)
   i = cgetfdsc(iun)
 end function getfdsc
 !
-subroutine sqopen(iun)
+subroutine sqopen(iun)   ! Open a stream on unit iun
   use ISO_C_BINDING
   implicit none
   interface
@@ -356,7 +356,7 @@ subroutine sqopen(iun)
   call csqopen(iun)
 end subroutine sqopen
 !
-subroutine sqclos(iun)
+subroutine sqclos(iun)   ! Close stream associated to unit iun
   use ISO_C_BINDING
   implicit none
   interface
@@ -370,7 +370,7 @@ subroutine sqclos(iun)
   call csqclos(iun)
 end subroutine sqclos
 !
-subroutine sqrew(iun)
+subroutine sqrew(iun)   ! Rewind stream associated to unit iun
   use ISO_C_BINDING
   implicit none
   interface
@@ -384,7 +384,7 @@ subroutine sqrew(iun)
   call csqrew(iun)
 end subroutine sqrew
 !
-subroutine sqeoi(iun)
+subroutine sqeoi(iun)   ! Go to the end of stream associated to unit iun (append position)
   use ISO_C_BINDING
   implicit none
   interface
@@ -398,34 +398,34 @@ subroutine sqeoi(iun)
   call csqeoi(iun)
 end subroutine sqeoi
 !
-subroutine sqgetw(iun,buf,nmots)
+subroutine sqgetw(iun,buf,nmots)   ! get nmots words (4 bytes) from stream associated to unit iun
   use ISO_C_BINDING
   implicit none
   interface
     subroutine csqgetw(iun,buf,nmots) bind(C,name='c_sqgetw')
       import
       integer(C_INT), intent(IN), value :: iun,nmots
-      integer(C_INT), intent(OUT) :: buf
+      integer(C_INT), intent(OUT), dimension(nmots) :: buf
     end subroutine csqgetw
   end interface
   integer, intent(IN) :: iun, nmots
-  integer, intent(OUT) :: buf
+  integer, intent(OUT), dimension(nmots) :: buf
 
   call csqgetw(iun,buf,nmots)
 end subroutine sqgetw
 !
-subroutine sqputw(iun,buf,nmots)
+subroutine sqputw(iun,buf,nmots)   ! write nmots words (4 bytes) into stream associated to unit iun
   use ISO_C_BINDING
   implicit none
   interface
     subroutine csqputw(iun,buf,nmots) bind(C,name='c_sqputw')
       import
       integer(C_INT), intent(IN), value :: iun,nmots
-      integer(C_INT), intent(IN) :: buf
+      integer(C_INT), intent(IN), dimension(nmots) :: buf
     end subroutine csqputw
   end interface
   integer, intent(IN) :: iun, nmots
-  integer, intent(IN) :: buf
+  integer, intent(IN), dimension(nmots) :: buf
 
   call csqputw(iun,buf,nmots)
 end subroutine sqputw
@@ -661,7 +661,7 @@ print *,'wawrit, adr, nmots',adr,nmots
   nwrt = cwawrit2(iun,buf,adr,nmots)
 end function wawrit2
 
-function numblks(iun) result(i)
+function numblks(iun) result(i)   ! get size of file associated with iun in units of 512 bytes
   use ISO_C_BINDING
   implicit none
   interface
@@ -677,7 +677,23 @@ function numblks(iun) result(i)
   i = cnumblks(iun)
 end function numblks
 
-function wasize(iun) result(i)
+function numblks64(iun) result(i8)   ! get size of file associated with iun in units of 512 bytes
+  use ISO_C_BINDING
+  implicit none
+  interface
+    function cnumblks64(iun) result(i8) bind(C,name='c_numblks64')
+      import
+      integer(C_INT), intent(IN), value :: iun
+      integer(C_LONG) :: i8
+    end function cnumblks64
+  end interface
+  integer, intent(IN) :: iun
+  integer*8 :: i8
+
+  i8 = cnumblks64(iun)
+end function numblks64
+
+function wasize(iun) result(i)   ! get size of file associated with iun in words (4 bytes)
   use ISO_C_BINDING
   implicit none
   interface
@@ -693,7 +709,23 @@ function wasize(iun) result(i)
   i = cwasize(iun)
 end function wasize
 
-function existe(name) result(status)
+function wasize64(iun) result(i8)   ! get size of file associated with iun in words (4 bytes)
+  use ISO_C_BINDING
+  implicit none
+  interface
+    function cwasize64(iun) result(i8) bind(C,name='c_wasize64')
+      import
+      integer(C_INT), intent(IN), value :: iun
+      integer(C_LONG) :: i8
+    end function cwasize64
+  end interface
+  integer, intent(IN) :: iun
+  integer*8 :: i8
+
+  i8 = cwasize64(iun)
+end function wasize64
+
+function existe(name) result(status)  ! return 1 if file 'name' exits, 0 otherwise
   use ISO_C_BINDING
   implicit none
   interface
@@ -703,7 +735,7 @@ function existe(name) result(status)
       integer(C_INT) :: status
     end function cexiste
   end interface
-  character(len=*), intent(IN) :: name
+  character(len=*), intent(IN) :: name    ! file name
   integer :: status
   character(C_CHAR), dimension(len(trim(name))+1), target :: name1
 
