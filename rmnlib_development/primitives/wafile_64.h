@@ -19,7 +19,7 @@
 #define CMCARC_SIGN_V5 "CMCARCH5"  /* signature du debut d'un fichier cmcarc version 5 */
 
 typedef struct {
-   word *page_adr;
+   uint32_t *page_adr;
    uint64_t wa0;
    uint64_t walast;
    int access_count;
@@ -31,7 +31,8 @@ typedef struct {
 typedef struct {
    int file_desc;
    int nb_page_in_use;
-   PAGEINFO page[MAXPAGES];
+//   PAGEINFO page[MAXPAGES];
+   PAGEINFO *page;             // ready for dynamic number of pages
    uint64_t offset;
    uint64_t segments[3];       // segment table, segment i addresses go from segments[i] -> segments[i+1]-1 0 means inactive
    } FILEINFO;

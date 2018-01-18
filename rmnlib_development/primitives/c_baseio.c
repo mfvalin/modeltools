@@ -91,15 +91,15 @@ static void get_new_page(int ind);
 static void wa_pages_flush(int ind);
 static long long filepos(int indf);
 static int qqcopen(int indf);
-static void wa_page_read(int fd,int32_t *buf,unsigned int adr,int nmots,int indf);
-static void wa_page_write(int fd,int32_t *buf,unsigned int adr,int nmots,int indf);
+static void wa_page_read(int fd,uint32_t *buf,uint64_t adr,int nmots,int indf);
+static void wa_page_write(int fd,uint32_t *buf,uint64_t adr,int nmots,int indf);
 // static void qqcwawr(int32_t *buf,uint32_t ladr,int lnmots,int indf);
 // static void qqcward(int32_t *buf,uint32_t ladr,int  lnmots,int indf);
-static void qqcwawr64(int32_t *buf,uint64_t ladr,int lnmots,int indf);
-static void qqcward64(int32_t *buf,uint64_t ladr,int  lnmots,int indf);
+static void qqcwawr64(uint32_t *buf,uint64_t ladr,int lnmots,int indf);
+static void qqcward64(uint32_t *buf,uint64_t ladr,int  lnmots,int indf);
 static int32_t qqcnblk(int lfd,int indf);
-static void MOVE (int32_t *src, int32_t *dest, int nwords);
-static void ZERO ( int32_t *dest, int nwords);
+static void MOVE (uint32_t *src, uint32_t *dest, int nwords);
+static void ZERO (uint32_t *dest, int nwords);
 static int fnom_rem_connect(int ind, char* remote_host);
 
 int c_existe(char *filename) ;
@@ -108,7 +108,7 @@ static ENTETE_CMCARC cmcarc;
 static ENTETE_CMCARC_V5 cmcarc64;
 
 static FILEINFO wafile[MAXWAFILES];
-static int32_t *free_list[MAXWAFILES*MAXPAGES];
+static uint32_t *free_list[MAXWAFILES*MAXPAGES];
 static int dastat[MAXWAFILES] = {MAXWAFILES * 0};
 
 static int BLKSIZE = 512;
@@ -165,7 +165,7 @@ void static dump_file_entry(int i)
       fprintf(stderr,"FGFDT[%d] ",i);
       fprintf(stderr,"file_name=%s subname=%s file_type=%s\n",
               FGFDT[i].file_name,FGFDT[i].subname,FGFDT[i].file_type);
-      fprintf(stderr,"iun=%d,fd=%d,size=%d,esize=%d,lrec=%d,flags=%s%s%s%s%s%s%s%s%s%s%s%s\n",
+      fprintf(stderr,"iun=%d,fd=%d,size=%ld,esize=%ld,lrec=%d,flags=%s%s%s%s%s%s%s%s%s%s%s%s\n",
               FGFDT[i].iun,
               FGFDT[i].fd,
               FGFDT[i].file_size,
@@ -956,7 +956,7 @@ int c_wawrit64(int iun,void *buf,uint64_t adr64,int nmots, uint32_t options)
 {
 #define WA_HOLE 2048
    int i,ier;
-   int32_t scrap[WA_HOLE];
+   uint32_t scrap[WA_HOLE];
    int32_t *bufswap = (int32_t *) buf;
    uint64_t adr = adr64;
 
@@ -973,7 +973,7 @@ int c_wawrit64(int iun,void *buf,uint64_t adr64,int nmots, uint32_t options)
       }
    if ( adr > FGFDT[i].file_size+WA_HOLE ) {
       fprintf(stderr,"c_wawrit64 error: attempt to write beyond EOF+%d\n",WA_HOLE);
-      fprintf(stderr,"                unit = %d, adr=%u > file_size=%d\n",
+      fprintf(stderr,"                unit = %d, adr=%lu > file_size=%ld\n",
                      iun,adr,FGFDT[i].file_size);
       fprintf(stderr,"                filename=%s\n",FGFDT[i].file_name);
       exit(1);
@@ -982,7 +982,7 @@ int c_wawrit64(int iun,void *buf,uint64_t adr64,int nmots, uint32_t options)
       qqcwawr64(scrap,FGFDT[i].file_size+1,adr-FGFDT[i].file_size,i);
       }
    if (*little_endian) swap_buffer_endianness(bufswap,nmots)  // skip this if options contains WA_NOSAVE
-   qqcwawr64((int32_t *)buf,adr,nmots,i);
+   qqcwawr64((uint32_t *)buf,adr,nmots,i);
    if (*little_endian) swap_buffer_endianness(bufswap,nmots)
    return( nmots>0 ? nmots : 0);
 }
@@ -1034,7 +1034,7 @@ int c_waread64(int iun,void *buf,uint64_t adr64,int nmots, uint32_t options)
       nmots -= (adr+nmots-1-FGFDT[i].eff_file_size);
       }
    if ( nmots == 0 ) return(0);
-   qqcward64((int32_t *)buf,adr,nmots,i);
+   qqcward64((uint32_t *)buf,adr,nmots,i);
    if (*little_endian) swap_buffer_endianness(bufswap,nmots)
    return(nmots);
 }
@@ -1054,7 +1054,7 @@ void c_waread(int iun,void *buf,unsigned int adr,int nmots)
     fprintf(stderr,
             "c_waread error: attempt to read beyond EOF, of file %s\n",
             FGFDT[i].file_name);
-    fprintf(stderr,"                addr = %u, EOF = %d\n",
+    fprintf(stderr,"                addr = %d, EOF = %ld\n",
             adr,FGFDT[i].eff_file_size);
   }
 
@@ -1589,14 +1589,14 @@ static void scrap_page(int ind0,int ind1)
       ier = write(wafile[fl0].file_desc,wafile[fl0].page[pg0].page_adr,sizeof(int32_t)*nm);
       if (ier != sizeof(int32_t)*nm) {
         fprintf(stderr,"scrap_page error: cannot write page, fd=%d\n",wafile[fl0].file_desc);
-        fprintf(stderr,"scrap_page error: trying to write %d words buffer=%x, fileadr=%d\n",nm,
+        fprintf(stderr,"scrap_page error: trying to write %d words buffer=%p, fileadr=%ld\n",nm,
                              wafile[fl0].page[pg0].page_adr,wafile[fl0].page[pg0].wa0-1);
         fprintf(stderr,"scrap_page error: ier=%d,fl0=%d,ind0=%d,ind1=%d\n",ier,fl0,ind0,ind1);
         perror("FATAL WA ERROR");
         exit(1);
         }
       if (debug_mode > 4) {
-         fprintf(stderr,"Debug SCRAP_PAGE ecriture disque adr=%d, nmots=%d \n",
+         fprintf(stderr,"Debug SCRAP_PAGE ecriture disque adr=%ld, nmots=%d \n",
                         wafile[fl0].page[pg0].wa0,nm);
          }
       }
@@ -1660,14 +1660,14 @@ static void get_new_page(int ind)
    if (nfree < 0) {
       if (global_count < WA_PAGE_LIMIT) {
          global_count++;
-         free_list[++nfree] = (int32_t *) malloc(WA_PAGE_SIZE * sizeof(int32_t));
+         free_list[++nfree] = (uint32_t *) malloc(WA_PAGE_SIZE * sizeof(int32_t));
          if (free_list[nfree] == NULL) {
            fprintf(stderr,
            "WA get_new_page error: can't allocate (not enough memory)\n");
            exit(1);
            }
    if (debug_mode > 4) {
-      fprintf(stderr,"Debug GET_NEW_PAGE nfree=%d malloc=%d \n",nfree,free_list[nfree]);
+      fprintf(stderr,"Debug GET_NEW_PAGE nfree=%d malloc=%lu \n",nfree,free_list[nfree]);
       }
          }
       }
@@ -1688,7 +1688,7 @@ static void get_new_page(int ind)
    wafile[ind].page[pg0].last_access = 0;
    wafile[ind].page[pg0].touch_flag = 0;
    if (debug_mode > 4) {
-      fprintf(stderr,"Debug GET_NEW_PAGE pg0=%d, page_adr=%d \n",
+      fprintf(stderr,"Debug GET_NEW_PAGE pg0=%d, page_adr=%p \n",
                      pg0,wafile[ind].page[pg0].page_adr);
       }
    }
@@ -1831,7 +1831,7 @@ static long long filepos(int indf)
       lng64 = (nt64 - nd64 - 4) * 8;
       if (nt64 < nd64+6) {
         fprintf(stderr,
-                "%s is a CMCARC file but nt=%d nd=%d\n",FGFDT[indf].file_name,nt64,nd64);
+                "%s is a CMCARC file but nt=%ld nd=%ld\n",FGFDT[indf].file_name,nt64,nd64);
         return(-1);
         }
       }
@@ -1920,11 +1920,12 @@ if (! init) {
   if (WA_PAGE_LIMIT == 0)
     WA_PAGE_LIMIT = WA_PAGE_NB * MAXWAFILES;
   if (WA_PAGE_SIZE > 0) {
-    fprintf(stderr,"WA_PAGE_SZ = %d Bytes ",WA_PAGE_SIZE*sizeof(int32_t));
+    fprintf(stderr,"WA_PAGE_SZ = %ld Bytes ",WA_PAGE_SIZE*sizeof(int32_t));
     fprintf(stderr,"WA_PAGE_NB = %d ",WA_PAGE_NB);
     fprintf(stderr,"WA_PAGE_LIMIT = %d\n",WA_PAGE_LIMIT);
   }
   for (ind = 0; ind < MAXWAFILES; ind++) {
+    wafile[ind].page = NULL;                  // NO page table yet
     wafile[ind].file_desc = -1;
     wafile[ind].nb_page_in_use = 0;
     wafile[ind].offset = 0;
@@ -1963,7 +1964,7 @@ if (FGFDT[indf].subname) {    /* fichier de type cmcarc */
   }
   FGFDT[indf].open_flag = 1;
   if (debug_mode > 4) {
-    fprintf(stderr,"Debug subfile found at position %u\n",wafile[ind].offset);
+    fprintf(stderr,"Debug subfile found at position %lu\n",wafile[ind].offset);
   }
 }
 
@@ -2006,7 +2007,9 @@ else {  /* not a CMCARC type file */
       fprintf(stderr, "qqcopen error: %s filename=(%s) !\n",errmsg,FGFDT[indf].file_name);
       return(-1);
     }
+
   wafile[ind].file_desc = fd;
+
   FGFDT[indf].fd = fd;
   FGFDT[indf].open_flag = 1;
   FGFDT[indf].waindx = ind;
@@ -2022,8 +2025,9 @@ if (subfile_length > 0)
 FGFDT[indf].eff_file_size = subfile_length;
 subfile_length = 0;
 
-if (WA_PAGE_SIZE != 0) {
-  for (i = 0; i < WA_PAGE_NB; i++) {
+if (WA_PAGE_SIZE > 0) {
+  wafile[ind].page = (PAGEINFO *)malloc(WA_PAGE_NB * sizeof(PAGEINFO));  // allocate page table for this WA file
+  for (i = 0; i < WA_PAGE_NB; i++) {                                     // and initialize it
     wafile[ind].page[i].page_adr = NULL;
     wafile[ind].page[i].wa0 = 0;
     wafile[ind].page[i].walast = 0;
@@ -2035,11 +2039,7 @@ if (WA_PAGE_SIZE != 0) {
   if (debug_mode > 1) {
     fprintf(stderr,"Debug ouverture du fichier %s ind=%d, fd=%d\n",
             FGFDT[indf].file_name,ind,fd);
-#if defined (NEC)
-    fprintf(stderr,"Debug longueur du fichier =%lld Bytes\n",dim);
-#else
-    fprintf(stderr,"Debug longueur du fichier =%d Bytes\n",dim);
-#endif
+    fprintf(stderr,"Debug longueur du fichier =%ld Bytes\n",dim);
   }      
     }
 return(fd);
@@ -2088,7 +2088,7 @@ for (i=0;i<MAXWAFILES;i++){
 *           in  indf   index of wafile in the master file table
 *
 */
-static void wa_page_read(int fd,int32_t *buf,unsigned int adr,int nmots,int indf)
+static void wa_page_read(int fd,uint32_t *buf,uint64_t adr,int nmots,int indf)
 
 {
    int ind, j, wa0, offset, i=0, found=0, nbytes;
@@ -2103,7 +2103,7 @@ static void wa_page_read(int fd,int32_t *buf,unsigned int adr,int nmots,int indf
    while ((wafile[ind].file_desc != fd) && (ind < MAXWAFILES))
       ind++;
    if (debug_mode > 4) {
-      fprintf(stderr,"Debug WA_PAGE_READ requete adr=%u, nmots=%d ind=%d\n",adr,nmots,ind); 
+      fprintf(stderr,"Debug WA_PAGE_READ requete adr=%lu, nmots=%d ind=%d\n",adr,nmots,ind); 
       }
    if (ind == MAXWAFILES) {
       fprintf(stderr,"wa_page_read error: file is not open\n");
@@ -2140,7 +2140,7 @@ static void wa_page_read(int fd,int32_t *buf,unsigned int adr,int nmots,int indf
        nbytes = read(fd,wafile[ind].page[i].page_adr,sizeof(int32_t)*WA_PAGE_SIZE);
        if ( nbytes < readbytes ) {
           fprintf(stderr,"wa_page_read error: cannot read page from file %d,fd=%d\n",ind,fd);
-          fprintf(stderr,"  tried to get %d bytes, got %d\n",sizeof(int32_t)*WA_PAGE_SIZE,nbytes);
+          fprintf(stderr,"  tried to get %ld bytes, got %d\n",sizeof(int32_t)*WA_PAGE_SIZE,nbytes);
           perror("WA_PAGE_READ");
           exit(1);
           }
@@ -2157,7 +2157,7 @@ static void wa_page_read(int fd,int32_t *buf,unsigned int adr,int nmots,int indf
          }
        wafile[ind].page[i].walast = wafile[ind].page[i].wa0 + nbytes / sizeof(int32_t) -1;
        if (debug_mode > 4) {
-          fprintf(stderr,"Debug WA_PAGE_READ lecture disque adr=%d\n",wafile[ind].page[i].wa0);
+          fprintf(stderr,"Debug WA_PAGE_READ lecture disque adr=%lu\n",wafile[ind].page[i].wa0);
           }
        }
 
@@ -2186,7 +2186,7 @@ static void wa_page_read(int fd,int32_t *buf,unsigned int adr,int nmots,int indf
             if ((wafile[ind].page[j].wa0 >= wafile[ind].page[i].wa0) &&
                 (wafile[ind].page[j].wa0 <= wafile[ind].page[i].wa0+WA_PAGE_SIZE-1)) {
                fprintf(stderr,"WA_PAGE_READ error: overlapping pages i=%d\n",i);
-               fprintf(stderr,"page[j].wa0 =%d, page[i].wa0 =%d, page[i].wa0+WA_PAGE_SIZE =%d\n",
+               fprintf(stderr,"page[j].wa0 =%lu, page[i].wa0 =%lu, page[i].wa0+WA_PAGE_SIZE =%lu\n",
                               wafile[ind].page[j].wa0,wafile[ind].page[i].wa0,
                               wafile[ind].page[i].wa0+WA_PAGE_SIZE-1);
                f_tracebck();
@@ -2255,7 +2255,7 @@ unsigned int hljust(unsigned int *moth, unsigned int *ncar)
 *           in indf  index of the wafile in the master file table
 *
 */
-static void wa_page_write(int fd,int32_t *buf,unsigned int adr,int nmots,int indf)
+static void wa_page_write(int fd,uint32_t *buf,uint64_t adr,int nmots,int indf)
 
 {
    int ind, j, wa0, offset, i=0, found=0, nbytes, readbytes;
@@ -2269,7 +2269,7 @@ static void wa_page_write(int fd,int32_t *buf,unsigned int adr,int nmots,int ind
    while ((wafile[ind].file_desc != fd) && (ind < MAXWAFILES))
       ind++;
    if (debug_mode > 4) {
-      fprintf(stderr,"Debug WA_PAGE_WRITE requete adr=%u, nmots=%d ind=%d\n",adr,nmots,ind); 
+      fprintf(stderr,"Debug WA_PAGE_WRITE requete adr=%lu, nmots=%d ind=%d\n",adr,nmots,ind); 
       }
    if (ind == MAXWAFILES) {
       fprintf(stderr,"wa_page_write error: file is not open\n");
@@ -2317,7 +2317,7 @@ static void wa_page_write(int fd,int32_t *buf,unsigned int adr,int nmots,int ind
                     FGFDT[indf].file_name);
             fprintf(stderr," tried to get %d bytes, got %d\n",
                     readbytes,nbytes);
-            fprintf(stderr,"WA_PAGE_SIZE=%d wa0=%d file_size=%d\n",
+            fprintf(stderr,"WA_PAGE_SIZE=%d wa0=%lu file_size=%lu\n",
                     WA_PAGE_SIZE,wafile[ind].page[i].wa0 ,
                     FGFDT[indf].file_size);
             perror("WA_PAGE_WRITE");
@@ -2335,7 +2335,7 @@ static void wa_page_write(int fd,int32_t *buf,unsigned int adr,int nmots,int ind
            }
          wafile[ind].page[i].walast = wafile[ind].page[i].wa0 + nbytes / sizeof(int32_t) -1;
          if (debug_mode > 4) {
-            fprintf(stderr,"Debug WA_PAGE_WRITE relecture disque de la page %d a l'adresse %d\n",
+            fprintf(stderr,"Debug WA_PAGE_WRITE relecture disque de la page %d a l'adresse %lu\n",
                            i,wafile[ind].page[i].wa0); 
             }
          }
@@ -2357,7 +2357,7 @@ static void wa_page_write(int fd,int32_t *buf,unsigned int adr,int nmots,int ind
    wafile[ind].page[i].access_count = new_age_wr(wafile[ind].page[i].access_count);
    wafile[ind].page[i].touch_flag = 1;
    if (adr > FGFDT[indf].file_size+1) {
-      fprintf(stderr,"WA_PAGE_WRITE error: ind = %d, adr=%u > file_size=%d\n",
+      fprintf(stderr,"WA_PAGE_WRITE error: ind = %d, adr=%lu > file_size=%ld\n",
                      ind,adr,FGFDT[indf].file_size);
       fprintf(stderr,"                     filename=%s\n",FGFDT[indf].file_name);
       exit(1);
@@ -2376,7 +2376,7 @@ static void wa_page_write(int fd,int32_t *buf,unsigned int adr,int nmots,int ind
             if ((wafile[ind].page[j].wa0 >= wafile[ind].page[i].wa0) && 
                 (wafile[ind].page[j].wa0 <= wafile[ind].page[i].wa0+WA_PAGE_SIZE-1)) {
                fprintf(stderr,"WA_PAGE_WRITE error: overlapping pages i=%d\n",i);
-               fprintf(stderr,"page[j].wa0 =%d, page[i].wa0 =%d, page[i].wa0+WA_PAGE_SIZE =%d\n",
+               fprintf(stderr,"page[j].wa0 =%lu, page[i].wa0 =%lu, page[i].wa0+WA_PAGE_SIZE =%lu\n",
                               wafile[ind].page[j].wa0,wafile[ind].page[i].wa0,
                               wafile[ind].page[i].wa0+WA_PAGE_SIZE-1);
                f_tracebck();
@@ -2402,10 +2402,11 @@ static void wa_page_write(int fd,int32_t *buf,unsigned int adr,int nmots,int ind
 *
 */
 
-static void qqcwawr64(int32_t *buf,uint64_t ladr,int lnmots,int indf)
+static void qqcwawr64(uint32_t *buf,uint64_t ladr,int lnmots,int indf)
 {
 
-int offset,i,adr0,nwritten,togo;
+int offset,i,nwritten,togo;
+uint64_t adr0;
 int lng, l, lastadr, ind, statut;
 int lfd=FGFDT[indf].fd;
 // uint64_t ladr=wadr;
@@ -2468,7 +2469,7 @@ else {
           if (errno == 14)
             {
               fprintf(stderr, "qqcwawr error: write error for file %s\n",FGFDT[indf].file_name);
-              fprintf(stderr,"qqcwawr: filename=%s, buf=%0x adr=%u, nmots=%d, nwritten=%d, errno=%d\n",
+              fprintf(stderr,"qqcwawr: filename=%s, buf=%p adr=%lu, nmots=%d, nwritten=%d, errno=%d\n",
                       FGFDT[indf].file_name,buf,ladr,lnmots,nwritten,errno);
               fprintf(stderr, "*** Contactez un membre de la section informatique de RPN ***\n");
               fprintf(stderr, "*** Seek support from RPN informatic section ***\n");
@@ -2481,11 +2482,11 @@ else {
             cbuf += nwritten;
             togo = (lnmots * sizeof(int32_t)) - nwritten;
             nwritten = write(lfd,buf,togo);
-            fprintf(stderr,"qqcwawr WARNING: multiple write attempt of file %s last write=%d bytes, total needed=%d bytes\n",
+            fprintf(stderr,"qqcwawr WARNING: multiple write attempt of file %s last write=%d bytes, total needed=%ld bytes\n",
                     FGFDT[indf].file_name,togo,lnmots*sizeof(int32_t));
             if (nwritten != togo) {
               fprintf(stderr, "qqcwawr error: write error for file %s\n",FGFDT[indf].file_name);
-              fprintf(stderr,"qqcwawr: filename=%s, buf=%0x adr=%u, nmots=%d, nwritten=%d, errno=%d\n",
+              fprintf(stderr,"qqcwawr: filename=%s, buf=%p adr=%lu, nmots=%d, nwritten=%d, errno=%d\n",
                       FGFDT[indf].file_name,buf,ladr,lnmots,nwritten,errno);
               perror("qqcwawr");
               exit(1);
@@ -2493,7 +2494,7 @@ else {
           }
           else {
             fprintf(stderr, "qqcwawr error: write error or file not open for write!\n");
-            fprintf(stderr,"qqcwawr: filename=%s, buf=%0x adr=%u, nmots=%d, nwritten=%d, errno=%d\n",
+            fprintf(stderr,"qqcwawr: filename=%s, buf=%p adr=%lu, nmots=%d, nwritten=%d, errno=%d\n",
                     FGFDT[indf].file_name,buf,ladr,lnmots,nwritten,errno);
             perror("qqcwawr");
             exit(1);
@@ -2548,9 +2549,10 @@ else {
 *           in  indf    index of file in the master file table
 *
 */
-static void qqcward64(int32_t *buf,uint64_t ladr,int  lnmots,int indf)
+static void qqcward64(uint32_t *buf,uint64_t ladr,int  lnmots,int indf)
 {
-int offset,i,wa0,adr0,lng,l,lastadr;
+int offset,i,wa0,lng,l,lastadr;
+uint64_t adr0;
 int npages,reste,ind;
 int lfd=FGFDT[indf].fd;
 // uint64_t ladr=wadr64;
@@ -2597,9 +2599,9 @@ else {
     if(ladr!=0) WSEEK(lfd, ladr - 1, L_SET);
     reste=read(lfd, buf, sizeof(int32_t) * lnmots);
     if(reste != sizeof(int32_t)*lnmots) {
-        fprintf(stderr,"qqcward error: tried to read %d words, only read %d\n",
+        fprintf(stderr,"qqcward error: tried to read %ld words, only read %d\n",
                       sizeof(int32_t)*lnmots,reste);
-        fprintf(stderr,"qqcward: wafile[ind].offset=%d ladr=%Ld\n",wafile[ind].offset,ladr);
+        fprintf(stderr,"qqcward: wafile[ind].offset=%lu ladr=%lu\n",wafile[ind].offset,ladr);
         f_tracebck();
         exit(1);
     }
@@ -2775,7 +2777,7 @@ int fnom_rem_connect(int ind, char* remote_host)
     check_swap_records(demande, 5, sizeof(int));
     new_checksum = *s_ID ^ *addr ^ *RW_mode;
     if (new_checksum != *checksum) {
-      fprintf(stderr,"fnom_rem_connect error: invalid checksum=%X not %X\n",new_checksum,checksum);
+      fprintf(stderr,"fnom_rem_connect error: invalid checksum=%d not %p\n",new_checksum,checksum);
       fflush(stderr);
       close(fclient);
       return(-1);
@@ -2809,7 +2811,7 @@ int fnom_rem_connect(int ind, char* remote_host)
 *           in nwords  number of words to copy
 *
 */
-static void MOVE (int32_t *src, int32_t *dest, int nwords)
+static void MOVE (uint32_t *src, uint32_t *dest, int nwords)
 {
 int i;
 for (i=0 ; i<nwords ; i++) {dest[i]=src[i];};
@@ -2827,7 +2829,7 @@ for (i=0 ; i<nwords ; i++) {dest[i]=src[i];};
 *           in nwords  number of words to put to zero
 *
 */
-static void ZERO ( int32_t *dest, int nwords)
+static void ZERO ( uint32_t *dest, int nwords)
 {
 int i;
 for (i=0 ; i<nwords ; i++) {dest[i]=0;};
