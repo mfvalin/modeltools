@@ -42,6 +42,8 @@ void c_waread(int iun,void *buf,unsigned int adr,int nmots);
 int c_waread2(int iun,void *buf,unsigned int adr,int nmots);
 int32_t c_wasize(int iun);
 int32_t c_numblks(int iun);
+int64_t c_wasize64(int iun);
+int64_t c_numblks64(int iun);
 void c_openda(int iun);
 void c_closda(int iun);
 void c_checda(int iun);
