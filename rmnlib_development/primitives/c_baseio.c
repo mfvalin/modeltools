@@ -706,23 +706,31 @@ int c_fclos(int iun)
 *RETURNS: the scratch unit number
 *
 */
+int FtnFreeUnitNumber();  // Fortran code to get unused Fortran unit
+
 static int c_qqqfscr(char *type)          
 {
-   int iun,i,j,inused,start;
+   int iun,i,j,iun_used,start;
 
    iun = -1;
-   if (strstr(type,"FTN") || strstr(type,"ftn") || strstr(type,"D77") || strstr(type,"d77")) 
-      start = 99;
-   else
-      start = 999;
-   for (j=start; j>10; j--) {
-      inused = 0;
+   if (strstr(type,"FTN") || strstr(type,"ftn") || strstr(type,"D77") || strstr(type,"d77")) {
+     start = FtnFreeUnitNumber() ;  // normally between 1 and 99
+     for (i=0; i<MAXFILES; i++){
+       if (FGFDT[i].iun == start) return(-1) ; // OOPS, this unit number is flagged as "in use" and Fortran thinks it is free
+     }
+     return (start) ;
+//       start = 99;
+   }else{
+      start = 1999;
+   }
+   for (j=start; j>9; j--) {
+      iun_used = 0;
       for (i=0; i<MAXFILES; i++)
          if (FGFDT[i].iun == j) {
-            inused = 1;
+            iun_used = 1;
             break;
             }
-      if (! inused) {
+      if (! iun_used) {
          iun = j;
          break;
          }

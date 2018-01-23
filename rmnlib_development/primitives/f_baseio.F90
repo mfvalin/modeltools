@@ -1,5 +1,5 @@
 !/* RMNLIB - Library of useful routines for C and FORTRAN programming
-! * Copyright (C) 1975-2001  Division de Recherche en Prevision Numerique
+! * Copyright (C) 1975-2018  Division de Recherche en Prevision Numerique
 ! *                          Environnement Canada
 ! *
 ! * This library is free software; you can redistribute it and/or
@@ -19,7 +19,7 @@
 ! */
 !
 #if defined(SELF_TEST)
-  program self_test
+  program self_test   ! bare bones test
     use ISO_C_BINDING
     implicit none
     integer :: status, iun1, iun2, iun3, errors, nw
@@ -165,6 +165,30 @@
 
   end program
 #endif
+!
+! iun        : if zero upon entry, fnom will find an appropriate unit number
+! path       : file name (character string)
+!              some_name@file_path refers to file some_name inside CMCARC archive file_path
+! options    : list of + separated options (upper case or lower case)
+!              STD         RPN "standard" file (implies WA+RND)
+!              FTN         Fortran file (UNF, D77 may be used as sub attributes)
+!              D77         Fortran direct access file (lrec must be non zero)
+!              UNF         Fortran sequential unformatted file (default is formatted)
+!              RND         random access file (normally used with STD)
+!              WA          Word Addressable file (Big Endian) (implies RND)
+!              STREAM      stream file (non Fortran, no record markers, Big Endian
+!              BURP        Meteorological reports file
+!              OLD         file must exist (applies to all files)
+!              R/O         file is Read Only (default is Read/Write) (applies to all files) (implies OLD)
+!              R/W         file is Read Write (default) (applies to all files)
+!              SCRATCH     File will be removed when closed (applies to all files)
+!              SPARSE      Unix WA sparse file (may be written into far beyond end of file)
+!              PAGED       special type of WA file (not implemented yet)
+!              REMOTE      file is on another system and accessed with a ssh (applies to all files)
+!              ex.   STD+RND+OLD+R/W open existing random standard file for reading and writing
+!                    FTN+UNF         open Fortran sequential file for reading and writing , create it if it does not exist
+! lrec       : record length in 4 byte integers for Fortran D77 file records (should be zero otherwise)
+!
   function fnom(iun, path, options, lrec) result(status)  ! moved from C to Fortran
     use ISO_C_BINDING
     implicit none
@@ -193,7 +217,39 @@
 !
   end function
 
-! this is called by the C code to set some Fortran I/O setup options
+  function get_ftn_free_unit_number() result(iun) bind(C,name='FtnFreeUnitNumber')
+    implicit none
+    integer :: iun
+    integer, external :: get_free_unit_number
+
+    iun = get_free_unit_number()
+  end function get_ftn_free_unit_number
+
+  function get_free_unit_number() result(iun)
+    implicit none
+    integer :: iun
+    integer :: i
+    character (len=16) :: access_mode
+      iun = -1
+      do i = 99, 1, -1  ! find an available Fortran unit number
+	inquire(UNIT=i,ACCESS=access_mode)
+	if(trim(access_mode) == 'UNDEFINED')then ! found
+	  iun = i
+	  exit
+	endif
+      enddo
+    return
+  end function get_free_unit_number
+
+! this is called by the C code to set some Fortran I/O setup options (NOT USER CALLABLE)
+! iun      : Fortran unit number
+! path     : file name
+! options  : SCRATCH APPEND OLD R/O
+! lrec     : see fnom
+! rndflag  : 0 sequential file, 1 random file
+! unfflag  : 0 formatted file, 1 unformattted file
+! lmult    : multiplier for lrec (compiler dependent)
+! lng_in   : length of path
   FUNCTION qqqf7op_from_c(iun,path,options,lrec,rndflag,unfflag,lmult,lng_in) result(status) BIND(C,name='qqq_f90_options')
     use ISO_C_BINDING
     implicit none
@@ -306,7 +362,7 @@ print *,'closing unit =',iun
     return
   end
 !
-  INTEGER FUNCTION LONGUEUR(NOM)
+  INTEGER FUNCTION LONGUEUR(NOM) ! one should use lentrim instead
     implicit none
     CHARACTER(len=*), intent(IN) :: NOM
 !
@@ -605,23 +661,23 @@ print *,'waread, adr, nmots, nread',adr,nmots,nread
 #endif
 end function waread2
 
-! subroutine waread64(iun,buf,adr,nmots,partition)
-!   use ISO_C_BINDING
-!   implicit none
-!   interface
-!     subroutine cwaread64(iun,buf,adr,nmots,partition) bind(C,name='c_waread64')
-!       import
-!       integer(C_INT), intent(IN), value :: iun, nmots, partition
-!       integer(C_LONG_LONG), intent(IN), value :: adr
-!       integer(C_INT), intent(OUT), dimension(nmots) :: buf
-!     end subroutine cwaread64
-!   end interface
-!   integer, intent(IN) :: iun, nmots, partition
-!   integer*8, intent(IN) :: adr
-!   integer, intent(OUT), dimension(nmots) :: buf
-! 
-!   call cwaread64(iun,buf,adr,nmots,partition)
-! end subroutine waread64
+subroutine waread64(iun,buf,adr,nmots,mode)
+  use ISO_C_BINDING
+  implicit none
+  interface
+    subroutine cwaread64(iun,buf,adr,nmots,mode) bind(C,name='c_waread64')
+      import
+      integer(C_INT), intent(IN), value :: iun, nmots, mode
+      integer(C_LONG_LONG), intent(IN), value :: adr
+      integer(C_INT), intent(OUT), dimension(nmots) :: buf
+    end subroutine cwaread64
+  end interface
+  integer, intent(IN) :: iun, nmots, mode
+  integer*8, intent(IN) :: adr
+  integer, intent(OUT), dimension(nmots) :: buf
+
+  call cwaread64(iun,buf,adr,nmots,mode)
+end subroutine waread64
 
 subroutine wawrit(iun,buf,adr,nmots)
   use ISO_C_BINDING
@@ -750,21 +806,21 @@ function existe(name) result(status)  ! return 1 if file 'name' exits, 0 otherwi
   return
 end function existe
 
-subroutine wawrit64(iun,buf,adr,nmots,partition)
+subroutine wawrit64(iun,buf,adr,nmots,mode)
   use ISO_C_BINDING
   implicit none
   interface
-    subroutine cwawrit64(iun,buf,adr,nmots,partition) bind(C,name='c_wawrit64')
+    subroutine cwawrit64(iun,buf,adr,nmots,mode) bind(C,name='c_wawrit64')
       import
-      integer(C_INT), intent(IN), value :: iun, nmots, partition
+      integer(C_INT), intent(IN), value :: iun, nmots, mode
       integer(C_LONG_LONG), intent(IN), value :: adr
       integer(C_INT), intent(IN), dimension(nmots) :: buf
     end subroutine cwawrit64
   end interface
-  integer, intent(IN) :: iun, nmots, partition
+  integer, intent(IN) :: iun, nmots, mode
   integer*8, intent(IN) :: adr
   integer, intent(IN), dimension(nmots) :: buf
 
-  call cwawrit64(iun,buf,adr,nmots,partition)
+  call cwawrit64(iun,buf,adr,nmots,mode)
 end subroutine wawrit64
 
