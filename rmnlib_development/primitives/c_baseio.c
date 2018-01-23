@@ -723,7 +723,7 @@ static int c_qqqfscr(char *type)
    }else{
       start = 1999;
    }
-   for (j=start; j>9; j--) {
+   for (j=start; j>99; j--) {
       iun_used = 0;
       for (i=0; i<MAXFILES; i++)
          if (FGFDT[i].iun == j) {
