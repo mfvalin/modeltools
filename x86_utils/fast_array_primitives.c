@@ -178,6 +178,118 @@ void FloatFastQuantizeLinear(float *z_in, short *quant, int n, int nbits, float 
   }  // for (i=0 ; i<np2 ; i+=VLEN)
 }
 
+void Float2Short(uint16_t *restrict q0, float *restrict s0, unsigned int n, float *bias, float *rscl){
+  int n1, i, maxexp, izero;
+  float *restrict s1;
+  uint16_t *restrict q1;
+  __m128  x0, x1, x2, x3, xxmin, xxmax, xxrng, xxsca;
+  __m256  y0, y1, yymin, yymax, yysca, point5;
+  __m128i ix0, ix1, ix2, ix3;
+  __m256i iy0, iy1;
+  union {
+    unsigned int i;
+    float f;
+  } xmin, xmax, xrng, xscl;
+  float rscale, fzero, scale;
+
+  n1 = (n + 15) & 0xFFFFFFF0 ; // multiple of 16
+  n1 = n1 >> 1 ;               // multiple of 8
+  s1 = s0 + n - n1 ;           // "midpoint"
+  q1 = q0 + n - n1 ;           // "midpoint"
+  xxmin = _mm_loadu_ps(s0) ;
+//   xxmax = xxmin;
+  yymin = _mm256_insertf128_ps(yymin,xxmin,0) ;
+  yymin = _mm256_insertf128_ps(yymin,xxmin,1) ;
+  yymax = yymin ;
+  for(i=0 ; i<n1 ; i+=8){                   // loop 1, get max and min (16 items per pass)
+    x0    = _mm_loadu_ps(&s0[i]) ;          // stream from beginning
+    x1    = _mm_loadu_ps(&s1[i]) ;          // stream from "midpoint"
+    y0    = _mm256_insertf128_ps(y0,x0,0) ;
+    y0    = _mm256_insertf128_ps(y0,x1,1) ;
+    x2    = _mm_loadu_ps(&s0[i+4]) ;        // stream from beginning + 4
+    x3    = _mm_loadu_ps(&s1[i+4]) ;        // stream from "midpoint" + 4
+    y1    = _mm256_insertf128_ps(y1,x0,0) ;
+    y1    = _mm256_insertf128_ps(y1,x1,1) ;
+    yymin = _mm256_min_ps(yymin,y0);
+    yymax = _mm256_max_ps(yymax,y0);
+    yymin = _mm256_min_ps(yymin,y1);
+    yymax = _mm256_max_ps(yymax,y1);
+//     xxmin = _mm_min_ps(xxmin,x0);
+//     xxmax = _mm_max_ps(xxmax,x0);
+//     xxmin = _mm_min_ps(xxmin,x1);
+//     xxmax = _mm_max_ps(xxmax,x1);
+//     xxmin = _mm_min_ps(xxmin,x2);
+//     xxmax = _mm_max_ps(xxmax,x2);
+//     xxmin = _mm_min_ps(xxmin,x3);
+//     xxmax = _mm_max_ps(xxmax,x3);
+  }
+  xxmin = (__m128) _mm256_extracti128_si256((__m256i) yymin,0);
+  x0    = (__m128) _mm256_extracti128_si256((__m256i) yymin,1);
+  xxmin = _mm_min_ps(xxmin,x0);
+  xxmax = (__m128) _mm256_extracti128_si256((__m256i) yymax,0);
+  x1    = (__m128)_mm256_extracti128_si256((__m256i) yymax,1);
+  xxmax = _mm_max_ps(xxmax,x1);
+  // scalar wrapup for min/max from 4 way vector
+  x0    = _mm_shuffle_ps(xxmin,xxmin,SELECT(2,3,2,3)) ;  //  put elements 2 and 3 on top of 0 and 1
+  x1    = _mm_shuffle_ps(xxmax,xxmax,SELECT(2,3,2,3)) ;
+  xxmin = _mm_min_ps(xxmin,x0);   // min(0,2) , min(1,3), 2 , 3
+  xxmax = _mm_max_ps(xxmax,x1);   // max(0,2) , max(1,3), 2 , 3
+  x0    = _mm_shuffle_ps(xxmin,xxmin,SELECT(1,1,1,1)) ;  // put 1 on top of 0
+  x1    = _mm_shuffle_ps(xxmax,xxmax,SELECT(1,1,1,1)) ;
+  xxmin = _mm_min_ss(xxmin,x0);
+  xxmax = _mm_max_ss(xxmax,x1);
+  _mm_store_ss(&xmin.f,xxmin);
+  _mm_store_ss(&xmax.f,xxmax);
+  xrng.f = xmax.f - xmin.f;                  // compute scaling factors from min and max
+  maxexp = IEEE32_EXP(xrng.i);
+  maxexp = maxexp - 127;                     // remove IEEE exponent bias
+  xscl.i = IEEE32(0,(NBITS-1) - (maxexp),0); // scaling factor (float to int)
+  scale  = xscl.f;
+  xscl.i = IEEE32(0,(maxexp) - (NBITS-1),0); // inverse scaling factor (int to float)
+  *rscl  = xscl.f;
+  if(IEEE32_SGN(xmax.i) + IEEE32_SGN(xmin.i) == 1 ) {   // min < 0 and max >0
+    izero = (0 - xmin.f) * scale + .5;
+    fzero = xmin.f + izero * xscl.f;
+    xmin.f -= fzero ;
+  }
+  *bias  = xmin.f;
+
+  yysca  = _mm256_set1_ps(scale) ;
+  point5 = _mm256_set1_ps(0.5) ;
+  yymin  = _mm256_set1_ps(xmin.f) ;
+  for(i=0 ; i<n1 ; i+=8){      // quantization loop (remove bias, then quantize) (16 items per pass)
+    x0    = _mm_loadu_ps(&s0[i]) ;             // stream from beginning
+    x1    = _mm_loadu_ps(&s1[i]) ;             // stream from "midpoint"
+    y0    = _mm256_insertf128_ps(y0,x0,0) ;
+    y0    = _mm256_insertf128_ps(y0,x1,1) ;
+
+    x2    = _mm_loadu_ps(&s0[i+4]) ;           // stream from beginning + 4
+    x3    = _mm_loadu_ps(&s1[i+4]) ;           // stream from "midpoint" + 4
+    y1    = _mm256_insertf128_ps(y1,x2,0) ;
+    y1    = _mm256_insertf128_ps(y1,x3,1) ;
+
+    y0    = _mm256_sub_ps(y0,yymin) ;          // x - min
+    y0    = _mm256_fmadd_ps(y0,yysca,point5) ; // * scale + .5
+    iy0   = _mm256_cvttps_epi32(y0) ;          // to integer (lower 16 bits used only)
+
+    y1    = _mm256_sub_ps(y1,yymin) ;          // x - min
+    y1    = _mm256_fmadd_ps(y1,yysca,point5) ; // * scale + .5
+    iy1   = _mm256_cvttps_epi32(y1) ;          // to integer (lower 16 bits used only)
+
+    ix0   = _mm256_extracti128_si256(iy0,0) ;  // lower 128 bits
+    ix1   = _mm256_extracti128_si256(iy0,1) ;  // upper 128 bits
+    ix0   = _mm_packus_epi32(ix0,ix1);         // 32 bit to 16 bit with unsigned saturation
+    _mm_storel_epi64((void *)&q0[i],ix0) ;         // store lower 64 bits at beginning
+    _mm_storeh_pi((void *)&q1[i],(__m128) ix0) ;   // store upper 64 bits at "midpoint"
+
+    ix2   = _mm256_extracti128_si256(iy1,0) ;  // lower 128 bits
+    ix3   = _mm256_extracti128_si256(iy1,1) ;  // upper 128 bits
+    ix2   = _mm_packus_epi32(ix2,ix3);         // 32 bit to 16 bit with unsigned saturation
+    _mm_storel_epi64((void *)&q0[i+4],ix2) ;       // store lower 64 bits at beginning + 4
+    _mm_storeh_pi((void *)&q1[i+4],(__m128) ix2) ; // store upper 64 bits at "midpoint" + 4
+  }
+}
+
 #if defined(SELF_TEST)
 #define ASIZE 1026
 #define RND 0.5
