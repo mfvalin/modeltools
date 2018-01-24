@@ -1,4 +1,5 @@
 #include <stdio.h>
+#include <stdint.h>
 #undef __SSExx__
 #if defined(__SSE__)
 #include <x86intrin.h>
@@ -178,14 +179,17 @@ void FloatFastQuantizeLinear(float *z_in, short *quant, int n, int nbits, float 
   }  // for (i=0 ; i<np2 ; i+=VLEN)
 }
 
+#define NBITS 16
 void Float2Short(uint16_t *restrict q0, float *restrict s0, unsigned int n, float *bias, float *rscl){
   int n1, i, maxexp, izero;
   float *restrict s1;
   uint16_t *restrict q1;
+#if defined(__AVX2__) && defined(__FMA__)
   __m128  x0, x1, x2, x3, xxmin, xxmax, xxrng, xxsca;
   __m256  y0, y1, yymin, yymax, yysca, point5;
   __m128i ix0, ix1, ix2, ix3;
   __m256i iy0, iy1;
+#endif
   union {
     unsigned int i;
     float f;
@@ -196,6 +200,7 @@ void Float2Short(uint16_t *restrict q0, float *restrict s0, unsigned int n, floa
   n1 = n1 >> 1 ;               // multiple of 8
   s1 = s0 + n - n1 ;           // "midpoint"
   q1 = q0 + n - n1 ;           // "midpoint"
+#if defined(__AVX2__) && defined(__FMA__)
   xxmin = _mm_loadu_ps(s0) ;
 //   xxmax = xxmin;
   yymin = _mm256_insertf128_ps(yymin,xxmin,0) ;
@@ -240,6 +245,14 @@ void Float2Short(uint16_t *restrict q0, float *restrict s0, unsigned int n, floa
   xxmax = _mm_max_ss(xxmax,x1);
   _mm_store_ss(&xmin.f,xxmin);
   _mm_store_ss(&xmax.f,xxmax);
+#else
+  xmin.f = s0[0];
+  xmax.f = s0[0];
+  for(i=1 ; i<n ; i++){
+    xmin.f = MIN(xmin.f,s0[i]);
+    xmax.f = MAX(xmax.f,s0[i]);
+  }
+#endif
   xrng.f = xmax.f - xmin.f;                  // compute scaling factors from min and max
   maxexp = IEEE32_EXP(xrng.i);
   maxexp = maxexp - 127;                     // remove IEEE exponent bias
@@ -254,6 +267,7 @@ void Float2Short(uint16_t *restrict q0, float *restrict s0, unsigned int n, floa
   }
   *bias  = xmin.f;
 
+#if defined(__AVX2__) && defined(__FMA__)
   yysca  = _mm256_set1_ps(scale) ;
   point5 = _mm256_set1_ps(0.5) ;
   yymin  = _mm256_set1_ps(xmin.f) ;
@@ -288,6 +302,17 @@ void Float2Short(uint16_t *restrict q0, float *restrict s0, unsigned int n, floa
     _mm_storel_epi64((void *)&q0[i+4],ix2) ;       // store lower 64 bits at beginning + 4
     _mm_storeh_pi((void *)&q1[i+4],(__m128) ix2) ; // store upper 64 bits at "midpoint" + 4
   }
+#else
+  while(n >= 8){
+    for(i=0 ; i<8 ; i++){
+      q0[i] = (s0[i] - xmin.f) * scale;
+    }
+    q0 += 8;
+    s0 += 8;
+    n  -= 8;
+  }
+  while(n-->0) *q0++ = (*s0++ - xmin.f) * scale;
+#endif
 }
 
 #if defined(SELF_TEST)
