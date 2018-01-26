@@ -180,6 +180,84 @@ void FloatFastQuantizeLinear(float *z_in, short *quant, int n, int nbits, float 
 }
 
 #define NBITS 16
+// inverse of linear quantizer, short to float with bias restoration
+void Short2Float(uint16_t *restrict q, float *restrict s, int n, float bias, float scale){
+  uint32_t i;
+
+#if defined(__AVX2__) && defined(__FMA__)
+  __m256  y0, y1, y2, y3, yscal, ybias;
+  __m128i ix0, ix1, ix2, ix3;
+  __m256i iy0, iy1, iy2, iy3;
+  uint16_t *q1;
+  float *s1;
+  int n1;
+  yscal  = _mm256_set1_ps(scale) ;
+  ybias  = _mm256_set1_ps(bias) ;
+  n1 = (n + 31) & 0xFFFFFFE0;      // multiple 0f 32 
+  n1 >>= 1;                        // multiple of 16
+  q1 = q + n - n1;                 // "beginning"
+  s1 = s + n - n1;                 // "mid point" (may overlap tail end of "beginning")
+#endif
+
+#if defined(__AVX2__) && defined(__FMA__)
+  while(n1 > 0){   // 16 elements per iteration, 16 at "beginning", 16 at "mid point"
+    ix0   = _mm_loadu_si128((const __m128i *) &q[0] ) ; // "beginning"
+    iy0   = _mm256_cvtepu16_epi32(ix0) ;                // unpack 16 to 32 bits
+    ix1   = _mm_loadu_si128((const __m128i *) &q[8] ) ; // "beginning" + 8
+    iy1   = _mm256_cvtepu16_epi32(ix1) ;                // unpack 16 to 32 bits
+    ix2   = _mm_loadu_si128((const __m128i *) &q1[0]) ; // "mid point"
+    iy2   = _mm256_cvtepu16_epi32(ix2) ;                // unpack 16 to 32 bits
+    ix3   = _mm_loadu_si128((const __m128i *) &q1[8]) ; // "mid point" + 8
+    iy3   = _mm256_cvtepu16_epi32(ix3) ;                // unpack 16 to 32 bits
+
+    y0    = _mm256_cvtepi32_ps(iy0) ;                   // convert to float
+    y1    = _mm256_cvtepi32_ps(iy1) ;
+    y2    = _mm256_cvtepi32_ps(iy2) ;
+    y3    = _mm256_cvtepi32_ps(iy3) ;
+
+    y0    = _mm256_fmadd_ps(y0,yscal,ybias);            // (value * scale) + bias
+    y1    = _mm256_fmadd_ps(y1,yscal,ybias);
+    y2    = _mm256_fmadd_ps(y2,yscal,ybias);
+    y3    = _mm256_fmadd_ps(y3,yscal,ybias);
+
+    _mm256_storeu_ps(s   ,y0);                          // store at "beginning"
+    _mm256_storeu_ps(s+ 8,y1);                          // store at "beginning" + 8
+    _mm256_storeu_ps(s1  ,y2);                          // store at "mid point"
+    _mm256_storeu_ps(s1+8,y3);                          // store at "mid point" + 8
+    
+    q  += 16;
+    s  += 16;
+    q1 += 16;
+    s1 += 16;
+    n1 -= 16;
+  }
+#else
+  while(n >= 32){     // 32 elements per iteration
+    for(i=0 ; i<8 ; i++){
+      s[i]    = (q[i]    * scale) + bias;
+      s[i+8]  = (q[i+8]  * scale) + bias;
+      s[i+16] = (q[i+16] * scale) + bias;
+      s[i+24] = (q[i+24] * scale) + bias;
+    }
+    q += 32;
+    s += 32;
+    n = n - 32;
+  }
+  while(n >= 8){     // 8 elements per iteration
+    for(i=0 ; i<8 ; i++){
+      s[i]    = (q[i]    * scale) + bias;
+    }
+    q += 8;
+    s += 8;
+    n = n - 8;
+  }
+  while(n-->0) {     // leftovers, one by one
+    *s++ = (*q++ * scale) + bias;
+  }
+#endif
+}
+
+// linear quantizer, float to short with bias removal
 void Float2Short(uint16_t *restrict q0, float *restrict s0, unsigned int n, float *bias, float *rscl){
   int n1, i, maxexp, izero;
   float *restrict s1;
@@ -198,35 +276,27 @@ void Float2Short(uint16_t *restrict q0, float *restrict s0, unsigned int n, floa
 
   n1 = (n + 15) & 0xFFFFFFF0 ; // multiple of 16
   n1 = n1 >> 1 ;               // multiple of 8
-  s1 = s0 + n - n1 ;           // "midpoint"
-  q1 = q0 + n - n1 ;           // "midpoint"
+  s1 = s0 + n - n1 ;           // "midpoint" with possible small overlap
+  q1 = q0 + n - n1 ;           // "midpoint" with possible small overlap
 #if defined(__AVX2__) && defined(__FMA__)
   xxmin = _mm_loadu_ps(s0) ;
-//   xxmax = xxmin;
+  xxmax = xxmin;
   yymin = _mm256_insertf128_ps(yymin,xxmin,0) ;
   yymin = _mm256_insertf128_ps(yymin,xxmin,1) ;
   yymax = yymin ;
   for(i=0 ; i<n1 ; i+=8){                   // loop 1, get max and min (16 items per pass)
     x0    = _mm_loadu_ps(&s0[i]) ;          // stream from beginning
-    x1    = _mm_loadu_ps(&s1[i]) ;          // stream from "midpoint"
     y0    = _mm256_insertf128_ps(y0,x0,0) ;
+    x1    = _mm_loadu_ps(&s1[i]) ;          // stream from "midpoint"
     y0    = _mm256_insertf128_ps(y0,x1,1) ;
-    x2    = _mm_loadu_ps(&s0[i+4]) ;        // stream from beginning + 4
-    x3    = _mm_loadu_ps(&s1[i+4]) ;        // stream from "midpoint" + 4
-    y1    = _mm256_insertf128_ps(y1,x0,0) ;
-    y1    = _mm256_insertf128_ps(y1,x1,1) ;
     yymin = _mm256_min_ps(yymin,y0);
     yymax = _mm256_max_ps(yymax,y0);
+    x2    = _mm_loadu_ps(&s0[i+4]) ;        // stream from beginning + 4
+    y1    = _mm256_insertf128_ps(y1,x2,0) ;
+    x3    = _mm_loadu_ps(&s1[i+4]) ;        // stream from "midpoint" + 4
+    y1    = _mm256_insertf128_ps(y1,x3,1) ;
     yymin = _mm256_min_ps(yymin,y1);
     yymax = _mm256_max_ps(yymax,y1);
-//     xxmin = _mm_min_ps(xxmin,x0);
-//     xxmax = _mm_max_ps(xxmax,x0);
-//     xxmin = _mm_min_ps(xxmin,x1);
-//     xxmax = _mm_max_ps(xxmax,x1);
-//     xxmin = _mm_min_ps(xxmin,x2);
-//     xxmax = _mm_max_ps(xxmax,x2);
-//     xxmin = _mm_min_ps(xxmin,x3);
-//     xxmax = _mm_max_ps(xxmax,x3);
   }
   xxmin = (__m128) _mm256_extracti128_si256((__m256i) yymin,0);
   x0    = (__m128) _mm256_extracti128_si256((__m256i) yymin,1);
@@ -273,33 +343,32 @@ void Float2Short(uint16_t *restrict q0, float *restrict s0, unsigned int n, floa
   yymin  = _mm256_set1_ps(xmin.f) ;
   for(i=0 ; i<n1 ; i+=8){      // quantization loop (remove bias, then quantize) (16 items per pass)
     x0    = _mm_loadu_ps(&s0[i]) ;             // stream from beginning
-    x1    = _mm_loadu_ps(&s1[i]) ;             // stream from "midpoint"
     y0    = _mm256_insertf128_ps(y0,x0,0) ;
+    x1    = _mm_loadu_ps(&s1[i]) ;             // stream from "midpoint"
     y0    = _mm256_insertf128_ps(y0,x1,1) ;
 
     x2    = _mm_loadu_ps(&s0[i+4]) ;           // stream from beginning + 4
-    x3    = _mm_loadu_ps(&s1[i+4]) ;           // stream from "midpoint" + 4
     y1    = _mm256_insertf128_ps(y1,x2,0) ;
+    x3    = _mm_loadu_ps(&s1[i+4]) ;           // stream from "midpoint" + 4
     y1    = _mm256_insertf128_ps(y1,x3,1) ;
 
     y0    = _mm256_sub_ps(y0,yymin) ;          // x - min
-    y0    = _mm256_fmadd_ps(y0,yysca,point5) ; // * scale + .5
-    iy0   = _mm256_cvttps_epi32(y0) ;          // to integer (lower 16 bits used only)
-
     y1    = _mm256_sub_ps(y1,yymin) ;          // x - min
+    y0    = _mm256_fmadd_ps(y0,yysca,point5) ; // * scale + .5
     y1    = _mm256_fmadd_ps(y1,yysca,point5) ; // * scale + .5
+    iy0   = _mm256_cvttps_epi32(y0) ;          // to integer (lower 16 bits used only)
     iy1   = _mm256_cvttps_epi32(y1) ;          // to integer (lower 16 bits used only)
 
     ix0   = _mm256_extracti128_si256(iy0,0) ;  // lower 128 bits
     ix1   = _mm256_extracti128_si256(iy0,1) ;  // upper 128 bits
     ix0   = _mm_packus_epi32(ix0,ix1);         // 32 bit to 16 bit with unsigned saturation
-    _mm_storel_epi64((void *)&q0[i],ix0) ;         // store lower 64 bits at beginning
+    _mm_storel_pi((void *)&q0[i],(__m128) ix0) ;         // store lower 64 bits at beginning
     _mm_storeh_pi((void *)&q1[i],(__m128) ix0) ;   // store upper 64 bits at "midpoint"
 
     ix2   = _mm256_extracti128_si256(iy1,0) ;  // lower 128 bits
     ix3   = _mm256_extracti128_si256(iy1,1) ;  // upper 128 bits
     ix2   = _mm_packus_epi32(ix2,ix3);         // 32 bit to 16 bit with unsigned saturation
-    _mm_storel_epi64((void *)&q0[i+4],ix2) ;       // store lower 64 bits at beginning + 4
+    _mm_storel_pi((void *)&q0[i+4],(__m128) ix2) ;       // store lower 64 bits at beginning + 4
     _mm_storeh_pi((void *)&q1[i+4],(__m128) ix2) ; // store upper 64 bits at "midpoint" + 4
   }
 #else
