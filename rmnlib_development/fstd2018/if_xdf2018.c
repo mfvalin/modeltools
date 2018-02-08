@@ -163,7 +163,7 @@ static INT_32 rewind_file(int file_index, int handle)
  *                              X D F A D D                                  * 
  *****************************************************************************/
 
-ftnword f77name(xdf_64_add)(word *buf,word *donnees,
+ftnword f77name(xdfadd)(word *buf,word *donnees,
                         ftnword *fnelm, ftnword *fnbits, ftnword *fdatyp)
 {
    int nelm = *fnelm, nbits = *fnbits, datyp = *fdatyp;
@@ -173,14 +173,14 @@ ftnword f77name(xdf_64_add)(word *buf,word *donnees,
    BUF_C;
    if ((datyp == 2) || (datyp == 4)) {
      xdf_stride = 2;
-     ier = c_xdf_64_add(buf+1,donnees+1,nelm,nbits,datyp);
+     ier = c_xdfadd(buf+1,donnees+1,nelm,nbits,datyp);
      xdf_stride = 1;
    }
    else
-     ier = c_xdf_64_add(buf+1,donnees,nelm,nbits,datyp);
+     ier = c_xdfadd(buf+1,donnees,nelm,nbits,datyp);
    BUF_F;
 #else
-   ier = c_xdf_64_add(buf,donnees,nelm,nbits,datyp);
+   ier = c_xdfadd(buf,donnees,nelm,nbits,datyp);
 #endif
    return((ftnword) ier);
 
@@ -191,7 +191,7 @@ ftnword f77name(xdf_64_add)(word *buf,word *donnees,
 /***************************************************************************** 
  *                                X D F C L E                                *
  *****************************************************************************/
-ftnword f77name(xdf_64_cle)(char *fkeyname,ftnword *fbit1,ftnword *flkey,
+ftnword f77name(xdfcle)(char *fkeyname,ftnword *fbit1,ftnword *flkey,
 			ftnword *ftkey,ftnword *fdesc1,ftnword *fdesc2,F2Cl l1)
 {
    char keyname[5]={' ',' ',' ',' ','\0'};
@@ -202,7 +202,7 @@ ftnword f77name(xdf_64_cle)(char *fkeyname,ftnword *fbit1,ftnword *flkey,
    lng = (l1 <= 4) ? l1 : 4;
    strncpy(keyname,fkeyname,lng);
    
-   err = c_xdf_64_cle(keyname,bit1,lkey,tkey,&desc1,&desc2);
+   err = c_xdfcle(keyname,bit1,lkey,tkey,&desc1,&desc2);
    
    *fdesc1 = (ftnword) desc1;
    *fdesc2 = (ftnword) desc2;
@@ -215,11 +215,11 @@ ftnword f77name(xdf_64_cle)(char *fkeyname,ftnword *fbit1,ftnword *flkey,
  *                              X D F C L S                                  * 
  *****************************************************************************/
 
-ftnword f77name(xdf_64_cls)(ftnword *fiun)
+ftnword f77name(xdfcls)(ftnword *fiun)
 {
    int iun = *fiun;
 
-   return(c_xdf_64_cls(iun));
+   return(c_xdfcls(iun));
 }
 
 /*splitpoint xdfcut */
@@ -227,7 +227,7 @@ ftnword f77name(xdf_64_cls)(ftnword *fiun)
  *                              X D F C U T                                  * 
  *****************************************************************************/
 
-ftnword f77name(xdf_64_cut)(word *buf,
+ftnword f77name(xdfcut)(word *buf,
 			ftnword *fbitpos, ftnword *fnelm,
 			ftnword *fnbits, ftnword *fdatyp)
 {
@@ -236,10 +236,10 @@ ftnword f77name(xdf_64_cut)(word *buf,
 
 #if defined(NEC64)
    BUF_C;
-   ier = c_xdf_64_cut(buf+1,bitpos,nelm,nbits,datyp);
+   ier = c_xdfcut(buf+1,bitpos,nelm,nbits,datyp);
    BUF_F;
 #else
-   ier = c_xdf_64_cut(buf,bitpos,nelm,nbits,datyp);
+   ier = c_xdfcut(buf,bitpos,nelm,nbits,datyp);
 #endif
    return((ftnword) ier);
 }
@@ -249,11 +249,11 @@ ftnword f77name(xdf_64_cut)(word *buf,
  *                              X D F D E L                                  * 
  *****************************************************************************/
 
-ftnword f77name(xdf_64_del)(ftnword *fhandle)
+ftnword f77name(xdfdel)(ftnword *fhandle)
 {
    int handle = *fhandle;
 
-   return((ftnword) c_xdf_64_del(handle));
+   return((ftnword) c_xdfdel(handle));
 }
 
 /*splitpoint xdfget */
@@ -261,16 +261,16 @@ ftnword f77name(xdf_64_del)(ftnword *fhandle)
  *                              X D F G E T                                  * 
  *****************************************************************************/
 
-ftnword f77name(xdf_64_get)(ftnword *fhandle, word *buf)
+ftnword f77name(xdfget)(ftnword *fhandle, word *buf)
 {
    int handle = *fhandle, ier;
 
 #if defined(NEC64)
    BUF_C;
-   ier = c_xdf_64_get(handle,buf+1);
+   ier = c_xdfget(handle,buf+1);
    BUF_F;
 #else
-   ier = c_xdf_64_get(handle,(buffer_interface_ptr) buf);
+   ier = c_xdfget(handle,(buffer_interface_ptr) buf);
 #endif
    return((ftnword) ier);
 }
@@ -280,7 +280,7 @@ ftnword f77name(xdf_64_get)(ftnword *fhandle, word *buf)
  *                              X D F G O P                                  * 
  *****************************************************************************/
 
-ftnword f77name(xdf_64_gop)(char *foptname, char *foptc, ftnword *foptv,
+ftnword f77name(xdfgop)(char *foptname, char *foptc, ftnword *foptv,
 			F2Cl ll1, F2Cl ll2)
 {
    int optv, err, l1=ll1, l2=ll2;
@@ -290,7 +290,7 @@ ftnword f77name(xdf_64_gop)(char *foptname, char *foptc, ftnword *foptv,
    strncpy(optname,foptname,l1);
    optname[l1] = '\0';
 
-   err = c_xdf_64_gop(optname,optc,&optv);
+   err = c_xdfgop(optname,optc,&optv);
 
    l2 = (l2 <= 256) ? l2 : 256;
    strncpy(foptc,optc,l2);
@@ -305,7 +305,7 @@ ftnword f77name(xdf_64_gop)(char *foptname, char *foptc, ftnword *foptv,
  *                              X D F H D R                                  * 
  *****************************************************************************/
 
-ftnword f77name(xdf_64_hdr)(word *buf,ftnword *addr,ftnword *lng,
+ftnword f77name(xdfhdr)(word *buf,ftnword *addr,ftnword *lng,
                         ftnword *idtyp,ftnword *primk,ftnword *fnprim,
 			ftnword *info, ftnword *fninfo)
 {
@@ -316,10 +316,10 @@ ftnword f77name(xdf_64_hdr)(word *buf,ftnword *addr,ftnword *lng,
 
 #if defined(NEC64)
    BUF_C;
-   ier = c_xdf_64_hdr(buf+1,&l_addr,&l_lng,&l_idtyp,l_primk,nprim,l_info,ninfo);
+   ier = c_xdfhdr(buf+1,&l_addr,&l_lng,&l_idtyp,l_primk,nprim,l_info,ninfo);
    BUF_F;
 #else
-   ier = c_xdf_64_hdr((buffer_interface_ptr)buf,&l_addr,&l_lng,&l_idtyp,l_primk,nprim,l_info,ninfo);
+   ier = c_xdfhdr((buffer_interface_ptr)buf,&l_addr,&l_lng,&l_idtyp,l_primk,nprim,l_info,ninfo);
 #endif
 
    *addr =  (ftnword) l_addr;
@@ -345,7 +345,7 @@ ftnword f77name(xdf_64_hdr)(word *buf,ftnword *addr,ftnword *lng,
  *                              X D F I M P                                  * 
  *****************************************************************************/
 
-ftnword f77name(xdf_64_imp)(ftnword *fiun,ftnword *stat,ftnword *fnstat,
+ftnword f77name(xdfimp)(ftnword *fiun,ftnword *stat,ftnword *fnstat,
                     word_2 *pri,word_2 *aux,
                     char *vers,char *appl,F2Cl l1,F2Cl l2)
 {
@@ -379,9 +379,9 @@ ftnword f77name(xdf_64_imp)(ftnword *fiun,ftnword *stat,ftnword *fnstat,
      infok[i].wd1 = aux[i].wd1;
      infok[i].wd2 = aux[i].wd2;
      }
-   ier = c_xdf_64_imp(iun,lstat,nstat,primk,infok,c_vers,c_appl);
+   ier = c_xdfimp(iun,lstat,nstat,primk,infok,c_vers,c_appl);
 #else
-   ier = c_xdf_64_imp(iun,stat,nstat,pri,aux,c_vers,c_appl);
+   ier = c_xdfimp(iun,stat,nstat,pri,aux,c_vers,c_appl);
 #endif
    return((ftnword) ier);
 }
@@ -391,7 +391,7 @@ ftnword f77name(xdf_64_imp)(ftnword *fiun,ftnword *stat,ftnword *fnstat,
  *                              X D F I N I                                  * 
  *****************************************************************************/
 
-ftnword f77name(xdf_64_ini)(ftnword *fiun,word *buf,ftnword *fidtyp,
+ftnword f77name(xdfini)(ftnword *fiun,word *buf,ftnword *fidtyp,
 			ftnword *keys,ftnword *fnkeys,ftnword *info,
 			ftnword *fninfo)
 {
@@ -409,10 +409,10 @@ ftnword f77name(xdf_64_ini)(ftnword *fiun,word *buf,ftnword *fidtyp,
    for (i=0; i < ninfo; i++) 
      infok[i] = info[i];
    BUF_C;
-   ier = c_xdf_64_ini(iun,buf+1,idtyp,primk,nkeys,infok,ninfo);
+   ier = c_xdfini(iun,buf+1,idtyp,primk,nkeys,infok,ninfo);
    BUF_F;
 #else
-   ier = c_xdf_64_ini(iun,(buffer_interface_ptr)buf,idtyp,keys,nkeys,info,ninfo);
+   ier = c_xdfini(iun,(buffer_interface_ptr)buf,idtyp,keys,nkeys,info,ninfo);
 #endif
    return((ftnword) ier);
 }
@@ -422,7 +422,7 @@ ftnword f77name(xdf_64_ini)(ftnword *fiun,word *buf,ftnword *fidtyp,
  *                              X D F I N S                                  * 
  *****************************************************************************/
 
-ftnword f77name(xdf_64_ins)(word *buf,word *donnees,
+ftnword f77name(xdfins)(word *buf,word *donnees,
                         ftnword *fbitpos, ftnword *fnelm,
 			ftnword *fnbits, ftnword *fdatyp)
 {
@@ -433,14 +433,14 @@ ftnword f77name(xdf_64_ins)(word *buf,word *donnees,
    BUF_C;
    if ((datyp == 2) || (datyp == 4)) {
      xdf_stride = 2;
-     ier = c_xdf_64_ins(buf+1,donnees+1,bitpos,nelm,nbits,datyp);
+     ier = c_xdfins(buf+1,donnees+1,bitpos,nelm,nbits,datyp);
      xdf_stride = 1;
    }
    else
-     ier = c_xdf_64_ins(buf+1,donnees,bitpos,nelm,nbits,datyp);
+     ier = c_xdfins(buf+1,donnees,bitpos,nelm,nbits,datyp);
    BUF_F;
 #else
-   ier = c_xdf_64_ins(buf,donnees,bitpos,nelm,nbits,datyp);
+   ier = c_xdfins(buf,donnees,bitpos,nelm,nbits,datyp);
 #endif
    return((ftnword) ier);
 }
@@ -450,11 +450,11 @@ ftnword f77name(xdf_64_ins)(word *buf,word *donnees,
  *                              X D F L N K                                  * 
  *****************************************************************************/
 
-ftnword f77name(xdf_64_lnk)(ftnword *liste, ftnword *fn)
+ftnword f77name(xdflnk)(ftnword *liste, ftnword *fn)
 {
    int n = *fn, ier;
 
-   ier = c_xdf_64_lnk(liste,n);
+   ier = c_xdflnk(liste,n);
    return((ftnword) ier);
 
 }
@@ -464,7 +464,7 @@ ftnword f77name(xdf_64_lnk)(ftnword *liste, ftnword *fn)
  *                              X D F L O C                                  * 
  *****************************************************************************/
 
-ftnword f77name(xdf_64_loc)(ftnword *fiun, ftnword *fhandle, ftnword *primk,
+ftnword f77name(xdfloc)(ftnword *fiun, ftnword *fhandle, ftnword *primk,
 			ftnword *fnprim)
 {
    int iun = *fiun, nprim = *fnprim, i;
@@ -478,7 +478,7 @@ ftnword f77name(xdf_64_loc)(ftnword *fiun, ftnword *fhandle, ftnword *primk,
    for (i=0; i<nprim; i++)
       l_primk[i] = primk[i];
 
-   return((ftnword) c_xdf_64_loc(iun,handle,l_primk,nprim));
+   return((ftnword) c_xdfloc(iun,handle,l_primk,nprim));
 
 }
 
@@ -487,7 +487,7 @@ ftnword f77name(xdf_64_loc)(ftnword *fiun, ftnword *fhandle, ftnword *primk,
  *                              X D F O P N                                  * 
  *****************************************************************************/
 
-ftnword f77name(xdf_64_opn)(ftnword *fiun, char *mode,
+ftnword f77name(xdfopn)(ftnword *fiun, char *mode,
 			word_2 *pri, ftnword *fnpri,
 			word_2 *aux, ftnword *fnaux,
 			char *appl, F2Cl l1, F2Cl l2)
@@ -517,7 +517,7 @@ ftnword f77name(xdf_64_opn)(ftnword *fiun, char *mode,
      infok[i].wd1 = aux[i].wd1;
      infok[i].wd2 = aux[i].wd2;
      }
-   ier = c_xdf_64_opn(iun,c_mode,primk,npri,infok,naux,c_appl);
+   ier = c_xdfopn(iun,c_mode,primk,npri,infok,naux,c_appl);
    return((ftnword) ier);
 }
 
@@ -526,7 +526,7 @@ ftnword f77name(xdf_64_opn)(ftnword *fiun, char *mode,
  *                              X D F O P T                                  * 
  *****************************************************************************/
 
-ftnword f77name(xdf_64_opt)(char *foptname, char *foptc, ftnword *foptv,
+ftnword f77name(xdfopt)(char *foptname, char *foptc, ftnword *foptv,
 			F2Cl ll1, F2Cl ll2)
 {
    int optv = *foptv, l1=ll1, l2=ll2;
@@ -540,7 +540,7 @@ ftnword f77name(xdf_64_opt)(char *foptname, char *foptc, ftnword *foptv,
    strncpy(optc,foptc,l2);
    optc[l2] = '\0';
 
-   return((ftnword) c_xdf_64_opt(optname,optc,optv));
+   return((ftnword) c_xdfopt(optname,optc,optv));
 }
 
 /*splitpoint xdfprm */
@@ -548,7 +548,7 @@ ftnword f77name(xdf_64_opt)(char *foptname, char *foptc, ftnword *foptv,
  *                              X D F P R M                                  * 
  *****************************************************************************/
 
-ftnword f77name(xdf_64_prm)(ftnword *fhandle,ftnword *addr,ftnword *lng,
+ftnword f77name(xdfprm)(ftnword *fhandle,ftnword *addr,ftnword *lng,
                         ftnword *idtyp,ftnword *primk,ftnword *fnprim)
 {
    int nprim = *fnprim, ier, i;
@@ -556,7 +556,7 @@ ftnword f77name(xdf_64_prm)(ftnword *fhandle,ftnword *addr,ftnword *lng,
    int l_addr, l_lng, l_idtyp;
    word l_primk[MAX_KEYS];
 
-   ier = c_xdf_64_prm(handle,&l_addr,&l_lng,&l_idtyp,l_primk,nprim);
+   ier = c_xdfprm(handle,&l_addr,&l_lng,&l_idtyp,l_primk,nprim);
    *addr =  (ftnword) l_addr;
    *lng =   (ftnword) l_lng;
    *idtyp = (ftnword) l_idtyp;
@@ -572,7 +572,7 @@ ftnword f77name(xdf_64_prm)(ftnword *fhandle,ftnword *addr,ftnword *lng,
  *                              X D F P U T                                  * 
  *****************************************************************************/
 
-ftnword f77name(xdf_64_put)(ftnword *fiun, ftnword *fhandle,
+ftnword f77name(xdfput)(ftnword *fiun, ftnword *fhandle,
 			word *buf)
 {
    int handle = *fhandle;
@@ -580,10 +580,10 @@ ftnword f77name(xdf_64_put)(ftnword *fiun, ftnword *fhandle,
 
 #if defined(NEC64)
    BUF_C;
-   ier = c_xdf_64_put(iun,handle,buf+1);
+   ier = c_xdfput(iun,handle,buf+1);
    BUF_F;
 #else
-   ier = c_xdf_64_put(iun,handle,(buffer_interface_ptr)buf);
+   ier = c_xdfput(iun,handle,(buffer_interface_ptr)buf);
 #endif
    return((ftnword) ier);
 }
@@ -593,7 +593,7 @@ ftnword f77name(xdf_64_put)(ftnword *fiun, ftnword *fhandle,
  *                              X D F R E P                                  * 
  *****************************************************************************/
 
-ftnword f77name(xdf_64_rep)(word *buf,word *donnees,
+ftnword f77name(xdfrep)(word *buf,word *donnees,
                         ftnword *fbitpos, ftnword *fnelm,
 			ftnword *fnbits, ftnword *fdatyp)
 {
@@ -604,14 +604,14 @@ ftnword f77name(xdf_64_rep)(word *buf,word *donnees,
    BUF_C;
    if ((datyp == 2) || (datyp == 4)) {
      xdf_stride = 2;
-     ier = c_xdf_64_rep(buf+1,donnees+1,bitpos,nelm,nbits,datyp);
+     ier = c_xdfrep(buf+1,donnees+1,bitpos,nelm,nbits,datyp);
      xdf_stride = 1;
    }
    else
-     ier = c_xdf_64_rep(buf+1,donnees,bitpos,nelm,nbits,datyp);
+     ier = c_xdfrep(buf+1,donnees,bitpos,nelm,nbits,datyp);
    BUF_F;
 #else
-   ier = c_xdf_64_rep(buf,donnees,bitpos,nelm,nbits,datyp);
+   ier = c_xdfrep(buf,donnees,bitpos,nelm,nbits,datyp);
 #endif
    return((ftnword) ier);
 }
@@ -621,7 +621,7 @@ ftnword f77name(xdf_64_rep)(word *buf,word *donnees,
  *                              X D F S T A                                  * 
  *****************************************************************************/
 
-ftnword f77name(xdf_64_sta)(ftnword *fiun,ftnword *stat,ftnword *fnstat,
+ftnword f77name(xdfsta)(ftnword *fiun,ftnword *stat,ftnword *fnstat,
 			word_2 *pri,ftnword *fnpri,
 			word_2 *aux,ftnword *fnaux,
 			char *vers,char *appl,F2Cl l1,F2Cl l2)
@@ -634,7 +634,7 @@ ftnword f77name(xdf_64_sta)(ftnword *fiun,ftnword *stat,ftnword *fnstat,
    word_2 primk[MAX_KEYS], infok[MAX_KEYS];
    word lstat[12];
 
-   ier = c_xdf_64_sta(iun,lstat,nstat,primk,npri,infok,naux,c_vers,c_appl);
+   ier = c_xdfsta(iun,lstat,nstat,primk,npri,infok,naux,c_vers,c_appl);
 
    if ((npri > MAX_KEYS) || (naux >MAX_KEYS)) {
       sprintf(errmsg,"npri=%d or naux=%d > MAX_KEYS must recompile",
@@ -652,7 +652,7 @@ ftnword f77name(xdf_64_sta)(ftnword *fiun,ftnword *stat,ftnword *fnstat,
    for (i=0; i < nstat; i++)
      stat[i] = lstat[i];
 #else
-   ier = c_xdf_64_sta(iun,stat,nstat,pri,npri,aux,naux,c_vers,c_appl);
+   ier = c_xdfsta(iun,stat,nstat,pri,npri,aux,naux,c_vers,c_appl);
 #endif
    lng = (l1 <= 256) ? l1 : 256;
    c_vers[lng] = '\0';
@@ -671,7 +671,7 @@ ftnword f77name(xdf_64_sta)(ftnword *fiun,ftnword *stat,ftnword *fnstat,
  *                              X D F U P D                                  * 
  *****************************************************************************/
 
-ftnword f77name(xdf_64_upd)(ftnword *fiun,word *buf,ftnword *fidtyp,
+ftnword f77name(xdfupd)(ftnword *fiun,word *buf,ftnword *fidtyp,
 			ftnword *keys,ftnword *fnkeys,
 			ftnword *info,ftnword *fninfo)
 {
@@ -685,10 +685,10 @@ ftnword f77name(xdf_64_upd)(ftnword *fiun,word *buf,ftnword *fidtyp,
       l_keys[i] = (ftnword) keys[i];
    for (i=0; i < ninfo; i++)
       l_info[i] = (ftnword) info[i];
-   ier = c_xdf_64_upd(iun,buf+1,idtyp,l_keys,nkeys,l_info,ninfo);
+   ier = c_xdfupd(iun,buf+1,idtyp,l_keys,nkeys,l_info,ninfo);
    BUF_F;
 #else
-   ier = c_xdf_64_upd(iun,(buffer_interface_ptr)buf,idtyp,keys,nkeys,info,ninfo);
+   ier = c_xdfupd(iun,(buffer_interface_ptr)buf,idtyp,keys,nkeys,info,ninfo);
 #endif
    return((ftnword) ier);
 }
@@ -698,11 +698,11 @@ ftnword f77name(xdf_64_upd)(ftnword *fiun,word *buf,ftnword *fidtyp,
  *                              X D F U S E                                  * 
  *****************************************************************************/
 
-ftnword f77name(xdf_64_use)(ftnword *fsrc_unit, ftnword *fdest_unit)
+ftnword f77name(xdfuse)(ftnword *fsrc_unit, ftnword *fdest_unit)
 {
    int src_unit = *fsrc_unit, dest_unit = *fdest_unit;
 
-   return((ftnword)c_xdf_64_use(src_unit,dest_unit));
+   return((ftnword)c_xdfuse(src_unit,dest_unit));
 
 }
 
@@ -711,7 +711,7 @@ ftnword f77name(xdf_64_use)(ftnword *fsrc_unit, ftnword *fdest_unit)
  *                              X D F X T R                                  * 
  *****************************************************************************/
 
-ftnword f77name(xdf_64_xtr)(word *buf,word *donnees,
+ftnword f77name(xdfxtr)(word *buf,word *donnees,
                         ftnword *fbitpos, ftnword *fnelm,
 			ftnword *fnbits, ftnword *fdatyp)
 {
@@ -722,14 +722,14 @@ ftnword f77name(xdf_64_xtr)(word *buf,word *donnees,
    BUF_C;
    if ((datyp == 2) || (datyp == 4)) {
      xdf_stride = 2;
-     ier = c_xdf_64_xtr(buf+1,donnees+1,bitpos,nelm,nbits,datyp);
+     ier = c_xdfxtr(buf+1,donnees+1,bitpos,nelm,nbits,datyp);
      xdf_stride = 1;
    }
    else
-     ier = c_xdf_64_xtr(buf+1,donnees,bitpos,nelm,nbits,datyp);
+     ier = c_xdfxtr(buf+1,donnees,bitpos,nelm,nbits,datyp);
    BUF_F;
 #else
-   ier = c_xdf_64_xtr(buf,donnees,bitpos,nelm,nbits,datyp);
+   ier = c_xdfxtr(buf,donnees,bitpos,nelm,nbits,datyp);
 #endif
    return((ftnword) ier);
 }
