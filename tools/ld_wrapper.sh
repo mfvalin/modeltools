@@ -1,11 +1,16 @@
 #!/bin/bash 
 # intercept ld call, add rpath argument to make sure all needed shared libraries will be found at runtime
+# TODO:
+#  external default for --enable|disable-new-tags (and ignore it if option explicitely specified)
+#  external list of rpaths to disable (to be added to PATHUSED)
+#  above done via environment variables
+#  add auto detection of next loader in PATH ?
 allParams=("$@")     # collect arguments to ld
 # for i in "${allParams[@]}" ; do
 #   echo $i
 # done
 # 
-TRUE_LD=/usr/bin/ld
+TRUE_LD=${LD_WRAPPER_TRUE_LD:-/usr/bin/ld}
 n=0
 nParams=${#allParams[*]}
 static=0
@@ -16,7 +21,7 @@ unset PATHUSED
 declare -A PATHUSED
 PATHUSED["/usr/lib"]=1         # ignore /usr/lib and /usr/lib64 as they are part of default rpath
 PATHUSED["/usr/lib64"]=1
-while ((n < nParams)); do
+while ((n < nParams)); do      # process -L -l -rpath -dynamic-linker -Bstatic -static -Bdynamic and explicit libxxx.so
     p=${allParams[n]}
     p2=${allParams[$((n+1))]}
     if [[ "${p:0:3}" == -L/ ]]; then
@@ -43,7 +48,7 @@ while ((n < nParams)); do
         PATHUSED["${path}"]=1 
         [[ -n ${LD_WRAPPER_DEBUG} ]] && echo "EXPLICIT rpath = ${path} (${p2})"
     elif [[ "$p" =~ ^[^-].*\.so($|\.) ]]; then
-	# direct reference to a shared library, so add its canonical path to rpath.
+	# explicit reference to a shared library, add its canonical path to rpath.
 	path="$(readlink -e $(dirname "$p"))";
 	PATHUSED["${path}"]=1
 	RpathList="${RpathList} -rpath ${path}"
