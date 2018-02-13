@@ -770,7 +770,6 @@ int c_xdfadd(word *buffer, word *donnees, int nelm, int nbits, int datyp)
             buf->data[index_word+i] = donnees[i];
          break;
 
-#if !defined(NEC)
       case 6:
       case 8:
 
@@ -790,7 +789,6 @@ int c_xdfadd(word *buffer, word *donnees, int nelm, int nbits, int datyp)
            for (i=0; i < nbwords; i++)
              buf->data[index_word+i] = donnees[i];
          break;
-#endif
       
       case 5:        /* upper char only */
          for (i=0; i < nbwords; i++)
@@ -1190,7 +1188,7 @@ int c_xdfget2(int handle, buffer_interface_ptr buf, int *aux_ptr)
 
    f = file_table[index];
 
-   if (! f->xdf_seq) {
+   if (! f->xdf_seq) {                // random file
      if (page_number < f->npages) {   /* page is in current file */
        target_page = f->dir_page[page_number];
      }
@@ -1218,7 +1216,7 @@ int c_xdfget2(int handle, buffer_interface_ptr buf, int *aux_ptr)
      rec = target_page->dir.entry + record_number * W64TOWD(f->primary_len);
      record = (file_record *) rec;
    }
-   else {
+   else {                             // sequential file
      if (! f->valid_pos) {
        sprintf(errmsg,"no valid file position for sequential file\n");
        return(error_msg("c_xdfget",ERR_NO_POS,ERROR));
@@ -2413,7 +2411,7 @@ int c_xdfprm(int handle,int *addr,int *lng,int *idtyp,word *primk,int nprim)
  *                                                                           * 
  *****************************************************************************/
 
-int c_xdfput(int iun, int handle, buffer_interface_ptr buf)
+static int c_xdfput_32(int iun, int handle, buffer_interface_ptr buf)
 {
    int index, record_number, page_number, i, idtyp, addr, lng, lngw;
    int index_from_buf, index_from_iun, write_to_end=0, nwords;
@@ -2485,7 +2483,7 @@ int c_xdfput(int iun, int handle, buffer_interface_ptr buf)
             return(error_msg("c_xdfput",ERR_NOT_COMP,ERROR));
             }
          }
-      if (! f->xdf_seq) {
+      if (! f->xdf_seq) {   /* file is xdf random */
         if (page_number < f->npages) {   /* page is in current file */
           f->cur_dir_page = f->dir_page[page_number];
         }
@@ -2619,7 +2617,7 @@ int c_xdfput(int iun, int handle, buffer_interface_ptr buf)
       f->nxtadr = W64TOWD(f->header->fsiz) + 1;  /* nxtadr = fsiz +1 */
       f->header->nbig = 
          (WDTO64(nwords) > f->header->nbig) ? WDTO64(nwords) : f->header->nbig;
-      if (f->xdf_seq) {  /* add postfix and eof marker */
+      if (f->xdf_seq) {  /* add postfix and eof marker if standard sequential file */
         postfix.idtyp = 0;
         postfix.lng = 2;
         postfix.addr = -1;
@@ -2646,11 +2644,14 @@ int c_xdfput(int iun, int handle, buffer_interface_ptr buf)
 
 }
 
-int c_xdfput_64(int iun, int handle, buffer_interface_64_ptr buf)
+int c_xdfput_64(int iun, int handle, buffer_interface_64_ptr buf64, int mode64)
 {
+   buffer_interface_ptr buf32 = (buffer_interface_ptr) buf64;
    int index, record_number, page_number, i, idtyp, addr, lng;
    int index_from_buf, index_from_iun, write_to_end=0;
    int64_t nwords, lngw, len64;
+   uint64_t nbits64;
+   void *buf_data = buf64->data;
    int write_addr, err, index_fnom, cluster_size, next_cluster_addr;
    file_table_entry *f, *f_buf;
    file_record *record, *bufrec;
@@ -2660,7 +2661,7 @@ int c_xdfput_64(int iun, int handle, buffer_interface_64_ptr buf)
    postfix_seq postfix;
 
    index_fnom = fnom_index(iun);
-   if ((index_from_buf = file_index(buf->iun)) == ERR_NO_FILE) {
+   if ((index_from_buf = file_index(buf64->iun)) == ERR_NO_FILE) {
       sprintf(errmsg,"record not properly initialized\n");
       return(error_msg("c_xdfput",ERR_BAD_INIT,ERROR));
       }
@@ -2670,29 +2671,33 @@ int c_xdfput_64(int iun, int handle, buffer_interface_64_ptr buf)
       return(error_msg("c_xdfput",ERR_BAD_UNIT,ERROR));
       }
 
-   if ((buf->nbits64 & 0x3f) != 0) {
+   if(mode64){                         // pick the right bit field for nbits
+     nbits64 = buf64->nbits64;         // 64 bit version
+   }else{
+     nbits64 = buf32->nbits;           // 32 bit version
+   }
+   if ((nbits64 & 0x3f) != 0) {
       sprintf(errmsg,"buf->nbits is not a multiple of 64 bits\n");
       return(error_msg("c_xdfput",ERR_BAD_ADDR,SYSTEM));
       }
 
-   nwords = buf->nbits64 / (8 * sizeof(word));
+   nwords = nbits64 / (8 * sizeof(word));
    index = index_from_iun;
    f = file_table[index_from_iun];
 
    if ((f->header->rwflg == RDMODE) || (FGFDT[index_fnom].attr.read_only)) {  /* mode read only */
-      sprintf(errmsg,"file is open in read only mode or no write permission\n");
+      sprintf(errmsg,"file is open in read only mode or does not have write permission\n");
       return(error_msg("c_xdfput",ERR_NO_WRITE,ERROR));
       }
 
    if ((handle != 0) && (f->header->rwflg == APPEND)) {
-      sprintf(errmsg,"file is open in append mode only\n");
+      sprintf(errmsg,"file is open in append mode only, cannot delete record\n");
       return(error_msg("c_xdfput",ERR_NO_WRITE,ERROR));
       }
 
-   if (handle <= 0)
-      write_to_end = 1;
+   if (handle <= 0) write_to_end = 1;
 
-   if (handle != 0) {
+   if (handle != 0) {      /* the existing record will be deleted  */
       if (handle < 0 ) 
          handle = -handle;
 
@@ -2719,7 +2724,7 @@ int c_xdfput_64(int iun, int handle, buffer_interface_64_ptr buf)
             return(error_msg("c_xdfput",ERR_NOT_COMP,ERROR));
             }
          }
-      if (! f->xdf_seq) {
+      if (! f->xdf_seq) {   /* file is xdf random */
         if (page_number < f->npages) {   /* page is in current file */
           f->cur_dir_page = f->dir_page[page_number];
         }
@@ -2747,7 +2752,7 @@ int c_xdfput_64(int iun, int handle, buffer_interface_64_ptr buf)
           f->cur_dir_page->dir.entry + record_number * W64TOWD(f->primary_len);
    
         record = (file_record *) f->cur_entry;
-      }
+      } 
       else {   /* file is xdf sequential */
         if (handle > 0) {   /* rewrite record */
           addr = address_from_handle(handle,f);
@@ -2806,9 +2811,9 @@ int c_xdfput_64(int iun, int handle, buffer_interface_64_ptr buf)
 
 
    /* update record header */
-   bufrec = (file_record *) buf->data;
+   bufrec = (file_record *) buf_data;
    bufrec->addr = WDTO64(write_addr - 1) + 1;
-   if (f->xdf_seq) {
+   if (f->xdf_seq) {          // sequential file
      next_cluster_addr = f->cur_addr -1 + nwords + W64TOwd(2);
      if ((next_cluster_addr >> 18) >= 512) {
        cluster_size = 128;
@@ -2833,14 +2838,13 @@ int c_xdfput_64(int iun, int handle, buffer_interface_64_ptr buf)
    if( (nwords >= 32*1024*1024) || (write_addr >= 1024*1024*1024) ) {
      if(! f->xdf_seq) f->header->vrsn = 'X' << 24 | 'D' << 16 | 'F' << 8 | '1';
    }
-   c_wawrit64(iun,&(buf->data),write_addr,nwords,0);
-   if (f->xdf_seq)
+   c_wawrit64(iun,buf_data,write_addr,nwords,0);   // write data to file
+   if (f->xdf_seq) {         // sequential file   
      f->cur_addr += nwords;
-
-   if (! f->xdf_seq) {
-     /* update directory entry */
+   }
+   else {                    // random file, update directory entry
      debug_record = (burp_record *) f->cur_entry;
-     f->build_primary(buf->data,primk,argument_not_used,
+     f->build_primary(buf_data,primk,argument_not_used,
                       mskkeys,index,RDMODE);              /* get keys */
      f->build_primary(f->cur_entry,primk,argument_not_used,
                       mskkeys,index,WMODE); 
@@ -2856,9 +2860,9 @@ int c_xdfput_64(int iun, int handle, buffer_interface_64_ptr buf)
       f->header->nxtn++;
       f->header->fsiz += WDTO64(nwords);
       f->nxtadr = W64TOWD(f->header->fsiz) + 1;  /* nxtadr = fsiz +1 */
-      f->header->nbig = 
-         (WDTO64(nwords) > f->header->nbig) ? WDTO64(nwords) : f->header->nbig;
-      if (f->xdf_seq) {  /* add postfix and eof marker */
+      f->header->nbig = (WDTO64(nwords) > f->header->nbig) ? WDTO64(nwords) : f->header->nbig;
+
+      if (f->xdf_seq) {  /* add postfix and eof marker if sequential file */
         postfix.idtyp = 0;
         postfix.lng = 2;
         postfix.addr = -1;
@@ -2877,14 +2881,18 @@ int c_xdfput_64(int iun, int handle, buffer_interface_64_ptr buf)
         FGFDT[index_fnom].file_size = f->nxtadr+W64TOWD(1)-1;
       }
    }
-   if (handle != 0)
-      f->header->nrwr++;
+   if (handle != 0)  f->header->nrwr++;   // bump rewrite count
 
    f->modified = 1;
-   if (! f->xdf_seq)
-     f->cur_dir_page->modified = 1;
+   if (! f->xdf_seq) f->cur_dir_page->modified = 1;   // flag directory page as modified (will be rewritten to disk)
+
    return(0);
 
+}
+
+int c_xdfput(int iun, int handle, buffer_interface_ptr buf){
+  return c_xdfput_32(iun, handle, (buffer_interface_ptr) buf);
+//   return c_xdfput_64(iun, handle, (buffer_interface_64_ptr) buf, 0);
 }
 
 /*splitpoint c_xdfrep */

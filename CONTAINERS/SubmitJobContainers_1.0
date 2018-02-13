@@ -93,6 +93,7 @@ cat $PBS_NODEFILE
 export SAVE_HOSTFILE=$PBS_NODEFILE
 export NODEFILE_PBS=${PBS_NODEFILE}
 export RANKFILE_PBS
+export RESOURCES_PBS
 #
 # arguments    noderange:cpurange ... noderange:cpurange
 # noderange    node | firstnode-lastnode               (origin 0)
@@ -115,6 +116,7 @@ while [[ -n $1 ]] ; do
   shift
   for n in $(seq $(echo ${nodes}| tr -- '-' " ") ) ; do  # build OpenMPI rank file
    the_host=$(cat ${NodeFileDir}/nodes.master | sed -n "$((n+1))p")
+#    the_host=+n$n
    low=${cpus%-*}
    high=${cpus#*-}
    while ((low+incr<=high+1 && rank<ntiles)) ; do
@@ -135,6 +137,7 @@ instanciate() # create one sub-container. arguments will be passed verbatim to m
   RANKFILE_PBS=${NodeFileDir}/${name}-${instance}
   echo "======================================================================================" >>${ListingFile}+${name}-${instance}
   chmod 644 ${ListingFile}+${name}-${instance}
+  RESOURCES_PBS="$*"                                                # transmit resources as they are passed to make_map
   make_map $* >${RANKFILE_PBS}                                      # create OpenMPI rank file
   cat ${RANKFILE_PBS} >>${ListingFile}+${name}-${instance}          # write rank file into listing file
   echo "======================================================================================" >>${ListingFile}+${name}-${instance}

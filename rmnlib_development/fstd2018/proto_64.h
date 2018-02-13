@@ -4,21 +4,21 @@
 int fnom_index(int iun);
 int error_msg(char *function_name, int errcode, int errlevel);
 int file_index(int iun);
-ftnword f77name(xdfopn)(ftnword *fiun,char *mode,ftnword_2 *pri,ftnword *fnpri,
-             ftnword_2 *aux,ftnword *fnaux,char *appl,F2Cl l1,F2Cl l2);
+ftnword f77name(xdfopn)(ftnword *fiun,char *mode,word_2 *pri,ftnword *fnpri,
+             word_2 *aux,ftnword *fnaux,char *appl,F2Cl l1,F2Cl l2);
 int c_xdfopn(int iun,char *mode,word_2 *pri,int npri,
              word_2 *aux,int naux,char *appl);
 ftnword f77name(xdfcls)(ftnword *fiun);
 int c_xdfcls(int iun);
 ftnword f77name(xdfsta)(ftnword *fiun,ftnword *stat,ftnword *fnstat,
-			ftnword_2 *pri,ftnword *fnpri,
-			ftnword_2 *aux,ftnword *fnaux,
+			word_2 *pri,ftnword *fnpri,
+			word_2 *aux,ftnword *fnaux,
 			char *vers,char *appl,F2Cl l1,F2Cl l2);
 int c_xdfsta(int iun,word *stat,int nstat,
                     word_2 *pri,int npri,word_2 *aux,int naux,
                     char *vers,char *appl);
 ftnword f77name(xdfimp)(ftnword *fiun,ftnword *stat,ftnword *fnstat,
-                    ftnword_2 *pri,ftnword_2 *aux,
+                    word_2 *pri,word_2 *aux,
                     char *vers,char *appl,F2Cl l1,F2Cl l2);
 int c_xdfimp(int iun,word *stat,int nstat,word_2 *pri,word_2 *aux,
                     char *vers,char *appl);

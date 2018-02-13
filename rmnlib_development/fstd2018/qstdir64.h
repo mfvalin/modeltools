@@ -700,7 +700,7 @@ typedef file_table_entry *file_table_entry_ptr;
 
 
 /*****************************************************************************/
-/*               description of a XDF buffer interface layout                */
+/*         description of a XDF buffer interface layout (2 versions)         */
 /*****************************************************************************/
 typedef struct{
         struct data_block *next;        /* pointer to next data block */
@@ -719,6 +719,7 @@ typedef struct{
         word iun;           /* associated unit number */
         word aux_index;     /* starting position of auxiliary keys */
         union{
+                uint64_t nbits64;       /* number of bits for entire record (48 bits) */
                 data_block_ptr ptr;
                 word dummy[2];
                 }buf78;
