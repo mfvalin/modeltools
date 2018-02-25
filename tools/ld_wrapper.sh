@@ -62,8 +62,10 @@ unset LIBS_SEEN
 declare -A LIBS_SEEN
 for i in ${LibPath[@]}; do
   path="$(readlink -f ${i})"
-  [[ -n ${LD_WRAPPER_DEBUG} ]] &&    [[ -n ${PATHUSED["$path"]} ]] && echo "<<< IGNORING $path >>>" && continue
-  [[ -n ${PATHUSED["$path"]} ]] && continue
+  if [[ -n ${PATHUSED["$path"]} || "$path" == /usr/lib* ]] ; then   # ignore paths starting with /usr/lib...
+    [[ -n ${LD_WRAPPER_DEBUG} ]] && echo "<<< IGNORING $path >>>"
+    continue
+  fi
   for j in ${LibList[@]}; do
       foundlib=${LIBS_SEEN["$j"]}
       if [ -z "$foundlib" -a -f "$i/lib$j.so" ]; then
