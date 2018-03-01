@@ -2,9 +2,9 @@
 
 typedef struct {
   uint32_t 
-     stream:1, std:1, burp:1, rnd:1, wa:1, ftn:1,
-     unf:1, read_only:1, old:1, scratch:1, paged:1,
-     pipe:1, write_mode:1, remote:1, sparse:1, padding:17;
+     stream:1, std:1,     burp:1,  rnd:1,  wa:1,         ftn:1,    unf:1,    read_only:1, 
+     old:1,    scratch:1, paged:1, pipe:1, write_mode:1, remote:1, sparse:1, atomic:1,
+     padding:16;
 } attributs;
 
 typedef struct {
@@ -21,11 +21,10 @@ typedef struct {
   attributs attr;
 } general_file_info;
 
-#if defined(FNOM_OWNER)
-general_file_info Fnom_General_File_Desc_Table[MAXFILES];
-#else
-extern general_file_info Fnom_General_File_Desc_Table[MAXFILES];
+#if ! defined(FNOM_OWNER)
+extern 
 #endif
+general_file_info Fnom_General_File_Desc_Table[MAXFILES];
 #define FGFDT Fnom_General_File_Desc_Table
 
 int c_fretour(int iun);

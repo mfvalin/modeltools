@@ -25,6 +25,9 @@
 #include <stdint.h>
 
 #include <rpnmacros.h>
+// #define F2Cl int32_t
+// #define f77name(a) a##_
+// #define D77MULT 4
 
 #include <ctype.h>
 #include <string.h>
@@ -174,7 +177,7 @@ void static dump_file_entry(int i)
       fprintf(stderr,"FGFDT[%d] ",i);
       fprintf(stderr,"file_name=%s subname=%s file_type=%s\n",
               FGFDT[i].file_name,FGFDT[i].subname,FGFDT[i].file_type);
-      fprintf(stderr,"iun=%d,fd=%d,size=%ld,esize=%ld,lrec=%d,flags=%s%s%s%s%s%s%s%s%s%s%s%s%s\n",
+      fprintf(stderr,"iun=%d,fd=%d,size=%ld,esize=%ld,lrec=%d,flags=%s%s%s%s%s%s%s%s%s%s%s%s%s%s\n",
               FGFDT[i].iun,
               FGFDT[i].fd,
               FGFDT[i].file_size,
@@ -192,6 +195,7 @@ void static dump_file_entry(int i)
               FGFDT[i].attr.old?"+OLD":"",
               FGFDT[i].attr.paged?"+PAGED":"+NOT PAGED",
               FGFDT[i].attr.sparse?"+SPARSE":"+COMPACT",
+              FGFDT[i].attr.scratch?"+ATOMIC":"",
               FGFDT[i].attr.scratch?"+SCRATCH":"");
       fprintf(stderr,"\n");
 }
@@ -260,6 +264,7 @@ static void reset_file_entry(int i){
    FGFDT[i].attr.paged     = 0;
    FGFDT[i].attr.sparse    = 0;
    FGFDT[i].attr.write_mode= 0;
+   FGFDT[i].attr.atomic    = 0;
    FGFDT[i].attr.remote    = 0;    /* remote file, socket wa file */
 }
 /****************************************************************************
@@ -447,6 +452,7 @@ int c_fnom(int *iun,char *nom,char *type,int lrec)
   FGFDT[i].attr.scratch = 0;
   FGFDT[i].attr.pipe = 0;
   FGFDT[i].attr.remote=0;
+  FGFDT[i].attr.atomic=0;
 
   if (strstr(type,"STREAM") || strstr(type,"stream")){ FGFDT[i].attr.stream=1;
                                                        FGFDT[i].attr.rnd=1; }
@@ -472,6 +478,7 @@ int c_fnom(int *iun,char *nom,char *type,int lrec)
   if (strstr(type,"PAGED")   || strstr(type,"paged"))   FGFDT[i].attr.paged=1;
   if (strstr(type,"SPARSE")   || strstr(type,"sparse")) FGFDT[i].attr.sparse=1;
   if (strstr(type,"REMOTE") || strstr(type,"remote")) { FGFDT[i].attr.remote=1; }
+  if (strstr(type,"ATOMIC") || strstr(type,"atomic")) { FGFDT[i].attr.atomic=1; }
     
   if (!FGFDT[i].attr.std && !FGFDT[i].attr.burp && 
       !FGFDT[i].attr.wa && !FGFDT[i].attr.rnd  && !FGFDT[i].attr.stream)

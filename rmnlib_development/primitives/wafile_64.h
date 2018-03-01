@@ -12,7 +12,7 @@
  {\
   LLSK local_off;\
   local_off = offst;\
-  LSEEK(fd,local_off * sizeof(word),posi);\
+  LSEEK(fd,local_off * sizeof(int32_t),posi);\
  }
 
 #define CMCARC_SIGN "CMCARCHS"  /* signature du debut d'un fichier cmcarc */
