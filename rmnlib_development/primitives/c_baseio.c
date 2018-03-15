@@ -116,9 +116,10 @@ static int dastat[MAXWAFILES] = {MAXWAFILES * 0};
 
 static int BLKSIZE = 512;
 
-static int WA_PAGE_SIZE = 0;
-static int WA_PAGE_NB   = 1;
-static int WA_PAGE_LIMIT = 0;
+static int WA_PAGE_SIZE  = 1024 * 512;
+static int WA_PAGE_NB    = 10;
+static int WA_PAGE_LIMIT = 100;
+static int USE_WA_PAGES  = 0;
 
 static int global_count = 0;
 static int nfree = -1;
@@ -177,7 +178,7 @@ void static dump_file_entry(int i)
       fprintf(stderr,"FGFDT[%d] ",i);
       fprintf(stderr,"file_name=%s subname=%s file_type=%s\n",
               FGFDT[i].file_name,FGFDT[i].subname,FGFDT[i].file_type);
-      fprintf(stderr,"iun=%d,fd=%d,size=%ld,esize=%ld,lrec=%d,flags=%s%s%s%s%s%s%s%s%s%s%s%s%s%s\n",
+      fprintf(stderr,"iun=%d,fd=%d,size=%ld,esize=%ld,lrec=%d,flags=%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s\n\n",
               FGFDT[i].iun,
               FGFDT[i].fd,
               FGFDT[i].file_size,
@@ -194,10 +195,11 @@ void static dump_file_entry(int i)
               FGFDT[i].attr.read_only?"+R/O":"+R/W",
               FGFDT[i].attr.old?"+OLD":"",
               FGFDT[i].attr.paged?"+PAGED":"+NOT PAGED",
+              FGFDT[i].attr.nopages?"+NOPAGES":"",
+              FGFDT[i].attr.dopages?"+DOPAGES":"",
               FGFDT[i].attr.sparse?"+SPARSE":"+COMPACT",
               FGFDT[i].attr.scratch?"+ATOMIC":"",
               FGFDT[i].attr.scratch?"+SCRATCH":"");
-      fprintf(stderr,"\n");
 }
 
 /****************************************************************************
@@ -262,6 +264,8 @@ static void reset_file_entry(int i){
    FGFDT[i].attr.old       = 0;
    FGFDT[i].attr.scratch   = 0;
    FGFDT[i].attr.paged     = 0;
+   FGFDT[i].attr.nopages   = 0;
+   FGFDT[i].attr.dopages   = 0;
    FGFDT[i].attr.sparse    = 0;
    FGFDT[i].attr.write_mode= 0;
    FGFDT[i].attr.atomic    = 0;
@@ -295,9 +299,9 @@ static int find_file_entry(char *caller, int iun)
 }
 
 /****************************************************************************
-*                            C _ F N O M , F N O M                          *
+*                            C _ F N O M                                    *
 *****************************************************************************
-*
+*   fnom is now in Fortran and calls c_fnom
 ***function c_fnom, fnom
 *
 *OBJECT: Open a file and make the connection with a unit number.
@@ -448,6 +452,8 @@ int c_fnom(int *iun,char *nom,char *type,int lrec)
   FGFDT[i].attr.read_only=0;
   FGFDT[i].attr.old=0;
   FGFDT[i].attr.paged=0;
+  FGFDT[i].attr.nopages=0;
+  FGFDT[i].attr.dopages=0;
   FGFDT[i].attr.sparse=0;
   FGFDT[i].attr.scratch = 0;
   FGFDT[i].attr.pipe = 0;
@@ -475,8 +481,10 @@ int c_fnom(int *iun,char *nom,char *type,int lrec)
   if (strstr(type,"D77")    || strstr(type,"d77"))   { FGFDT[i].attr.ftn=1;
                                                        FGFDT[i].attr.rnd=1; }
   if (strstr(type,"SCRATCH") || strstr(type,"scratch")) FGFDT[i].attr.scratch=1;
-  if (strstr(type,"PAGED")   || strstr(type,"paged"))   FGFDT[i].attr.paged=1;
-  if (strstr(type,"SPARSE")   || strstr(type,"sparse")) FGFDT[i].attr.sparse=1;
+  if (strstr(type,"PAGED")   || strstr(type,"paged"))   FGFDT[i].attr.paged=1;    // segmented/paged file
+  if (strstr(type,"DOPAGES") || strstr(type,"dopages")) FGFDT[i].attr.dopages=1;  // try to page file
+  if (strstr(type,"NOPAGES") || strstr(type,"nopages")) FGFDT[i].attr.nopages=1;  // do not page file, despite WA_CONFIG
+  if (strstr(type,"SPARSE")  || strstr(type,"sparse")) FGFDT[i].attr.sparse=1;
   if (strstr(type,"REMOTE") || strstr(type,"remote")) { FGFDT[i].attr.remote=1; }
   if (strstr(type,"ATOMIC") || strstr(type,"atomic")) { FGFDT[i].attr.atomic=1; }
     
@@ -713,7 +721,7 @@ int c_fclos(int iun)
 *RETURNS: the scratch unit number
 *
 */
-int FtnFreeUnitNumber();  // Fortran code to get unused Fortran unit
+int FtnFreeUnitNumber();  // Fortran function to get unused Fortran unit
 
 static int c_qqqfscr(char *type)          
 {
@@ -721,13 +729,13 @@ static int c_qqqfscr(char *type)
 
    iun = -1;
    if (strstr(type,"FTN") || strstr(type,"ftn") || strstr(type,"D77") || strstr(type,"d77")) {
-     start = FtnFreeUnitNumber() ;  // normally between 1 and 99
+     start = FtnFreeUnitNumber() ;  // for now between 1 and 99
      for (i=0; i<MAXFILES; i++){
        if (FGFDT[i].iun == start) return(-1) ; // OOPS, this unit number is flagged as "in use" and Fortran thinks it is free
      }
      return (start) ;
 //       start = 99;
-   }else{
+   }else{        // not a Fortran file, result should be between 100 and 1999
       start = 1999;
    }
    for (j=start; j>99; j--) {
@@ -853,6 +861,7 @@ static int qqcclos(int indf)
 /****************************************************************************
  * c_wa_get_segment_limit, c_wa_set_segment_limit
  * (normally called with segment = 0) (segment 1 normally unlimited)
+ * (provision for future feature)
 *****************************************************************************
 */
 void c_wa_get_segment_limit(int iun, int segment, uint64_t *limit){
@@ -886,8 +895,8 @@ void c_wa_set_segment_limit(int iun, int segment, uint64_t limit){
 *RETURNS: (only for c_waopen2 and waopen2) zero if file correctly opened, non-zero otherwise
 *
 */
-void c_waopen(int iun) { int scrap=c_waopen2(iun); if(scrap < 0) exit(1); }
-int c_waopen2(int iun)   /* open unit iun for WORD ADDRESSABLE access */
+void c_waopen(int iun) { int scrap=c_waopen2(iun); if(scrap < 0) exit(1); }  // abort on error
+int c_waopen2(int iun)   /* open unit iun for WORD ADDRESSABLE access, return 0 or error code */
 {
    int i,ier;
 
@@ -971,10 +980,11 @@ int c_waclos2(int iun)
 *OBJECT: Writes in a word addressable. c_wawrit2 and wawrit2 are functions
 *        returning an error code.
 *
-*ARGUMENTS: in iun    unit number
-*           in buf    will contain data
-*           in adr    file address
-*           in nmots  number of words
+*ARGUMENTS: in iun     unit number
+*           in buf     data to write
+*           in adr     file address in 32 bit words, origin 1
+*           in nmots   number of 32 bit words
+*           in options provision for feature expansion
 *
 *RETURNS: (only for c-wawrit2 and wawrit2) the number of words written.
 *
@@ -1035,8 +1045,9 @@ void c_wawrit(int iun,void *buf,uint32_t adr,int nmots)
 *
 *ARGUMENTS: in  iun     unit number
 *           out buf     will contain the data read
-*           in  adr     adress to start from
-*           in  nmots   number of words to read
+*           in  adr     adress to read from, in 32 bit words, origin 1
+*           in  nmots   number of 32 bit words to read
+*           in  options provision for feature expansion
 *
 *RETURNS: (only for c-waread2 and waread2) the number of words read.
 *
@@ -1094,11 +1105,11 @@ void c_waread(int iun,void *buf,unsigned int adr,int nmots)
 *
 ***function c_wasize, wasize
 *
-*OBJECT: Returns the size (in words) of a file, given its unit number.
+*OBJECT: Returns the size (in 32 bit words) of a file, given its unit number.
 *
 *ARGUMENTS: in iun   unit number
 *
-*RETURNS: the size of a file in words.
+*RETURNS: the size of a file in 32 bit words.
 *
 *NOTE: Gives the size of any file that can be passed to fnom.
 *
@@ -1208,7 +1219,7 @@ int c_existe(char *filename)
 *
 ***function c_openda, openda
 *
-*OBJECT: Opens a direct access file.
+*OBJECT: Opens a direct access file. (legacy)
 *
 *ARGUMENTS: in iun  unit number
 *
@@ -1223,7 +1234,7 @@ void c_openda(int iun)
 *
 ***function c_closda, closda
 *
-*OBJECT: Closes a direct access file.
+*OBJECT: Closes a direct access file. (legacy)
 *
 *ARGUMENTS: in iun unit number
 *
@@ -1238,7 +1249,7 @@ void c_closda(int iun)
 *
 ***function c_checda, checda
 *
-*OBJECT: Checks that I/O is done.
+*OBJECT: Checks that I/O is done. (legacy)
 *
 *ARGUMENTS: in iun   unit number
 *
@@ -1258,7 +1269,7 @@ void c_checda(int iun)
 *
 ***function c_readda, readda
 *
-*OBJECT: Reads a direct access file.
+*OBJECT: Reads a direct access file. (legacy)
 *
 *ARGUMENTS: in  iun      unit number
 *           out bufptr   will contain the data read
@@ -1293,7 +1304,7 @@ void c_readda(int iun,int *bufptr,int ns,int is)
 *
 ***function c_writda, writda
 *
-*OBJECT: Writes to a direct access file.
+*OBJECT: Writes to a direct access file. (legacy)
 *
 *ARGUMENTS: in  iun     unit number
 *           in  bufptr  will contain the data read
@@ -1360,7 +1371,7 @@ int c_getfdsc(int iun) {
 *
 ***function c_sqopen, sqopen
 *
-*OBJECT: Opens a stream.
+*OBJECT: Opens a stream file.
 *
 *ARGUMENTS: in iun   unit number
 *
@@ -1467,7 +1478,7 @@ void c_sqeoi(int iun) {
 *
 *ARGUMENTS: in  iun      unit number
 *           out bufptr   will contain the data read
-*           in  nmots    number of words to read
+*           in  nmots    number of 32 bit words to read
 *
 *RETURNS: the number of words read if the read is successful,
 *         or a negative or null number otherwise.
@@ -1502,7 +1513,7 @@ int c_sqgetw(int iun, uint32_t *bufptr, int nmots) {
 *
 *ARGUMENTS: in iun      unit number
 *           in bufptr   what to write
-*           in nmots    number of words to write
+*           in nmots    number of 32 bit words to write
 *
 *RETURNS: the number of words written, if the write is successful,
 *         or a negative or null number otherwise.
@@ -1593,7 +1604,7 @@ int32_t f77name(sqputs)(int32_t *iun, char  *bufptr, int32_t *nchar, F2Cl llbuf)
 /****************************************************************************
 *                           S C R A P _ P A G E                             *
 *****************************************************************************
-*
+*   (part of the data pager)
 ***function scrap_page
 *
 *OBJECT: Gets rid of the least useful page used by wafiles ind0 
@@ -1673,7 +1684,7 @@ static void scrap_page(int ind0,int ind1)
 /****************************************************************************
 *                        P R O C E S S _ D E C A Y                          *
 *****************************************************************************
-*
+*   (part of the data pager)
 ***function process_decay
 *
 *OBJECT: Updates the age of the pages.  
@@ -1694,7 +1705,7 @@ static void process_decay()
 /****************************************************************************
 *                        G E T _ N E W _ P A G E                            *
 *****************************************************************************
-*
+*   (part of the data pager)
 ***function get_new_page
 *
 *OBJECT: Gets a new page for the wafile of index ind.
@@ -1753,7 +1764,7 @@ static void get_new_page(int ind)
 /****************************************************************************
 *                       W A _ P A G E S _ F L U S H                         *
 *****************************************************************************
-*
+*   (part of the data pager)
 ***function wa_pages_flush
 *
 *OBJECT: Flushes all pages of a word addressable file.
@@ -1776,7 +1787,7 @@ static void wa_pages_flush(int ind)
 ***function filepos
 *
 *OBJECT: Returns the position of the start of the data of a subfile 
-*        in a CMCARC file.
+*        in a CMCARC file. (V4 or V5)
 *
 *ARGUMENTS: in indf  index of the subfile in the master file table
 *
@@ -1921,7 +1932,7 @@ static long long filepos(int indf)
 ***function qqcopen
 *
 *OBJECT: Opens a non-fortran file.
-*        Active part of c_waopen2.
+*        Active part of c_waopen2 & al.
 *
 *ARGUMENTS: in indf  index of the file in the master file table 
 *
@@ -1963,10 +1974,11 @@ if (! init) {
       
     case 1:
       WA_PAGE_SIZE = n1 * 1024 * (sizeof(int32_t) / sizeof(int32_t));
+      USE_WA_PAGES = 1;
       break;
       
     default:
-      WA_PAGE_SIZE = 0;
+//       WA_PAGE_SIZE = 0;
       break;
       
     }
@@ -1976,7 +1988,7 @@ if (! init) {
   
   if (WA_PAGE_LIMIT == 0)
     WA_PAGE_LIMIT = WA_PAGE_NB * MAXWAFILES;
-  if (WA_PAGE_SIZE > 0) {
+  if (USE_WA_PAGES == 1) {
     fprintf(stderr,"WA_PAGE_SZ = %ld Bytes ",WA_PAGE_SIZE*sizeof(int32_t));
     fprintf(stderr,"WA_PAGE_NB = %d ",WA_PAGE_NB);
     fprintf(stderr,"WA_PAGE_LIMIT = %d\n",WA_PAGE_LIMIT);
@@ -2082,8 +2094,15 @@ if (subfile_length > 0)
 FGFDT[indf].eff_file_size = subfile_length;
 subfile_length = 0;
 
-if (WA_PAGE_SIZE > 0) {
+if ( (USE_WA_PAGES == 1) || (FGFDT[indf].attr.dopages == 1) ) {
   wafile[ind].page = (PAGEINFO *)malloc(WA_PAGE_NB * sizeof(PAGEINFO));  // allocate page table for this WA file
+  if(wafile[ind].page == NULL) {
+    fprintf(stderr, "qqcopen warning: cannot allocate page table, filename='%s' !\n",FGFDT[indf].file_name);
+    FGFDT[indf].attr.nopages = 1;   // set nopages flag
+    FGFDT[indf].attr.dopages = 0;   // unset dopages flag
+    USE_WA_PAGES = 0;               // rescind USE_WA_PAGES
+    return(fd);
+  }
   for (i = 0; i < WA_PAGE_NB; i++) {                                     // and initialize it
     wafile[ind].page[i].page_adr = NULL;
     wafile[ind].page[i].wa0 = 0;
@@ -2133,7 +2152,7 @@ for (i=0;i<MAXWAFILES;i++){
 /****************************************************************************
 *                         W A _ P A G E _ R E A D                           *
 *****************************************************************************
-*
+*   (part of the data pager)
 ***function wa_page_read
 *
 *OBJECT: Reads a word addressable file page.
@@ -2300,7 +2319,7 @@ unsigned int hljust(unsigned int *moth, unsigned int *ncar)
 /****************************************************************************
 *                       W A _ P A G E _ W R I T E                           *
 *****************************************************************************
-*
+*   (part of the data pager)
 ***function wa_page_write
 *
 *OBJECT: Writes on a wa page.
@@ -2468,6 +2487,7 @@ int lng, l, lastadr, ind, statut;
 int lfd=FGFDT[indf].fd;
 // uint64_t ladr=wadr;
 char *cbuf;
+int no_paging;
 
 ind = 0;
 while ((wafile[ind].file_desc != lfd) && (ind < MAXWAFILES))
@@ -2486,7 +2506,7 @@ if (FGFDT[indf].attr.read_only) {
   exit(1);
   }
   
-if (FGFDT[indf].attr.remote) {
+if (FGFDT[indf].attr.remote) {      //   remote file on network
   int *s_ID, *addr, *nw, *RW_mode, *checksum;
   int sock_comm_ID=0xBABE;
   int demande[5];
@@ -2517,11 +2537,14 @@ if (FGFDT[indf].attr.remote) {
     FGFDT[indf].eff_file_size = ladr+lnmots-1;
     }
 } /* end remote */
-else {
-  
-  if ((WA_PAGE_SIZE == 0) || (ladr == 0)) {
+else {                            // normal local file
+
+  // use paging if it was requested via FGFDT[indf].attr.dopages == 1
+  no_paging = (USE_WA_PAGES == 0) || (ladr == 0) || (wafile[ind].page == NULL) || (FGFDT[indf].attr.nopages == 1);
+  if(FGFDT[indf].attr.dopages == 1) no_paging = 0 ;
+  if ( no_paging == 1 ) {    // non paged access
     if(ladr!=0) WSEEK(lfd,ladr - 1, L_SET);
-    if ((nwritten=write(lfd, buf, sizeof(int32_t) * lnmots)) != sizeof(int32_t) * lnmots)
+    if ( (nwritten=write(lfd, buf, sizeof(int32_t) * lnmots)) != sizeof(int32_t) * lnmots )  // incomplete write
         {
           if (errno == 14) // BAD ADDRESS
             {
@@ -2534,7 +2557,7 @@ else {
               perror("qqcwawr");
               exit(1);
             }
-          if (nwritten >= 0) {
+          if (nwritten >= 0) {     // attempt to write remaining data
             cbuf = (char *) buf;
             cbuf += nwritten;
             togo = (lnmots * sizeof(int32_t)) - nwritten;
@@ -2557,12 +2580,12 @@ else {
             exit(1);
           }
         }
-    if (ladr+lnmots-1 > FGFDT[indf].file_size) {
+    if (ladr+lnmots-1 > FGFDT[indf].file_size) {     // bump file "size" if necessary
         FGFDT[indf].file_size = ladr+lnmots-1;
         FGFDT[indf].eff_file_size = ladr+lnmots-1;
         }
     }
-  else {
+  else {            // paged access
     lng = lnmots;
     adr0 = ladr;
     offset = 0;
@@ -2581,7 +2604,7 @@ else {
           lng = 0;
           }
         }
-    }
+    } // end paged / not paged access
 } /* end else remote */
 }
 // static void qqcwawr(int32_t *buf,unsigned int wadr,int lnmots,int indf)
@@ -2612,6 +2635,7 @@ uint64_t offset,i,wa0,lng,l,lastadr;
 uint64_t adr0;
 int npages,reste,ind;
 int lfd=FGFDT[indf].fd;
+int no_paging;
 // uint64_t ladr=wadr64;
 
 ind = 0;
@@ -2652,7 +2676,10 @@ else {
   if (ladr != 0) 
     ladr += wafile[ind].offset;
 
-  if ((WA_PAGE_SIZE == 0) || (ladr == 0)) {      // not page cached
+  // use paging if it was requested via FGFDT[indf].attr.dopages == 1
+  no_paging = (USE_WA_PAGES == 0) || (ladr == 0) || (wafile[ind].page == NULL) || (FGFDT[indf].attr.nopages == 1);
+  if(FGFDT[indf].attr.dopages == 1) no_paging = 0 ;
+  if ( no_paging == 1 ) {    // non paged access
     if(ladr!=0) WSEEK(lfd, ladr - 1, L_SET);
     reste=read(lfd, buf, sizeof(int32_t) * lnmots);
     if(reste != sizeof(int32_t)*lnmots) {

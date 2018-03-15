@@ -183,7 +183,9 @@
 !              R/W         file is Read Write (default) (applies to all files)
 !              SCRATCH     File will be removed when closed (applies to all files)
 !              SPARSE      Unix WA sparse file (may be written into far beyond end of file)
-!              PAGED       special type of WA file (not implemented yet)
+!              PAGED       special type of segmented WA file (not implemented yet)
+!              NOPAGES     despite WA_CONFIG, do not page this file
+!              DOPAGES     always try to page this file
 !              REMOTE      file is on another system and accessed with a ssh (applies to all files)
 !              ex.   STD+RND+OLD+R/W open existing random standard file for reading and writing
 !                    FTN+UNF         open Fortran sequential file for reading and writing , create it if it does not exist
