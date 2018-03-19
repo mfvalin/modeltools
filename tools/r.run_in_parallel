@@ -82,7 +82,7 @@ mpiexec_Linux() {
         OPEN_MPI_PARMS="--mca btl sm,self ${OPEN_MPI_PARMS}"         # do not try to use infiniband
       [[ "$mpirun" == mpirun ]] && [[ -n ${OPAL_PREFIX} ]] && \
         OPEN_MPI_PARMS="--prefix ${OPAL_PREFIX} ${OPEN_MPI_PARMS}"    # if not using rumpirun.openmpi (Dorval EC clusters)
-      OPEN_MPI_PARMS="--mca shmem posix ${OPEN_MPI_PARMS}"
+      OPEN_MPI_PARMS="--mca shmem sysv ${OPEN_MPI_PARMS}"
       if [ -f /run/shm ]
       then
          OPEN_MPI_PARMS="--mca orte_tmpdir_base /run/shm ${OPEN_MPI_PARMS}"
@@ -630,8 +630,9 @@ wait_for() {
 #Version="1.1.29b 2017/09/14"  # cosmetic doc changes in cclargs call
 #Version="1.1.29X 2017/09/26"  #  added RANKFILE_PBS+NODEFILE_PBS recognition , changed syntax of bind to none
 #Version="1.1.30  2017/12/21"  # Add -ddt option for XC40. Improve infiniband performance
+#Version="1.1.30a 2018/03/19"  # Reverted back to sysv shmem mca
 true
-Version="1.1.30  2017/12/21"  # Add -ddt option for XC40. Improve infiniband performance
+Version="1.1.30a 2018/03/19"  # Reverted back to sysv shmem mca
 echo "INFO: ${0##*/} version $Version ( /bin/ksh93 )"
 MY_NODEFILE=${PARALLEL_NODEFILE:-${GECOSHEP_HOSTS_FILE:-${GECOSHEP_HOSTFILE:-${LOADL_HOSTFILE:-${PBS_NODEFILE:-${HOME}/.PBS_NODEFILE}}}}}
 [[ ! -f "${MY_NODEFILE}" ]] && \
