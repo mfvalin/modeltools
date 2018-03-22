@@ -666,8 +666,8 @@ typedef struct {
         fn_ptr *file_filter;          /* pointer to record filter function */
         word *cur_entry;              /* pointer to current directory entry */
         file_header *header;          /* pointer to file header */
-        uint64_t nxtadr;              /* next write address (in word units) */
-        uint64_t cur_addr;            /* current address (WA, sequential xdf) */
+        uint64_t nxtadr;              /* next write address (in word units) (origin 1) */
+        uint64_t cur_addr;            /* current address (WA, sequential xdf) (origin 1) */
         uint64_t seq_bof;             /* address (WA) of first record (seq xdf) */
         int primary_len;
         /* length in 64 bit units of primary keys (including 64 bit header) */
