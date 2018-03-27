@@ -527,7 +527,7 @@ int c_qdfdiag(int iun)
        if (header.idtyp == 0)
          ndirect++;
        else {
-         if (header.idtyp == 255)
+         if (header.idtyp == 255)   // actually idtyp > 127 means deleted
            nrec_eff++;
          else
            nrec_act++;
@@ -917,7 +917,7 @@ int c_xdfcls(int iun)
             entry = (f->dir_page[i])->dir.entry;
             for (j=0; j < (f->dir_page[i])->dir.nent; j++) {
                rec = (xdf_record_header *) entry;
-               if ((rec->idtyp | 0x80) == 254) {
+               if ((rec->idtyp | 0x80) == 254) {      // to be reviewed, bit 128 is delete flag
                   rec->idtyp = 255;
                   c_wawrit(iun,rec,W64TOWD(rec->addr-1)+1,W64TOWD(1));
                   }
@@ -1106,14 +1106,14 @@ int c_xdfdel(int handle)
       return(error_msg("c_xdfdel",ERR_SPECIAL,ERROR));
       }
 
-   if ((idtyp & 0x7E) == 0x7E) {
+   if ((idtyp & 0x7E) == 0x7E) {           // should test for bit 7 (128)
       sprintf(errmsg,"record already deleted\n");
       return(error_msg("c_xdfdel",ERR_DELETED,WARNING));
       }
    
    if (! f->xdf_seq) {
      /* update directory entry */
-     record->idtyp = 0xFE;               /* 254 */
+     record->idtyp = 0xFE;      /* 254 */     // should really be  record->idtyp |=  128
      target_page->modified =1;
    }
    else { /* xdf sequential */
@@ -1229,22 +1229,22 @@ int c_xdfget2(int handle, buffer_interface_ptr buf, int *aux_ptr)
      }
    }
    
-   idtyp = record->idtyp;
+   idtyp = record->idtyp;   // contains scaling factor for lng
    addr = record->addr;
    lng = record->lng;
-   lngw = W64TOWD(lng);
+   lngw = W64TOWD(lng);     // will be scaled using idtyp
 
    if (idtyp == 0) {
       sprintf(errmsg,"special record idtyp=0\n");
       return(error_msg("c_xdfget",ERR_SPECIAL,ERROR));
       }
 
-   if ((idtyp & 0x7E) == 0x7E) {
+   if ((idtyp & 0x7E) == 0x7E) {         // should really test for bit 7 (idtyp & 128 == 128)
       sprintf(errmsg,"deleted record\n");
       return(error_msg("c_xdfget",ERR_DELETED,ERROR));
       }
 
-   nw = buf->nwords;
+   nw = buf->nwords;   // or buf64->nwords64 if call to xdfget_64 (fstd only)
    offset = 0;
    if (nw < 0) {
      if (buf->nbits != -1) {
@@ -1376,9 +1376,9 @@ int c_xdfhdr(buffer_interface_ptr buf ,int *addr,int *lng,int *idtyp,
 
    record = (file_record *) buf->data;
   
-   *idtyp = record->idtyp;
-   *addr = record->addr;
-   *lng = record->lng;
+   *idtyp = record->idtyp;    // contains lng scaling factor
+   *addr = record->addr;      // scaled using upper 2 bits
+   *lng = record->lng;        // to be scaled using idtyp
    
    if ((index = file_index(buf->iun)) == ERR_NO_FILE) {
       sprintf(errmsg,"file is not open");
@@ -2383,9 +2383,9 @@ int c_xdfprm(int handle,int *addr,int *lng,int *idtyp,word *primk,int nprim)
      }
    }
   
-   *idtyp = record->idtyp;
-   *addr = record->addr;
-   *lng = record->lng;
+   *idtyp = record->idtyp;   // contains scaling factor for lng
+   *addr = record->addr;     // scaled using upper 2 bits
+   *lng = record->lng;       // scaled using idtyp
 
    f->build_primary((word *) record,primk,argument_not_used,mskkeys,index,RDMODE);
 
@@ -2519,9 +2519,9 @@ static int c_xdfput_32(int iun, int handle, buffer_interface_ptr buf)
           record = (file_record *) f->head_keys;
         }
       }
-      idtyp = record->idtyp;
-      addr = record->addr;
-      lng = record->lng;
+      idtyp = record->idtyp;  // used to scale lng
+      addr = record->addr;    // scaled using upper 2 bits
+      lng = record->lng;      // scaled using idtyp
       lngw = W64TOWD(lng);
 
       if (idtyp == 0) {
@@ -2529,7 +2529,7 @@ static int c_xdfput_32(int iun, int handle, buffer_interface_ptr buf)
          return(error_msg("c_xdfput",ERR_SPECIAL,ERROR));
          }
 
-      if ((idtyp & 0x7E) == 0x7E) {
+      if ((idtyp & 0x7E) == 0x7E) {          // should really be ((idtyp & 0x80) == 0x80)
          sprintf(errmsg,"deleted record\n");
          return(error_msg("c_xdfput",ERR_DELETED,ERROR));
          }
@@ -2604,6 +2604,7 @@ static int c_xdfput_32(int iun, int handle, buffer_interface_ptr buf)
      f->build_primary(f->cur_entry,primk,argument_not_used,
                       mskkeys,index,WMODE); 
      record = (file_record *) f->cur_entry;
+     // make sure to code/scale lng/addr/idtyp
      record->idtyp = bufrec->idtyp;
      record->addr = WDTO64(write_addr - 1) + 1;
      record->lng = WDTO64(nwords);
@@ -2760,9 +2761,9 @@ int c_xdfput_64(int iun, int handle, buffer_interface_64_ptr buf64, int mode64)
           record = (file_record *) f->head_keys;
         }
       }
-      idtyp = record->idtyp;
-      addr = record->addr;
-      lng = record->lng;
+      idtyp = record->idtyp;    // used to scale lng
+      addr = record->addr;      // scaled using upper 2 bits
+      lng = record->lng;        // scaled and rounded using idtyp
       lngw = W64TOWD(lng);
 
       if (idtyp == 0) {
@@ -2770,12 +2771,12 @@ int c_xdfput_64(int iun, int handle, buffer_interface_64_ptr buf64, int mode64)
          return(error_msg("c_xdfput",ERR_SPECIAL,ERROR));
          }
 
-      if ((idtyp & 0x7E) == 0x7E) {
+      if ((idtyp & 0x7E) == 0x7E) {     // should really be ((idtyp & 0x80) == 0x80)
          sprintf(errmsg,"deleted record\n");
          return(error_msg("c_xdfput",ERR_DELETED,ERROR));
          }
 
-      if (lngw != nwords)      /* enforce rewrite to end of file */
+      if (lngw != nwords)      /* enforce rewrite to end of file if length mismatch */
          write_to_end = 1;
       else
          write_addr = W64TOWD(addr-1)+1;
@@ -2798,7 +2799,7 @@ int c_xdfput_64(int iun, int handle, buffer_interface_64_ptr buf64, int mode64)
                         f->cur_dir_page->dir.nent * W64TOWD(f->primary_len);
          }
       f->page_nrecords = f->cur_dir_page->dir.nent++;
-      write_addr = f->nxtadr;
+      write_addr = f->nxtadr;     // to be rounded up using proper blocksize for this address
       }
 
    if ((write_to_end) && (f->xdf_seq))
@@ -2812,7 +2813,7 @@ int c_xdfput_64(int iun, int handle, buffer_interface_64_ptr buf64, int mode64)
 
    /* update record header */
    bufrec = (file_record *) buf_data;
-   bufrec->addr = WDTO64(write_addr - 1) + 1;
+   bufrec->addr = WDTO64(write_addr - 1) + 1;    // must be coded properly, consistent rounding needed
    if (f->xdf_seq) {          // sequential file
      next_cluster_addr = f->cur_addr -1 + nwords + W64TOwd(2);
      if ((next_cluster_addr >> 18) >= 512) {
@@ -2834,8 +2835,8 @@ int c_xdfput_64(int iun, int handle, buffer_interface_64_ptr buf64, int mode64)
 
    /* write record to file in < 2GW chunks */
    /* ADD LOOP HERE */
-   /* PLUG signature to XDF1 if address > 8GB or nwords > 32M and random file */
-   if( (nwords >= 32*1024*1024) || (write_addr >= 1024*1024*1024) ) {
+   /* PLUG signature to XDF1 if address > 8GB or nwords > 32M and random file (extended length marker) */
+   if( (nwords >= 32*1024*1024) || (write_addr >= 2*1024*1024*1024) ) {
      if(! f->xdf_seq) f->header->vrsn = 'X' << 24 | 'D' << 16 | 'F' << 8 | '1';
    }
    c_wawrit64(iun,buf_data,write_addr,nwords,0);   // write data to file
@@ -2849,16 +2850,16 @@ int c_xdfput_64(int iun, int handle, buffer_interface_64_ptr buf64, int mode64)
      f->build_primary(f->cur_entry,primk,argument_not_used,
                       mskkeys,index,WMODE); 
      record = (file_record *) f->cur_entry;
-     record->idtyp = bufrec->idtyp;
-     record->addr = WDTO64(write_addr - 1) + 1;
-     record->lng = WDTO64(nwords);
+     record->idtyp = bufrec->idtyp;       // actually, idtyp will depend on lng (scaling factor)
+     record->addr = WDTO64(write_addr - 1) + 1;   // to be coded properly
+     record->lng = WDTO64(nwords);        // apply scaling from idtyp
    }
 
    /* update file header */
    f->header->nrec++;
    if (write_to_end) {
       f->header->nxtn++;
-      f->header->fsiz += WDTO64(nwords);
+      f->header->fsiz += WDTO64(nwords);    // nwords should be properly rounded up before adding for random files
       f->nxtadr = W64TOWD(f->header->fsiz) + 1;  /* nxtadr = fsiz +1 */
       f->header->nbig = (WDTO64(nwords) > f->header->nbig) ? WDTO64(nwords) : f->header->nbig;
 
