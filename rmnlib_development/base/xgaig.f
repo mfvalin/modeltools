@@ -67,6 +67,7 @@
 *     
 *     
       REAL XXG2,XXG4,XLON
+      REAL*8 :: XLON8, XLAT8
       INTEGER I2B
       
       IF (CGTYP .EQ. 'N' .OR. CGTYP.EQ.'S') THEN
@@ -186,17 +187,18 @@ C
         IG2 = ISHFT(IG2,-2)
         IG4 = IOR(ISHFT(IG4,2),I2B)
 
-      ELSE IF (CGTYP .EQ. '+')  THEN          !  point LAT,LON
-        CALL VALIDE("XG1",NINT(XG1),-90,90)   ! -90, +90
-        XLON = XG2
-        if(XLON < 0) XLON = XLON + 360.0      ! -180, +180 -> 0, 360
-        CALL VALIDE("XG2",NINT(XLON),0,360)   ! 0, 360
-        IG3  = nint( (XG1+100.)*100. )        ! compatibilite arriere, centidegres (10 -> 19000)
-        IG4  = nint( XG2*100. )               ! compatibilite arriere, centidegres (0 -> 36000)
-        IG1  = nint( (XG1+100.)*100000. ) - IG3*1000  ! en 1/100000 de degre
-        IG1  = IG1 + 1000                     ! correction, IG1 pourrait etre < 0  (500 -> 1500)
-        IG2  = nint( XG2*100000. ) - IG4*1000         ! en 1/100000 de degre
-        IG2  = IG2 + 1000                     ! correction, IG2 pourrait etre < 0  (500 -> 1500)
+      ELSE IF (CGTYP .EQ. '+')  THEN            !  point LAT,LON
+        XLAT8 = XG1
+        CALL VALIDE("XG1",NINT(XLAT8),-90,90)   ! -90, +90
+        XLON8 = XG2
+        if(XLON8 < 0) XLON8 = XLON8 + 360.0     ! -180, +180 -> 0, 360
+        CALL VALIDE("XG2",NINT(XLON8),0,360)    ! 0, 360
+        IG3  = nint( (XLAT8+100.)*100. )        ! compatibilite arriere, centidegres (10 -> 19000)
+        IG4  = nint( XLON8*100. )               ! compatibilite arriere, centidegres (0 -> 36000)
+        IG1  = nint( (XLAT8+100.)*100000. ) - IG3*1000  ! en 1/100000 de degre
+        IG1  = IG1 + 1000                       ! correction, IG1 pourrait etre < 0  (500 -> 1500)
+        IG2  = nint( XLON8*100000. ) - IG4*1000         ! en 1/100000 de degre
+        IG2  = IG2 + 1000                       ! correction, IG2 pourrait etre < 0  (500 -> 1500)
 
       ELSE
         WRITE(6,602)

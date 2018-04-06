@@ -65,6 +65,7 @@
 *
 *-------------------------------------------------------------------
 *
+      real*8 :: XG18, XG28
 
       IF ((CGTYP .EQ. 'N') .OR. (CGTYP .EQ.'S')) THEN
         IF(IG4 .LT. 32768) THEN    ! ANCIEN STYLE DE CODAGE
@@ -140,10 +141,12 @@ C
         XG4 = LG4 / 40.0D0
 *                                 !  GRILLE LAT,LON (GEF)
       ELSE IF(CGTYP .EQ. '+') THEN
-        XG1 = (IG3*.01) - 100.0   ! compatibilite arriere
-        if(IG1.ne.0) XG1 = XG1 + (IG1-1000)*.00001  ! correction au 1/100000 de degre
-        XG2 = (IG4*.01) - 100.0   ! compatibilite arriere
-        if(IG2.ne.0) XG2 = XG2 + (IG2-1000)*.00001  ! correction au 1/100000 de degre
+        XG18 = (IG3*.01_8) - 100.0   ! compatibilite arriere
+        if(IG1.ne.0) XG18 = XG18 + (IG1-1000)*.00001_8  ! correction au 1/100000 de degre
+        XG28 = (IG4*.01_8)           ! compatibilite arriere
+        if(IG2.ne.0) XG28 = XG28 + (IG2-1000)*.00001_8  ! correction au 1/100000 de degre
+        XG1 = XG18
+        XG2 = XG28
         XG3 = 0.0    ! dummy
         XG4 = 0.0    ! dummy
 *                                 !  point LAT,LON
