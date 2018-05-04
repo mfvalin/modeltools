@@ -4,6 +4,9 @@
 
 #include <xmmintrin.h>
 
+#include <signal.h>
+#include <fenv.h>
+
 #define FPU_DIVBYZERO 4
 #define FPU_INEXACT 32
 #define FPU_INVALID 1
@@ -17,6 +20,10 @@
 #define FPU_DAZ ((1<<6)|(1<<8))
 #define FPU_FTZ ((1<<11)|(1<<15))
 
+unsigned int set_fpu_control(unsigned short mode);
+unsigned int clr_fpu_control(unsigned short mode);
+
+#if defined(__x86_64__)
 static unsigned short translate_x87(unsigned short mode){   // translate "standard" modes into x87 legacy modes
   short new = 0;
 
@@ -91,68 +98,83 @@ static unsigned int clr_x87_control(unsigned short mode){   // enable interrupts
   asm ( "fldcw %w0" :: "m" (new_mode));
   return old_mode;
 }
+#endif
 
 unsigned int set_fpu_control(unsigned short mode){   // disable interrupts by setting bits
   int flags = 0;
+#if defined(__x86_64__)
   flags = set_x87_control(translate_x87(mode));
   flags = (flags << 16) | set_xmm_control(translate_xmm(mode));
+#endif
   return flags;
 }
 
-unsigned int clr_fpu_control(unsigned short mode){   // disable interrupts by setting bits
+unsigned int clr_fpu_control(unsigned short mode){   // enable interrupts by clearing bits
   int flags = 0;
+#if defined(__x86_64__)
   flags = clr_x87_control(translate_x87(mode));
   flags = (flags << 16) | clr_xmm_control(translate_xmm(mode));
+#endif
   return flags;
 }
 
-// unsigned int clr_fpu_flags(){
-//   int flags, new;
-//   flags = _mm_getcsr();
-//   new = flags;
-//   new >>= 6;
-//   new <<= 6;
-//   _mm_setcsr(new);
-//   return flags;
-// }
-
-#if defined(PRINT_FLAGS)
-int main(){
-  printf("integer, parameter :: FPU_DIVBYZERO = %d\n",FPU_DIVBYZERO);
-  printf("integer, parameter :: FPU_INEXACT = %d\n",FPU_INEXACT);
-  printf("integer, parameter :: FPU_INVALID = %d\n",FPU_INVALID);
-  printf("integer, parameter :: FPU_OVERFLOW = %d\n",FPU_OVERFLOW);
-  printf("integer, parameter :: FPU_UNDERFLOW = %d\n",FPU_UNDERFLOW);
-  printf("integer, parameter :: FPU_ALL_EXCEPT = %d\n",FPU_ALL_EXCEPT);
-  printf("integer, parameter :: FPU_TONEAREST = %d\n",FPU_TONEAREST);
-  printf("integer, parameter :: FPU_UPWARD = %d\n",FPU_UPWARD);
-  printf("integer, parameter :: FPU_DOWNWARD = %d\n",FPU_DOWNWARD);
-  printf("integer, parameter :: FPU_TOWARDZERO = %d\n",FPU_TOWARDZERO);
-  printf("integer, parameter :: FPU_DAZ = %d\n",FPU_DAZ);
-  printf("integer, parameter :: FPU_FTZ = %d\n",FPU_FTZ);
+// print include files for Fortran and C
+//
+#if defined(PRINT_DEFS)
+int main(int argc, char **argv){
+  if(argc <2) {
+    printf("usage: %s f  (Fortran definitions)\n       %s c  (C definitions)\n",argv[0],argv[0]);
+    exit(0);
+  }
+  if(*argv[1] == 'f'){
+    printf("integer(C_SHORT), parameter :: FPU_DIVBYZERO = %d\n",FPU_DIVBYZERO);
+    printf("integer(C_SHORT), parameter :: FPU_INEXACT = %d\n",FPU_INEXACT);
+    printf("integer(C_SHORT), parameter :: FPU_INVALID = %d\n",FPU_INVALID);
+    printf("integer(C_SHORT), parameter :: FPU_OVERFLOW = %d\n",FPU_OVERFLOW);
+    printf("integer(C_SHORT), parameter :: FPU_UNDERFLOW = %d\n",FPU_UNDERFLOW);
+    printf("integer(C_SHORT), parameter :: FPU_ALL_EXCEPT = %d\n",FPU_ALL_EXCEPT);
+    printf("integer(C_SHORT), parameter :: FPU_TONEAREST = %d\n",FPU_TONEAREST);
+    printf("integer(C_SHORT), parameter :: FPU_UPWARD = %d\n",FPU_UPWARD);
+    printf("integer(C_SHORT), parameter :: FPU_DOWNWARD = %d\n",FPU_DOWNWARD);
+    printf("integer(C_SHORT), parameter :: FPU_TOWARDZERO = %d\n",FPU_TOWARDZERO);
+    printf("integer(C_SHORT), parameter :: FPU_DAZ = %d\n",FPU_DAZ);
+    printf("integer(C_SHORT), parameter :: FPU_FTZ = %d\n",FPU_FTZ);
+    printf("%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n",
+    "interface",
+    "  integer function set_fpu_control(mode) bind(C,name='set_fpu_control')",
+    "  import :: C_SHORT",
+    "  integer(C_SHORT), intent(IN), value :: mode",
+    "  end function set_fpu_control",
+    "  integer function clr_fpu_control(mode) bind(C,name='clr_fpu_control')",
+    "  import :: C_SHORT",
+    "  integer(C_SHORT), intent(IN), value :: mode",
+    "  end function clr_fpu_control",
+    "end interface"
+    );
+  }
+  if(*argv[1] == 'c'){
+    printf("#define FPU_DIVBYZERO %d\n",FPU_DIVBYZERO);
+    printf("#define FPU_INEXACT %d\n",FPU_INEXACT);
+    printf("#define FPU_INVALID %d\n",FPU_INVALID);
+    printf("#define FPU_OVERFLOW %d\n",FPU_OVERFLOW);
+    printf("#define FPU_UNDERFLOW %d\n",FPU_UNDERFLOW);
+    printf("#define FPU_ALL_EXCEPT %d\n",FPU_ALL_EXCEPT);
+    printf("#define FPU_TONEAREST %d\n",FPU_TONEAREST);
+    printf("#define FPU_UPWARD %d\n",FPU_UPWARD);
+    printf("#define FPU_DOWNWARD %d\n",FPU_DOWNWARD);
+    printf("#define FPU_TOWARDZERO %d\n",FPU_TOWARDZERO);
+    printf("#define FPU_DAZ %d\n",FPU_DAZ);
+    printf("#define FPU_FTZ %d\n",FPU_FTZ);
+    printf("%s\n%s\n",
+    "unsigned int set_fpu_control(unsigned short mode);",
+    "unsigned int clr_fpu_control(unsigned short mode);"
+    );
+  }
   return 0;
 }
 #endif
-#if defined(PRINT_FLAGS_C)
-int main(){
-  printf("#define FPU_DIVBYZERO %d\n",FPU_DIVBYZERO);
-  printf("#define FPU_INEXACT %d\n",FPU_INEXACT);
-  printf("#define FPU_INVALID %d\n",FPU_INVALID);
-  printf("#define FPU_OVERFLOW %d\n",FPU_OVERFLOW);
-  printf("#define FPU_UNDERFLOW %d\n",FPU_UNDERFLOW);
-  printf("#define FPU_ALL_EXCEPT %d\n",FPU_ALL_EXCEPT);
-  printf("#define FPU_TONEAREST %d\n",FPU_TONEAREST);
-  printf("#define FPU_UPWARD %d\n",FPU_UPWARD);
-  printf("#define FPU_DOWNWARD %d\n",FPU_DOWNWARD);
-  printf("#define FPU_TOWARDZERO %d\n",FPU_TOWARDZERO);
-  printf("#define FPU_DAZ %d\n",FPU_DAZ);
-  printf("#define FPU_FTZ %d\n",FPU_FTZ);
-  return 0;
-}
-#endif
 
-#if defined(CODE_FROM_WEB)
-// With Visual Studio Proc Pack
+#if defined(X86_CODE_FROM_WEB)
 #include "xmmintrin.h"
 #include "memory.h"
 
