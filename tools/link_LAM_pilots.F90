@@ -13,18 +13,22 @@ program print_date_range
   character(len=4096) :: oldpath, newpath, dirpath, option, oldmonth, month_name
   character(len=1024) :: set_pattern
   character(C_CHAR), dimension(4096) :: oldp, newp, dirp
-  character(len=4096) :: nest_rept, set_name, anal
+  character(len=4096) :: nest_rept, set_name, anal, statusfile
   integer(C_INT) :: mode
   logical :: use_anal, first_in_month
   integer :: cur_arg, nargs, arg_len, ntimes
   integer :: month_is_file = 0
-  character(len=128) :: version = 'version 1.0.6a 2017/11/13'
+  character(len=128) :: version = 'version 1.0.7 2018/03/04'
   integer, parameter :: MAXGLOB=2
   character(len=4096), dimension(MAXGLOB) :: globs
   integer :: nglob, arg2_nc
   character(len=16) :: template
 
   interface
+    subroutine f_exit(code) BIND(C,name='exit')
+      import :: C_INT
+      integer(C_INT), intent(IN), value :: code
+    end subroutine f_exit
     function f_mkdir(path,mode) result(status) bind(C,name='mkdir')   ! interface to libc mkdir
       import :: C_CHAR, C_INT
       character(C_CHAR), dimension(*), intent(IN) :: path
@@ -49,6 +53,7 @@ program print_date_range
   end interface
 
   CALL get_command_argument(0, name)   ! program name as seen by OS
+  statusfile = '/dev/null'
 
   mode = o'0777'  ! to be "anded" with user's umask for mkdir
   oldmonth = ' '
@@ -100,6 +105,8 @@ program print_date_range
       endif
     else if(option(1:13) == '--start_anal=' ) then       ! initial analysis (only necessary if start_sym == start_date)
       anal = option(14:4096)
+    else if(option(1:13) == '--status=' ) then       ! initial analysis (only necessary if start_sym == start_date)
+      statusfile = option(10:4096)
     else if(option(1:13) == '--pilot_data=' ) then       ! directory for boundary conditions
       nest_rept = option(14:4096)
     else if(option(1:11) == '--set_name=' ) then         ! experiment name
@@ -118,10 +125,12 @@ program print_date_range
       goto 777
     else 
       print *,"ERROR: unrecognized option '"//trim(option)//"'"
+      if( trim(statusfile) .ne. '/dev/null' ) set_status(statusfile,'status="ABORT"')
       goto 777
     endif
     cur_arg = cur_arg + 1
   enddo
+  if( trim(statusfile) .ne. '/dev/null' ) set_status(statusfile,'status="ABORT"')
   use_anal = (printable3(1) == printable1(1)) .and. (printable3(2) == printable1(2))
   if(printable1(1) == -1 .or. printable2(1) == -1) then
     write(0,*),'ERROR: missing start/end date(s)'
@@ -248,14 +257,17 @@ program print_date_range
     ntimes = ntimes + 1                               ! counter for time frames
   enddo
   write(0,*),"INFO: ",ntimes," directory/link sets created"
+  if( trim(statusfile) .ne. '/dev/null' ) call set_status(statusfile,'status="SUCCESS"')
+  call f_exit(0)
   stop
 11  format(I8,1x,I6)
 12  format(I8,I6)
 777 continue
-  write(0,*),'USAGE: '//trim(name)//' [-h|--help] --start_date= --end_date= --nhours= --nseconds= [--start_sym=] \'
+  write(0,*),'USAGE: '//trim(name)//' [-h|--help] --start_date= --end_date= --nhours= --nseconds= [--start_sym=] [--status=statusfile] \'
   write(0,*),'        [--version] [--start_anal=] --pilot_data= --set_name= [--set_pattern] [--year=gregorian|360_day|365_day]'
   write(0,*),'       '//version
   write(0,*),''
+  write(0,*),'       statusfile : path to status file that will contain(status="SUCCESS" or status="ABORT")'
   write(0,*),'       start_date : YYYYMMDD.HHMMSS or YYYYMMDDHHMMSS , start of this simulation slice'
   write(0,*),'       end_date   : YYYYMMDD.HHMMSS or YYYYMMDDHHMMSS , end of this simulation slice'
   write(0,*),'       nseconds   : interval in seconds between boundary condition files'
@@ -269,5 +281,21 @@ program print_date_range
   write(0,*),'       arguments between [] are optional'
   write(0,*),'       one of nhours/nseconds is necessary'
   write(0,*),'       for date parameters, the trailing 0s in the HHMMSS part can be omitted'
+  call f_exit(1)
   stop
 end program
+subroutine set_status(filename,message)
+  implicit none
+  character (len=*), intent(IN) :: filename,message
+  integer :: iun, status
+  integer, external :: fnom
+
+  iun = 0
+  status = fnom(iun,trim(filename),'FTN+FMT',0)
+  if(iun > 0) then
+    write(iun,1) trim(message)
+1     format(A)
+    call fclos(iun)
+  endif
+  return
+end subroutine set_status
