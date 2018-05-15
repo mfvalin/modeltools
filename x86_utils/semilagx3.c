@@ -27,10 +27,10 @@ static float cm5 = -0.5;
 static float one = 1.0;
 static float two = 2.0;
 
-void setninj(int ini, int ininj) {
-  static int ni=0;
-  static int ninj=0;
-  ni = ini; ninj = ininj;}
+// void setninj(int ini, int ininj) {
+//   static int ni=0;
+//   static int ninj=0;
+//   ni = ini; ninj = ininj;}
 
 // Fortran indexed arrays of dimension (3,ni,nj,nk) are expected :
 //    element i+1,j,k is 3 reals       from element i,j,k
@@ -46,13 +46,16 @@ void setninj(int ini, int ininj) {
 // NJ    : number of lines in a plane
 // NOTE:  in the linear case, a[2] and a[3] MUST BE 0.0, a[0] = 1 - z, a[1] = z , where z is the
 //        fractional index along z in middle cell (0 <= z <= 1.0)
-void tricub_x86_f3(float *d, float *f, float *abcd, float x, float y, int NI, int NJ){
+void tricub_x86_f3(void *dd, void *ff, float *abcd, float x, float y, int NI, int NJ){
   float *s;
   float x0, x1, x2, x3, y0, y1, y2, y3;
   float dst[13];
   int ni = 3*NI;
   int ninj = ni*NJ;
   int ninjl;
+  int *d = (int *) dd;
+  float *f = (float *) ff;
+
 #if defined(__AVX2__) && defined(__x86_64__)
   __m256 cz0, cz1, cz2, cz3, cya;
   __m256 za, ya, ta;
@@ -84,10 +87,10 @@ void tricub_x86_f3(float *d, float *f, float *abcd, float x, float y, int NI, in
   cz2 = _mm256_broadcast_ss(abcd+2);
   cz3 = _mm256_broadcast_ss(abcd+3);
 
-  ya =_mm256_xor_ps(ya,ya)  ; yb = _mm256_xor_ps(yb,yb);    // zero row accumulator
+  ya =_mm256_xor_ps(ya,ya)  ; yb = _mm256_xor_ps(yb,yb);    // set y accumulator to zero
 
   s = f;                          // row 0, 4 planes (Z0, Z1, Z2, Z3)
-  za  = _mm256_xor_ps(za,za); zb = _mm256_xor_ps(zb,zb);    // set to zero
+  za  = _mm256_xor_ps(za,za); zb = _mm256_xor_ps(zb,zb);    // set z accumulator to zero
   cya = _mm256_broadcast_ss(&y0);      // promote constant to vector
 
   ta  = _mm256_load_ps(s)   ; tb = _mm256_load_ps(s+4);  // plane 0
@@ -108,7 +111,7 @@ void tricub_x86_f3(float *d, float *f, float *abcd, float x, float y, int NI, in
   ya  = _mm256_fmadd_ps(za,cya,ya); yb  = _mm256_fmadd_ps(zb,cya,yb);    // accumulation along y
 
   s = f + ni;                          // row 1, 4 planes (Z0, Z1, Z2, Z3)
-  za  = _mm256_xor_ps(za,za); zb = _mm256_xor_ps(zb,zb);    // set to zero
+  za  = _mm256_xor_ps(za,za); zb = _mm256_xor_ps(zb,zb);    // set z accumulator to zero
   cya = _mm256_broadcast_ss(&y1);      // promote constant to vector
 
   ta  = _mm256_load_ps(s)   ; tb = _mm256_load_ps(s+4);  // plane 0
@@ -129,7 +132,7 @@ void tricub_x86_f3(float *d, float *f, float *abcd, float x, float y, int NI, in
   ya  = _mm256_fmadd_ps(za,cya,ya); yb  = _mm256_fmadd_ps(zb,cya,yb);    // accumulation along y
 
   s = f + 2*ni;                          // row 2, 4 planes (Z0, Z1, Z2, Z3)
-  za  = _mm256_xor_ps(za,za); zb = _mm256_xor_ps(zb,zb);    // set to zero
+  za  = _mm256_xor_ps(za,za); zb = _mm256_xor_ps(zb,zb);    // set z accumulator to zero
   cya = _mm256_broadcast_ss(&y2);      // promote constant to vector
 
   ta  = _mm256_load_ps(s)   ; tb = _mm256_load_ps(s+4);  // plane 0
@@ -150,7 +153,7 @@ void tricub_x86_f3(float *d, float *f, float *abcd, float x, float y, int NI, in
   ya  = _mm256_fmadd_ps(za,cya,ya); yb  = _mm256_fmadd_ps(zb,cya,yb);    // accumulation along y
 
   s = f + 3*ni;                          // row 3, 4 planes (Z0, Z1, Z2, Z3)
-  za  = _mm256_xor_ps(za,za); zb = _mm256_xor_ps(zb,zb);    // set to zero
+  za  = _mm256_xor_ps(za,za); zb = _mm256_xor_ps(zb,zb);    // set z accumulator to zero
   cya = _mm256_broadcast_ss(&y3);      // promote constant to vector
 
   ta  = _mm256_load_ps(s)   ; tb = _mm256_load_ps(s+4);  // plane 0
@@ -170,16 +173,25 @@ void tricub_x86_f3(float *d, float *f, float *abcd, float x, float y, int NI, in
 
   ya  = _mm256_fmadd_ps(za,cya,ya); yb  = _mm256_fmadd_ps(zb,cya,yb);    // accumulation along y
 
-  _mm256_storeu_ps(dst,ya); _mm256_storeu_ps(dst+4,yb); dst[12] = 0.0;  // store result of interp along y
+// dst : x(0,0) x(1,0) x(2,0)   x(0,1) x(1,1) x(2,1)   x(0,2) x(1,2) x(2,2) x(0,3)   x(1,3) x(2,3) 0
+  _mm256_storeu_ps(dst,ya); _mm256_storeu_ps(dst+4,yb); dst[12] = 0.0;  // store result of accumulation along y
 
+// cheating load : only the first 3 values are of any interest in vx0 ... vx3
+//          vx0 : x(0,0) x(1,0) x(2,0) x(0,1)   (low part of ya)
+//          vx1 : x(0,1) x(1,1) x(2,1) x(0,2)
+//          vx2 : x(0,2) x(1,2) x(2,2) x(0,3)
+//          vx3 : x(0,3) x(1,3) x(2,3) 0   ( instead of load, could have used a shuffle on yb)
   vx0 = _mm256_extractf128_ps(ya,0); cxt =  _mm_broadcast_ss(&x0); vx0 = _mm_mul_ps(vx0,cxt);
   vx1 = _mm_loadu_ps(dst+3)        ; cxt =  _mm_broadcast_ss(&x1); vx0 = _mm_fmadd_ps(vx1,cxt,vx0);
   vx2 = _mm_loadu_ps(dst+6)        ; cxt =  _mm_broadcast_ss(&x2); vx0 = _mm_fmadd_ps(vx2,cxt,vx0);
   vx3 = _mm_loadu_ps(dst+9)        ; cxt =  _mm_broadcast_ss(&x3); vx0 = _mm_fmadd_ps(vx3,cxt,vx0);
-  _mm_storeu_ps(dst,vx0);
-  d[0] = dst[0];
-  d[1] = dst[1];
-  d[2] = dst[2];
+//   _mm_storeu_ps(dst,vx0);    // store 4 values, move only the first 3 into output array d
+//   d[0] = dst[0];             // could also use _mm_maskstore_ps (float * mem_addr, __m128i mask, __m128 a)
+//   d[1] = dst[1];
+//   d[2] = dst[2];
+  d[0] = _mm_extract_ps (vx0, 0);  // extract element 0 and store
+  d[1] = _mm_extract_ps (vx0, 1);  // extract element 1 and store
+  d[2] = _mm_extract_ps (vx0, 2);  // extract element 2 and store
    
 #else
 #endif
@@ -222,27 +234,38 @@ main(){
   dz = .333;
   dx = .555;
   dy = .777;
-  a[0] = cm167*dz*(dz-one)*(dz-two);        // coefficients for interpolation along z
-  a[1] = cp5*(dz+one)*(dz-one)*(dz-two);
-  a[2] = cm5*dz*(dz+one)*(dz-two);
-  a[3] = cp167*dz*(dz+one)*(dz-one);
+#if defined(LINEAR)
   a[0] = 1.0 - dz;
   a[1] = dz;
   a[2] = 0.0;
   a[3] = 0.0;
-
-  expected = 1.0 + dx + 1.0 + dy + 1.0 + dz ;
+#else
+  a[0] = cm167*dz*(dz-one)*(dz-two);        // coefficients for interpolation along z
+  a[1] = cp5*(dz+one)*(dz-one)*(dz-two);
+  a[2] = cm5*dz*(dz+one)*(dz-two);
+  a[3] = cp167*dz*(dz+one)*(dz-one);
+#endif
+#if defined(LINEAR)
   expected = 1.0 + dx + 1.0 + dy + 0.0 + dz ;
+#else
+  expected = 1.0 + dx + 1.0 + dy + 1.0 + dz ;
+#endif
   tricub_x86_f3(&dest[0],&array[0], &a[0], dx, dy, NI, NJ);
   printf("got %10.6f, %10.6f, %10.6f, expected %10.6f\n",dest[0],dest[1],dest[2],expected);
 
-  expected = 1.0 + dx + 2.0 + dy + 1.0 + dz ;
+#if defined(LINEAR)
   expected = 1.0 + dx + 2.0 + dy + 0.0 + dz ;
+#else
+  expected = 1.0 + dx + 2.0 + dy + 1.0 + dz ;
+#endif
   tricub_x86_f3(&dest[0],&array[3*NI], &a[0], dx, dy, NI, NJ);
   printf("got %10.6f, %10.6f, %10.6f, expected %10.6f\n",dest[0],dest[1],dest[2],expected);
 
-  expected = 2.0 + dx + 2.0 + dy + 2.0 + dz ;
+#if defined(LINEAR)
   expected = 2.0 + dx + 2.0 + dy + 1.0 + dz ;
+#else
+  expected = 2.0 + dx + 2.0 + dy + 2.0 + dz ;
+#endif
   tricub_x86_f3(&dest[0],&array[3*NI*NJ + 3 + 3*NI], &a[0], dx, dy, NI, NJ);
   printf("got %10.6f, %10.6f, %10.6f, expected %10.6f\n",dest[0],dest[1],dest[2],expected);
 
