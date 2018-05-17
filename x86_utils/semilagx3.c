@@ -46,6 +46,18 @@ static float two = 2.0;
 // NJ    : number of lines in a plane
 // NOTE:  in the linear case, a[2] and a[3] MUST BE 0.0, a[0] = 1 - z, a[1] = z , where z is the
 //        fractional index along z in middle cell (0 <= z <= 1.0)
+#if defined(NEVER_EVER_TRUE)
+interface
+  subroutine tricub_x86_f3(dd, ff, abcd, x, y, NI, NJ) bind(C,name='tricub_x86_f3')
+    import :: C_FLOAT, C_INT
+    real(C_FLOAT),  intent(OUT), dimension(3)   :: dd
+    real(C_FLOAT),  intent(IN),  dimension(3,*) :: ff
+    real(C_FLOAT),  intent(IN),  dimension(4)   :: abcd
+    real(C_FLOAT),  intent(IN),  value :: x, y
+    integer(C_INT), intent(IN),  value :: NI, NJ
+  end subroutine tricub_x86_f3
+end interface
+#endif
 void tricub_x86_f3(void *dd, void *ff, float *abcd, float x, float y, int NI, int NJ){
   float *s;
   float x0, x1, x2, x3, y0, y1, y2, y3;
