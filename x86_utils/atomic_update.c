@@ -1,7 +1,9 @@
 #include <stdio.h>
 #include <stdint.h>
 
-  atomic_add(int *what,int n) {
+#if defined(__amd64__)
+
+atomic_add_32(int32_t *what,int32_t n) {
   __asm__ __volatile__(
       "   lock       ;\n"
       "   addl %1,%0 ;\n"
@@ -11,7 +13,7 @@
       );
 }
 
-atomic_and(int *what,int n) {
+atomic_and_32(uint32_t *what,uint32_t n) {
   __asm__ __volatile__(
       "   lock       ;\n"
       "   andl %1,%0 ;\n"
@@ -21,7 +23,7 @@ atomic_and(int *what,int n) {
       );
 }
 
-atomic_or(int *what,int n) {
+atomic_or_32(uint32_t *what,uint32_t n) {
   __asm__ __volatile__(
       "   lock       ;\n"
       "   orl %1,%0 ;\n"
@@ -31,7 +33,7 @@ atomic_or(int *what,int n) {
       );
 }
 
-atomic_xor(int *what,int n) {
+atomic_xor_32(uint32_t *what,uint32_t n) {
   __asm__ __volatile__(
       "   lock       ;\n"
       "   xorl %1,%0 ;\n"
@@ -39,6 +41,65 @@ atomic_xor(int *what,int n) {
       : "ir" (n), "m" (*what)
       :
       );
+}
+
+// function cas(p : pointer to int, old : int, new : int) returns bool {
+//     if *p != old {
+//         return false
+//     }
+//     *p = new
+//     return true
+// }
+
+int atomic_compare_and_swap_64(uint64_t *thevalue, uint64_t expected, uint64_t newvalue) {
+	uint64_t prev;
+	asm volatile("lock;\n"
+		"\tcmpxchgq %1, %2;"
+		: "=a"(prev)
+		: "q"(newvalue), "m"(*thevalue), "a"(expected)
+		: "memory");
+	return prev == expected;
+}
+
+int64_t atomic_fetch_and_add_64(int64_t* ptr, int64_t value) {
+	int64_t previous;
+	// xadd r0, r1   - Exchange r0 and r1 loading sum into r1
+	asm volatile ("lock;\n"
+		"\txaddq %1, %2;"
+		: "=r"(previous)
+		: "0"(value), "m"(*ptr)
+		: "memory");
+	return previous;
+}
+
+int atomic_compare_and_swap_32(uint32_t *thevalue, uint32_t expected, uint32_t newvalue) {
+	uint32_t prev;
+	asm volatile("lock;\n"
+		"\tcmpxchgl %1, %2;"
+		: "=a"(prev)
+		: "q"(newvalue), "m"(*thevalue), "a"(expected)
+		: "memory");
+	return prev == expected;
+}
+
+int32_t atomic_fetch_and_add_32(int32_t* ptr, int32_t value) {
+	int32_t previous;
+	// xadd r0, r1   - Exchange r0 and r1 loading sum into r1
+	asm volatile ("lock;\n"
+		"\txaddl %1, %2;"
+		: "=r"(previous)
+		: "0"(value), "m"(*ptr)
+		: "memory");
+	return previous;
+}
+
+uint32_t atomic_compare_exchange(uint32_t *what, uint32_t expected, uint32_t desired)
+{
+   uint32_t previous;
+    asm volatile("lock cmpxchgl %2, %1"
+                 : "=a"(previous), "+m"(*what)
+                 : "q"(desired), "0"(expected));
+    return previous;
 }
 
 int atomic_fetch_and_add(int* what, int n)
@@ -53,14 +114,21 @@ int atomic_fetch_and_add(int* what, int n)
     return n;
 }
 
-uint32_t atomic_compare_exchange(uint32_t *what, uint32_t expected, uint32_t desired)
-{
-   uint32_t previous;
-    asm volatile("lock cmpxchgl %2, %1"
-                 : "=a"(previous), "+m"(*what)
-                 : "q"(desired), "0"(expected));
-    return previous;
+uint32_t release_lock_32(uint32_t *lock, uint32_t id){  // release lock if i am the owner (id)
+  if(*lock == ~id) *lock = 0;  // only if i am the owner of the lock
+  return *lock ;               // return lock value, 0 means i was the owner of the lock
 }
+
+uint32_t acquire_lock_32(uint32_t *lock, uint32_t id){ // id MUST NOT BE 0xFFFFFFFF (all ones)
+  while( ! atomic_compare_and_swap_32(lock, 0, ~id ) ) ; // spin loop until lock is free (value == 0)
+  return *lock;
+}
+
+uint32_t testlock_32(int32_t *lock){
+  return *lock ; // return lock value, 0 means free
+}
+
+#endif
 
 #if defined(SELF_TEST)
 
