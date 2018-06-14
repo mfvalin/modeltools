@@ -16,7 +16,31 @@
  * Free Software Foundation, Inc., 59 Temple Place - Suite 330,
  * Boston, MA 02111-1307, USA.
  */
-
+/* Fortran interface definitions
+   interface
+    ! void fast_dot_product_f3(const float *fa, const float *fb, const float *fc, double *r, int n)
+    subroutine fast_dot_product_f3(fa, fb, fc, r, n) bind(C,name='fast_dot_product_f3')
+      import :: C_FLOAT, C_DOUBLE, C_INT
+      integer(C_INT), intent(IN), value :: n
+      real(C_FLOAT), dimension(n), intent(IN) :: fa, fb, fc
+      real(C_DOUBLE), dimension(3), intent(OUT) :: r
+    end subroutine fast_dot_product_f3
+    ! double fast_dot_product_f(const float *fa, const float *fa, int n)
+    function fast_dot_product_f(fa, fb, n) result(r) bind(C,name='fast_dot_product_f')
+      import :: C_FLOAT, C_DOUBLE, C_INT
+      integer(C_INT), intent(IN), value :: n
+      real(C_FLOAT), dimension(n), intent(IN) :: fa, fb
+      real(C_DOUBLE) :: r
+    end function fast_dot_product_f 
+    ! double fast_normdot_f(const float *fa, int n)
+    function fast_normdot_f(fa, n) result(r) bind(C,name='fast_normdot_f')
+      import :: C_FLOAT, C_DOUBLE, C_INT
+      integer(C_INT), intent(IN), value :: n
+      real(C_FLOAT), dimension(n), intent(IN) :: fa
+      real(C_DOUBLE) :: r
+    end function fast_normdot_f 
+   end interface
+ */
 #include <immintrin.h>
 #include <stdint.h>
 typedef int xsum_length;
@@ -278,7 +302,7 @@ double fast_normdot_f(const float *f1, int n){
 
 // sum of contents of double array vec, length n, using tweaked version of Kahan's algorithm
 // function result (double)
-xsum_flt xsum_sum_kahan (const xsum_flt *restrict vec, xsum_length n){
+xsum_flt xsum_sum_kahan (const xsum_flt *vec, xsum_length n){
   xsum_flt s, t, c, y;
   xsum_length i, j;
 #if defined(USE_ORIGINAL_CODE)
