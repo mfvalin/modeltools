@@ -94,11 +94,11 @@ void fast_dot_product_f3(const float *fa, const float *fb, const float *fc, doub
     dc0 = _mm256_fmadd_pd (tdb, tdc, dc0);
     db0 = _mm256_fmadd_pd (tda, tdb, db0);
 #else
-    tdc = _mm256_mul_pd (tdb, tdc);
+    tdc = _mm256_mul_pd (tdb, tdc);    // fb * fc
     dc0 = _mm256_add_pd (tdc, dc0);
-    tdb = _mm256_mul_pd (tda, tdb);
+    tdb = _mm256_mul_pd (tda, tdb);    // fa * fb
     db0 = _mm256_add_pd (tdb, db0);
-    tda = _mm256_mul_pd (tda, tda);
+    tda = _mm256_mul_pd (tda, tda);    // fa * fa
     da0 = _mm256_add_pd (tda, da0);
 #endif
 
@@ -113,23 +113,23 @@ void fast_dot_product_f3(const float *fa, const float *fb, const float *fc, doub
     db1 = _mm256_fmadd_pd (tda, tdb, db1);
     dc1 = _mm256_fmadd_pd (tdb, tdc, dc1);
 #else
-    tdc = _mm256_mul_pd (tdb, tdc);
+    tdc = _mm256_mul_pd (tdb, tdc);    // fb * fc
     dc1 = _mm256_add_pd (tdc, dc1);
-    tdb = _mm256_mul_pd (tda, tdb);
+    tdb = _mm256_mul_pd (tda, tdb);    // fa * fb
     db1 = _mm256_add_pd (tdb, db1);
-    tda = _mm256_mul_pd (tda, tda);
+    tda = _mm256_mul_pd (tda, tda);    // fa * fa
     da1 = _mm256_add_pd (tda, da1);
 #endif
   }
   da0 =  _mm256_add_pd (da0, da1);   // add subtotal pairs into da0, db0, dc0
-  db0 =  _mm256_add_pd (db0, db1);
   dc0 =  _mm256_add_pd (dc0, dc1);
-  _mm256_storeu_pd ((double *) &ta[0], da0) ;
-  _mm256_storeu_pd ((double *) &tb[0], db0) ;
-  _mm256_storeu_pd ((double *) &tc[0], dc0) ;
-  r[0] = ta[0] + ta[1] + ta[2] + ta[3];
-  r[1] = tb[0] + tb[1] + tb[2] + tb[3];
-  r[2] = tc[0] + tc[1] + tc[2] + tc[3];
+  db0 =  _mm256_add_pd (db0, db1);
+  _mm256_storeu_pd ((double *) &ta[0], da0) ;    // fa * fa
+  _mm256_storeu_pd ((double *) &tc[0], dc0) ;    // fb * fc
+  _mm256_storeu_pd ((double *) &tb[0], db0) ;    // fa * fb
+  r[0] = ta[0] + ta[1] + ta[2] + ta[3];     // fa * fa
+  r[1] = tc[0] + tc[1] + tc[2] + tc[3];     // fb * fc
+  r[2] = tb[0] + tb[1] + tb[2] + tb[3];     // fa * fb
 }
 
 // dot product f1*f2 (real arrays)
@@ -454,8 +454,8 @@ int main(){
   t1 = rdtsc();
   sum2 = 0; sum3 = 0; sum4 = 0;
   for(i=0 ; i<NPF; i++) sum2 += f1[i]*f1[i];
-  for(i=0 ; i<NPF; i++) sum3 += f1[i]*f2[i];
-  for(i=0 ; i<NPF; i++) sum4 += f2[i]*f3[i];
+  for(i=0 ; i<NPF; i++) sum3 += f2[i]*f3[i];
+  for(i=0 ; i<NPF; i++) sum4 += f1[i]*f2[i];
   printf("dot3 time : %g cycles/value\n",1.0*(t1-t0)/NPF/REP/3);
   printf("dot3:      got = %g, %g, %g\n",r[0],r[1],r[2]);
   printf("dot3: expected = %g, %g, %g\n\n",sum2,sum3,sum4);
