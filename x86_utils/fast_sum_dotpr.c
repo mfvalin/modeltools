@@ -25,6 +25,13 @@
       real(C_FLOAT), dimension(n), intent(IN) :: fa, fb, fc
       real(C_DOUBLE), dimension(3), intent(OUT) :: r
     end subroutine fast_dot_product_f3
+    ! void compensated_dot_product_f3(const float *fa, const float *fb, const float *fc, double *r, int rowsize, int planesize, int ni, int nj, int nk)
+    subroutine compensated_dot_product_f3(fa, fb, fc, r, rowsize, planesize, ni, nj, nk) bind(C,name='compensated_dot_product_f3')
+      import :: C_FLOAT, C_DOUBLE, C_INT
+      integer(C_INT), intent(IN), value :: ni, nj, nk, rowsize, planesize
+      real(C_FLOAT), dimension(*), intent(IN) :: fa, fb, fc
+      real(C_DOUBLE), dimension(3), intent(OUT) :: r
+    end subroutine compensated_dot_product_f3
     ! double fast_dot_product_f(const float *fa, const float *fa, int n)
     function fast_dot_product_f(fa, fb, n) result(r) bind(C,name='fast_dot_product_f')
       import :: C_FLOAT, C_DOUBLE, C_INT
@@ -39,12 +46,104 @@
       real(C_FLOAT), dimension(n), intent(IN) :: fa
       real(C_DOUBLE) :: r
     end function fast_normdot_f 
+    ! double compensated_sum_f (const double *vec, int n)
+    function compensated_sum_f(f, n) result(r) bind(C,name='compensated_sum_f')
+      import :: C_DOUBLE, C_INT
+      integer(C_INT), intent(IN), value :: n
+      real(C_DOUBLE), dimension(n), intent(IN) :: f
+      real(C_DOUBLE) :: r
+    end function compensated_sum_f
    end interface
  */
 #include <immintrin.h>
 #include <stdint.h>
 typedef int xsum_length;
 typedef double xsum_flt;
+
+// triple dot product r[0] = fa*fa ; r[1] = fa*fb, r[2] = fb*fc  (real*4/float input arrays)
+// result in r[0], r[1], r[2]              (real*8/double result)
+void compensated_dot_product_f3(const float *fa, const float *fb, const float *fc, double *r, int rowsize, int planesize, int ni, int nj, int nk){
+  __m256d vta, vtb, vtc ;  // temporary
+  __m256d vya, vyb, vyc ;  // temporary
+  __m256d vsa, vsb, vsc ;  // sums
+  __m256d vca, vcb, vcc ;  // compensation(eror) terms
+  float fa0[4], fb0[4], fc0[4] ;
+  double fa1[4], fb1[4], fc1[4] ;
+  const float *far, *fbr, *fcr ;   // row pointers
+  const float *fap, *fbp, *fcp ;   // 2D plane pointers
+  int i, j, k;
+  int i0 = (ni & 0x3) ; // ni modulo 4
+
+  for(i=0 ; i<4 ; i++) { fa0[i] = 0 ; fb0[i] = 0 ; fc0[i] = 0 ; }
+  vsa = _mm256_xor_pd(vsa,vsa); vsb = vsa ; vsc = vsa ;  // set sums to zero
+  vca = vsa ; vcb = vsa ; vcc = vsa ;                    // set compensation terms to zero
+
+  fap = fa ; fbp = fb ; fcp = fc;
+  for(k=0 ; k<nk ; k++){
+    for(j=0 ; j<nj; j++){
+      far = fap ; fbr = fbp ; fcr = fcp ; 
+      for(i=0 ; i<i0 ; i++) {
+        fa0[i] = far[i] ; fb0[i] = fbr[i] ; fc0[i] = fcr[i] ;   // first (potentially short and zero padded) row section
+      }
+      vtc = _mm256_cvtps_pd(  _mm_loadu_ps((float *) &fc0[0])  ) ;  // fetch and convert to double (first row section)
+      vtb = _mm256_cvtps_pd(  _mm_loadu_ps((float *) &fb0[0])  ) ;
+      vta = _mm256_cvtps_pd(  _mm_loadu_ps((float *) &fa0[0])  ) ;
+      for(i=i0 ; i<ni-3 ; i+=4){        // all row sections but last one
+        vtc = _mm256_mul_pd(vtc, vtb);  // vtc = vtc * vtb
+        vtb = _mm256_mul_pd(vtb, vta);  // vtb = vtb * vta
+        vta = _mm256_mul_pd(vta, vta);  // vta = vta * vta
+        vyc = _mm256_sub_pd(vtc,vcc) ;  // vy = vt - vc
+        vyb = _mm256_sub_pd(vtb,vcb) ;
+        vya = _mm256_sub_pd(vta,vca) ;
+        vtc = _mm256_add_pd(vsc,vyc) ;  // vt = vs + vy
+        vtb = _mm256_add_pd(vsb,vyb) ;
+        vta = _mm256_add_pd(vsa,vya) ;
+        vcc = _mm256_sub_pd(vtc,vsc) ;  // vc = vt - vs
+        vcb = _mm256_sub_pd(vtb,vsb) ;
+        vca = _mm256_sub_pd(vta,vsa) ;
+        vcc = _mm256_sub_pd(vcc,vyc) ;  // vc = vc - vy
+        vcb = _mm256_sub_pd(vcb,vyb) ;
+        vca = _mm256_sub_pd(vca,vya) ;
+        vsc = vtc ;   // vs = vt
+        vsb = vtb ;
+        vsa = vta ;
+        vtc = _mm256_cvtps_pd(  _mm_loadu_ps((float *) &fcr[i])  ) ;  // fetch and convert to double (next row section)
+        vtb = _mm256_cvtps_pd(  _mm_loadu_ps((float *) &fbr[i])  ) ;
+        vta = _mm256_cvtps_pd(  _mm_loadu_ps((float *) &far[i])  ) ;
+      }
+      //  last row section
+      vtc = _mm256_mul_pd(vtc, vtb);  // vtc = vtc * vtb
+      vtb = _mm256_mul_pd(vtb, vta);  // vtb = vtb * vta
+      vta = _mm256_mul_pd(vta, vta);  // vta = vta * vta
+      vyc = _mm256_sub_pd(vtc,vcc) ;  // vy = vt - vc
+      vyb = _mm256_sub_pd(vtb,vcb) ;
+      vya = _mm256_sub_pd(vta,vca) ;
+      vtc = _mm256_add_pd(vsc,vyc) ;  // vt = vs + vy
+      vtb = _mm256_add_pd(vsb,vyb) ;
+      vta = _mm256_add_pd(vsa,vya) ;
+      vcc = _mm256_sub_pd(vtc,vsc) ;  // vc = vt - vs
+      vcb = _mm256_sub_pd(vtb,vsb) ;
+      vca = _mm256_sub_pd(vta,vsa) ;
+      vcc = _mm256_sub_pd(vcc,vyc) ;  // vc = vc - vy
+      vcb = _mm256_sub_pd(vcb,vyb) ;
+      vca = _mm256_sub_pd(vca,vya) ;
+      vsc = vtc ;   // vs = vt
+      vsb = vtb ;
+      vsa = vta ;
+      far += rowsize ; fbr += rowsize ; fcr += rowsize ;   // next row
+    }
+    fap += planesize ; fbp += planesize ; fcp += planesize ;  // next 2D plane
+  }
+  vsc = _mm256_add_pd(vsc,vcc) ;  // add remainder of compensation term to sum
+  vsb = _mm256_add_pd(vsb,vcb) ;
+  vsa = _mm256_add_pd(vsa,vca) ;
+  _mm256_storeu_pd((double *) &fc1[ 0], vsc);
+  _mm256_storeu_pd((double *) &fb1[ 0], vsb);
+  _mm256_storeu_pd((double *) &fa1[ 0], vsa);
+  r[2] = (fb1[0]+fb1[1]) + (fb1[2]+fb1[3]) ;
+  r[1] = (fc1[0]+fc1[1]) + (fc1[2]+fc1[3]) ;  // final wrapup, 4 to 1 sums
+  r[0] = (fa1[0]+fa1[1]) + (fa1[2]+fa1[3]) ;
+}
 
 // triple dot product fa*fa, fa*fb, fb*fc  (real arrays)
 // result in r[0], r[1], r[2]              (double)
@@ -302,7 +401,7 @@ double fast_normdot_f(const float *f1, int n){
 
 // sum of contents of double array vec, length n, using tweaked version of Kahan's algorithm
 // function result (double)
-xsum_flt xsum_sum_kahan (const xsum_flt *vec, xsum_length n){
+xsum_flt compensated_sum_f (const xsum_flt *vec, xsum_length n){
   xsum_flt s, t, c, y;
   xsum_length i, j;
 #if defined(USE_ORIGINAL_CODE)
@@ -411,12 +510,15 @@ static uint64_t rdtsc(void) {   // version rapide "out of order"
 }
 
 #define NP 1000
-#define NPF 1000000
+#define NI 71
+#define NJ 151
+#define NK 100
+#define NPF (NI*NJ*NK)
 #define REP 10000
 #include <stdio.h>
 int main(){
   int i, j;
-  double z[NP], r[3];
+  double z[NP], r[3], r2[3];
   float f1[NPF], f2[NPF], f3[NPF];
   double sum, sum2, sum3, sum4;
   uint64_t t0, t1;
@@ -424,33 +526,34 @@ int main(){
   sum3 = 0;
   sum4 = 0;
   for(i=0 ; i<NP; i++) z[i] = (i+1) * 111.111;
-  for(i=0 ; i<NPF; i++) { f1[i] = 1.1  ; f2[i] = 1.5 ; f3[i] = 1.0 ;}
+//   for(i=0 ; i<NPF; i++) { f1[i] = 1.107*(NPF-i)*.001  ; f2[i] = 1.503*(NPF-i)*.001 ; f3[i] = 1.01*(NPF-i)*.001 ;}  // descending order
+  for(i=0 ; i<NPF; i++) { f1[i] = 1.107*(i)*.001  ; f2[i] = 1.503*(i)*.001 ; f3[i] = 1.01*(i)*.001 ;}      // ascending order
   for(i=0 ; i<NP; i++) sum2 += z[i];
   for(i=0 ; i<NPF; i++) sum3 += f1[i]*f2[i];
   for(i=0 ; i<NPF; i++) sum4 += f1[i]*f1[i];
-  sum = xsum_sum_kahan (z , NP);
+  sum = compensated_sum_f (z , NP);
   printf("sum: expected = %g, got = %g\n\n",sum2,sum);
 
   t0 = rdtsc();
-  for (j=0; j<REP; j++) sum = fast_dot_product_f(f1, f2, NPF);
+  for (j=0; j<REP; j++) sum = fast_dot_product_f(f1, f2, NPF);    // dot product of 2 different vectors
   t1 = rdtsc();
   printf("dot time : %g cycles/value\n",1.0*(t1-t0)/NPF/REP);
   printf("dot: expected = %g, got = %g\n\n",sum3,sum);
 
   t0 = rdtsc();
-  for (j=0; j<REP; j++) sum = fast_dot_product_f(f1, f1, NPF);
+  for (j=0; j<REP; j++) sum = fast_dot_product_f(f1, f1, NPF);    // dot product of vector with itself
   t1 = rdtsc();
   printf("self dot time : %g cycles/value\n",1.0*(t1-t0)/NPF/REP);
   printf("dot: expected = %g, got = %g\n\n",sum4,sum);
 
   t0 = rdtsc();
-  for (j=0; j<REP; j++) sum = fast_normdot_f(f1, NPF);
+  for (j=0; j<REP; j++) sum = fast_normdot_f(f1, NPF);    // dot product of vector with itself
   t1 = rdtsc();
   printf("normdot time : %g cycles/value\n",1.0*(t1-t0)/NPF/REP);
   printf("dot: expected = %g, got = %g\n\n",sum4,sum);
 
   t0 = rdtsc();
-  for (j=0; j<REP; j++) fast_dot_product_f3(f1, f2, f3, r, NPF);
+  for (j=0; j<REP; j++) fast_dot_product_f3(f1, f2, f3, r, NPF);  // triple dot product without add error compensation
   t1 = rdtsc();
   sum2 = 0; sum3 = 0; sum4 = 0;
   for(i=0 ; i<NPF; i++) sum2 += f1[i]*f1[i];
@@ -459,6 +562,20 @@ int main(){
   printf("dot3 time : %g cycles/value\n",1.0*(t1-t0)/NPF/REP/3);
   printf("dot3:      got = %g, %g, %g\n",r[0],r[1],r[2]);
   printf("dot3: expected = %g, %g, %g\n\n",sum2,sum3,sum4);
+  printf("sum-dot3 = %g, %g, %g\n\n",sum2-r[0],sum3-r[1],sum4-r[2]);
+
+  t0 = rdtsc();
+  for (j=0; j<REP; j++) compensated_dot_product_f3(f1, f2, f3, r2, NI, NI*NJ, NI, NJ, NK);  // with add error compensation
+  t1 = rdtsc();
+  sum2 = 0; sum3 = 0; sum4 = 0;
+  for(i=0 ; i<NPF; i++) sum2 += f1[i]*f1[i];
+  for(i=0 ; i<NPF; i++) sum3 += f2[i]*f3[i];
+  for(i=0 ; i<NPF; i++) sum4 += f1[i]*f2[i];
+  printf("comp3 time : %g cycles/value\n",1.0*(t1-t0)/NPF/REP/3);
+  printf("comp3:      got = %g, %g, %g\n",r2[0],r2[1],r2[2]);
+  printf("comp3: expected = %g, %g, %g\n\n",sum2,sum3,sum4);
+  printf("comp3-dot3 = %g, %g, %g\n\n",r2[0]-r[0],r2[1]-r[1],r2[2]-r[2]);
+
   return 0;
 }
 #endif
