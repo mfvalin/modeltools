@@ -525,32 +525,44 @@ int main(){
   sum2 = 0;
   sum3 = 0;
   sum4 = 0;
-  for(i=0 ; i<NP; i++) z[i] = (i+1) * 111.111;
+  for(i=0 ; i<NP; i++) { z[i] = (i+1) ; z[i] *= 1.234568901e01 ; }
 //   for(i=0 ; i<NPF; i++) { f1[i] = 1.107*(NPF-i)*.001  ; f2[i] = 1.503*(NPF-i)*.001 ; f3[i] = 1.01*(NPF-i)*.001 ;}  // descending order
   for(i=0 ; i<NPF; i++) { f1[i] = 1.107*(i)*.001  ; f2[i] = 1.503*(i)*.001 ; f3[i] = 1.01*(i)*.001 ;}      // ascending order
   for(i=0 ; i<NP; i++) sum2 += z[i];
   for(i=0 ; i<NPF; i++) sum3 += f1[i]*f2[i];
   for(i=0 ; i<NPF; i++) sum4 += f1[i]*f1[i];
   sum = compensated_sum_f (z , NP);
-  printf("sum: expected = %g, got = %g\n\n",sum2,sum);
+  printf("compensated_sum_f (z , NP)\n");
+  printf("sum: dumb sum = %24.16E\n",sum2);
+  printf("     got      = %24.16E\n",sum);
+  printf("difference    = %24.16E\n\n",sum2-sum);
 
   t0 = rdtsc();
   for (j=0; j<REP; j++) sum = fast_dot_product_f(f1, f2, NPF);    // dot product of 2 different vectors
   t1 = rdtsc();
+  printf("fast_dot_product_f(f1, f2, NPF)\n");
   printf("dot time : %g cycles/value\n",1.0*(t1-t0)/NPF/REP);
-  printf("dot: expected = %g, got = %g\n\n",sum3,sum);
+  printf("dot: dumb sum = %24.16E\n",sum3);
+  printf("     got      = %24.16E\n",sum);
+  printf("difference    = %24.16E\n\n",sum3-sum);
 
   t0 = rdtsc();
   for (j=0; j<REP; j++) sum = fast_dot_product_f(f1, f1, NPF);    // dot product of vector with itself
   t1 = rdtsc();
+  printf("fast_dot_product_f(f1, f1, NPF)\n");
   printf("self dot time : %g cycles/value\n",1.0*(t1-t0)/NPF/REP);
-  printf("dot: expected = %g, got = %g\n\n",sum4,sum);
+  printf("dot: dumb sum = %24.16E\n",sum4);
+  printf("     got      = %24.16E\n",sum);
+  printf("difference    = %24.16E\n\n",sum4-sum);
 
   t0 = rdtsc();
   for (j=0; j<REP; j++) sum = fast_normdot_f(f1, NPF);    // dot product of vector with itself
   t1 = rdtsc();
+  printf("fast_normdot_f(f1, NPF)\n");
   printf("normdot time : %g cycles/value\n",1.0*(t1-t0)/NPF/REP);
-  printf("dot: expected = %g, got = %g\n\n",sum4,sum);
+  printf("dot: dumb sum = %24.16E\n",sum4);
+  printf("     got      = %24.16E\n",sum);
+  printf("difference    = %24.16E\n\n",sum4-sum);
 
   t0 = rdtsc();
   for (j=0; j<REP; j++) fast_dot_product_f3(f1, f2, f3, r, NPF);  // triple dot product without add error compensation
@@ -559,22 +571,25 @@ int main(){
   for(i=0 ; i<NPF; i++) sum2 += f1[i]*f1[i];
   for(i=0 ; i<NPF; i++) sum3 += f2[i]*f3[i];
   for(i=0 ; i<NPF; i++) sum4 += f1[i]*f2[i];
+  printf("fast_dot_product_f3(f1, f2, f3, r, NPF)\n");
   printf("dot3 time : %g cycles/value\n",1.0*(t1-t0)/NPF/REP/3);
-  printf("dot3:      got = %g, %g, %g\n",r[0],r[1],r[2]);
-  printf("dot3: expected = %g, %g, %g\n\n",sum2,sum3,sum4);
-  printf("sum-dot3 = %g, %g, %g\n\n",sum2-r[0],sum3-r[1],sum4-r[2]);
+  printf("dot3: dumb sum = %24.16E, %24.16E, %24.16E\n",sum2,sum3,sum4);
+  printf("dot3:      got = %24.16E, %24.16E, %24.16E\n",r[0],r[1],r[2]);
+  printf("sum-dot3       = %24.16E, %24.16E, %24.16E\n\n",sum2-r[0],sum3-r[1],sum4-r[2]);
 
   t0 = rdtsc();
   for (j=0; j<REP; j++) compensated_dot_product_f3(f1, f2, f3, r2, NI, NI*NJ, NI, NJ, NK);  // with add error compensation
   t1 = rdtsc();
-  sum2 = 0; sum3 = 0; sum4 = 0;
-  for(i=0 ; i<NPF; i++) sum2 += f1[i]*f1[i];
-  for(i=0 ; i<NPF; i++) sum3 += f2[i]*f3[i];
-  for(i=0 ; i<NPF; i++) sum4 += f1[i]*f2[i];
+//   sum2 = 0; sum3 = 0; sum4 = 0;
+//   for(i=0 ; i<NPF; i++) sum2 += f1[i]*f1[i];
+//   for(i=0 ; i<NPF; i++) sum3 += f2[i]*f3[i];
+//   for(i=0 ; i<NPF; i++) sum4 += f1[i]*f2[i];
+  printf("compensated_dot_product_f3(f1, f2, f3, r2, NI, NI*NJ, NI, NJ, NK)\n");
   printf("comp3 time : %g cycles/value\n",1.0*(t1-t0)/NPF/REP/3);
-  printf("comp3:      got = %g, %g, %g\n",r2[0],r2[1],r2[2]);
-  printf("comp3: expected = %g, %g, %g\n\n",sum2,sum3,sum4);
-  printf("comp3-dot3 = %g, %g, %g\n\n",r2[0]-r[0],r2[1]-r[1],r2[2]-r[2]);
+  printf("comp3: dumb sum = %24.16E, %24.16E, %24.16E\n",sum2,sum3,sum4);
+  printf("comp3:      got = %24.16E, %24.16E, %24.16E\n",r2[0],r2[1],r2[2]);
+  printf("comp3-dot3      = %24.16E, %24.16E, %24.16E\n",r2[0]-r[0],r2[1]-r[1],r2[2]-r[2]);
+  printf("sum-comp3       = %24.16E, %24.16E, %24.16E\n\n",sum2-r2[0],sum3-r2[1],sum4-r2[2]);
 
   return 0;
 }
