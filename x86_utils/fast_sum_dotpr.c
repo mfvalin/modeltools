@@ -145,6 +145,92 @@ void compensated_dot_product_f3(const float *fa, const float *fb, const float *f
   r[0] = (fa1[0]+fa1[1]) + (fa1[2]+fa1[3]) ;
 }
 
+// triple dot product fa*fa, fa*fb, fb*fc  (double arrays) [template only for now, code has yet to be adjusted]
+// result in r[0], r[1], r[2]              (double)
+void fast_dot_product_8_f3(const double *fa, const double *fb, const double *fc, double *r, int n){
+  __m256d da0, da1, db0, db1, dc0, dc1;
+  __m256d tda, tdb, tdc;
+  __m256  tt0;
+  __m128  tf0;
+  float t1[8], t2[8], t3[8];
+  double ta[4], tb[4], tc[4];
+  int i, j;
+  tt0 = _mm256_xor_ps(tt0,tt0);
+  _mm256_storeu_ps((float *) &t1[ 0], tt0);
+  _mm256_storeu_ps((float *) &t2[ 0], tt0);
+  _mm256_storeu_ps((float *) &t3[ 0], tt0);
+  for(i=0 ; i<(n&0x7); i++) { t1[i] = fa[i] ; t2[i] = fb[i];  t3[i] = fc[i]; }
+
+  tf0 = _mm_loadu_ps((float *) &t1[0]);
+  tda = _mm256_cvtps_pd(tf0);
+  tf0 = _mm_loadu_ps((float *) &t2[0]);
+  tdb = _mm256_cvtps_pd(tf0);
+  tf0 = _mm_loadu_ps((float *) &t3[0]);
+  tdc = _mm256_cvtps_pd(tf0);
+  da0 = _mm256_mul_pd(tda, tda);
+  db0 = _mm256_mul_pd(tda, tdb);
+  dc0 = _mm256_mul_pd(tdb, tdc);
+
+  tf0 = _mm_loadu_ps((float *) &t1[4]);
+  tda = _mm256_cvtps_pd(tf0);
+  tf0 = _mm_loadu_ps((float *) &t2[4]);
+  tdb = _mm256_cvtps_pd(tf0);
+  tf0 = _mm_loadu_ps((float *) &t3[4]);
+  tdc = _mm256_cvtps_pd(tf0);
+  da1 = _mm256_mul_pd(tda, tda);
+  db1 = _mm256_mul_pd(tda, tdb);
+  dc1 = _mm256_mul_pd(tdb, tdc);
+
+  for(j=i ; j<n ; j+=8){      // 8 values processed per iteration
+    tf0 = _mm_loadu_ps((float *) &fa[j + 0]);
+    tda = _mm256_cvtps_pd(tf0);
+    tf0 = _mm_loadu_ps((float *) &fb[j + 0]);
+    tdb = _mm256_cvtps_pd(tf0);
+    tf0 = _mm_loadu_ps((float *) &fc[j + 0]);
+    tdc = _mm256_cvtps_pd(tf0);
+#if defined(WITH_FMA)
+    da0 = _mm256_fmadd_pd (tda, tda, da0);
+    dc0 = _mm256_fmadd_pd (tdb, tdc, dc0);
+    db0 = _mm256_fmadd_pd (tda, tdb, db0);
+#else
+    tdc = _mm256_mul_pd (tdb, tdc);    // fb * fc
+    dc0 = _mm256_add_pd (tdc, dc0);
+    tdb = _mm256_mul_pd (tda, tdb);    // fa * fb
+    db0 = _mm256_add_pd (tdb, db0);
+    tda = _mm256_mul_pd (tda, tda);    // fa * fa
+    da0 = _mm256_add_pd (tda, da0);
+#endif
+
+    tf0 = _mm_loadu_ps((float *) &fa[j + 4]);
+    tda = _mm256_cvtps_pd(tf0);
+    tf0 = _mm_loadu_ps((float *) &fb[j + 4]);
+    tdb = _mm256_cvtps_pd(tf0);
+    tf0 = _mm_loadu_ps((float *) &fc[j + 4]);
+    tdc = _mm256_cvtps_pd(tf0);
+#if defined(WITH_FMA)
+    da1 = _mm256_fmadd_pd (tda, tda, da1);
+    db1 = _mm256_fmadd_pd (tda, tdb, db1);
+    dc1 = _mm256_fmadd_pd (tdb, tdc, dc1);
+#else
+    tdc = _mm256_mul_pd (tdb, tdc);    // fb * fc
+    dc1 = _mm256_add_pd (tdc, dc1);
+    tdb = _mm256_mul_pd (tda, tdb);    // fa * fb
+    db1 = _mm256_add_pd (tdb, db1);
+    tda = _mm256_mul_pd (tda, tda);    // fa * fa
+    da1 = _mm256_add_pd (tda, da1);
+#endif
+  }
+  da0 =  _mm256_add_pd (da0, da1);   // add subtotal pairs into da0, db0, dc0
+  dc0 =  _mm256_add_pd (dc0, dc1);
+  db0 =  _mm256_add_pd (db0, db1);
+  _mm256_storeu_pd ((double *) &ta[0], da0) ;    // fa * fa
+  _mm256_storeu_pd ((double *) &tc[0], dc0) ;    // fb * fc
+  _mm256_storeu_pd ((double *) &tb[0], db0) ;    // fa * fb
+  r[0] = ta[0] + ta[1] + ta[2] + ta[3];     // fa * fa
+  r[1] = tc[0] + tc[1] + tc[2] + tc[3];     // fb * fc
+  r[2] = tb[0] + tb[1] + tb[2] + tb[3];     // fa * fb
+}
+
 // triple dot product fa*fa, fa*fb, fb*fc  (real arrays)
 // result in r[0], r[1], r[2]              (double)
 void fast_dot_product_f3(const float *fa, const float *fb, const float *fc, double *r, int n){
@@ -229,6 +315,99 @@ void fast_dot_product_f3(const float *fa, const float *fb, const float *fc, doub
   r[0] = ta[0] + ta[1] + ta[2] + ta[3];     // fa * fa
   r[1] = tc[0] + tc[1] + tc[2] + tc[3];     // fb * fc
   r[2] = tb[0] + tb[1] + tb[2] + tb[3];     // fa * fb
+}
+
+// dot product f1*f2 (double arrays) [template only for now, code has yet to be adjusted]
+// function result   (double)
+double fast_dot_product_8_f(const double *f1, const double *f2, int n){
+  __m256d d0, d1, d2, d3;
+  __m256d td0, td1;
+  __m256  tt0;
+  __m128  tf0;
+  float t1[16], t2[16];
+  double td[4];
+  int i, j;
+  tt0 = _mm256_xor_ps(tt0,tt0);
+  _mm256_storeu_ps((float *) &t1[ 0], tt0);
+  _mm256_storeu_ps((float *) &t1[ 8], tt0);
+  _mm256_storeu_ps((float *) &t2[ 0], tt0);
+  _mm256_storeu_ps((float *) &t2[ 8], tt0);
+  for(i=0 ; i<(n&0xF); i++) { t1[i] = f1[i] ; t2[i] = f2[i]; }
+
+  tf0 = _mm_loadu_ps((float *) &t1[ 0]);
+  d0 = _mm256_cvtps_pd(tf0);
+  tf0 = _mm_loadu_ps((float *) &t2[ 0]);
+  td0 = _mm256_cvtps_pd(tf0);
+  d0 = _mm256_mul_pd(d0, td0);
+
+  tf0 = _mm_loadu_ps((float *) &t1[ 4]);
+  d1 = _mm256_cvtps_pd(tf0);
+  tf0 = _mm_loadu_ps((float *) &t2[ 4]);
+  td0 = _mm256_cvtps_pd(tf0);
+  d1 = _mm256_mul_pd(d1, td0);
+
+  tf0 = _mm_loadu_ps((float *) &t1[ 8]);
+  d2 = _mm256_cvtps_pd(tf0);
+  tf0 = _mm_loadu_ps((float *) &t2[ 8]);
+  td0 = _mm256_cvtps_pd(tf0);
+  d2 = _mm256_mul_pd(d2, td0);
+
+  tf0 = _mm_loadu_ps((float *) &t1[12]);
+  d3 = _mm256_cvtps_pd(tf0);
+  tf0 = _mm_loadu_ps((float *) &t2[12]);
+  td0 = _mm256_cvtps_pd(tf0);
+  d3 = _mm256_mul_pd(d3, td0);
+
+  for(j=i ; j<n ; j+=16){      // 16 values processed per iteration
+    tf0 = _mm_loadu_ps((float *) &f1[j + 0]);
+    td0 = _mm256_cvtps_pd(tf0);
+    tf0 = _mm_loadu_ps((float *) &f2[j + 0]);
+    td1 = _mm256_cvtps_pd(tf0);
+#if defined(WITH_FMA)
+    d0 = _mm256_fmadd_pd (td0, td1, d0);
+#else
+    td0 = _mm256_mul_pd(td1, td0);
+    d0 = _mm256_add_pd (td0, d0);
+#endif
+
+    tf0 = _mm_loadu_ps((float *) &f1[j + 4]);
+    td0 = _mm256_cvtps_pd(tf0);
+    tf0 = _mm_loadu_ps((float *) &f2[j + 4]);
+    td1 = _mm256_cvtps_pd(tf0);
+#if defined(WITH_FMA)
+    d1 = _mm256_fmadd_pd (td0, td1, d1);
+#else
+    td0 = _mm256_mul_pd(td1, td0);
+    d1 = _mm256_add_pd (td0, d1);
+#endif
+
+    tf0 = _mm_loadu_ps((float *) &f1[j + 8]);
+    td0 = _mm256_cvtps_pd(tf0);
+    tf0 = _mm_loadu_ps((float *) &f2[j + 8]);
+    td1 = _mm256_cvtps_pd(tf0);
+#if defined(WITH_FMA)
+    d2 = _mm256_fmadd_pd (td0, td1, d2);
+#else
+    td0 = _mm256_mul_pd(td1, td0);
+    d2 = _mm256_add_pd (td0, d2);
+#endif
+
+    tf0 = _mm_loadu_ps((float *) &f1[j +12]);
+    td0 = _mm256_cvtps_pd(tf0);
+    tf0 = _mm_loadu_ps((float *) &f2[j +12]);
+    td1 = _mm256_cvtps_pd(tf0);
+#if defined(WITH_FMA)
+    d3 = _mm256_fmadd_pd (td0, td1, d3);
+#else
+    td0 = _mm256_mul_pd(td1, td0);
+    d3 = _mm256_add_pd (td0, d3);
+#endif
+  }
+  d0 =  _mm256_add_pd (d0, d1);   // add 4 subtotals into d0
+  d2 =  _mm256_add_pd (d2, d3);
+  d0 =  _mm256_add_pd (d0, d2);
+  _mm256_storeu_pd ((double *) &td[0], d0) ;
+  return td[0] + td[1] + td[2] + td[3];
 }
 
 // dot product f1*f2 (real arrays)
