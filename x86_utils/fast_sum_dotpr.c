@@ -520,7 +520,7 @@ int main(){
   int i, j;
   double z[NP], r[3], r2[3];
   float f1[NPF], f2[NPF], f3[NPF];
-  double sum, sum2, sum3, sum4;
+  double sum, sum2, sum3, sum4, temp;
   uint64_t t0, t1;
   sum2 = 0;
   sum3 = 0;
@@ -568,9 +568,9 @@ int main(){
   for (j=0; j<REP; j++) fast_dot_product_f3(f1, f2, f3, r, NPF);  // triple dot product without add error compensation
   t1 = rdtsc();
   sum2 = 0; sum3 = 0; sum4 = 0;
-  for(i=0 ; i<NPF; i++) sum2 += f1[i]*f1[i];
-  for(i=0 ; i<NPF; i++) sum3 += f2[i]*f3[i];
-  for(i=0 ; i<NPF; i++) sum4 += f1[i]*f2[i];
+  for(i=0 ; i<NPF; i++) { temp = f1[i] ; sum2 += temp*f1[i]; }
+  for(i=0 ; i<NPF; i++) { temp = f2[i] ; sum3 += temp*f3[i]; }
+  for(i=0 ; i<NPF; i++) { temp = f1[i] ; sum4 += temp*f2[i]; }
   printf("fast_dot_product_f3(f1, f2, f3, r, NPF)\n");
   printf("dot3 time : %g cycles/value\n",1.0*(t1-t0)/NPF/REP/3);
   printf("dot3: dumb sum = %24.16E, %24.16E, %24.16E\n",sum2,sum3,sum4);
