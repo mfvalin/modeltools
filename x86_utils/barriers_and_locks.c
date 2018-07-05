@@ -250,10 +250,17 @@ main(int argc, char **argv){
     printf("lock acquire/release time = %d\n",(t1-t0)/100);
     t0 = rdtsc();
     for(i=0 ; i<100 ; i++){
-      ierr = wait_barrier(i, localsize);
+//       ierr = reset_barrier(i+1);
+//       ierr = wait_barrier(i, localsize);
+      ierr = reset_barrier(2);
+      ierr = wait_barrier(1, localsize);
+      ierr = reset_barrier(3);
+      ierr = wait_barrier(2, localsize);
+      ierr = reset_barrier(1);
+      ierr = wait_barrier(3, localsize);
     }
     t1 = rdtsc();
-    printf("barrier time = %d\n",(t1-t0)/100);
+    printf("barrier time = %d\n",(t1-t0)/300);
 
   ierr = MPI_Finalize();
 }
