@@ -188,6 +188,7 @@ main(int argc, char **argv){
   void *ptr;
   int32_t sid, size;
   uint64_t t0 , t1, t2;
+  double tmin, tmax, tavg, tmp;
 
   ierr = MPI_Init( &argc, &argv );
   ierr = MPI_Comm_rank(MPI_COMM_WORLD,&globalrank);
@@ -203,8 +204,7 @@ main(int argc, char **argv){
   ierr = MPI_Comm_split(MPI_COMM_WORLD,localrank,globalrank,&MY_Peers) ; // communicator with PES of same local rank on other SMP nodes
   ierr = MPI_Comm_rank(MY_Peers,&peerrank);
   ierr = MPI_Comm_size(MY_Peers,&peersize);
-  if(localrank == 0) printf("number of PEs in node = %d\n",localsize);
-  printf("number of peers in MY_Peers = %d\n",peersize);
+  if(localrank == 0) printf("PEs in node = %d, peers in MY_Peers = %d\n",localsize,peersize);
   size = 3*4096;
 
   if(localrank == 0){
@@ -247,7 +247,13 @@ main(int argc, char **argv){
       ierr = release_lock(2,localrank);
     }
     t1 = rdtsc();
-    printf("lock acquire/release time = %d\n",(t1-t0)/100);
+//     printf("lock acquire/release time = %d\n",(t1-t0)/100);
+    tmp = (t1-t0)/100;
+    ierr = MPI_Allreduce(&tmp,&tmin,1,MPI_DOUBLE,MPI_MIN,MPI_COMM_WORLD);
+    ierr = MPI_Allreduce(&tmp,&tmax,1,MPI_DOUBLE,MPI_MAX,MPI_COMM_WORLD);
+    ierr = MPI_Allreduce(&tmp,&tavg,1,MPI_DOUBLE,MPI_SUM,MPI_COMM_WORLD);
+    tavg = tavg / globalsize;
+    if(globalrank == 0) printf("barrier min, max, avg = %9f, %9f, %9f\n",tmin,tmax,tavg);
     t0 = rdtsc();
     for(i=0 ; i<100 ; i++){
 //       ierr = reset_barrier(i+1);
@@ -260,7 +266,13 @@ main(int argc, char **argv){
       ierr = wait_barrier(3, localsize);
     }
     t1 = rdtsc();
-    printf("barrier time = %d\n",(t1-t0)/300);
+//     printf("barrier time = %d\n",(t1-t0)/300);
+    tmp = (t1-t0)/300;
+    ierr = MPI_Allreduce(&tmp,&tmin,1,MPI_DOUBLE,MPI_MIN,MPI_COMM_WORLD);
+    ierr = MPI_Allreduce(&tmp,&tmax,1,MPI_DOUBLE,MPI_MAX,MPI_COMM_WORLD);
+    ierr = MPI_Allreduce(&tmp,&tavg,1,MPI_DOUBLE,MPI_SUM,MPI_COMM_WORLD);
+    tavg = tavg / globalsize;
+    if(globalrank == 0) printf("barrier min, max, avg = %9f, %9f, %9f\n",tmin,tmax,tavg);
 
   ierr = MPI_Finalize();
 }
