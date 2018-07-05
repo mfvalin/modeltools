@@ -211,45 +211,49 @@ main(int argc, char **argv){
     ptr = allocate_safe_shared_memory(&sid, size);
     ierr = MPI_Bcast(&sid,1,MPI_INTEGER,0,MY_World);
     ierr = setup_locks_and_barriers(ptr, size);
+#if ! defined(TIMING)
     printf("setup status = %d\n",ierr);
-
+#endif
     ierr = MPI_Barrier(MY_World);
 
+#if ! defined(TIMING)
     ierr = acquire_lock(1,localrank);
     if(ierr == 0) printf("lock acquired by %d\n",localrank);
     sleep(1);
     ierr = release_lock(1,localrank);
     printf("lock %d release status = %d\n",1,ierr);
     if(ierr != 0) printf("lock release successful\n");
-    t0 = rdtsc();
-    for(i=0 ; i<100 ; i++){
-      ierr = acquire_lock(2,localrank);
-      ierr = release_lock(2,localrank);
-    }
-    t1 = rdtsc();
-    printf("time = %d\n",t1-t0);
+#endif
   }else{
     ierr = MPI_Bcast(&sid,1,MPI_INTEGER,0,MY_World);
     ptr = shmat(sid,NULL,0);
     ierr = setup_locks_and_barriers(ptr, size);  
+#if ! defined(TIMING)
     printf("setup status = %d\n",ierr);
-
+#endif
     ierr = MPI_Barrier(MY_World);
-
+#if ! defined(TIMING)
     ierr = acquire_lock(1,localrank);
     if(ierr == 0) printf("lock acquired by %d\n",localrank);
     sleep(1);
     ierr = release_lock(1,localrank);
     printf("lock %d release status = %d\n",1,ierr);
     if(ierr != 0) printf("lock release successful\n");
+#endif
+  }
     t0 = rdtsc();
     for(i=0 ; i<100 ; i++){
       ierr = acquire_lock(2,localrank);
       ierr = release_lock(2,localrank);
     }
     t1 = rdtsc();
-    printf("time = %d\n",t1-t0);
-  }
+    printf("lock acquire/release time = %d\n",(t1-t0)/100);
+    t0 = rdtsc();
+    for(i=0 ; i<100 ; i++){
+      ierr = wait_barrier(i, localsize);
+    }
+    t1 = rdtsc();
+    printf("barrier time = %d\n",(t1-t0)/100);
 
   ierr = MPI_Finalize();
 }
