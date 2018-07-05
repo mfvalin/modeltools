@@ -253,7 +253,7 @@ main(int argc, char **argv){
     ierr = MPI_Allreduce(&tmp,&tmax,1,MPI_DOUBLE,MPI_MAX,MPI_COMM_WORLD);
     ierr = MPI_Allreduce(&tmp,&tavg,1,MPI_DOUBLE,MPI_SUM,MPI_COMM_WORLD);
     tavg = tavg / globalsize;
-    if(globalrank == 0) printf("barrier min, max, avg = %9f, %9f, %9f\n",tmin,tmax,tavg);
+    if(globalrank == 0) printf("lock min, max, avg = %9f, %9f, %9f\n",tmin,tmax,tavg);
     t0 = rdtsc();
     for(i=0 ; i<100 ; i++){
 //       ierr = reset_barrier(i+1);
