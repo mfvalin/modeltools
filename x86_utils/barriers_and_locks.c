@@ -115,12 +115,13 @@ void *setup_shared_locks_and_barriers(int32_t *sid, uint32_t size){
 }
 
 // id       : identifier for this thread/process  ( 0 <= id < maxcount )
-// maxcount : number of threads/processes for this barrier
+// maxcount : number of threads/processes for this barrier (maxcount < 3 does not work)
 void node_barrier(int32_t id, int32_t maxcount){
  int32_t count;
- int32_t group      = (id & 1) ^ 1;            // 0 or 1
+ int32_t group      = (id & 1) ^ 1;            // 0 (id is odd) or 1 (id is even)
  int32_t halfcount  = maxcount >> 1;
- int32_t grouplimit = halfcount + group - 1;   // 1 less than group population
+ int32_t grouplimit = halfcount + (maxcount & group) - 1;   // 1 less than group population
+         // the even group population is one more than the odd group if maxcount is odd
 
  if(halfcount == 0){
    spins[group] = 0;        // first of group sets group spinflag to false
