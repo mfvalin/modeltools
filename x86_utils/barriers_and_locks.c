@@ -279,11 +279,11 @@ main(int argc, char **argv){
 //       ierr = reset_barrier(i+1);
 //       ierr = wait_barrier(i, localsize);
 //       ierr = reset_barrier(2);
-      ierr = node_barrier(localrank, localsize);
+      node_barrier(localrank, localsize);
 //       ierr = reset_barrier(3);
-      ierr = node_barrier(localrank, localsize);
+      node_barrier(localrank, localsize);
 //       ierr = reset_barrier(1);
-      ierr = node_barrier(localrank, localsize);
+      node_barrier(localrank, localsize);
     }
     t1 = rdtsc();
 //     printf("barrier time = %d\n",(t1-t0)/300);
