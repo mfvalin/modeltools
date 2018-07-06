@@ -117,75 +117,79 @@ void *setup_shared_locks_and_barriers(int32_t *sid, uint32_t size){
 // id       : identifier for this thread/process  ( 0 <= id < maxcount )
 // maxcount : number of threads/processes for this barrier
 void node_barrier(int32_t id, int32_t maxcount){
- int32_t count;
- int32_t group      = (id & 1) ^ 1;            // 0 (id is odd) or 1 (id is even)
- int32_t halfcount  = maxcount >> 1;
- int32_t grouplimit = halfcount + (maxcount & group) - 1;   // 1 less than group population
-         // the even group population is one more than the odd group if maxcount is odd
+  int32_t count;
+  int32_t group      = (id & 1) ^ 1;            // 0 (id is odd) or 1 (id is even)
+  int32_t halfcount  = maxcount >> 1;
+  int32_t grouplimit = halfcount + (maxcount & group) - 1;   // 1 less than group population
+	  // the even group population is one more than the odd group if maxcount is odd
 
- if(maxcount < 2) return;   // barrier with 1 thread/process is a NO-OP
- if(halfcount == 0){
-   spins[group] = 0;        // first of group sets group spinflag to false
- }
- count = __sync_fetch_and_add (barrs+group, 1);  // increment 
- if(count == grouplimit) {          // i am the last member of the even/odd group
-  barrs[group] = 0;                 // last one to arrive resets the group barrier count to zero
-  spins[group] = 1;                 // and sets the group spin flag to true
- }
- while(spins[0] & spins[1] == 0);
-}
+  if(maxcount < 2) return;   // barrier with 1 thread/process is a NO-OP
+  if(halfcount == 0){
+    spins[group] = 0;        // first of group resets group spinflag to false
+  }
+  count = __sync_fetch_and_add (barrs+group, 1);  // increment 
+  if(count == grouplimit) {           // i am the last member of the my (even/odd) group
+    barrs[group] = 0;                 // last one to arrive resets the group barrier count to zero
+    spins[group] = 1;                 // and sets the group spin flag to true
+  }
+  while(spins[0] & spins[1] == 0);
+  }
 
-int32_t wait_barrier(int barrier, int maxcount){
- int32_t count;
+int32_t wait_barrier(int barrier, int id, int maxcount){
+  int32_t count;
 
- if(spins == NULL || barrs == NULL) return -1;
+  if(maxcount < 2) return 0;      // barrier with 1 thread/process is a NO-OP
 
- count = __sync_fetch_and_add (barrs+barrier, 1);
- if(count == maxcount-1) {
-  barrs[barrier] = 0;         // last one to arrive resets the barrier count to zero
-  spins[barrier] = maxcount;  // and sets the global spin flag to maxcount
- }else{
-  while(spins[barrier] != maxcount);
- }
- return 0;
+  if(spins == NULL || barrs == NULL) return -1;
+
+  if(id ==0) spins[barrier] = 0;  // lowest id thread/process sets spin flag to false
+				  // initial state of spin flags MUST BE 0
+  count = __sync_fetch_and_add (barrs+barrier, 1);
+  if(count == maxcount-1) {
+    barrs[barrier] = 0;            // last one to arrive resets the barrier count to zero
+    spins[barrier] = 1;            // and sets the global spin flag to true
+  }else{
+    while(spins[barrier] == 0);
+  }
+  return 0;
 }
 
 int32_t reset_barrier(int barrier){
 
- if(spins == NULL || barrs == NULL) return -1;
+  if(spins == NULL || barrs == NULL) return -1;
 
- spins[barrier] = 0;
- barrs[barrier] = 0;
- return 0;
+  spins[barrier] = 0;
+  barrs[barrier] = 0;
+  return 0;
 }
 
 int32_t test_lock(int lock){
 
- if(spins == NULL || barrs == NULL) return -1;
+  if(spins == NULL || barrs == NULL) return -1;
 
- return locks[lock]-1;
+  return locks[lock]-1;
 }
 
 int32_t release_lock(int lock, int me){
   int status;
 
- if(spins == NULL || barrs == NULL) return -1;
+  if(spins == NULL || barrs == NULL) return -1;
 
 //  printf("attempting release of lock %d by %d owned by %d\n",lock,me,locks[lock]-1);
- return (__sync_val_compare_and_swap(locks+lock, me+1, 0) == me+1);
+  return (__sync_val_compare_and_swap(locks+lock, me+1, 0) == me+1);
 }
 
 int32_t acquire_lock(int lock, int me){
   int count = 0;
 
- if(spins == NULL || barrs == NULL) return -1;
+  if(spins == NULL || barrs == NULL) return -1;
 
 //  printf("attempting acquisition of lock %d owned by %d\n",lock,locks[lock]-1);
- while(__sync_val_compare_and_swap(locks+lock, 0, me+1) != 0) {
+  while(__sync_val_compare_and_swap(locks+lock, 0, me+1) != 0) {
 //    if(count++ == 0) printf("process %s waiting for lock %d\n",me,lock);
- }
+  }
 //  printf("lock %d acquired by %d, lock = %d\n",lock,me,locks[lock]);
- return 0;
+  return 0;
 }
 #if defined(SELF_TEST)
 
