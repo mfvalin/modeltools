@@ -276,13 +276,8 @@ main(int argc, char **argv){
     if(globalrank == 0) printf("lock min, max, avg = %9f, %9f, %9f\n",tmin,tmax,tavg);
     t0 = rdtsc();
     for(i=0 ; i<100 ; i++){
-//       ierr = reset_barrier(i+1);
-//       ierr = wait_barrier(i, localsize);
-//       ierr = reset_barrier(2);
       node_barrier(localrank, localsize);
-//       ierr = reset_barrier(3);
       node_barrier(localrank, localsize);
-//       ierr = reset_barrier(1);
       node_barrier(localrank, localsize);
     }
     t1 = rdtsc();
@@ -292,7 +287,22 @@ main(int argc, char **argv){
     ierr = MPI_Allreduce(&tmp,&tmax,1,MPI_DOUBLE,MPI_MAX,MPI_COMM_WORLD);
     ierr = MPI_Allreduce(&tmp,&tavg,1,MPI_DOUBLE,MPI_SUM,MPI_COMM_WORLD);
     tavg = tavg / globalsize;
-    if(globalrank == 0) printf("barrier min, max, avg = %9f, %9f, %9f\n",tmin,tmax,tavg);
+    if(globalrank == 0) printf("SMP barrier min, max, avg = %9f, %9f, %9f\n",tmin,tmax,tavg);
+
+    t0 = rdtsc();
+    for(i=0 ; i<100 ; i++){
+      ierr = MPI_Barrier(MY_World);
+      ierr = MPI_Barrier(MY_World);
+      ierr = MPI_Barrier(MY_World);
+    }
+    t1 = rdtsc();
+//     printf("barrier time = %d\n",(t1-t0)/300);
+    tmp = (t1-t0)/300;
+    ierr = MPI_Allreduce(&tmp,&tmin,1,MPI_DOUBLE,MPI_MIN,MPI_COMM_WORLD);
+    ierr = MPI_Allreduce(&tmp,&tmax,1,MPI_DOUBLE,MPI_MAX,MPI_COMM_WORLD);
+    ierr = MPI_Allreduce(&tmp,&tavg,1,MPI_DOUBLE,MPI_SUM,MPI_COMM_WORLD);
+    tavg = tavg / globalsize;
+    if(globalrank == 0) printf("MPI barrier min, max, avg = %9f, %9f, %9f\n",tmin,tmax,tavg);
 
   ierr = MPI_Finalize();
 }
