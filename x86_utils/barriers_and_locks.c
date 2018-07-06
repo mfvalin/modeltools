@@ -114,6 +114,25 @@ void *setup_shared_locks_and_barriers(int32_t *sid, uint32_t size){
   return ptr;                     // return address of shared memory segment
 }
 
+// id       : identifier for this thread/process  ( 0 <= id < maxcount )
+// maxcount : number of threads/processes for this barrier
+void node_barrier(int32_t id, int32_t maxcount){
+ int32_t count;
+ int32_t group      = (id & 1) ^ 1;            // 0 or 1
+ int32_t halfcount  = maxcount >> 1;
+ int32_t grouplimit = halfcount + group - 1;   // 1 less than group population
+
+ if(halfcount == 0){
+   spins[group] = 0;        // first of group sets group spinflag to false
+ }
+ count = __sync_fetch_and_add (barrs+group, 1);  // increment 
+ if(count == grouplimit) {          // i am the last member of the even/odd group
+  barrs[group] = 0;                 // last one to arrive resets the group barrier count to zero
+  spins[group] = 1;                 // and sets the group spin flag to true
+ }
+ while(spins[0] & spins[1] == 0);
+}
+
 int32_t wait_barrier(int barrier, int maxcount){
  int32_t count;
 
@@ -121,7 +140,8 @@ int32_t wait_barrier(int barrier, int maxcount){
 
  count = __sync_fetch_and_add (barrs+barrier, 1);
  if(count == maxcount-1) {
-  spins[barrier] = maxcount;
+  barrs[barrier] = 0;         // last one to arrive resets the barrier count to zero
+  spins[barrier] = maxcount;  // and sets the global spin flag to maxcount
  }else{
   while(spins[barrier] != maxcount);
  }
@@ -258,12 +278,12 @@ main(int argc, char **argv){
     for(i=0 ; i<100 ; i++){
 //       ierr = reset_barrier(i+1);
 //       ierr = wait_barrier(i, localsize);
-      ierr = reset_barrier(2);
-      ierr = wait_barrier(1, localsize);
-      ierr = reset_barrier(3);
-      ierr = wait_barrier(2, localsize);
-      ierr = reset_barrier(1);
-      ierr = wait_barrier(3, localsize);
+//       ierr = reset_barrier(2);
+      ierr = node_barrier(localrank, localsize);
+//       ierr = reset_barrier(3);
+      ierr = node_barrier(localrank, localsize);
+//       ierr = reset_barrier(1);
+      ierr = node_barrier(localrank, localsize);
     }
     t1 = rdtsc();
 //     printf("barrier time = %d\n",(t1-t0)/300);
