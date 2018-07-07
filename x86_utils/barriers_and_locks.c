@@ -124,8 +124,10 @@ void node_barrier(int32_t id, int32_t maxcount){
 	  // the even group population is one more than the odd group if maxcount is odd
 
   if(maxcount < 2) return;   // barrier with 1 thread/process is a NO-OP
-  if(halfcount == 0){
-    spins[group] = 0;        // first of group resets group spinflag to false
+
+//   if(halfcount == 0){
+  if(spins[group] != 0){        // make sure to reset group spinflag to false at beginning
+    spins[group] = 0;
   }
   count = __sync_fetch_and_add (barrs+group, 1);  // increment 
   if(count == grouplimit) {           // i am the last member of the my (even/odd) group
