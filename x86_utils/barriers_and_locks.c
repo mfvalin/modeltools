@@ -120,12 +120,11 @@ void *setup_shared_locks_and_barriers(int32_t *sid, uint32_t size){
 
 // id       : identifier for this thread/process  ( 0 <= id < maxcount )
 // maxcount : number of threads/processes for this barrier
-void node_barrier(int32_t id, int32_t maxcount){
+void node_barrier1(int32_t id, int32_t maxcount){
   int32_t count;
   int32_t group;
   int32_t halfcount;
   int32_t grouplimit;
-	  // the even group population is one more than the odd group if maxcount is odd
 
   if(maxcount < 2) return;      // barrier with 1 thread/process is a NO-OP
 
@@ -141,6 +140,20 @@ void node_barrier(int32_t id, int32_t maxcount){
     barrs[group] = 0;                 // and reset the barrier count of the group
   }
   while( (spins[0] & spins[1]) == 0); // wait until every thread/process has joined
+}
+
+void node_barrier2(int32_t id, int32_t maxcount){
+  int32_t count;
+  int32_t group;
+  int32_t halfcount;
+  int32_t grouplimit;
+
+  if(maxcount < 2) return;      // barrier with 1 thread/process is a NO-OP
+
+  group      = (id & 1) ^ 1;            // 0 (id is odd) or 1 (id is even)
+  halfcount  = maxcount >> 1;
+  grouplimit = halfcount + (maxcount & group) - 1;   // 1 less than group population
+  // the even group population is one more than the odd group if maxcount is odd
 
   spins[group+4] = 0;
   count = __sync_fetch_and_add (barrs+group, 1);  // increment barrier count unpon entry
@@ -149,8 +162,22 @@ void node_barrier(int32_t id, int32_t maxcount){
     barrs[group] = 0;                 // and reset the barrier count of the group
   }
   while( (spins[2] & spins[3]) == 0); // wait until every thread/process has joined
+}
 
-  spins[group] = 0;
+void node_barrier3(int32_t id, int32_t maxcount){
+  int32_t count;
+  int32_t group;
+  int32_t halfcount;
+  int32_t grouplimit;
+
+  if(maxcount < 2) return;      // barrier with 1 thread/process is a NO-OP
+
+  group      = (id & 1) ^ 1;            // 0 (id is odd) or 1 (id is even)
+  halfcount  = maxcount >> 1;
+  grouplimit = halfcount + (maxcount & group) - 1;   // 1 less than group population
+  // the even group population is one more than the odd group if maxcount is odd
+
+  spins[group+0] = 0;
   count = __sync_fetch_and_add (barrs+group, 1);  // increment barrier count unpon entry
   if(count == grouplimit) {           // the last member of the (even/odd) group ?
     spins[group+4] = 1;                 // yes, set the group spin flag to true
@@ -305,8 +332,10 @@ main(int argc, char **argv){
     tavg = tavg / globalsize;
     if(globalrank == 0) printf("lock min, max, avg = %9f, %9f, %9f\n",tmin,tmax,tavg);
     t0 = rdtsc();
-    for(i=0 ; i<20 ; i++){
-      node_barrier(localrank, localsize);
+    for(i=0 ; i<100 ; i++){
+      node_barrier1(localrank, localsize);
+      node_barrier2(localrank, localsize);
+      node_barrier3(localrank, localsize);
     }
     t1 = rdtsc();
 //     printf("barrier time = %d\n",(t1-t0)/300);
