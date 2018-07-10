@@ -181,42 +181,34 @@ static inline get_put(int me, int partner){
 void node_barrier(int32_t id, int32_t maxcount){
   int powerof2, n, rest, gap, partner;
 
-  if(maxcount < 2) return;
+  if(maxcount < 2) return;     // trivial case, no need for fancy footwork
 
   powerof2 = 1;
   n = 2;
-  while(n <= maxcount) {
+  while(n <= maxcount) {       // get largest power of 2 <= maxcount
     powerof2 = n ;
     n <<= 1 ; 
-  }  // get largetst power of 2 <= maxcount
-  rest = maxcount - powerof2;
-//   printf("id(%d) p2 = %d, rest = %d\n",id,powerof2, rest);
+  }
+  rest = maxcount - powerof2;  // the rest above largest power of 2
 
   if(id < powerof2){
-//     printf("id(%d) lower\n",id);
-    if(id < rest) {
-//       printf("id(%d) rest = %d\n",id,rest);
+    if(id < rest) {            // get from upper part partner if there is one
       partner = id + powerof2;
       get_from(id, partner);
     }
     for(gap=1 ; gap < powerof2 ; gap<<=1){
-//       printf("id(%d) gap = %d\n",id,gap);
       partner = id ^ gap;
-//       printf("id(%d) get_put %d <-> %d\n",id,id,partner);
       get_put(id, partner);
     }
-    if(id < rest) {
-//       printf("id(%d) rest = %d\n",id,rest);
+    if(id < rest) {            // put to upper part partner if there is one
       partner = id + powerof2;
       put_to(id, partner);
     }
   }else{
-//     printf("id(%d) upper\n",id);
     partner = id - powerof2;
     put_to(id, partner);
     get_from(id, partner);
   }
-//   printf("id(%d) flag = %d DONE\n",id, barrs[id]);
 }
 
 void node_barrier1(int32_t id, int32_t maxcount){
@@ -452,7 +444,7 @@ main(int argc, char **argv){
     tavg = tavg / globalsize;
     if(globalrank == 0) printf("lock min, max, avg = %9f, %9f, %9f\n",tmin,tmax,tavg);
     t0 = rdtsc();
-    for(i=0 ; i<1 ; i++){
+    for(i=0 ; i<100 ; i++){
       node_barrier(localrank, localsize);
       node_barrier(localrank, localsize);
       node_barrier(localrank, localsize);
