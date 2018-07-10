@@ -120,6 +120,107 @@ void *setup_shared_locks_and_barriers(int32_t *sid, uint32_t size){
 
 // id       : identifier for this thread/process  ( 0 <= id < maxcount )
 // maxcount : number of threads/processes for this barrier
+void node_barrier00(int32_t id, int32_t maxcount){
+  int32_t count, i, answer;
+
+  if(maxcount < 2) return;      // barrier with 1 thread/process is a NO-OP
+
+  barrs[id] = 1 ^ barrs[id];
+  answer = ( barrs[id] == 0 ) ? 0 : maxcount ;
+//   printf("answer(%d) = %d\n",id,answer);
+  while(1){
+    count = barrs[0];
+    for(i=1 ; i<maxcount ; i++) count += barrs[i];
+    break;
+//     if(count == answer) break;
+  }
+}
+
+// id       : identifier for this thread/process  ( 0 <= id < maxcount )
+// maxcount : number of threads/processes for this barrier
+void node_barrier0(int32_t id, int32_t maxcount){
+  int32_t count;
+
+  if(maxcount < 2) return;      // barrier with 1 thread/process is a NO-OP
+  if(id == 0){
+    barrs[id+1] = 1;
+    while(barrs[id] != 2);
+    barrs[id]  = 0;
+  }else if(id == maxcount-1){
+    while(barrs[id] != 1);
+    barrs[id]  = 0;
+    barrs[id-1]  = 2;
+  }else{
+    while(barrs[id] != 1);
+    barrs[id+1] = 1;
+    while(barrs[id] != 2);
+    barrs[id-1]  = 2;
+    barrs[id]  = 0;
+  }
+
+}
+
+static inline get_from(int id){
+  while(barrs[id] == 0);     // wait for partner's signal
+  barrs[id] = 0;             // acknowledge reception
+}
+
+static inline put_to(int partner){
+  while(barrs[partner] != 0);  // wait till partner free to receive
+  barrs[partner] = 1;          // send to partner
+  while(barrs[partner] != 0);  // wait till partner acknowledges reception
+}
+
+static inline get_put(int id, int partner){
+  while(barrs[partner] != 0);  // wait till partner free to receive
+  barrs[partner] = 1;          // send to partner
+  while(barrs[id] == 0);       // wait for partner's signal
+  barrs[id] = 0;               // acknowledge reception
+  while(barrs[partner] != 0);  // wait till partner acknowledges reception
+  if(barrs[id]) exit(1);
+}   
+
+void node_barrier(int32_t id, int32_t maxcount){
+  int powerof2, n, rest, gap, partner;
+
+  if(maxcount < 2) return;
+
+  powerof2 = 1;
+  n = 2;
+  while(n <= maxcount) {
+    powerof2 = n ;
+    n <<= 1 ; 
+  }  // get largetst power of 2 <= maxcount
+  rest = maxcount - powerof2;
+//   printf("id(%d) p2 = %d, rest = %d\n",id,powerof2, rest);
+
+  if(id < powerof2){
+//     printf("id(%d) lower\n",id);
+    if(id < rest) {
+//       printf("id(%d) rest = %d\n",id,rest);
+      partner = id + powerof2;
+      get_from(id);
+    }
+    for(gap=1 ; gap < powerof2 ; gap<<=1){
+      printf("id(%d) gap = %d\n",id,gap);
+      partner = id ^ gap;
+//       printf("id(%d) get_put %d <-> %d\n",id,id,partner);
+      get_put(id, partner);
+    }
+    if(id < rest) {
+//       printf("id(%d) rest = %d\n",id,rest);
+      partner = id + powerof2;
+      put_to(partner);
+    }
+  }else{
+//     printf("id(%d) upper\n",id);
+    partner = id - powerof2;
+    put_to(partner);
+    get_from(id);
+  }
+//   printf("id(%d) flag = %d DONE\n",id, barrs[id]);
+}
+
 void node_barrier1(int32_t id, int32_t maxcount){
   int32_t count;
   int32_t group;
@@ -127,6 +228,13 @@ void node_barrier1(int32_t id, int32_t maxcount){
   int32_t grouplimit;
 
   if(maxcount < 2) return;      // barrier with 1 thread/process is a NO-OP
+
+  count = __sync_fetch_and_add (barrs, 1);  // increment barrier count unpon entry
+  if(count == maxcount -1){
+    barrs[0] = 0;
+  }
+  while(barrs[0] != 0) ; // printf("count = %d\n",barrs[0]);
+  return;
 
   group      = (id & 1) ^ 1;            // 0 (id is odd) or 1 (id is even)
   halfcount  = maxcount >> 1;
@@ -150,6 +258,13 @@ void node_barrier2(int32_t id, int32_t maxcount){
 
   if(maxcount < 2) return;      // barrier with 1 thread/process is a NO-OP
 
+  count = __sync_fetch_and_add (barrs+1, 1);  // increment barrier count unpon entry
+  if(count == maxcount -1){
+    barrs[1] = 0;
+  }
+  while(barrs[1] != 0) ; // printf("count = %d\n",barrs[0]);
+  return;
+
   group      = (id & 1) ^ 1;            // 0 (id is odd) or 1 (id is even)
   halfcount  = maxcount >> 1;
   grouplimit = halfcount + (maxcount & group) - 1;   // 1 less than group population
@@ -171,6 +286,13 @@ void node_barrier3(int32_t id, int32_t maxcount){
   int32_t grouplimit;
 
   if(maxcount < 2) return;      // barrier with 1 thread/process is a NO-OP
+
+  count = __sync_fetch_and_add (barrs+2, 1);  // increment barrier count unpon entry
+  if(count == maxcount -1){
+    barrs[2] = 0;
+  }
+  while(barrs[2] != 0) ; // printf("count = %d\n",barrs[0]);
+  return;
 
   group      = (id & 1) ^ 1;            // 0 (id is odd) or 1 (id is even)
   halfcount  = maxcount >> 1;
@@ -332,10 +454,13 @@ main(int argc, char **argv){
     tavg = tavg / globalsize;
     if(globalrank == 0) printf("lock min, max, avg = %9f, %9f, %9f\n",tmin,tmax,tavg);
     t0 = rdtsc();
-    for(i=0 ; i<100 ; i++){
-      node_barrier1(localrank, localsize);
-      node_barrier2(localrank, localsize);
-      node_barrier3(localrank, localsize);
+    for(i=0 ; i<1 ; i++){
+      node_barrier(localrank, localsize);
+      ierr = MPI_Barrier(MY_World);
+      node_barrier(localrank, localsize);
+      ierr = MPI_Barrier(MY_World);
+      node_barrier(localrank, localsize);
+      ierr = MPI_Barrier(MY_World);
     }
     t1 = rdtsc();
 //     printf("barrier time = %d\n",(t1-t0)/300);
