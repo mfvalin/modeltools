@@ -185,6 +185,130 @@ void intrp_bicub_yx(float *f, float *r, int ni, int ninj, int nk, int np, double
 #endif
 }
 
+void intrp_bicub_yx_2(float *f, float *r, int ni, int ninj, int nk, int np, double xx, double yy){
+#if defined(__AVX2__) && defined(__x86_64__)
+  __m256d fd0, fd1, fd2, fd3, gd0, gd1, gd2, gd3, fwx, fwy0, fwy1, fwy2, fwy3, fdt, gdt ;
+  __m128  frt, grt ;
+  __m128d ft0, ft1, gt0, gt1;
+#else
+  double fd0[4], fd1[4], fd2[4], fd3[4] ;
+#endif
+  float *g;
+  double  wx[4], wy[4] ;
+  double  x, y;
+  int ni2 = ni + ni;    // + 2 rows
+  int ni3 = ni2 + ni;   // + 3 rows
+  int i, k;
+  int ix, iy;
+// printf("DEBUG: f = %p, r = %p \n",f,r);
+// printf("DEBUG: f[0] = %f, r[0] = %f, ni = %d, ninj = %d, nk = %d, np = %d, xx = %f, yy = %f\n",f[0],r[0],ni,ninj,nk,np,xx,yy);
+  x = xx - 1.0 ; y = yy - 1.0; // xx and yy are in "ORIGIN 1"
+  ix = xx ; if(ix > xx) ix = ix -1 ; ix = ix - 2;   // xx and yy are in "ORIGIN 1"
+  iy = yy ; if(iy > yy) iy = iy -1 ; iy = iy - 2;
+  x  = x - 1 - ix;
+  y  = y - 1 - iy;
+  f = f + ix + iy * ni;
+  g = f + ninj;
+//   printf("DEBUG: ix=%d, iy=%d, ni=%d\n",ix, iy, ni);
+// printf("DEBUG: f[0] = %f, ix = %d, iy = %d, x = %f, y = %f\n",f[0],ix,iy,x,y);
+  wx[0] = cm133*x*(x-one)*(x-two);       // polynomial coefficients along i
+  wx[1] = cp5*(x+one)*(x-one)*(x-two);
+  wx[2] = cm5*x*(x+one)*(x-two);
+  wx[3] = cp133*x*(x+one)*(x-one);
+
+  wy[0] = cm133*y*(y-one)*(y-two);       // polynomial coefficients along j
+  wy[1] = cp5*(y+one)*(y-one)*(y-two);
+  wy[2] = cm5*y*(y+one)*(y-two);
+  wy[3] = cp133*y*(y+one)*(y-one);
+
+#if defined(__AVX2__) && defined(__x86_64__)
+  fwx = _mm256_loadu_pd(wx) ;              // vector of coefficients along i
+  fwy0 = _mm256_set1_pd(wy[0]) ;           // scalar * vector not available, promote scalar to vector
+  fwy1 = _mm256_set1_pd(wy[1]) ;
+  fwy2 = _mm256_set1_pd(wy[2]) ;
+  fwy3 = _mm256_set1_pd(wy[3]) ;
+  for(k=0 ; k<nk-2 ; k+=2){               // levels done 2 by 2
+    // fetch 4 rows, level k (f) and level k + 1 (g)
+    // interpolation along J level k, and level k+1
+    fd0 = _mm256_cvtps_pd(_mm_loadu_ps(f    )) ;            // promote row 1 to double
+    gd0 = _mm256_cvtps_pd(_mm_loadu_ps(g    )) ;            // promote row 1 to double
+    fdt = _mm256_mul_pd(fd0,fwy0) ;                         // sum of row[j] * coefficient[j]
+    gdt = _mm256_mul_pd(gd0,fwy0) ;                         // sum of row[j] * coefficient[j]
+
+    fd1 = _mm256_cvtps_pd(_mm_loadu_ps(f+ni )) ;            // promote row 2 to double
+    gd1 = _mm256_cvtps_pd(_mm_loadu_ps(g+ni )) ;            // promote row 2 to double
+    fdt = _mm256_fmadd_pd(fd1,fwy1,fdt) ;                   // sum of row[j] * coefficient[j]
+    gdt = _mm256_fmadd_pd(gd1,fwy1,gdt) ;                   // sum of row[j] * coefficient[j]
+
+    fd2 = _mm256_cvtps_pd(_mm_loadu_ps(f+ni2)) ;            // promote row 3 to double
+    gd2 = _mm256_cvtps_pd(_mm_loadu_ps(g+ni2)) ;            // promote row 3 to double
+    fdt = _mm256_fmadd_pd(fd2,fwy2,fdt) ;                   // sum of row[j] * coefficient[j]
+    gdt = _mm256_fmadd_pd(gd2,fwy2,gdt) ;                   // sum of row[j] * coefficient[j]
+
+    fd3 = _mm256_cvtps_pd(_mm_loadu_ps(f+ni3)) ;            // promote row 4 to double
+    gd3 = _mm256_cvtps_pd(_mm_loadu_ps(g+ni3)) ;            // promote row 4 to double
+    fdt = _mm256_fmadd_pd(fd3,fwy3,fdt) ;                   // sum of row[j] * coefficient[j]
+    gdt = _mm256_fmadd_pd(gd3,fwy3,gdt) ;                   // sum of row[j] * coefficient[j]
+
+    f = g + ninj; g = f + ninj;
+
+    // interpolation along i: multiply by coefficients along x , then sum elements (using vector folding)
+    fdt = _mm256_mul_pd(fdt,fwx) ;
+    gdt = _mm256_mul_pd(gdt,fwx) ;
+    ft1 = _mm256_extractf128_pd(fdt,1) ;    // fdt[2]                      fdt[3]
+    ft0 = _mm256_extractf128_pd(fdt,0) ;    // fdt[0]                      fdt[1]
+    ft0 = _mm_add_pd(ft0,ft1) ;             // fdt[0]+fdt[2]               fdt[1]+fdt[3]
+    gt1 = _mm256_extractf128_pd(gdt,1) ;    // gdt[2]                      gdt[3]
+    gt0 = _mm256_extractf128_pd(gdt,0) ;    // gdt[0]                      gdt[1]
+    gt0 = _mm_add_pd(gt0,gt1) ;             // gdt[0]+gdt[2]               gdt[1]+gdt[3]
+    ft1 = _mm_permute_pd(ft0,0x3) ;         // fdt[1]+fdt[3]               fdt[1]+fdt[3]
+    gt1 = _mm_permute_pd(gt0,0x3) ;         // gdt[1]+gdt[3]               gdt[1]+gdt[3]
+    ft0 = _mm_add_sd(ft0,ft1) ;             // fdt[0]+fdt[2]+fdt[1]+fdt[3]
+    gt0 = _mm_add_sd(gt0,gt1) ;             // gdt[0]+gdt[2]+gdt[1]+gdt[3]
+    frt = _mm_cvtsd_ss(frt,ft0) ;           // convert fdt[0]+fdt[2]+fdt[1]+fdt[3] to float
+    grt = _mm_cvtsd_ss(grt,gt0) ;           // convert gdt[0]+gdt[2]+gdt[1]+gdt[3] to float
+    _mm_store_ss(r,frt) ;                   // store float
+    r += np;
+    _mm_store_ss(r,grt) ;                   // store float
+    r += np;
+  }
+  // interpolation, level nk if nk odd
+  if(k == nk-1){
+    // interpolation along J level nk
+    fd0 = _mm256_cvtps_pd(_mm_loadu_ps(f    )) ;            // promote row 1 to double
+    fdt = _mm256_mul_pd(fd0,fwy0) ;                         // sum of row[j] * coefficient[j]
+
+    fd1 = _mm256_cvtps_pd(_mm_loadu_ps(f+ni )) ;            // promote row 2 to double
+    fdt = _mm256_fmadd_pd(fd1,fwy1,fdt) ;
+
+    fd2 = _mm256_cvtps_pd(_mm_loadu_ps(f+ni2)) ;            // promote row 3 to double
+    fdt = _mm256_fmadd_pd(fd2,fwy2,fdt) ;
+
+    fd3 = _mm256_cvtps_pd(_mm_loadu_ps(f+ni3)) ;            // promote row 4 to double
+    fdt = _mm256_fmadd_pd(fd3,fwy3,fdt) ;
+
+    // interpolation along i: multiply by coefficients along x , then sum elements (using vector folding)
+    fdt = _mm256_mul_pd(fdt,fwx) ;
+    ft1 = _mm256_extractf128_pd(fdt,1) ;    // fdt[2]                      fdt[3]
+    ft0 = _mm256_extractf128_pd(fdt,0) ;    // fdt[0]                      fdt[1]
+    ft0 = _mm_add_pd(ft0,ft1) ;             // fdt[0]+fdt[2]               fdt[1]+fdt[3]
+    ft1 = _mm_permute_pd(ft0,0x3) ;         // fdt[1]+fdt[3]               fdt[1]+fdt[3]
+    ft0 = _mm_add_sd(ft0,ft1) ;             // fdt[0]+fdt[2]+fdt[1]+fdt[3]
+    frt = _mm_cvtsd_ss(frt,ft0) ;           // convert fdt[0]+fdt[2]+fdt[1]+fdt[3] to float
+    _mm_store_ss(r,frt) ;                   // store float
+  }
+#else
+  for(k=0 ; k<nk ; k++){
+    for(i=0 ; i<4 ; i++){                   // easily vectorizable form
+      fd0[i] = ( f[i]*wy[0] + f[i+ni]*wy[1] + f[i+ni2]*wy[2] + f[i+ni3]*wy[3] ) * wx[i];
+    }
+    r[0] = fd0[0] + fd0[1] + fd0[2] + fd0[3];
+    f+= ninj;
+    r += np;
+  }
+#endif
+}
+
 void intrp_bicub_yx_mono(float *f, float *r, int ni, int ninj, int nk, int np, double xx, double yy){
 #if defined(__AVX2__) && defined(__x86_64__)
   __m256d fd0, fd1, fd2, fd3, fwx, fwy0, fwy1, fwy2, fwy3, fdt, fmi, fma ;
@@ -359,7 +483,7 @@ void intrp_bicub_yx_mono(float *f, float *r, int ni, int ninj, int nk, int np, d
 
 #define NI 65
 #define NJ 27
-#define NK 80
+#define NK 81
 #define NP 20
 
 int main(int argc,char **argv){
@@ -388,6 +512,14 @@ int main(int argc,char **argv){
   k = t2 - t1;
   printf(" r = %f %f\n",r[0][0],r[0][1]);
   printf("time = %d clocks for %d values, %d flops\n",k,NP*NK,NP*NK*35);
+  t1 = rdtsc();
+  for(i=0 ; i<NP ; i++){
+    intrp_bicub_yx_2(&f[0][0][0], &r[0][i], NI, NI*NJ, NK, NP, x[i], y[i]) ;
+  }
+  t2 = rdtsc();
+  k = t2 - t1;
+  printf(" r = %f %f\n",r[0][0],r[0][1]);
+  printf("time = %d clocks for %d values, %d flops\n",k,NP*NK,NP*NK*35);
 }
 #endif
 #else
@@ -410,6 +542,13 @@ program test_interp
   integer*8 :: t1, t2, tmg1(NR), tmg2(nr)
   integer :: nidim, ninjdim
   interface
+    subroutine intrp_bicub_yx_2(f, r, ni, ninj, nk, np, x, y) bind(C,name='intrp_bicub_yx_2')         !InTf!
+      import :: C_INT, C_FLOAT, C_DOUBLE                                                          !InTf!
+      real(C_FLOAT), dimension(*), intent(IN) :: f                                                !InTf!
+      real(C_FLOAT), dimension(*), intent(OUT) :: r                                               !InTf!
+      real(C_DOUBLE), intent(IN), value :: x, y                                                   !InTf!
+      integer(C_INT), intent(IN), value :: ni, ninj, nk, np                                       !InTf!
+    end subroutine intrp_bicub_yx_2                                                               !InTf!
     subroutine intrp_bicub_yx(f, r, ni, ninj, nk, np, x, y) bind(C,name='intrp_bicub_yx')         !InTf!
       import :: C_INT, C_FLOAT, C_DOUBLE                                                          !InTf!
       real(C_FLOAT), dimension(*), intent(IN) :: f                                                !InTf!
@@ -452,7 +591,7 @@ program test_interp
   do j = 1, NR
     t1 = rdtsc()
     do i = 1 , NP
-      call intrp_bicub_yx( f(1,1,1), r(i,1), nidim, ninjdim, NK, NP, x(i), y(i) )
+      call intrp_bicub_yx_2( f(1,1,1), r(i,1), nidim, ninjdim, NK, NP, x(i), y(i) )
     enddo
     t2 = rdtsc()
     tmg1(j) = t2 - t1
@@ -468,6 +607,7 @@ program test_interp
   print 100,'direct =',tmg1
   print 100,'mono   =',tmg2
   print 100,'flops  =',NP*NK*35
+  print 100,'Bytes  =',NP*NK*16*4
 100 format(A,40I6)
 !  print 102,f(nint(x(1)),nint(y(1)),1),f(nint(x(2)),nint(y(2)),1),f(nint(x(1)),nint(y(1)),NK),f(nint(x(2)),nint(y(2)),NK)
 !  print 102,x(1)+y(1)+1,x(2)+y(2)+1,x(1)+y(1)+NK,x(2)+y(2)+NK
@@ -505,7 +645,7 @@ program test_interp
             (r(:,NK)-FXY(x(:),y(:),NK))  / FXY(x(:),y(:),NK)
 
   do i = 1 , NP
-    call intrp_bicub_yx( f(1,1,1), r(i,1), nidim, ninjdim, NK, NP, x(i), y(i) )
+    call intrp_bicub_yx_2( f(1,1,1), r(i,1), nidim, ninjdim, NK, NP, x(i), y(i) )
   enddo
 !  print 102,f(nint(x(1)),nint(y(1)),1),f(nint(x(2)),nint(y(2)),1),f(nint(x(1)),nint(y(1)),NK),f(nint(x(2)),nint(y(2)),NK)
 !  print 102,x(1)+y(1)+1,x(2)+y(2)+1,x(1)+y(1)+NK,x(2)+y(2)+NK
