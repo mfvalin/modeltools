@@ -178,7 +178,30 @@ static inline get_put(int me, int partner){
   while(barrs[me] != 0);                   // wait for partmer's acknowledge
 }
 
-void node_barrier(int32_t id, int32_t maxcount){
+static inline get_put_m(int me, int src, int dst){
+//   printf("(%d) send to %d, get from %d\n",me, src, dst);
+  barrs[me] = (POST_RCV+src);          // post request for partner's data
+  while(barrs[dst] != (POST_RCV+me));  // wait till partner posts request from me
+  barrs[dst] = 0;                      // send data acknowledge to partner
+  while(barrs[me] != 0);                   // wait for partmer's acknowledge
+}
+
+void node_barrier(int32_t id, int32_t maxcount){  // version with "messages"
+  int mask, src, dst;
+
+  if(maxcount < 2) return;     // trivial case, no need for fancy footwork
+
+  mask = 1;
+  while(mask < maxcount){
+    dst = (id + mask) % maxcount;
+    src = (id - mask + maxcount) % maxcount;
+    get_put_m(id, src, dst);
+    mask <<= 1;
+  }
+//   printf("(%d) DONE\n",id);
+}
+
+void node_barrier_0(int32_t id, int32_t maxcount){  // version with "messages"
   int powerof2, n, rest, gap, partner;
 
   if(maxcount < 2) return;     // trivial case, no need for fancy footwork
