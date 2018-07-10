@@ -170,6 +170,21 @@ void node_barrier0(int32_t id, int32_t maxcount){
 
 }
 
+void node_barrier_3(int32_t id, int32_t maxcount){  // version with "messages"
+  int lgo, count;
+
+  if(maxcount < 2) return;     // trivial case, no need for fancy footwork
+
+  lgo = barrs[0];
+  count = __sync_fetch_and_add (barrs+16, 1);
+  if(count == maxcount - 1){
+    barrs[16] = 0;
+    barrs[0] = 1 - barrs[0];
+  }else{
+    while(lgo == barrs[0]) ;
+  }
+}
+
 #define POST_RCV 0x40000000
 // static inline get_from(int me, int partner){
 //   barrs[me] = (POST_RCV+partner);     // post request for partner's data
@@ -510,9 +525,9 @@ main(int argc, char **argv){
     if(globalrank == 0) printf("lock min, max, avg = %9f, %9f, %9f\n",tmin,tmax,tavg);
     t0 = rdtsc();
     for(i=0 ; i<100 ; i++){
-      node_barrier(localrank, localsize);
-      node_barrier(localrank, localsize);
-      node_barrier(localrank, localsize);
+      node_barrier_3(localrank, localsize);
+      node_barrier_3(localrank, localsize);
+      node_barrier_3(localrank, localsize);
     }
     t1 = rdtsc();
 //     printf("barrier time = %d\n",(t1-t0)/300);
