@@ -33,6 +33,15 @@
 // static int volatile __attribute__ ((aligned (64))) barrs[64];
 // static int volatile __attribute__ ((aligned (64))) locks[64];
 
+typedef struct{
+  int32_t volatile spin;
+  int32_t volatile barr;
+  int32_t volatile busy;
+  int32_t volatile lock;
+  int32_t volatile pad[12];
+} comm_area;
+
+static comm_area *node;
 static int32_t volatile *spins = NULL;
 static int32_t volatile *barrs = NULL;
 static int32_t volatile *locks = NULL;
@@ -56,6 +65,7 @@ int32_t setup_locks_and_barriers(void *ptr, uint32_t size){
   barrs = spins + siz;
   locks = barrs + siz;
   busys = locks + siz;
+  node  = (comm_area *) ptr;
   for(i=0 ; i<siz ; i++) {
     spins[i] = 0;
     barrs[i] = 0;
@@ -160,65 +170,125 @@ void node_barrier0(int32_t id, int32_t maxcount){
 
 }
 
-static inline get_from(int id){
-  while(barrs[id] == 0);     // wait for partner's signal
-  barrs[id] = 0;             // acknowledge reception
+void node_barrier_3(int32_t id, int32_t maxcount){  // version with "messages"
+  int lgo, count;
+
+  if(maxcount < 2) return;     // trivial case, no need for fancy footwork
+
+  lgo = barrs[0];
+  count = __sync_fetch_and_add (barrs+16, 1);
+  if(count == maxcount - 1){
+    barrs[16] = 0;
+    barrs[0] = 1 - barrs[0];
+  }else{
+    while(lgo == barrs[0]) ;
+  }
 }
 
-static inline put_to(int partner){
-  while(barrs[partner] != 0);  // wait till partner free to receive
-  barrs[partner] = 1;          // send to partner
-  while(barrs[partner] != 0);  // wait till partner acknowledges reception
+#define POST_RCV 0x40000000
+// static inline get_from(int me, int partner){
+//   barrs[me] = (POST_RCV+partner);     // post request for partner's data
+//   while(barrs[me] != 0);              // wait for partmer's acknowledge
+// }
+// 
+// static inline put_to(int me, int partner){
+//   while(barrs[partner] != (POST_RCV+me));  // wait till partner posts request from me
+//   barrs[partner] = 0;                      // send data acknowledge to partner
+// }
+// 
+// static inline get_put(int me, int partner){
+//   barrs[me] = (POST_RCV+partner);          // post request for partner's data
+//   while(barrs[partner] != (POST_RCV+me));  // wait till partner posts request from me
+//   barrs[partner] = 0;                      // send data acknowledge to partner
+//   while(barrs[me] != 0);                   // wait for partmer's acknowledge
+// }
+
+static inline get_from(int me, int partner){
+  node[me].barr = (POST_RCV+partner);     // post request for partner's data
+  while(node[me].barr != 0);              // wait for partmer's acknowledge
 }
 
-static inline get_put(int id, int partner){
-  while(barrs[partner] != 0);  // wait till partner free to receive
-  barrs[partner] = 1;          // send to partner
-  while(barrs[id] == 0);       // wait for partner's signal
-  barrs[id] = 0;               // acknowledge reception
-  while(barrs[partner] != 0);  // wait till partner acknowledges reception
-  if(barrs[id]) exit(1);
-}   
+static inline put_to(int me, int partner){
+  while(node[partner].barr != (POST_RCV+me));  // wait till partner posts request from me
+  node[partner].barr = 0;                      // send data acknowledge to partner
+}
 
-void node_barrier(int32_t id, int32_t maxcount){
+static inline get_put(int me, int partner){
+  node[me].barr = (POST_RCV+partner);          // post request for partner's data
+  while(node[partner].barr != (POST_RCV+me));  // wait till partner posts request from me
+  node[partner].barr = 0;                      // send data acknowledge to partner
+  while(node[me].barr != 0);                   // wait for partmer's acknowledge
+}
+
+static inline get_put_m(int me, int src, int dst){
+//   printf("(%d) send to %d, get from %d\n",me, src, dst);
+  node[me].barr = (POST_RCV+src);          // post request for partner's data
+  while(node[dst].barr != (POST_RCV+me));  // wait till partner posts request from me
+  node[dst].barr = 0;                      // send data acknowledge to partner
+  while(node[me].barr != 0);                   // wait for partmer's acknowledge
+}
+
+void node_barrier_2(int32_t id, int32_t maxcount){  // version with "messages"
+  int mask, src, dst;
+
+  if(maxcount < 2) return;     // trivial case, no need for fancy footwork
+
+  mask = 1;
+  while(mask < maxcount){
+    dst = (id + mask) % maxcount;
+    src = (id - mask + maxcount) % maxcount;
+    get_put_m(id, src, dst);
+    mask <<= 1;
+  }
+//   printf("(%d) DONE\n",id);
+}
+
+void node_barrier(int32_t id, int32_t maxcount){  // version with "messages"
+  int mask, src, dst;
+
+  if(maxcount < 2) return;     // trivial case, no need for fancy footwork
+
+  mask = 1;
+  while(mask < maxcount){
+    dst = (id + mask) % maxcount;
+    src = (id - mask + maxcount) % maxcount;
+    get_put_m(id, src, dst);
+    mask <<= 1;
+  }
+//   printf("(%d) DONE\n",id);
+}
+
+void node_barrier_0(int32_t id, int32_t maxcount){  // version with "messages"
   int powerof2, n, rest, gap, partner;
 
-  if(maxcount < 2) return;
+  if(maxcount < 2) return;     // trivial case, no need for fancy footwork
 
   powerof2 = 1;
   n = 2;
-  while(n <= maxcount) {
+  while(n <= maxcount) {       // get largest power of 2 <= maxcount
     powerof2 = n ;
     n <<= 1 ; 
-  }  // get largetst power of 2 <= maxcount
-  rest = maxcount - powerof2;
-//   printf("id(%d) p2 = %d, rest = %d\n",id,powerof2, rest);
+  }
+  rest = maxcount - powerof2;  // the rest above largest power of 2
 
   if(id < powerof2){
-//     printf("id(%d) lower\n",id);
-    if(id < rest) {
-//       printf("id(%d) rest = %d\n",id,rest);
+    if(id < rest) {            // get from upper part partner if there is one
       partner = id + powerof2;
-      get_from(id);
+      get_from(id, partner);
     }
     for(gap=1 ; gap < powerof2 ; gap<<=1){
-      printf("id(%d) gap = %d\n",id,gap);
       partner = id ^ gap;
-//       printf("id(%d) get_put %d <-> %d\n",id,id,partner);
       get_put(id, partner);
     }
-    if(id < rest) {
-//       printf("id(%d) rest = %d\n",id,rest);
+    if(id < rest) {            // put to upper part partner if there is one
       partner = id + powerof2;
-      put_to(partner);
+      put_to(id, partner);
     }
   }else{
-//     printf("id(%d) upper\n",id);
     partner = id - powerof2;
-    put_to(partner);
-    get_from(id);
+    put_to(id, partner);
+    get_from(id, partner);
   }
-//   printf("id(%d) flag = %d DONE\n",id, barrs[id]);
 }
 
 void node_barrier1(int32_t id, int32_t maxcount){
@@ -404,7 +474,7 @@ main(int argc, char **argv){
   ierr = MPI_Comm_rank(MY_Peers,&peerrank);
   ierr = MPI_Comm_size(MY_Peers,&peersize);
   if(localrank == 0) printf("PEs in node = %d, peers in MY_Peers = %d\n",localsize,peersize);
-  size = 3*4096;
+  size = 16*4096;
 
   if(localrank == 0){
     ptr = allocate_safe_shared_memory(&sid, size);
@@ -454,13 +524,10 @@ main(int argc, char **argv){
     tavg = tavg / globalsize;
     if(globalrank == 0) printf("lock min, max, avg = %9f, %9f, %9f\n",tmin,tmax,tavg);
     t0 = rdtsc();
-    for(i=0 ; i<1 ; i++){
-      node_barrier(localrank, localsize);
-      ierr = MPI_Barrier(MY_World);
-      node_barrier(localrank, localsize);
-      ierr = MPI_Barrier(MY_World);
-      node_barrier(localrank, localsize);
-      ierr = MPI_Barrier(MY_World);
+    for(i=0 ; i<100 ; i++){
+      node_barrier_3(localrank, localsize);
+      node_barrier_3(localrank, localsize);
+      node_barrier_3(localrank, localsize);
     }
     t1 = rdtsc();
 //     printf("barrier time = %d\n",(t1-t0)/300);
