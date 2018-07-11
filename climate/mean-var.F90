@@ -1,4 +1,4 @@
-#define VERSION '1.0_rc19 2018/07/11'
+#define VERSION '1.0_rc20 2018/07/11'
 #define AVG_MARKER '/'
 #define VAR_MARKER '%'
   module averages_common   ! tables and table management routines
@@ -244,6 +244,7 @@
       endif
       call convip_plus( ip3, r3, it3, -1, string, .false. )    ! convert ip3
 
+
       if( (it1 == it3) .and. (ip1 > 0) .and. (ip3 > 0) ) level2 = ip3   ! 2 level data
       if( (it1 == it2) .and. (ip1 > 0) .and. (ip2 > 0) ) level2 = ip2   ! 2 level data
 
@@ -254,6 +255,7 @@
       sample = 0  ! "instantaneous" sample
       if((it2 == 10) .and. (it3 == 10))then  ! both ip2 and ip3 are time tags
         sample = 3600*ABS(r2 - r3)           ! sample interval in seconds
+!         print *,'DEBUG: sample, r2, r3 =',sample,r2,r3,ip1,ip2,ip3
         if(verbose > 4) print *,'DEBUG: sample =',sample
       endif
       if(is_special) then   !  special names
@@ -297,7 +299,7 @@
         if(p%typvar(2:2) .eq. AVG_MARKER) p%typvar = trim(typvar)  ! force typvar into p%typvar if average
         if(p%typvar(1:1) .ne. typvar(1:1)) cycle               ! check first character of typvar
         if(sample .ne. p%sample .and. weight == 1.0) then
-           if(verbose > 1) print *,'WARNING: sample interval mismatch, got',sample,' expected',p%sample
+           if(verbose > 1) print *,'WARNING: sample interval mismatch, got',sample,' expected',p%sample,' name ='//trim(nomvar)
            if(strict) call f_exit(1)    ! abort if strict mode
         endif
         ix = i                      ! a matching entry has been found
