@@ -1,4 +1,4 @@
-#define VERSION '1.0_rc18 2017/10/24'
+#define VERSION '1.0_rc19 2018/07/11'
 #define AVG_MARKER '/'
 #define VAR_MARKER '%'
   module averages_common   ! tables and table management routines
@@ -806,14 +806,14 @@
       if(status <0) return
       status = fstouv(fstdmean,'RND')
       if(status <0) return
-      if(verbose > 2) print *,"INFO: opened mean output file '"//trim(filename)//"'"
+      if(verbose > 2) print *,"INFO: opened mean output file '"//trim(filename)//"', unit =",fstdmean
 
       if(variance) then  ! only open variance file if it is required
         status = fnom(fstdvar,trim(varfile),'STD+RND',0)
         if(status <0) return
         status = fstouv(fstdvar,'RND')
         if(status <0) return
-        if(verbose > 2) print *,"INFO: opened variance output file '"//trim(filename)//"'"
+        if(verbose > 2) print *,"INFO: opened variance output file '"//trim(varfile)//"', unit =",fstdvar
       endif
 
       return
@@ -895,8 +895,8 @@
       if(variance) then            ! use IEEE 64 bit format for variances
         call fst_data_length(8)    ! 64 bit format
         p%typvar(2:2) = VAR_MARKER
-        call fstecr(p%stats(1,1,2),p%stats(1,1,2),-64,p%typvar, &
-                    new_dateo,deet,npas,p%ni,p%nj,1,ip1,ip2,ip3,vartag,p%nomvar,p%etiket, &
+        call fstecr(p%stats(1,1,2),p%stats(1,1,2),-64,fstdvar, &
+                    new_dateo,deet,npas,p%ni,p%nj,1,ip1,ip2,ip3,p%typvar,p%nomvar,p%etiket, &
                     p%grtyp,p%ig1,p%ig2,p%ig3,p%ig4,5,.false.)
       endif
 
