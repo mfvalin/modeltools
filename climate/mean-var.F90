@@ -1,4 +1,4 @@
-#define VERSION '1.0_rc20 2018/07/11'
+#define VERSION '1.0_rc21 2018/07/12'
 #define AVG_MARKER '/'
 #define VAR_MARKER '%'
   module averages_common   ! tables and table management routines
@@ -299,7 +299,8 @@
         if(p%typvar(2:2) .eq. AVG_MARKER) p%typvar = trim(typvar)  ! force typvar into p%typvar if average
         if(p%typvar(1:1) .ne. typvar(1:1)) cycle               ! check first character of typvar
         if(sample .ne. p%sample .and. weight == 1.0) then
-           if(verbose > 1) print *,'WARNING: sample interval mismatch, got',sample,' expected',p%sample,' name ='//trim(nomvar)
+           if(verbose > 1) print *,'WARNING: sample interval mismatch, got',sample,' expected',p%sample,' name = '//trim(nomvar)
+           p%sample = sample
            if(strict) call f_exit(1)    ! abort if strict mode
         endif
         ix = i                      ! a matching entry has been found
