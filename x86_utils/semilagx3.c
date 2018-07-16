@@ -17,8 +17,15 @@
  * Boston, MA 02111-1307, USA.
  */
 
-#if defined(__AVX2__) && defined(__x86_64__)
+#if defined(__x86_64__)
+
 #include <immintrin.h>
+
+#if ! defined(__FMA__)
+#define _mm256_fmadd_ps(a,b,c) _mm256_add_ps(_mm256_mul_ps(a,b),c)
+#define _mm_fmadd_ps(a,b,c) _mm_add_ps(_mm_mul_ps(a,b),c)
+#endif
+
 #endif
 
 #include <stdint.h>
@@ -51,15 +58,23 @@ static float two = 2.0;
 //        fractional index along z in middle cell (0 <= z <= 1.0)
 #if defined(NEVER_EVER_TRUE)
 interface
-  subroutine tricub_x86_f3(dd, ff, abcd, x, y, NI, NJ) bind(C,name='tricub_x86_f3')
+  subroutine tricub_zyx3 (ff, x, y, abcd, ni, ninj, dd) bind(C,name='tricub_zyx3')
     import :: C_FLOAT, C_INT
     real(C_FLOAT),  intent(OUT), dimension(3)   :: dd
     real(C_FLOAT),  intent(IN),  dimension(3,*) :: ff
     real(C_FLOAT),  intent(IN),  dimension(4)   :: abcd
     real(C_FLOAT),  intent(IN),  value :: x, y
-    integer(C_INT), intent(IN),  value :: NI, NJ
+    integer(C_INT), intent(IN),  value :: NI, NINJ
+  end subroutine tricub_zyx3
+  subroutine tricub_x86_f3(dd, ff, abcd, x, y, NI, NINJ) bind(C,name='tricub_x86_f3')
+    import :: C_FLOAT, C_INT
+    real(C_FLOAT),  intent(OUT), dimension(3)   :: dd
+    real(C_FLOAT),  intent(IN),  dimension(3,*) :: ff
+    real(C_FLOAT),  intent(IN),  dimension(4)   :: abcd
+    real(C_FLOAT),  intent(IN),  value :: x, y
+    integer(C_INT), intent(IN),  value :: NI, NINJ
   end subroutine tricub_x86_f3
-  subroutine tricub_x86_3f(dd, ff1, f2, ff3, abcd, x, y, NI, NJ) bind(C,name='tricub_x86_3f')
+  subroutine tricub_x86_3f(dd, ff1, ff2, ff3, abcd, x, y, NI, NJ) bind(C,name='tricub_x86_3f')
     import :: C_FLOAT, C_INT
     real(C_FLOAT),  intent(OUT), dimension(3)   :: dd
     real(C_FLOAT),  intent(IN),  dimension(*)   :: ff1, ff2, ff3
@@ -69,17 +84,25 @@ interface
   end subroutine tricub_x86_3f
 end interface
 #endif
-void tricub_x86_f3(void *dd, void *ff, float *abcd, float x, float y, int NI, int NJ){
+
+void tricub_x86_f3(void *dd, void *ff, float *abcd, float x, float y, int NI, int NINJ);
+void tricub_zyx3(void *ff, float x, float y, float *abcd, int NI, int ninj, void *dd);
+
+void tricub_x86_f3(void *dd, void *ff, float *abcd, float x, float y, int NI, int ninj){
+  tricub_zyx3(ff, x, y, abcd, NI, ninj, dd);
+}
+
+void tricub_zyx3(void *ff, float x, float y, float *abcd, int NI, int NINJ, void *dd){
   float *s;
   float x0, x1, x2, x3, y0, y1, y2, y3;
   float dst[13];
   int ni = 3*NI;
-  int ninj = ni*NJ;
+  int ninj = 3*NINJ;
   int ninjl;
   int *d = (int *) dd;
   float *f = (float *) ff;
 
-#if defined(__AVX2__) && defined(__x86_64__)
+#if defined(__AVX__) && defined(__x86_64__)
   __m256 cz0, cz1, cz2, cz3, cya;
   __m256 za, ya, ta;
   __m256 zb, yb, tb;
@@ -103,7 +126,7 @@ void tricub_x86_f3(void *dd, void *ff, float *abcd, float x, float y, int NI, in
   ninjl = ninj ; // assuming cubic case. in the linear case, ninjl will be 0
   if(abcd[2] == 0.0 && abcd[3] == 0.0) ninjl = 0;
 
-#if defined(__AVX2__) && defined(__x86_64__)
+#if defined(__AVX__) && defined(__x86_64__)
 
 // ==== interpolation along Z, vector length is 16 (2 vectors of length 8 per plane) ====
 
@@ -246,7 +269,7 @@ void tricub_x86_3f(void *dd, void *F1, void *F2, void *F3, float *abcd, float x,
   float *f2 = (float *) F2;
   float *f3 = (float *) F3;
 
-#if defined(__AVX2__) && defined(__x86_64__)
+#if defined(__AVX__) && defined(__x86_64__)
   __m128 cz0, cz1, cz2, cz3, cya;
   __m128 za, ya, ta;
   __m128 zb, yb, tb;
@@ -269,7 +292,7 @@ void tricub_x86_3f(void *dd, void *F1, void *F2, void *F3, float *abcd, float x,
   ninjl = ninj ; // assuming cubic case. in the linear case, ninjl will be 0
   if(abcd[2] == 0.0 && abcd[3] == 0.0) ninjl = 0;
 
-#if defined(__AVX2__) && defined(__x86_64__)
+#if defined(__AVX__) && defined(__x86_64__)
 // ==== interpolation along Z, vector length is 16 (2 vectors of length 8 per plane) ====
   cz0 = _mm_broadcast_ss(abcd);   // coefficients for interpolation along z, promote to vectors
   cz1 = _mm_broadcast_ss(abcd+1);
@@ -442,7 +465,7 @@ main(){
 #else
   expected = 1.0 + dx + 1.0 + dy + 1.0 + dz ;
 #endif
-  tricub_x86_f3(&dest[0],&array[0], &a[0], dx, dy, NI, NJ);
+  tricub_x86_f3(&dest[0],&array[0], &a[0], dx, dy, NI, NI*NJ);
   printf("got %10.6f, %10.6f, %10.6f, expected %10.6f\n",dest[0],dest[1],dest[2],expected);
 
 #if defined(LINEAR)
@@ -450,7 +473,7 @@ main(){
 #else
   expected = 1.0 + dx + 2.0 + dy + 1.0 + dz ;
 #endif
-  tricub_x86_f3(&dest[0],&array[3*NI], &a[0], dx, dy, NI, NJ);
+  tricub_x86_f3(&dest[0],&array[3*NI], &a[0], dx, dy, NI, NI*NJ);
   printf("got %10.6f, %10.6f, %10.6f, expected %10.6f\n",dest[0],dest[1],dest[2],expected);
 
 #if defined(LINEAR)
@@ -458,13 +481,13 @@ main(){
 #else
   expected = 2.0 + dx + 2.0 + dy + 2.0 + dz ;
 #endif
-  tricub_x86_f3(&dest[0],&array[3*NI*NJ + 3 + 3*NI], &a[0], dx, dy, NI, NJ);
+  tricub_x86_f3(&dest[0],&array[3*NI*NJ + 3 + 3*NI], &a[0], dx, dy, NI, NI*NJ);
   printf("got %10.6f, %10.6f, %10.6f, expected %10.6f\n",dest[0],dest[1],dest[2],expected);
 
-  for (i=0 ; i<nijk ; i++) tricub_x86_f3(&dest[i*3], &array[i], &a[0], .3, .7, NI, NJ);
+  for (i=0 ; i<nijk ; i++) tricub_x86_f3(&dest[i*3], &array[i], &a[0], .3, .7, NI, NI*NJ);
   gettimeofday(&t1,NULL);
   for (j=0;j<100;j++) {
-    for (i=0 ; i<nijk ; i++) tricub_x86_f3(&dest[i*3], &array[i], &a[0], .3, .7, NI, NJ);
+    for (i=0 ; i<nijk ; i++) tricub_x86_f3(&dest[i*3], &array[i], &a[0], .3, .7, NI, NI*NJ);
   }
   gettimeofday(&t2,NULL);
   tm1 = t1.tv_usec + t1.tv_sec * 1000000;
