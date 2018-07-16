@@ -38,7 +38,8 @@ typedef struct{
   int32_t volatile barr;
   int32_t volatile busy;
   int32_t volatile lock;
-  int32_t volatile pad[12];
+  int32_t volatile flag;
+  int32_t volatile pad[11];
 } comm_area;
 
 static comm_area *node;
@@ -170,7 +171,39 @@ void node_barrier0(int32_t id, int32_t maxcount){
 
 }
 
-void node_barrier_3(int32_t id, int32_t maxcount){  // version with "messages"
+void node_barrier_multi(int32_t id, int32_t maxcount){  // version with 2 level "flag flip"
+  int lgo, lgo2, count;
+  int group, base, maxpop, lastgrp;
+  int maxsiz = 3;              // eventually maxsiz = table1[maxcount]
+
+  if(maxcount < 2) return;     // trivial case, no need for fancy footwork
+
+  maxpop = maxsiz; group = 0; base = 0;
+  lastgrp = (maxcount + maxpop - 1) / maxpop ;       // eventually  lastgrp = table2[maxcount]
+  while(id >= base+maxpop) { group++ ; base += maxpop ; }  // which group of maxsiz does id belong to ? 
+  maxpop = maxcount - base;
+  maxpop = (maxpop > maxsiz) ? maxsiz : maxpop;
+//   printf("maxpop = %d, group = %d, lastgrp = %d\n", maxpop, group, lastgrp);
+
+  lgo  = node[group].flag;
+  lgo2 = node[lastgrp].flag;
+  count = __sync_fetch_and_add (&(node[group].barr), 1);        // bump group count
+  if(count == maxpop - 1){                   // group count has been reached
+      count = __sync_fetch_and_add (&(node[lastgrp].barr), 1);  // bump lastgrp count
+      if(count == lastgrp - 1){              // lastgrp count has been reached
+	node[lastgrp].barr = 0;              // reset lastgrp count to zero
+	node[lastgrp].flag = 1 - lgo2;       // set lastgrp done flag
+      }else{
+	while(lgo2 == node[lastgrp].flag) ;  // wait till lastgrp done
+      }
+      node[group].barr = 0;                  // reset group count to zero
+      node[group].flag = 1 - lgo;            // set group done flag
+  }else{
+      while(lgo == node[group].flag) ;       // wait till group done
+  }
+}
+
+void node_barrier_3(int32_t id, int32_t maxcount){  // version with "flag flip"
   int lgo, count;
 
   if(maxcount < 2) return;     // trivial case, no need for fancy footwork
@@ -474,7 +507,7 @@ main(int argc, char **argv){
   ierr = MPI_Comm_rank(MY_Peers,&peerrank);
   ierr = MPI_Comm_size(MY_Peers,&peersize);
   if(localrank == 0) printf("PEs in node = %d, peers in MY_Peers = %d\n",localsize,peersize);
-  size = 16*4096;
+  size =globalsize *4096;   // 4 KBytes per process
 
   if(localrank == 0){
     ptr = allocate_safe_shared_memory(&sid, size);
@@ -525,9 +558,9 @@ main(int argc, char **argv){
     if(globalrank == 0) printf("lock min, max, avg = %9f, %9f, %9f\n",tmin,tmax,tavg);
     t0 = rdtsc();
     for(i=0 ; i<100 ; i++){
-      node_barrier_3(localrank, localsize);
-      node_barrier_3(localrank, localsize);
-      node_barrier_3(localrank, localsize);
+      node_barrier_multi(localrank, localsize);
+      node_barrier_multi(localrank, localsize);
+      node_barrier_multi(localrank, localsize);
     }
     t1 = rdtsc();
 //     printf("barrier time = %d\n",(t1-t0)/300);
