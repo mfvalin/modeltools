@@ -1,4 +1,4 @@
-#define VERSION '1.0_rc21 2018/07/12'
+#define VERSION '1.0_rc22 2018/07/17'
 #define AVG_MARKER '/'
 #define VAR_MARKER '%'
   module averages_common   ! tables and table management routines
@@ -52,6 +52,7 @@
     logical, save :: weight_abs = .false.  ! use a specific constant weight
     integer, save :: time_weight = 24      ! weight is in days, set to 1 for weight in hours
     logical, save :: strict = .false.      ! non strict mode by default
+    logical, save :: strictsample = .false.  ! non strictsample mode by default (sample interval mismatches tolerated)
     logical, save :: select_etiket = .false. ! etiket 1s a significant item if .true.
 
     character(len=4), dimension(1024), save :: specials
@@ -64,16 +65,16 @@
       integer :: i, status
 
       if(n < 0 .or. n >= MAX_PAGES) then
-        print *,"FATAL: page number",n,' is invalid. it must be between 0 and',MAX_PAGES-1
+        print *,"ERROR: page number",n,' is invalid. it must be between 0 and',MAX_PAGES-1
         call f_exit(1)
       endif
       if(associated(ptab(n)%p)) then
-        print *,"FATAL: page number",n,' is already allocated'
+        print *,"ERROR: page number",n,' is already allocated'
         call f_exit(1)
       endif
       allocate(ptab(n)%p(0:PAGE_SIZE-1),STAT=status)  ! allocate page
       if(status .ne. 0) then
-        print *,"FATAL: page number",n,' cannot be allocated'
+        print *,"ERROR: page number",n,' cannot be allocated'
         call f_exit(1)
       endif
       do i = 0, PAGE_SIZE-1
@@ -113,7 +114,7 @@
 
       if(verbose > 4) print *,'DEBUG: allocated stats - slot, ni,nj =',ix,ni,nj
       if(status .ne. 0) then
-        print *,"FATAL: entry number",slot,'in page',pg,' cannot be allocated'
+        print *,"ERROR: entry number",slot,'in page',pg,' cannot be allocated'
         call f_exit(1)
       endif
 !     initialize entry to EMPTY but READY
@@ -155,7 +156,7 @@
       slot = mod(next,PAGE_SIZE)  ! slot number
       ix = create_page_entry(pg,slot,ni,nj)
       if(ix < 0) then
-        print *,"FATAL: error creating entry",slot,' in page',pg
+        print *,"ERROR: error creating entry",slot,' in page',pg
         call f_exit(1)
       endif
       return
@@ -299,9 +300,12 @@
         if(p%typvar(2:2) .eq. AVG_MARKER) p%typvar = trim(typvar)  ! force typvar into p%typvar if average
         if(p%typvar(1:1) .ne. typvar(1:1)) cycle               ! check first character of typvar
         if(sample .ne. p%sample .and. weight == 1.0) then
+           if(strictsample) then
+             print *,'ERROR: sample interval mismatch, got',sample,' expected',p%sample,' name = '//trim(nomvar)
+             call f_exit(1)    ! abort if strictsample mode
+           endif
            if(verbose > 1) print *,'WARNING: sample interval mismatch, got',sample,' expected',p%sample,' name = '//trim(nomvar)
            p%sample = sample
-           if(strict) call f_exit(1)    ! abort if strict mode
         endif
         ix = i                      ! a matching entry has been found
         if(verbose > 4) print *,'DEBUG: found entry, previous samples',ix,p%nsamples
@@ -355,17 +359,19 @@
   subroutine print_usage(name)
     implicit none
     character(len=*) :: name
-    print *,'USAGE: '//trim(name)//' [-h|--help] [-version] [-newtags] [-strict] [-novar] [-stddev] [-tag nomvar] \'
+    print *,'USAGE: '//trim(name)//' [-h|--help] [-version] [-newtags] [-strict] [-strictsample] [-novar] [-stddev] [-tag nomvar] \'
     print *,'           [-npas0] [-dateo] [-mean mean_out] [-var var_out] [-weight ip3|time|hours|days|nnn] \'
     print *,'           [-etiket] [-status path/to/status/file] [-test] [-q[q]] [-v[v][v]] [--|-f] \'
     print *,'           [mean_out] [var_out] in_1 ... in_n'
-    print *,'        var_out  MUST NOT be present if -novar or -var is used'
-    print *,'        mean_out MUST NOT be present if -mean is used'
-    print *,'        -var -novar are mutually exclusive and may not be used together'
+    print *,'        var_out(variances file)  MUST NOT be present if -novar or -var is used'
+    print *,'        mean_out(means file) MUST NOT be present if -mean is used'
+    print *,'        -var -novar are MUTUALLY EXCLUSIVE and may not be used together'
     print *,'        options are order independent but -- or -f MUST BE THE LAST ONE'
     print *,"        default special tag names = '>>  ', '^^  ', '!!  ', 'HY  '"
-    print *,'        the -tag option may be used than once to add to this list'
+    print *,'        the -tag option may be used more than once to add to this list'
     print *,'        etiket is ignored except if -etiket used on the command line'
+    print *,'        -strict: abort upon unrecognized option, existing mean/variance file, or missing data file'
+    print *,'        -strictsample: abort upon inconsistent sample interval or missing sample'
     print *,'example :'
     print *,"  "//trim(name)//" -status stat.dot -vv -mean mean.fst -var var.fst -tag HY -tag '>>' my_dir/dm*"
     return
@@ -391,7 +397,7 @@
     use averages_common
     implicit none
     integer :: curarg
-    character (len=8) :: option
+    character (len=16) :: option
     character (len=2048) :: filename, progname, meanfile, varfile, statusfile
     integer :: arg_count, arg_len, status, i
     integer :: first_file
@@ -408,6 +414,7 @@
     curarg = 1                         ! current argument number
     first_file = 0                     ! argument number of first input file
     strict = .false.                   ! do not abort on error (default)
+    strictsample = .false.             ! do not abort on sample interval (default)
     test = .false.                     ! internal flag for development purposes
     arg_count = command_argument_count()
     call get_command_argument(0,progname,arg_len,status)  ! get program name
@@ -429,7 +436,7 @@
       if(verbose > 3) print *,"NOTE: option = '"//trim(option)//"'"
       curarg = curarg + 1
       if(status .ne. 0) then
-        print *,"FATAL: option is too long :'"//trim(option)//"..."//"'"
+        print *,"ERROR: option is too long :'"//trim(option)//"..."//"'"
         call f_exit(1)
       endif
 
@@ -443,12 +450,15 @@
       else if( option == '-strict' ) then   ! set strict mode
         strict = .true.                     ! abort on ERROR 
 
+      else if( option == '-strictsample' ) then   ! set strictsample mode
+        strictsample = .true.                     ! abort on ERROR 
+
       else if( option == '-etiket' ) then
         select_etiket = .true.
 
       else if( option == '-weight' ) then     ! -mean file_for_averages
         if(curarg > arg_count) then
-          print *,'FATAL: missing argument after -weight'
+          print *,'ERROR: missing argument after -weight'
           call print_usage(progname)
           call f_exit(1)
         endif
@@ -474,7 +484,7 @@
 
       else if( option == '-mean' ) then     ! -mean file_for_averages
         if(curarg > arg_count) then
-          print *,'FATAL: missing argument after -mean'
+          print *,'ERROR: missing argument after -mean'
           call print_usage(progname)
           call f_exit(1)
         endif
@@ -483,7 +493,7 @@
 
       else if( option == '-status' ) then     ! -mean path/to/status/file
         if(curarg > arg_count) then
-          print *,'FATAL: missing argument after -mean'
+          print *,'ERROR: missing argument after -mean'
           call print_usage(progname)
           call f_exit(1)
         endif
@@ -492,7 +502,7 @@
 
       else if( option == '-tag' ) then     ! -tag
         if(curarg > arg_count) then
-          print *,'FATAL: missing argument after -tag'
+          print *,'ERROR: missing argument after -tag'
           call print_usage(progname)
           call f_exit(1)
         endif
@@ -508,7 +518,7 @@
           call f_exit(1)
         endif
         if(curarg > arg_count) then
-          print *,'FATAL: missing argument after -var'
+          print *,'ERROR: missing argument after -var'
           call print_usage(progname)
           call f_exit(1)
         endif
@@ -558,9 +568,8 @@
         exit
 
       else
-        if(verbose > 1) print *,"WARNING: unrecognized option = '"//trim(option)//"'"
-        if(strict) call f_exit(1)    ! abort if strict mode
-        cycle
+        print *,"ERROR: unrecognized option = '"//trim(option)//"'"
+        call f_exit(1)    ! abort if strict mode
       endif
     enddo
 
@@ -604,17 +613,22 @@
     endif
 
     status = write_stats(meanfile,varfile)   ! first call just opens the files
+    if(status< 0) call f_exit(1)             ! file open error(s)
 
     do i = curarg, arg_count         ! loop over input files
       call get_command_argument(i,filename,arg_len,status)   ! get file name
       inquire(FILE=trim(filename),EXIST=file_exists)         ! check that it exists
       if(.not. file_exists)then
-        if(verbose > 0) print *,"ERROR: file '"//trim(filename)//"' not found"
+        print *,"WARNING: file '"//trim(filename)//"' not found"
         if(strict) call f_exit(1)   ! strict mode, error is fatal
       else
         if(verbose > 2) print *,"INFO: processing file '"//trim(filename)//"'"
         status = process_file(trim(filename))
-        if(status<0 .and. strict) call f_exit(1)   ! strict mode, error is fatal
+        if(status<0) then
+          print *,"ERROR: problem opening or processing file '"//trim(filename)//"'"
+          call f_exit(1)
+        endif
+!         if(status<0 .and. strict) call f_exit(1)   ! strict mode, error is fatal
       endif
     enddo
 
@@ -650,8 +664,8 @@
       call fstfrm(fstdvar)   ! close variance/std deviation file
       call fclos(fstdvar)
     endif
-    if(missing .and. strict) then
-       print *,"FATAL: missing sample(s) for some variables"
+    if(missing .and. strictsample) then
+       print *,"ERROR: missing sample(s) for some variables"
       call f_exit(1)
     endif
     if( trim(statusfile) .ne. '/dev/null' ) call set_status(statusfile,'status="SUCCESS"')
@@ -677,6 +691,7 @@
     do while(key >= 0)                                  ! loop while valid records
       if(nk > 1)    cycle                               ! xy 2D records only
       status = process_record(key,ni,nj,nk)             ! process record
+      if(status == -1) return                           ! something went wrong
       key = fstsui(fstdin,ni,nj,nk)                     ! next record 
     enddo
     call fstfrm(fstdin)                                 ! close file
@@ -769,7 +784,7 @@
     endif
 
     if(lni .ne. ni .or. lnj .ne. nj .or. lnk .ne. nk) then  ! this should NEVER happen
-      if(verbose > 1) print *,'WARNING:skipping record - dimension mismatch (should never happen)'
+      if(verbose > 1) print *,'ERROR:skipping record - dimension mismatch (should never happen)'
       status = -1
       return
     endif
@@ -806,16 +821,28 @@
     if(fstdmean == 0 .and. fstdvar == 0) then  ! first call just opens the files
 
       status = fnom(fstdmean,trim(filename),'STD+RND',0) ! open averages file
-      if(status <0) return
+      if(status <0) then
+        print *,"ERROR: open of mean output file '"//trim(filename)//"', unit =",fstdmean,' failed'
+        return
+      endif
       status = fstouv(fstdmean,'RND')
-      if(status <0) return
+      if(status <0) then
+        print *,"ERROR: open of mean output file '"//trim(filename)//"', unit =",fstdmean,' failed'
+        return
+      endif
       if(verbose > 2) print *,"INFO: opened mean output file '"//trim(filename)//"', unit =",fstdmean
 
       if(variance) then  ! only open variance file if it is required
         status = fnom(fstdvar,trim(varfile),'STD+RND',0)
-        if(status <0) return
+        if(status <0) then
+          print *,"ERROR: open of var output file '"//trim(varfile)//"', unit =",fstdvar,' failed'
+          return
+        endif
         status = fstouv(fstdvar,'RND')
-        if(status <0) return
+        if(status <0) then
+          print *,"ERROR: open of var output file '"//trim(varfile)//"', unit =",fstdvar,' failed'
+          return
+        endif
         if(verbose > 2) print *,"INFO: opened variance output file '"//trim(varfile)//"', unit =",fstdvar
       endif
 
