@@ -174,7 +174,7 @@ void node_barrier0(int32_t id, int32_t maxcount){
 void node_barrier_multi(int32_t id, int32_t maxcount){  // version with 2 level "flag flip"
   int lgo, lgo2, count;
   int group, base, maxpop, lastgrp;
-  int maxsiz = 3;              // eventually maxsiz = table1[maxcount]
+  int maxsiz = 6;              // eventually maxsiz = table1[maxcount]
 
   if(maxcount < 2) return;     // trivial case, no need for fancy footwork
 
@@ -203,7 +203,7 @@ void node_barrier_multi(int32_t id, int32_t maxcount){  // version with 2 level 
   }
 }
 
-void node_barrier_3(int32_t id, int32_t maxcount){  // version with "flag flip"
+void node_barrier_single(int32_t id, int32_t maxcount){  // version with "flag flip"
   int lgo, count;
 
   if(maxcount < 2) return;     // trivial case, no need for fancy footwork
@@ -452,7 +452,7 @@ int32_t release_lock(int lock, int me){
   if(spins == NULL || barrs == NULL) return -1;
 
 //  printf("attempting release of lock %d by %d owned by %d\n",lock,me,locks[lock]-1);
-  return (__sync_val_compare_and_swap(locks+lock, me+1, 0) == me+1);
+  return (__sync_val_compare_and_swap(&(node[lock].lock), me+1, 0) == me+1);
 }
 
 int32_t acquire_lock(int lock, int me){
@@ -461,7 +461,7 @@ int32_t acquire_lock(int lock, int me){
   if(spins == NULL || barrs == NULL) return -1;
 
 //  printf("attempting acquisition of lock %d owned by %d\n",lock,locks[lock]-1);
-  while(__sync_val_compare_and_swap(locks+lock, 0, me+1) != 0) {
+  while(__sync_val_compare_and_swap(&(node[lock].lock), 0, me+1) != 0) {
 //    if(count++ == 0) printf("process %s waiting for lock %d\n",me,lock);
   }
 //  printf("lock %d acquired by %d, lock = %d\n",lock,me,locks[lock]);
