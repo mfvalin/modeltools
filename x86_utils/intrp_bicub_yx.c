@@ -193,6 +193,7 @@ void intrp_nk2d_yx3_mono(float *f, float *r, int ni, int ninj, int nk, int np, d
   __m128d ft0, ft1;
 #else
   double fd0[4], fd1[4], fd2[4], fd3[4] ;
+  float minval, maxval;
 #endif
   double  wx[4], wy[4] ;
   int ni2 = ni + ni;    // + 2 rows
@@ -306,10 +307,18 @@ void intrp_nk2d_yx3_mono(float *f, float *r, int ni, int ninj, int nk, int np, d
   _mm_store_ss(r,frt) ;                   // store float
 #else
   for(k=0 ; k<nk ; k++){
+    minval = (m[0]    < m[1]  ) ? m[0]    : m[1]   ;
+    minval = (m[ni  ] < minval) ? m[ni]   : minval ;
+    minval = (m[ni+1] < minval) ? m[ni+1] : minval ;
+    maxval = (m[0]    > m[1]  ) ? m[0]    : m[1] ;
+    maxval = (m[ni  ] < maxval) ? m[ni]   : maxval ;
+    maxval = (m[ni+1] < maxval) ? m[ni+1] : maxval ;
     for(i=0 ; i<4 ; i++){                   // easily vectorizable form
       fd0[i] = ( f[i]*wy[0] + f[i+ni]*wy[1] + f[i+ni2]*wy[2] + f[i+ni3]*wy[3] ) * wx[i];
     }
     r[0] = fd0[0] + fd0[1] + fd0[2] + fd0[3];
+    r[0] = (maxval < r[0]) ? maxval : r[0] ;
+    r[0] = (minval > r[0]) ? minval : r[0] ;
     f+= ninj;
     r += np;
   }
@@ -595,6 +604,8 @@ void intrp_bicub_yx_mono(float *f, float *r, int ni, int ninj, int nk, int np, d
   int ni3 = ni2 + ni;   // + 3 rows
   int i, k;
   int ix, iy;
+  float *m;    // pointer used for the min/max constraint
+
 // printf("DEBUG: f = %p, r = %p \n",f,r);
 // printf("DEBUG: f[0] = %f, r[0] = %f, ni = %d, ninj = %d, nk = %d, np = %d, xx = %f, yy = %f\n",f[0],r[0],ni,ninj,nk,np,xx,yy);
   x = xx - 1.0 ; y = yy - 1.0; // xx and yy are in "ORIGIN 1"
@@ -607,6 +618,11 @@ void intrp_bicub_yx_mono(float *f, float *r, int ni, int ninj, int nk, int np, d
   x  = x - 1 - ix;
   y  = y - 1 - iy;
   f = f + ix + iy * ni;
+  m = f;
+  if(x >= 0.0) m++;
+  if(x >  1.0) m++;
+  if(y >= 0.0) m+=ni;
+  if(y >  1.0) m+=ni;  // m should now point to the lower left corner of the 2 by 2 limit matrix
 //   printf("DEBUG: ix=%d, iy=%d, ni=%d\n",ix, iy, ni);
 // printf("DEBUG: f[0] = %f, ix = %d, iy = %d, x = %f, y = %f\n",f[0],ix,iy,x,y);
   wx[0] = cm133*x*(x-one)*(x-two);       // polynomial coefficients along i
@@ -734,14 +750,20 @@ void intrp_bicub_yx_mono(float *f, float *r, int ni, int ninj, int nk, int np, d
     for(i=0 ; i<4 ; i++){                   // easily vectorizable form
       fd0[i] = ( f[i]*wy[0] + f[i+ni]*wy[1] + f[i+ni2]*wy[2] + f[i+ni3]*wy[3] ) * wx[i];
     }
-    minval = f[ni+1] ;
-    maxval = f[ni+1] ;
-    minval = (minval > f[ni+2] ) ? f[ni+2] : minval ;
-    maxval = (maxval < f[ni+2] ) ? f[ni+2] : maxval ;
-    minval = (minval > f[ni2+1] ) ? f[ni2+1] : minval ;
-    maxval = (maxval < f[ni2+1] ) ? f[ni2+1] : maxval ;
-    minval = (minval > f[ni2+2] ) ? f[ni2+2] : minval ;
-    maxval = (maxval < f[ni2+2] ) ? f[ni2+2] : maxval ;
+//     minval = f[ni+1] ;
+//     maxval = f[ni+1] ;
+//     minval = (minval > f[ni+2] ) ? f[ni+2] : minval ;
+//     maxval = (maxval < f[ni+2] ) ? f[ni+2] : maxval ;
+//     minval = (minval > f[ni2+1] ) ? f[ni2+1] : minval ;
+//     maxval = (maxval < f[ni2+1] ) ? f[ni2+1] : maxval ;
+//     minval = (minval > f[ni2+2] ) ? f[ni2+2] : minval ;
+//     maxval = (maxval < f[ni2+2] ) ? f[ni2+2] : maxval ;
+    minval = (m[0]    < m[1]  ) ? m[0]    : m[1]   ;
+    minval = (m[ni  ] < minval) ? m[ni]   : minval ;
+    minval = (m[ni+1] < minval) ? m[ni+1] : minval ;
+    maxval = (m[0]    > m[1]  ) ? m[0]    : m[1] ;
+    maxval = (m[ni  ] < maxval) ? m[ni]   : maxval ;
+    maxval = (m[ni+1] < maxval) ? m[ni+1] : maxval ;
     r[0] = fd0[0] + fd0[1] + fd0[2] + fd0[3];
     r[0] = (r[0] < minval ) ? minval : r[0] ;
     r[0] = (r[0] > maxval ) ? maxval : r[0] ;
@@ -799,6 +821,7 @@ int main(int argc,char **argv){
   printf("time = %d clocks for %d values, %d flops\n",k,NP*NK,NP*NK*35);
 }
 #endif
+
 #else
 program test_interp
   use ISO_C_BINDING
@@ -852,6 +875,7 @@ program test_interp
       integer, intent(IN), value :: x1,x2,y1,y2
     end subroutine set_intrp_bicub_yx
   end interface
+
 #define FXY(A,B,C) (1.3*(A)**3 + 1.4*(A)**2 + (A)*1.5 + 2.3*(B)**3 + 2.4*(B)**2 + (B)*2.5 + (C))
 
 call set_intrp_bicub_yx(1,NI-3,1,NJ-3)
