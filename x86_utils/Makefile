@@ -3,16 +3,16 @@ ifeq "$(BASE_ARCH)" "$(EC_ARCH)"
 $(error FATAL: EC_ARCH is equal to BASE_ARCH, no compiler architecture is defined, ABORTING)
 endif
 
-ifeq (/intel,$(findstring /intel,$(EC_ARCH)))
+ifneq (,$(findstring intel,$(EC_ARCH)))
 # $(error FATAL: intel compiler  detected)
 EXTRA_FTN := -no-wrap-margin
-EXTRA_C := -march=core-avx2
+EXTRA_C   := -march=core-avx2
 endif
 
-ifeq (gfortran,$(findstring gfortran,$(EC_ARCH)))
+ifneq (,$(findstring gfortran,$(EC_ARCH)))
 # $(error FATAL: intel compiler  detected)
 EXTRA_FTN := 
-EXTRA_C := -mavx2 -mfma
+EXTRA_C   := -mavx2 -mfma
 endif
 
 all: fp_x87_xmm_control.o fp_x87_xmm_control.h fp_x87_xmm_control.inc
