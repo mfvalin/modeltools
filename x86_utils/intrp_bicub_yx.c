@@ -53,10 +53,18 @@ uint64_t rdtsc(void) {   // version rapide "out of order"
 }
 #endif
 #include <immintrin.h>
-static int minx = 0;
-static int maxx = 999999;
-static int miny = 0;
-static int maxy = 999999;
+static int qminx = 0;
+static int qmaxx = 999999;
+static int qminy = 0;
+static int qmaxy = 999999;
+static int uminx = 0;
+static int umaxx = 999999;
+static int uminy = 0;
+static int umaxy = 999999;
+static int vminx = 0;
+static int vmaxx = 999999;
+static int vminy = 0;
+static int vmaxy = 999999;
 /*
 interface
   subroutine set_intrp_bicub_yx(x1,x2,y1,y2) bind(C,name='set_intrp_bicub_yx')
@@ -64,11 +72,27 @@ interface
   end subroutine set_intrp_bicub_yx
 end interface
  */
-void set_intrp_bicub_yx(int xmin, int xmax, int ymin, int ymax){
-  minx = xmin - 1 ;
-  maxx = xmax - 1 ;
-  miny = ymin - 1 ;
-  maxy = ymax - 1 ;
+void set_intrp_bicub_yx(int qxmin, int qxmax, int qymin, int qymax){
+  qminx = qxmin - 1 ;
+  qmaxx = qxmax - 1 ;
+  qminy = qymin - 1 ;
+  qmaxy = qymax - 1 ;
+}
+void set_intrp_bicub_quv(int qxmin, int qxmax, int qymin, int qymax, 
+                        int uxmin, int uxmax, int uymin, int uymax, 
+                        int vxmin, int vxmax, int vymin, int vymax){
+  qminx = qxmin - 1 ;
+  qmaxx = qxmax - 1 ;
+  qminy = qymin - 1 ;
+  qmaxy = qymax - 1 ;
+  uminx = uxmin - 1 ;
+  umaxx = uxmax - 1 ;
+  uminy = uymin - 1 ;
+  umaxy = uymax - 1 ;
+  vminx = vxmin - 1 ;
+  vmaxx = vxmax - 1 ;
+  vminy = vymin - 1 ;
+  vmaxy = vymax - 1 ;
 }
 /*
    interpolate a column from a 3D source array f, put results in array r
@@ -351,6 +375,9 @@ void intrp_nk2d_yx3_mono(float *f, float *r, int ni, int ninj, int nk, int np, d
       real(C_DOUBLE), intent(IN), value :: x, y
       integer(C_INT), intent(IN), value :: ni, ninj, nk, np
  */
+void intrp_bicub_yx_vec(float *u, float *v, float *r, int ni, int ninj, int nk, int np, double xx, double yy, double s[4]){
+}
+
 void intrp_bicub_yx(float *f, float *r, int ni, int ninj, int nk, int np, double xx, double yy){
 #if defined(__AVX2__) && defined(__x86_64__)
   __m256d fd0, fd1, fd2, fd3, fwx, fwy0, fwy1, fwy2, fwy3, fdt ;
@@ -370,10 +397,10 @@ void intrp_bicub_yx(float *f, float *r, int ni, int ninj, int nk, int np, double
   x = xx - 1.0 ; y = yy - 1.0; // xx and yy are in "ORIGIN 1"
   ix = xx ; if(ix > xx) ix = ix -1 ; ix = ix - 2;   // xx and yy are in "ORIGIN 1"
   iy = yy ; if(iy > yy) iy = iy -1 ; iy = iy - 2;
-  ix = (ix < minx) ? minx : ix;
-  ix = (ix > maxx) ? maxx : ix;
-  iy = (iy < miny) ? miny : iy;
-  iy = (iy > maxy) ? maxy : iy;
+  ix = (ix < qminx) ? qminx : ix;
+  ix = (ix > qmaxx) ? qmaxx : ix;
+  iy = (iy < qminy) ? qminy : iy;
+  iy = (iy > qmaxy) ? qmaxy : iy;
   x  = x - 1 - ix;
   y  = y - 1 - iy;
   f = f + ix + iy * ni;
@@ -481,10 +508,10 @@ void intrp_bicub_yx_2(float *f, float *r, int ni, int ninj, int nk, int np, doub
   x = xx - 1.0 ; y = yy - 1.0; // xx and yy are in "ORIGIN 1"
   ix = xx ; if(ix > xx) ix = ix -1 ; ix = ix - 2;   // xx and yy are in "ORIGIN 1"
   iy = yy ; if(iy > yy) iy = iy -1 ; iy = iy - 2;
-  ix = (ix < minx) ? minx : ix;
-  ix = (ix > maxx) ? maxx : ix;
-  iy = (iy < miny) ? miny : iy;
-  iy = (iy > maxy) ? maxy : iy;
+  ix = (ix < qminx) ? qminx : ix;
+  ix = (ix > qmaxx) ? qmaxx : ix;
+  iy = (iy < qminy) ? qminy : iy;
+  iy = (iy > qmaxy) ? qmaxy : iy;
   x  = x - 1 - ix;
   y  = y - 1 - iy;
   f = f + ix + iy * ni;
@@ -591,9 +618,9 @@ void intrp_bicub_yx_2(float *f, float *r, int ni, int ninj, int nk, int np, doub
 
 void intrp_bicub_yx_mono(float *f, float *r, int ni, int ninj, int nk, int np, double xx, double yy){
 #if defined(__AVX2__) && defined(__x86_64__)
-  __m256d fd0, fd1, fd2, fd3, fwx, fwy0, fwy1, fwy2, fwy3, fdt, fmi, fma ;
-  __m128  fr0, fr1, fr2, fr3, frt ;   // frt is used as a scalar, fr0->fr3 are 128 bit aliases for fd0->fd3
-  __m128d ft0, ft1, smi, sma ;        // smi, sma are used as scalars (reduction of fmi, fma)
+  __m256d fd0, fd1, fd2, fd3, fwx, fwy0, fwy1, fwy2, fwy3, fdt ; // , fmi, fma ;
+  __m128  fr0, fr1, fr2, fr3, frt, fmi, fma, smi, sma ; ;   // frt is used as a scalar, fr0->fr3 are 128 bit aliases for fd0->fd3
+  __m128d ft0, ft1 ; //, smi , sma ;        // smi, sma are used as scalars (reduction of fmi, fma)
   double dd0[4], dd1[4], dd2[4], dd3[4] ;
 #else
   double fd0[4], fd1[4], fd2[4], fd3[4] ;
@@ -611,10 +638,10 @@ void intrp_bicub_yx_mono(float *f, float *r, int ni, int ninj, int nk, int np, d
   x = xx - 1.0 ; y = yy - 1.0; // xx and yy are in "ORIGIN 1"
   ix = xx ; if(ix > xx) ix = ix -1 ; ix = ix - 2;   // xx and yy are in "ORIGIN 1"
   iy = yy ; if(iy > yy) iy = iy -1 ; iy = iy - 2;
-  ix = (ix < minx) ? minx : ix;
-  ix = (ix > maxx) ? maxx : ix;
-  iy = (iy < miny) ? miny : iy;
-  iy = (iy > maxy) ? maxy : iy;
+  ix = (ix < qminx) ? qminx : ix;
+  ix = (ix > qmaxx) ? qmaxx : ix;
+  iy = (iy < qminy) ? qminy : iy;
+  iy = (iy > qmaxy) ? qmaxy : iy;
   x  = x - 1 - ix;
   y  = y - 1 - iy;
   f = f + ix + iy * ni;
@@ -624,7 +651,7 @@ void intrp_bicub_yx_mono(float *f, float *r, int ni, int ninj, int nk, int np, d
   if(y >= 0.0) m+=ni;
   if(y >  1.0) m+=ni;  // m should now point to the lower left corner of the 2 by 2 limit matrix
 //   printf("DEBUG: ix=%d, iy=%d, ni=%d\n",ix, iy, ni);
-// printf("DEBUG: f[0] = %f, ix = %d, iy = %d, x = %f, y = %f\n",f[0],ix,iy,x,y);
+//   printf("DEBUG: f[0] = %f, ix = %d, iy = %d, x = %f, y = %f\n",f[0],ix,iy,x,y);
   wx[0] = cm133*x*(x-one)*(x-two);       // polynomial coefficients along i
   wx[1] = cp5*(x+one)*(x-one)*(x-two);
   wx[2] = cm5*x*(x+one)*(x-two);
@@ -667,8 +694,16 @@ void intrp_bicub_yx_mono(float *f, float *r, int ni, int ninj, int nk, int np, d
     fr0 = _mm_loadu_ps(f) ;                 // row 1 : f[i:i+3 , j   ,k]
     fd0 = _mm256_cvtps_pd(fr0) ;            // promote row 1 to double
 
-    fmi = _mm256_min_pd(fd1,fd2) ;          // min of rows 1 and 2 (ignore 0 and 3)
-    fma = _mm256_max_pd(fd1,fd2) ;          // max of rows 1 and 2 (ignore 0 and 3)
+    fma = _mm_loadu_ps(m);                // shuffle 0,1,0,1 might be needed
+    fma = _mm_permute_ps(fma,0x44);       // [0] [1] [0] [1]
+    fmi = fma;
+    frt = _mm_loadu_ps(m+ni);             // shuffle 0,1,0,1 might be needed
+    frt = _mm_permute_ps(frt,0x44);       // [0] [1] [0] [1]
+    fma = _mm_max_ps(frt,fma);
+    fmi = _mm_min_ps(frt,fmi);
+    m+= ninj;
+//     fmi = _mm256_min_pd(fd1,fd2) ;          // min of rows 1 and 2 (ignore 0 and 3)
+//     fma = _mm256_max_pd(fd1,fd2) ;          // max of rows 1 and 2 (ignore 0 and 3)
 
     fdt = _mm256_fmadd_pd(fd1,fwy1,fdt) ;
     fr1 = _mm_loadu_ps(f+ni) ;              // row 2 : f[i:i+3 , j+1 ,k]
@@ -679,16 +714,20 @@ void intrp_bicub_yx_mono(float *f, float *r, int ni, int ninj, int nk, int np, d
     fd2 = _mm256_cvtps_pd(fr2) ;            // promote row 3 to double
 
     // get minimum of fmi vector elements 1 and 2 (ignore 0 and 3)
-    ft0 = _mm256_extractf128_pd(fmi,0) ;    // fmi[0]              fmi[1]
-    ft1 = _mm256_extractf128_pd(fmi,1) ;    // fmi[2]              fmi[3]
-    ft0 = _mm_permute_pd(ft0,0x1)      ;    // fmi[1]              fmi[1]
-    smi = _mm_min_sd(ft0,ft1) ;             // min(fmi[1],fmi[2])
+//     ft0 = _mm256_extractf128_pd(fmi,0) ;    // fmi[0]              fmi[1]
+//     ft1 = _mm256_extractf128_pd(fmi,1) ;    // fmi[2]              fmi[3]
+//     ft0 = _mm_permute_pd(ft0,0x1)      ;    // fmi[1]              fmi[1]
+//     smi = _mm_min_sd(ft0,ft1) ;             // min(fmi[1],fmi[2])
 
     // get maximum of fma vector elements 1 and 2 (ignore 0 and 3)
-    ft0 = _mm256_extractf128_pd(fma,0) ;    // fma[0]              fma[1]
-    ft1 = _mm256_extractf128_pd(fma,1) ;    // fma[2]              fma[3]
-    ft0 = _mm_permute_pd(ft0,0x1) ;         // fma[1]              fma[1]
-    sma = _mm_max_sd(ft0,ft1) ;             // max(fma[1],fma[2])
+    frt = _mm_permute_ps(fma,0x55);         // [1] [1] [1] [1]
+    sma = _mm_max_ss(frt,fma);              // max of first 2 values in fma
+    frt = _mm_permute_ps(fmi,0x55);         // [1] [1] [1] [1]
+    smi = _mm_min_ss(frt,fmi);              // min of first 2 values in fmi
+//     ft0 = _mm256_extractf128_pd(fma,0) ;    // fma[0]              fma[1]
+//     ft1 = _mm256_extractf128_pd(fma,1) ;    // fma[2]              fma[3]
+//     ft0 = _mm_permute_pd(ft0,0x1) ;         // fma[1]              fma[1]
+//     sma = _mm_max_sd(ft0,ft1) ;             // max(fma[1],fma[2])
 
     fdt = _mm256_fmadd_pd(fd3,fwy3,fdt) ;
     fr3 = _mm_loadu_ps(f+ni3) ;             // row 4 : f[i:i+3 , j+3 ,k]
@@ -701,34 +740,49 @@ void intrp_bicub_yx_mono(float *f, float *r, int ni, int ninj, int nk, int np, d
     ft0 = _mm_add_pd(ft0,ft1) ;             // fdt[0]+fdt[2]               fdt[1]+fdt[3]
     ft1 = _mm_permute_pd(ft0,0x3) ;         // fdt[1]+fdt[3]               fdt[1]+fdt[3]
     ft0 = _mm_add_sd(ft0,ft1) ;             // fdt[0]+fdt[2]+fdt[1]+fdt[3]
-    ft0 = _mm_max_sd(ft0,smi) ;             // max(result, min value)
-    ft0 = _mm_min_sd(ft0,sma) ;             // min(result, max value)
+//     ft0 = _mm_max_sd(ft0,smi) ;             // max(result, min value)
+//     ft0 = _mm_min_sd(ft0,sma) ;             // min(result, max value)
     frt = _mm_cvtsd_ss(frt,ft0) ;           // convert result to float
+    frt = _mm_min_ss(frt,fma);
+    frt = _mm_max_ss(frt,smi);
 //   _mm_store_sd(&minval,smi) ;
 //   _mm_store_sd(&maxval,sma) ;
 //   if(k == 0) printf("DEBUG: LIMITS(1) = %f %f\n",minval,maxval);
     _mm_store_ss(r,frt) ;                   // store float
     r += np;
   }
+
+  fma = _mm_loadu_ps(m);                // shuffle 0,1,0,1 might be needed
+  fma = _mm_permute_ps(fma,0x44);       // [0] [1] [0] [1]
+  fmi = fma;
+  frt = _mm_loadu_ps(m+ni);             // shuffle 0,1,0,1 might be needed
+  frt = _mm_permute_ps(frt,0x44);       // [0] [1] [0] [1]
+  fma = _mm_max_ps(frt,fma);
+  fmi = _mm_min_ps(frt,fmi);
+
   // interpolation along j , level nk
   fdt = _mm256_mul_pd(fd0,fwy0) ;            // sum of row[j] * coefficient[j]
-  fmi = _mm256_min_pd(fd1,fd2) ;             // min of rows 1 and 2 (ignore 0 and 3)
-  fma = _mm256_max_pd(fd1,fd2) ;             // max of rows 1 and 2 (ignore 0 and 3)
+//   fmi = _mm256_min_pd(fd1,fd2) ;             // min of rows 1 and 2 (ignore 0 and 3)
+//   fma = _mm256_max_pd(fd1,fd2) ;             // max of rows 1 and 2 (ignore 0 and 3)
   fdt = _mm256_fmadd_pd(fd1,fwy1,fdt) ;
   fdt = _mm256_fmadd_pd(fd2,fwy2,fdt) ;
   fdt = _mm256_fmadd_pd(fd3,fwy3,fdt) ;
 
+  frt = _mm_permute_ps(fma,0x55);         // [1] [1] [1] [1]
+  sma = _mm_max_ss(frt,fma);              // max of first 2 values in fma
+  frt = _mm_permute_ps(fmi,0x55);         // [1] [1] [1] [1]
+  smi = _mm_min_ss(frt,fmi);              // min of first 2 values in fmi
   // get minimum of fmi vector elements 1 and 2 (ignore 0 and 3)
-  ft0 = _mm256_extractf128_pd(fmi,0) ;    // fmi[0]              fmi[1]
-  ft1 = _mm256_extractf128_pd(fmi,1) ;    // fmi[2]              fmi[3]
-  ft0 = _mm_permute_pd(ft0,0x1)      ;    // fmi[1]              fmi[1]
-  smi = _mm_min_sd(ft0,ft1) ;             // min(fmi[1],fmi[2])
+//   ft0 = _mm256_extractf128_pd(fmi,0) ;    // fmi[0]              fmi[1]
+//   ft1 = _mm256_extractf128_pd(fmi,1) ;    // fmi[2]              fmi[3]
+//   ft0 = _mm_permute_pd(ft0,0x1)      ;    // fmi[1]              fmi[1]
+//   smi = _mm_min_sd(ft0,ft1) ;             // min(fmi[1],fmi[2])
 
   // get maximum of fma vector elements 1 and 2 (ignore 0 and 3)
-  ft0 = _mm256_extractf128_pd(fma,0) ;    // fma[0]              fma[1]
-  ft1 = _mm256_extractf128_pd(fma,1) ;    // fma[2]              fma[3]
-  ft0 = _mm_permute_pd(ft0,0x1) ;         // fma[1]              fma[1]
-  sma = _mm_max_sd(ft0,ft1) ;             // max(fma[1],fma[2])
+//   ft0 = _mm256_extractf128_pd(fma,0) ;    // fma[0]              fma[1]
+//   ft1 = _mm256_extractf128_pd(fma,1) ;    // fma[2]              fma[3]
+//   ft0 = _mm_permute_pd(ft0,0x1) ;         // fma[1]              fma[1]
+//   sma = _mm_max_sd(ft0,ft1) ;             // max(fma[1],fma[2])
 
   // interpolation along i: multiply by coefficients along x , then sum elements (using vector folding)
   fdt = _mm256_mul_pd(fdt,fwx) ;
@@ -738,8 +792,11 @@ void intrp_bicub_yx_mono(float *f, float *r, int ni, int ninj, int nk, int np, d
   ft1 = _mm_permute_pd(ft0,0x3) ;         // fdt[1]+fdt[3]               fdt[1]+fdt[3]
   ft0 = _mm_add_sd(ft0,ft1) ;             // fdt[0]+fdt[2]+fdt[1]+fdt[3]
 
-  ft0 = _mm_max_sd(ft0,smi) ;             // max(result, min value)
-  ft0 = _mm_min_sd(ft0,sma) ;             // min(result, max value)
+//   ft0 = _mm_max_sd(ft0,smi) ;             // max(result, min value)
+//   ft0 = _mm_min_sd(ft0,sma) ;             // min(result, max value)
+  frt = _mm_cvtsd_ss(frt,ft0) ;           // convert result to float
+  frt = _mm_min_ss(frt,fma);
+  frt = _mm_max_ss(frt,smi);
   frt = _mm_cvtsd_ss(frt,ft0) ;           // convert result to float
 //   _mm_store_sd(&minval,smi) ;
 //   _mm_store_sd(&maxval,sma) ;
@@ -828,11 +885,11 @@ program test_interp
   implicit none
   integer, parameter :: NI=65
   integer, parameter :: NJ=27
-  integer, parameter :: NK=1
+  integer, parameter :: NK=81
   integer, parameter :: NP=4
   integer, parameter :: HX=2
   integer, parameter :: HY=2
-  integer, parameter :: NR=1
+  integer, parameter :: NR=10
   real(C_FLOAT), dimension(1-HX:NI+HX , 1-HY:NJ+HY , NK) :: f
   real(C_FLOAT), dimension(NP,NK) :: r
   real(C_DOUBLE), dimension(NP) :: x, y, xmin, xmax, xmin2, xmax2
@@ -871,14 +928,14 @@ program test_interp
       real(C_DOUBLE), intent(IN), value :: x, y                                                   !InTf!
       integer(C_INT), intent(IN), value :: ni, ninj, nk, np                                       !InTf!
     end subroutine intrp_bicub_yx_mono                                                            !InTf!
-    subroutine set_intrp_bicub_yx(x1,x2,y1,y2) bind(C,name='set_intrp_bicub_yx')
+    subroutine set_intrp_bicub_quv(x1,x2,y1,y2) bind(C,name='set_intrp_bicub_quv')
       integer, intent(IN), value :: x1,x2,y1,y2
-    end subroutine set_intrp_bicub_yx
+    end subroutine set_intrp_bicub_quv
   end interface
 
 #define FXY(A,B,C) (1.3*(A)**3 + 1.4*(A)**2 + (A)*1.5 + 2.3*(B)**3 + 2.4*(B)**2 + (B)*2.5 + (C))
 
-call set_intrp_bicub_yx(1,NI-3,1,NJ-3)
+call set_intrp_bicub_quv(1,NI-3,1,NJ-3)
   r = 9999.99
   do k = 1 , NK
     do j = 1-HY , NJ+HY
