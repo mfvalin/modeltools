@@ -36,7 +36,7 @@ fp_x87_xmm_control.h: fp_x87_xmm_control.c
 	rm -f a.out
 
 intrp_bicub_yx_f.F90:
-	ln -sf intrp_bicub_yx_f.F90 intrp_bicub_yx.c
+	ln -sf  intrp_bicub_yx.c intrp_bicub_yx_f.F90
 
 intrp_bicub_yx.o: intrp_bicub_yx.c
 	s.cc -O2 -DTIMING -c ${EXTRA_C} intrp_bicub_yx.c -DWITH_MONO
