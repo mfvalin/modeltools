@@ -45,4 +45,4 @@ intrp_bicub_yx: intrp_bicub_yx.o intrp_bicub_yx_f.F90
 	s.f90 ${EXTRA_FTN} -DF_TEST -o intrp_bicub_yx intrp_bicub_yx_f.F90 intrp_bicub_yx.o
 
 clean:
-	rm -f intrp_bicub_yx intrp_bicub_yx.o a.out fp_x87_xmm_control.o 
+	rm -f intrp_bicub_yx intrp_bicub_yx.o intrp_bicub_yx.s a.out fp_x87_xmm_control.o 
