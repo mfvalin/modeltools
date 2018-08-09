@@ -21,9 +21,11 @@
 
 #include <immintrin.h>
 
+#if defined(__AVX__) && defined(__x86_64__)
 #if ! defined(__FMA__)
 #define _mm256_fmadd_ps(a,b,c) _mm256_add_ps(_mm256_mul_ps(a,b),c)
 #define _mm_fmadd_ps(a,b,c) _mm_add_ps(_mm_mul_ps(a,b),c)
+#endif
 #endif
 
 #endif
@@ -135,89 +137,67 @@ void tricub_zyx3(void *ff, float x, float y, float *abcd, int NI, int NINJ, void
   cz2 = _mm256_broadcast_ss(abcd+2);
   cz3 = _mm256_broadcast_ss(abcd+3);
 
-  ya =_mm256_xor_ps(ya,ya)  ; yb = _mm256_xor_ps(yb,yb);    // set y accumulator to zero
-
   s = f;                          // row 0, 4 planes (Z0, Z1, Z2, Z3)
-  za  = _mm256_xor_ps(za,za); zb = _mm256_xor_ps(zb,zb);    // set z accumulator to zero
   cya = _mm256_broadcast_ss(&y0);      // promote constant to vector
 
-  ta  = _mm256_load_ps(s)   ; tb = _mm256_load_ps(s+4);  // plane 0
-  za  = _mm256_fmadd_ps(ta,cz0,za); zb  = _mm256_fmadd_ps(tb,cz0,zb);
+  za  = _mm256_mul_ps(_mm256_load_ps(s),cz0)     ; zb  = _mm256_mul_ps(_mm256_load_ps(s+4),cz0);       // plane 0
 
   s += ninj;
-  ta  = _mm256_load_ps(s)   ; tb = _mm256_load_ps(s+4);  // plane 1
-  za  = _mm256_fmadd_ps(ta,cz1,za); zb  = _mm256_fmadd_ps(tb,cz1,zb);
+  za  = _mm256_fmadd_ps(_mm256_load_ps(s),cz1,za); zb  = _mm256_fmadd_ps(_mm256_load_ps(s+4),cz1,zb);  // plane 1
 
   s += ninjl;
-  ta  = _mm256_load_ps(s)   ; tb = _mm256_load_ps(s+4);  // plane 2
-  za  = _mm256_fmadd_ps(ta,cz2,za); zb  = _mm256_fmadd_ps(tb,cz2,zb);
+  za  = _mm256_fmadd_ps(_mm256_load_ps(s),cz2,za); zb  = _mm256_fmadd_ps(_mm256_load_ps(s+4),cz2,zb);  // plane 2
 
   s += ninjl;
-  ta  = _mm256_load_ps(s)   ; tb = _mm256_load_ps(s+4);  // plane 3
-  za  = _mm256_fmadd_ps(ta,cz3,za); zb  = _mm256_fmadd_ps(tb,cz3,zb);
+  za  = _mm256_fmadd_ps(_mm256_load_ps(s),cz3,za); zb  = _mm256_fmadd_ps(_mm256_load_ps(s+4),cz3,zb);  // plane 3
 
-  ya  = _mm256_fmadd_ps(za,cya,ya); yb  = _mm256_fmadd_ps(zb,cya,yb);    // accumulation along y
+  ya  = _mm256_mul_ps(za,cya); yb  = _mm256_mul_ps(zb,cya);              // accumulation along y
 
   s = f + ni;                          // row 1, 4 planes (Z0, Z1, Z2, Z3)
-  za  = _mm256_xor_ps(za,za); zb = _mm256_xor_ps(zb,zb);    // set z accumulator to zero
   cya = _mm256_broadcast_ss(&y1);      // promote constant to vector
 
-  ta  = _mm256_load_ps(s)   ; tb = _mm256_load_ps(s+4);  // plane 0
-  za  = _mm256_fmadd_ps(ta,cz0,za); zb  = _mm256_fmadd_ps(tb,cz0,zb);
+  za  = _mm256_mul_ps(_mm256_load_ps(s),cz0)     ; zb  = _mm256_mul_ps(_mm256_load_ps(s+4),cz0);       // plane 0
 
   s += ninj;
-  ta  = _mm256_load_ps(s)   ; tb = _mm256_load_ps(s+4);  // plane 1
-  za  = _mm256_fmadd_ps(ta,cz1,za); zb  = _mm256_fmadd_ps(tb,cz1,zb);
+  za  = _mm256_fmadd_ps(_mm256_load_ps(s),cz1,za); zb  = _mm256_fmadd_ps(_mm256_load_ps(s+4),cz1,zb);  // plane 1
 
   s += ninjl;
-  ta  = _mm256_load_ps(s)   ; tb = _mm256_load_ps(s+4);  // plane 2
-  za  = _mm256_fmadd_ps(ta,cz2,za); zb  = _mm256_fmadd_ps(tb,cz2,zb);
+  za  = _mm256_fmadd_ps(_mm256_load_ps(s),cz2,za); zb  = _mm256_fmadd_ps(_mm256_load_ps(s+4),cz2,zb);  // plane 2
 
   s += ninjl;
-  ta  = _mm256_load_ps(s)   ; tb = _mm256_load_ps(s+4);  // plane 3
-  za  = _mm256_fmadd_ps(ta,cz3,za); zb  = _mm256_fmadd_ps(tb,cz3,zb);
+  za  = _mm256_fmadd_ps(_mm256_load_ps(s),cz3,za); zb  = _mm256_fmadd_ps(_mm256_load_ps(s+4),cz3,zb);  // plane 3
 
   ya  = _mm256_fmadd_ps(za,cya,ya); yb  = _mm256_fmadd_ps(zb,cya,yb);    // accumulation along y
 
   s = f + 2*ni;                          // row 2, 4 planes (Z0, Z1, Z2, Z3)
-  za  = _mm256_xor_ps(za,za); zb = _mm256_xor_ps(zb,zb);    // set z accumulator to zero
   cya = _mm256_broadcast_ss(&y2);      // promote constant to vector
 
-  ta  = _mm256_load_ps(s)   ; tb = _mm256_load_ps(s+4);  // plane 0
-  za  = _mm256_fmadd_ps(ta,cz0,za); zb  = _mm256_fmadd_ps(tb,cz0,zb);
+  za  = _mm256_mul_ps(_mm256_load_ps(s),cz0)     ; zb  = _mm256_mul_ps(_mm256_load_ps(s+4),cz0);       // plane 0
 
   s += ninj;
-  ta  = _mm256_load_ps(s)   ; tb = _mm256_load_ps(s+4);  // plane 1
-  za  = _mm256_fmadd_ps(ta,cz1,za); zb  = _mm256_fmadd_ps(tb,cz1,zb);
+  za  = _mm256_fmadd_ps(_mm256_load_ps(s),cz1,za); zb  = _mm256_fmadd_ps(_mm256_load_ps(s+4),cz1,zb);  // plane 1
 
   s += ninjl;
-  ta  = _mm256_load_ps(s)   ; tb = _mm256_load_ps(s+4);  // plane 2
-  za  = _mm256_fmadd_ps(ta,cz2,za); zb  = _mm256_fmadd_ps(tb,cz2,zb);
+  za  = _mm256_fmadd_ps(_mm256_load_ps(s),cz2,za); zb  = _mm256_fmadd_ps(_mm256_load_ps(s+4),cz2,zb);  // plane 2
 
   s += ninjl;
-  ta  = _mm256_load_ps(s)   ; tb = _mm256_load_ps(s+4);  // plane 3
-  za  = _mm256_fmadd_ps(ta,cz3,za); zb  = _mm256_fmadd_ps(tb,cz3,zb);
+  za  = _mm256_fmadd_ps(_mm256_load_ps(s),cz3,za); zb  = _mm256_fmadd_ps(_mm256_load_ps(s+4),cz3,zb);  // plane 3
 
   ya  = _mm256_fmadd_ps(za,cya,ya); yb  = _mm256_fmadd_ps(zb,cya,yb);    // accumulation along y
 
   s = f + 3*ni;                          // row 3, 4 planes (Z0, Z1, Z2, Z3)
-  za  = _mm256_xor_ps(za,za); zb = _mm256_xor_ps(zb,zb);    // set z accumulator to zero
   cya = _mm256_broadcast_ss(&y3);      // promote constant to vector
 
-  ta  = _mm256_load_ps(s)   ; tb = _mm256_load_ps(s+4);  // plane 0
-  za  = _mm256_fmadd_ps(ta,cz0,za); zb  = _mm256_fmadd_ps(tb,cz0,zb);
+  za  = _mm256_mul_ps(_mm256_load_ps(s),cz0)     ; zb  = _mm256_mul_ps(_mm256_load_ps(s+4),cz0);       // plane 0
 
   s += ninj;
-  ta  = _mm256_load_ps(s)   ; tb = _mm256_load_ps(s+4);  // plane 1
-  za  = _mm256_fmadd_ps(ta,cz1,za); zb  = _mm256_fmadd_ps(tb,cz1,zb);
+  za  = _mm256_fmadd_ps(_mm256_load_ps(s),cz1,za); zb  = _mm256_fmadd_ps(_mm256_load_ps(s+4),cz1,zb);  // plane 1
 
   s += ninjl;
-  ta  = _mm256_load_ps(s)   ; tb = _mm256_load_ps(s+4);  // plane 2
-  za  = _mm256_fmadd_ps(ta,cz2,za); zb  = _mm256_fmadd_ps(tb,cz2,zb);
+  za  = _mm256_fmadd_ps(_mm256_load_ps(s),cz2,za); zb  = _mm256_fmadd_ps(_mm256_load_ps(s+4),cz2,zb);  // plane 2
 
   s += ninjl;
-  ta  = _mm256_load_ps(s)   ; tb = _mm256_load_ps(s+4);  // plane 3
-  za  = _mm256_fmadd_ps(ta,cz3,za); zb  = _mm256_fmadd_ps(tb,cz3,zb);
+  za  = _mm256_fmadd_ps(_mm256_load_ps(s),cz3,za); zb  = _mm256_fmadd_ps(_mm256_load_ps(s+4),cz3,zb);  // plane 3
 
   ya  = _mm256_fmadd_ps(za,cya,ya); yb  = _mm256_fmadd_ps(zb,cya,yb);    // accumulation along y
 
@@ -257,6 +237,7 @@ void tricub_zyx3(void *ff, float x, float y, float *abcd, int NI, int NINJ, void
 #endif
 
 }
+
 void tricub_x86_3f(void *dd, void *F1, void *F2, void *F3, float *abcd, float x, float y, int NI, int NJ){
   float *s1, *s2, *s3;
   float x0, x1, x2, x3, y0, y1, y2, y3;
@@ -268,6 +249,8 @@ void tricub_x86_3f(void *dd, void *F1, void *F2, void *F3, float *abcd, float x,
   float *f1 = (float *) F1;
   float *f2 = (float *) F2;
   float *f3 = (float *) F3;
+  int ni2 = ni + ni;
+  int ni3 = ni2 + ni;
 
 #if defined(__AVX__) && defined(__x86_64__)
   __m128 cz0, cz1, cz2, cz3, cya;
@@ -293,33 +276,29 @@ void tricub_x86_3f(void *dd, void *F1, void *F2, void *F3, float *abcd, float x,
   if(abcd[2] == 0.0 && abcd[3] == 0.0) ninjl = 0;
 
 #if defined(__AVX__) && defined(__x86_64__)
-// ==== interpolation along Z, vector length is 16 (2 vectors of length 8 per plane) ====
+  // ==== interpolation along Z, vector length is 12 (3 vectors of length 4 per plane) ====
   cz0 = _mm_broadcast_ss(abcd);   // coefficients for interpolation along z, promote to vectors
   cz1 = _mm_broadcast_ss(abcd+1);
   cz2 = _mm_broadcast_ss(abcd+2);
   cz3 = _mm_broadcast_ss(abcd+3);
 
-  ya =_mm_xor_ps(ya,ya) ; yb = _mm_xor_ps(yb,yb) ; yc = _mm_xor_ps(yc,yc) ;    // set y accumulator to zero
+  ya =_mm_xor_ps(ya,ya) ; yb = _mm_xor_ps(yb,yb) ; yc = _mm_xor_ps(yc,yc) ;    // set y accumulators to zero
 
   s1 = f1; s2 = f2; s3 = f3;                // row 0, 4 planes (Z0, Z1, Z2, Z3)
 
-  za  = _mm_xor_ps(za,za); zb = _mm_xor_ps(zb,zb); zc = _mm_xor_ps(zc,zc);    // set z accumulator to zero
+  za  = _mm_xor_ps(za,za); zb = _mm_xor_ps(zb,zb); zc = _mm_xor_ps(zc,zc);    // set z accumulators to zero
   cya = _mm_broadcast_ss(&y0);      // promote constant to vector
 
-  ta  = _mm_load_ps(s1)   ;      tb = _mm_load_ps(s2);          tc = _mm_load_ps(s3);  // plane 0
-  za  = _mm_fmadd_ps(ta,cz0,za); zb  = _mm_fmadd_ps(tb,cz0,zb); zc  = _mm_fmadd_ps(tc,cz0,zc);
+  za  = _mm_fmadd_ps(_mm_load_ps(s1),cz0,za); zb  = _mm_fmadd_ps(_mm_load_ps(s2),cz0,zb); zc  = _mm_fmadd_ps(_mm_load_ps(s3),cz0,zc);  // plane 0
 
   s1 += ninj; s2 += ninj; s3 += ninj;
-  ta  = _mm_load_ps(s1)   ;      tb = _mm_load_ps(s2);          tc = _mm_load_ps(s3);  // plane 1
-  za  = _mm_fmadd_ps(ta,cz1,za); zb  = _mm_fmadd_ps(tb,cz1,zb); zc  = _mm_fmadd_ps(tc,cz2,zc);
+  za  = _mm_fmadd_ps(_mm_load_ps(s1),cz1,za); zb  = _mm_fmadd_ps(_mm_load_ps(s2),cz1,zb); zc  = _mm_fmadd_ps(_mm_load_ps(s3),cz2,zc);  // plane 1
 
   s1 += ninjl; s2 += ninjl; s3 += ninjl;
-  ta  = _mm_load_ps(s1)   ;      tb = _mm_load_ps(s2);          tc = _mm_load_ps(s3);  // plane 2
-  za  = _mm_fmadd_ps(ta,cz2,za); zb  = _mm_fmadd_ps(tb,cz2,zb); zc  = _mm_fmadd_ps(tc,cz2,zc);
+  za  = _mm_fmadd_ps(_mm_load_ps(s1),cz2,za); zb  = _mm_fmadd_ps(_mm_load_ps(s2),cz2,zb); zc  = _mm_fmadd_ps(_mm_load_ps(s3),cz2,zc);  // plane 2
 
   s1 += ninjl; s2 += ninjl; s3 += ninjl;
-  ta  = _mm_load_ps(s1)   ;      tb = _mm_load_ps(s2);          tc = _mm_load_ps(s3);  // plane 3
-  za  = _mm_fmadd_ps(ta,cz3,za); zb  = _mm_fmadd_ps(tb,cz1,zb); zc  = _mm_fmadd_ps(tc,cz2,zc);
+  za  = _mm_fmadd_ps(_mm_load_ps(s1),cz3,za); zb  = _mm_fmadd_ps(_mm_load_ps(s2),cz1,zb); zc  = _mm_fmadd_ps(_mm_load_ps(s3),cz2,zc);  // plane 3
 
   ya  = _mm_fmadd_ps(za,cya,ya); yb  = _mm_fmadd_ps(zb,cya,yb); yc  = _mm_fmadd_ps(zc,cya,yc);    // accumulation along y
 
@@ -328,83 +307,68 @@ void tricub_x86_3f(void *dd, void *F1, void *F2, void *F3, float *abcd, float x,
   za  = _mm_xor_ps(za,za); zb = _mm_xor_ps(zb,zb); zc = _mm_xor_ps(zc,zc);    // set z accumulator to zero
   cya = _mm_broadcast_ss(&y1);      // promote constant to vector
 
-  ta  = _mm_load_ps(s1)   ;      tb = _mm_load_ps(s2);          tc = _mm_load_ps(s3);  // plane 0
-  za  = _mm_fmadd_ps(ta,cz0,za); zb  = _mm_fmadd_ps(tb,cz0,zb); zc  = _mm_fmadd_ps(tc,cz0,zc);
+  za  = _mm_fmadd_ps(_mm_load_ps(s1),cz0,za); zb  = _mm_fmadd_ps(_mm_load_ps(s2),cz0,zb); zc  = _mm_fmadd_ps(_mm_load_ps(s3),cz0,zc);  // plane 0
 
   s1 += ninj; s2 += ninj; s3 += ninj;
-  ta  = _mm_load_ps(s1)   ;      tb = _mm_load_ps(s2);          tc = _mm_load_ps(s3);  // plane 1
-  za  = _mm_fmadd_ps(ta,cz1,za); zb  = _mm_fmadd_ps(tb,cz1,zb); zc  = _mm_fmadd_ps(tc,cz2,zc);
+  za  = _mm_fmadd_ps(_mm_load_ps(s1),cz1,za); zb  = _mm_fmadd_ps(_mm_load_ps(s2),cz1,zb); zc  = _mm_fmadd_ps(_mm_load_ps(s3),cz2,zc);  // plane 1
 
   s1 += ninjl; s2 += ninjl; s3 += ninjl;
-  ta  = _mm_load_ps(s1)   ;      tb = _mm_load_ps(s2);          tc = _mm_load_ps(s3);  // plane 2
-  za  = _mm_fmadd_ps(ta,cz2,za); zb  = _mm_fmadd_ps(tb,cz2,zb); zc  = _mm_fmadd_ps(tc,cz2,zc);
+  za  = _mm_fmadd_ps(_mm_load_ps(s1),cz2,za); zb  = _mm_fmadd_ps(_mm_load_ps(s2),cz2,zb); zc  = _mm_fmadd_ps(_mm_load_ps(s3),cz2,zc);  // plane 2
 
   s1 += ninjl; s2 += ninjl; s3 += ninjl;
-  ta  = _mm_load_ps(s1)   ;      tb = _mm_load_ps(s2);          tc = _mm_load_ps(s3);  // plane 3
-  za  = _mm_fmadd_ps(ta,cz3,za); zb  = _mm_fmadd_ps(tb,cz1,zb); zc  = _mm_fmadd_ps(tc,cz2,zc);
+  za  = _mm_fmadd_ps(_mm_load_ps(s1),cz3,za); zb  = _mm_fmadd_ps(_mm_load_ps(s2),cz1,zb); zc  = _mm_fmadd_ps(_mm_load_ps(s3),cz2,zc);  // plane 3
 
   ya  = _mm_fmadd_ps(za,cya,ya); yb  = _mm_fmadd_ps(zb,cya,yb); yc  = _mm_fmadd_ps(zc,cya,yc);    // accumulation along y
 
-  s1 = f1 + 2*ni; s2 = f2 + 2*ni; s3 = f3 + 2*ni;                          // row 1, 4 planes (Z0, Z1, Z2, Z3)
+  s1 = f1 + ni2; s2 = f2 + ni2; s3 = f3 + ni2;                          // row 2, 4 planes (Z0, Z1, Z2, Z3)
 
   za  = _mm_xor_ps(za,za); zb = _mm_xor_ps(zb,zb); zc = _mm_xor_ps(zc,zc);    // set z accumulator to zero
   cya = _mm_broadcast_ss(&y2);      // promote constant to vector
 
-  ta  = _mm_load_ps(s1)   ;      tb = _mm_load_ps(s2);          tc = _mm_load_ps(s3);  // plane 0
-  za  = _mm_fmadd_ps(ta,cz0,za); zb  = _mm_fmadd_ps(tb,cz0,zb); zc  = _mm_fmadd_ps(tc,cz0,zc);
+  za  = _mm_fmadd_ps(_mm_load_ps(s1),cz0,za); zb  = _mm_fmadd_ps(_mm_load_ps(s2),cz0,zb); zc  = _mm_fmadd_ps(_mm_load_ps(s3),cz0,zc);  // plane 0
 
   s1 += ninj; s2 += ninj; s3 += ninj;
-  ta  = _mm_load_ps(s1)   ;      tb = _mm_load_ps(s2);          tc = _mm_load_ps(s3);  // plane 1
-  za  = _mm_fmadd_ps(ta,cz1,za); zb  = _mm_fmadd_ps(tb,cz1,zb); zc  = _mm_fmadd_ps(tc,cz2,zc);
+  za  = _mm_fmadd_ps(_mm_load_ps(s1),cz1,za); zb  = _mm_fmadd_ps(_mm_load_ps(s2),cz1,zb); zc  = _mm_fmadd_ps(_mm_load_ps(s3),cz2,zc);  // plane 1
 
   s1 += ninjl; s2 += ninjl; s3 += ninjl;
-  ta  = _mm_load_ps(s1)   ;      tb = _mm_load_ps(s2);          tc = _mm_load_ps(s3);  // plane 2
-  za  = _mm_fmadd_ps(ta,cz2,za); zb  = _mm_fmadd_ps(tb,cz2,zb); zc  = _mm_fmadd_ps(tc,cz2,zc);
+  za  = _mm_fmadd_ps(_mm_load_ps(s1),cz2,za); zb  = _mm_fmadd_ps(_mm_load_ps(s2),cz2,zb); zc  = _mm_fmadd_ps(_mm_load_ps(s3),cz2,zc);  // plane 2
 
   s1 += ninjl; s2 += ninjl; s3 += ninjl;
-  ta  = _mm_load_ps(s1)   ;      tb = _mm_load_ps(s2);          tc = _mm_load_ps(s3);  // plane 3
-  za  = _mm_fmadd_ps(ta,cz3,za); zb  = _mm_fmadd_ps(tb,cz1,zb); zc  = _mm_fmadd_ps(tc,cz2,zc);
+  za  = _mm_fmadd_ps(_mm_load_ps(s1),cz3,za); zb  = _mm_fmadd_ps(_mm_load_ps(s2),cz1,zb); zc  = _mm_fmadd_ps(_mm_load_ps(s3),cz2,zc);  // plane 3
 
   ya  = _mm_fmadd_ps(za,cya,ya); yb  = _mm_fmadd_ps(zb,cya,yb); yc  = _mm_fmadd_ps(zc,cya,yc);    // accumulation along y
 
-  s1 = f1 + 3*ni; s2 = f2 + 3*ni; s3 = f3 + 3*ni;                          // row 1, 4 planes (Z0, Z1, Z2, Z3)
+  s1 = f1 + ni3; s2 = f2 + ni3; s3 = f3 + ni3;                          // row 3, 4 planes (Z0, Z1, Z2, Z3)
 
   za  = _mm_xor_ps(za,za); zb = _mm_xor_ps(zb,zb); zc = _mm_xor_ps(zc,zc);    // set z accumulator to zero
   cya = _mm_broadcast_ss(&y3);      // promote constant to vector
 
-  ta  = _mm_load_ps(s1)   ;      tb = _mm_load_ps(s2);          tc = _mm_load_ps(s3);  // plane 0
-  za  = _mm_fmadd_ps(ta,cz0,za); zb  = _mm_fmadd_ps(tb,cz0,zb); zc  = _mm_fmadd_ps(tc,cz0,zc);
+  za  = _mm_fmadd_ps(_mm_load_ps(s1),cz0,za); zb  = _mm_fmadd_ps(_mm_load_ps(s2),cz0,zb); zc  = _mm_fmadd_ps(_mm_load_ps(s3),cz0,zc);  // plane 0
 
   s1 += ninj; s2 += ninj; s3 += ninj;
-  ta  = _mm_load_ps(s1)   ;      tb = _mm_load_ps(s2);          tc = _mm_load_ps(s3);  // plane 1
-  za  = _mm_fmadd_ps(ta,cz1,za); zb  = _mm_fmadd_ps(tb,cz1,zb); zc  = _mm_fmadd_ps(tc,cz2,zc);
+  za  = _mm_fmadd_ps(_mm_load_ps(s1),cz1,za); zb  = _mm_fmadd_ps(_mm_load_ps(s2),cz1,zb); zc  = _mm_fmadd_ps(_mm_load_ps(s3),cz2,zc);  // plane 1
 
   s1 += ninjl; s2 += ninjl; s3 += ninjl;
-  ta  = _mm_load_ps(s1)   ;      tb = _mm_load_ps(s2);          tc = _mm_load_ps(s3);  // plane 2
-  za  = _mm_fmadd_ps(ta,cz2,za); zb  = _mm_fmadd_ps(tb,cz2,zb); zc  = _mm_fmadd_ps(tc,cz2,zc);
+  za  = _mm_fmadd_ps(_mm_load_ps(s1),cz2,za); zb  = _mm_fmadd_ps(_mm_load_ps(s2),cz2,zb); zc  = _mm_fmadd_ps(_mm_load_ps(s3),cz2,zc);  // plane 2
 
   s1 += ninjl; s2 += ninjl; s3 += ninjl;
-  ta  = _mm_load_ps(s1)   ;      tb = _mm_load_ps(s2);          tc = _mm_load_ps(s3);  // plane 3
-  za  = _mm_fmadd_ps(ta,cz3,za); zb  = _mm_fmadd_ps(tb,cz1,zb); zc  = _mm_fmadd_ps(tc,cz2,zc);
+  za  = _mm_fmadd_ps(_mm_load_ps(s1),cz3,za); zb  = _mm_fmadd_ps(_mm_load_ps(s2),cz1,zb); zc  = _mm_fmadd_ps(_mm_load_ps(s3),cz2,zc);  // plane 3
 
   ya  = _mm_fmadd_ps(za,cya,ya); yb  = _mm_fmadd_ps(zb,cya,yb); yc  = _mm_fmadd_ps(zc,cya,yc);    // accumulation along y
 
-// dst : x(0,0) x(1,0) x(2,0)   x(0,1) x(1,1) x(2,1)   x(0,2) x(1,2) x(2,2)   x(0,3) x(1,3) x(2,3)   0
+  // dst : x(0,0) x(1,0) x(2,0)   x(0,1) x(1,1) x(2,1)   x(0,2) x(1,2) x(2,2)   x(0,3) x(1,3) x(2,3)   0
   _mm_storeu_ps(dst,ya); _mm_storeu_ps(dst+4,yb);_mm_storeu_ps(dst+8,yc); dst[12] = 0.0;  // store result of accumulation along y
 
-// cheating load : only the first 3 values are of any interest in vx0 ... vx3
-//          vx0 : x(0,0) x(1,0) x(2,0) x(0,1)   (low part of ya)
-//          vx1 : x(0,1) x(1,1) x(2,1) x(0,2)
-//          vx2 : x(0,2) x(1,2) x(2,2) x(0,3)
-//          vx3 : x(0,3) x(1,3) x(2,3) 0   ( instead of load, could have used a shuffle on yc)
-  vx0 = ya                         ; cxt =  _mm_broadcast_ss(&x0); vx0 = _mm_mul_ps(vx0,cxt);
-  vx1 = _mm_loadu_ps(dst+3)        ; cxt =  _mm_broadcast_ss(&x1); vx0 = _mm_fmadd_ps(vx1,cxt,vx0);
-  vx2 = _mm_loadu_ps(dst+6)        ; cxt =  _mm_broadcast_ss(&x2); vx0 = _mm_fmadd_ps(vx2,cxt,vx0);
-  vx3 = _mm_loadu_ps(dst+9)        ; cxt =  _mm_broadcast_ss(&x3); vx0 = _mm_fmadd_ps(vx3,cxt,vx0);
-//   _mm_storeu_ps(dst,vx0);    // store 4 values, move only the first 3 into output array d
-//   d[0] = dst[0];             // could also use _mm_maskstore_ps (float * mem_addr, __m128i mask, __m128 a)
-//   d[1] = dst[1];
-//   d[2] = dst[2];
+  // cheating load : only the first 3 values are of any interest in vx0 ... vx3
+  //          vx0 : x(0,0) x(1,0) x(2,0) x(0,1)   (low part of ya)
+  //          vx1 : x(0,1) x(1,1) x(2,1) x(0,2)
+  //          vx2 : x(0,2) x(1,2) x(2,2) x(0,3)
+  //          vx3 : x(0,3) x(1,3) x(2,3) 0   ( instead of load, could have used a shuffle on yc)
+  vx0 =   _mm_mul_ps(ya                 ,_mm_broadcast_ss(&x0));
+  vx0 = _mm_fmadd_ps(_mm_loadu_ps(dst+3),_mm_broadcast_ss(&x1),vx0);   // vx1
+  vx0 = _mm_fmadd_ps(_mm_loadu_ps(dst+6),_mm_broadcast_ss(&x2),vx0);   // vx2
+  vx0 = _mm_fmadd_ps(_mm_loadu_ps(dst+9),_mm_broadcast_ss(&x3),vx0);   // vx3
+
   d[0] = _mm_extract_ps (vx0, 0);  // extract element 0 and store
   d[1] = _mm_extract_ps (vx0, 1);  // extract element 1 and store
   d[2] = _mm_extract_ps (vx0, 2);  // extract element 2 and store
