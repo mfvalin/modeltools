@@ -54,6 +54,7 @@ uint64_t rdtsc(void) {   // version rapide "out of order"
 #endif
 #include <immintrin.h>
 
+// use separate multiply and add instructions if fused multiply-add not available
 #if defined(__AVX__) && defined(__x86_64__)
 #if ! defined(__FMA__)
 #define _mm256_fmadd_ps(a,b,c) _mm256_add_ps(_mm256_mul_ps(a,b),c)
@@ -63,15 +64,18 @@ uint64_t rdtsc(void) {   // version rapide "out of order"
 #endif
 #endif
 
-static int qminx = -999999999;  // default values mean practically "no limit"
+// default values mean practically "no limit"
+static int qminx = -999999999;  // limits for the 'q' grid, in "origin 0"
 static int qmaxx =  999999999;
 static int qminy = -999999999;
 static int qmaxy =  999999999;
-static int uminx = -999999999;
+
+static int uminx = -999999999;  // limits for the 'u' grid
 static int umaxx =  999999999;
 static int uminy = -999999999;
 static int umaxy =  999999999;
-static int vminx = -999999999;
+
+static int vminx = -999999999;  // limits for the 'v' grid
 static int vmaxx =  999999999;
 static int vminy = -999999999;
 static int vmaxy =  999999999;
@@ -85,16 +89,19 @@ interface
   end subroutine set_intrp_bicub_quv
 end interface
  */
+
+// set limits for 'q' grid only
 void set_intrp_bicub_yx(int qxmin, int qxmax, int qymin, int qymax){
-  qminx = qxmin - 1 ;
+  qminx = qxmin - 1 ;   // qxmin is in "origin 1", qminx is in "origin 0"
   qmaxx = qxmax - 1 ;
   qminy = qymin - 1 ;
   qmaxy = qymax - 1 ;
 }
+// set limits for 'q', 'u', and 'v' grids
 void set_intrp_bicub_quv(int qxmin, int qxmax, int qymin, int qymax, 
-                        int uxmin, int uxmax, int uymin, int uymax, 
-                        int vxmin, int vxmax, int vymin, int vymax){
-  qminx = qxmin - 1 ;
+                         int uxmin, int uxmax, int uymin, int uymax, 
+                         int vxmin, int vxmax, int vymin, int vymax){
+  qminx = qxmin - 1 ;  // qxmin is in "origin 1", qminx is in "origin 0"
   qmaxx = qxmax - 1 ;
   qminy = qymin - 1 ;
   qmaxy = qymax - 1 ;
@@ -130,7 +137,8 @@ void set_intrp_bicub_quv(int qxmin, int qxmax, int qymin, int qymax,
 
    this routine expects the address of f(ix,iy), lower left corner of the 4x4 submatrix used for interpolation
 */
-void intrp_nk2d_yx3(float *f, float *r, int ni, int ninj, int nk, int np, double x, double y){
+
+void intrp_bicub_yx_s(float *f, float *r, int ni, int ninj, int nk, double xx, double yy){
 #if defined(__AVX__) && defined(__x86_64__)
   __m256d fd0, fd1, fd2, fd3, fwx, fwy0, fwy1, fwy2, fwy3, fdt ;
   __m128  fr0, fr1, fr2, fr3, frt ;
@@ -142,6 +150,19 @@ void intrp_nk2d_yx3(float *f, float *r, int ni, int ninj, int nk, int np, double
   int ni2 = ni + ni;    // + 2 rows
   int ni3 = ni2 + ni;   // + 3 rows
   int i, k;
+  double x, y;
+  int ix, iy;
+
+  x = xx - 1.0 ; y = yy - 1.0;                      // xx and yy are in "ORIGIN 1"
+  ix = xx ; if(ix > xx) ix = ix -1 ; ix = ix - 2;
+  iy = yy ; if(iy > yy) iy = iy -1 ; iy = iy - 2;
+  ix = (ix < qminx) ? qminx : ix;
+  ix = (ix > qmaxx) ? qmaxx : ix;
+  iy = (iy < qminy) ? qminy : iy;
+  iy = (iy > qmaxy) ? qmaxy : iy;
+  x  = x - 1 - ix;
+  y  = y - 1 - iy;
+  f = f + ix + iy * ni;                  // point to lower left corner of 4 x 4 subarray
 
   wx[0] = cm133*x*(x-one)*(x-two);       // polynomial coefficients along i
   wx[1] = cp5*(x+one)*(x-one)*(x-two);
@@ -196,7 +217,7 @@ void intrp_nk2d_yx3(float *f, float *r, int ni, int ninj, int nk, int np, double
     ft0 = _mm_add_sd(ft0,ft1) ;             // fdt[0]+fdt[2]+fdt[1]+fdt[3]
     frt = _mm_cvtsd_ss(frt,ft0) ;           // convert fdt[0]+fdt[2]+fdt[1]+fdt[3] to float
     _mm_store_ss(r,frt) ;                   // store float
-    r += np;
+    r ++;
   }
   // interpolation along j , level nk
   fdt = _mm256_mul_pd(fd0,fwy0) ;            // sum of row[j] * coefficient[j]
@@ -219,11 +240,11 @@ void intrp_nk2d_yx3(float *f, float *r, int ni, int ninj, int nk, int np, double
     }
     r[0] = fd0[0] + fd0[1] + fd0[2] + fd0[3];
     f+= ninj;
-    r += np;
+    r ++;
   }
 #endif
 }
-void intrp_nk2d_yx3_mono(float *f, float *r, int ni, int ninj, int nk, int np, double x, double y){
+void intrp_nk2d_yx_s_mono(float *f, float *r, int ni, int ninj, int nk, double x, double y){
 #if defined(__AVX__) && defined(__x86_64__)
   __m256d fd0, fd1, fd2, fd3, fwx, fwy0, fwy1, fwy2, fwy3, fdt ;
   __m128  fr0, fr1, fr2, fr3, frt, fmi, fma ;
@@ -311,7 +332,7 @@ void intrp_nk2d_yx3_mono(float *f, float *r, int ni, int ninj, int nk, int np, d
     frt = _mm_max_ss(frt,fmi) ;             // apply max(value,minval)
     frt = _mm_min_ss(frt,fma) ;             // apply min(value,maxval)
     _mm_store_ss(r,frt) ;                   // store float
-    r += np;
+    r ++;
   }
   // interpolation along j , level nk
   fma = _mm_loadu_ps(m);
@@ -357,7 +378,7 @@ void intrp_nk2d_yx3_mono(float *f, float *r, int ni, int ninj, int nk, int np, d
     r[0] = (maxval < r[0]) ? maxval : r[0] ;
     r[0] = (minval > r[0]) ? minval : r[0] ;
     f+= ninj;
-    r += np;
+    r ++;
   }
 #endif
 }
@@ -372,9 +393,15 @@ void intrp_nk2d_yx3_mono(float *f, float *r, int ni, int ninj, int nk, int np, d
    r       2D array, fortran dimension(np,nk)
    nk      number of 2D planes
    xx      i coordinate in i j fractional index space of desired column ( xx(l) is assumed >= mini+1 )
+   xxu     i coordinate in i j fractional index space of desired column ( xxu(l) is assumed >= mini+1 )
+   xxv     i coordinate in i j fractional index space of desired column ( xxv(l) is assumed >= mini+1 )
    yy      j coordinate in i j fractional index space of desired column ( yy(l) is assumed >= minj+1 )
+   yyu     j coordinate in i j fractional index space of desired column ( yyu(l) is assumed >= minj+1 )
+   yyv     j coordinate in i j fractional index space of desired column ( yyv(l) is assumed >= minj+1 )
   
-   f is assumed to point to f(1,1,1)
+   f is assumed to point to the address of f(1,1,1)  (Fortran indexing)
+   xx, yy positions are in fractional indes space (origin 1)
+   the value at (1.0, 1.0) is f(1,1,1)
   
    xx = 2.5, yy = 2.5 would be the center ot the square formed by
    f(2,2,k) f(3,2,k) f(2,3,k) f(3.3.k)  (where 1 <= k <= nk)
@@ -382,29 +409,33 @@ void intrp_nk2d_yx3_mono(float *f, float *r, int ni, int ninj, int nk, int np, d
    to call from FORTRAN, the following interface is used
 
     subroutine intrp_bicub_yx(f, r, ni, ninj, nk, np, x, y)      bind(C,name='intrp_bicub_yx')
-    subroutine intrp_bicub_yx_mono(f, r, ni, ninj, nk, np, x, y) bind(C,name='intrp_bicub_yx_mono')
+    subroutine intrp_bicub_yx_s_mono(f, r, ni, ninj, nk, np, x, y) bind(C,name='intrp_bicub_yx_s_mono')
       real(C_FLOAT), dimension(*), intent(IN) :: f
       real(C_FLOAT), dimension(*), intent(OUT) :: r
       real(C_DOUBLE), intent(IN), value :: x, y
       integer(C_INT), intent(IN), value :: ni, ninj, nk, np
  */
-void intrp_bicub_yx_vec(float *u, float *v, float *r, int ni, int ninj, int nk, int np, double xx, double yy, double s[4]){
+
+// interpolate u and v with rotation, u and v are on different grids
+// hence the 2 sets of positions (xxu,yyu) and (xxv,yyv)
+// xxu, yyu, xxv, yyv in fractional index space, same as intrp_bicub_yx_s
+void intrp_bicub_yx_vec(float *u, float *v, float *ru, float *rv, int ni, int ninj, int nk,
+                        double xxu, double yyu, double xxv, double yyv, double s[4]){
 #if defined(__AVX__) && defined(__x86_64__)
   __m256d fwyu0, fwyu1, fwyu2, fwyu3, fwyv0, fwyv1, fwyv2, fwyv3, fdtu, fdtv, fwxu, fwxv;
   __m256d fd0, fd1, fd2, fd3;
   __m128d ft0, ft1;
   __m128 frt;
 #else
+  double ud0[4];
+  double vd0[4];
 #endif
   double  wxu[4], wyu[4], wxv[4], wyv[4] ;
-  double  xxu, xxv, yyu, yyv, xu, yu, xv, yv;;
+  double  xu, yu, xv, yv, tu, tv;
   int ni2 = ni + ni;    // + 2 rows
   int ni3 = ni2 + ni;   // + 3 rows
   int i, k;
   int ixu, iyu, ixv, iyv;
-
-  xxu = xx - .5 ; yyu = yy;   // q grid to u grid
-  yyv = yy - .5 ; xxu = xx;   // q grid to v grid
 
   xu = xxu - 1.0 ; yu = yyu - 1.0; // xxu and yyu are in "ORIGIN 1"
   ixu = xxu ; if(ixu > xxu) ixu = ixu -1 ; ixu = ixu - 2;
@@ -464,22 +495,22 @@ void intrp_bicub_yx_vec(float *u, float *v, float *r, int ni, int ninj, int nk, 
     fd0  = _mm256_cvtps_pd( _mm_loadu_ps(u    ) ) ;   // row 1 : f[i:i+3 , j   ,k]
     fd1  = _mm256_cvtps_pd( _mm_loadu_ps(v    ) ) ;
     fdtu = _mm256_mul_pd(fd0,fwyu0) ;                 // row[j] * coefficient[0]
-    fdtv = _mm256_mul_pd(fd1,fwyu0) ;
+    fdtv = _mm256_mul_pd(fd1,fwyv0) ;
 
     fd0  = _mm256_cvtps_pd( _mm_loadu_ps(u+ni ) ) ;   // row 2 : f[i:i+3 , j+1 ,k]
     fd1  = _mm256_cvtps_pd( _mm_loadu_ps(v+ni ) ) ;
     fdtu = _mm256_fmadd_pd(fd0,fwyu1,fdtu) ;          // add row[j+1] * coefficient[1]
-    fdtv = _mm256_fmadd_pd(fd1,fwyu1,fdtv) ;
+    fdtv = _mm256_fmadd_pd(fd1,fwyv1,fdtv) ;
 
     fd0  = _mm256_cvtps_pd( _mm_loadu_ps(u+ni2) ) ;   // row 3 : f[i:i+3 , j+2 ,k]
     fd1  = _mm256_cvtps_pd( _mm_loadu_ps(v+ni2) ) ;
     fdtu = _mm256_fmadd_pd(fd0,fwyu2,fdtu) ;          // add row[j+2] * coefficient[2]
-    fdtv = _mm256_fmadd_pd(fd1,fwyu2,fdtv) ;
+    fdtv = _mm256_fmadd_pd(fd1,fwyv2,fdtv) ;
 
     fd0  = _mm256_cvtps_pd( _mm_loadu_ps(u+ni3) ) ;   // row 4 : f[i:i+3 , j+3 ,k]
     fd1  = _mm256_cvtps_pd( _mm_loadu_ps(v+ni3) ) ;
     fdtu = _mm256_fmadd_pd(fd0,fwyu3,fdtu) ;          // add row[j+3] * coefficient[3]
-    fdtv = _mm256_fmadd_pd(fd1,fwyu3,fdtv) ;
+    fdtv = _mm256_fmadd_pd(fd1,fwyv3,fdtv) ;
 
     // interpolation along i: multiply by coefficients along x , then sum elements (using vector folding)
     fdtu = _mm256_mul_pd(fdtu,fwxu) ;
@@ -490,26 +521,39 @@ void intrp_bicub_yx_vec(float *u, float *v, float *r, int ni, int ninj, int nk, 
     ft0 = _mm_add_pd(ft0,ft1) ;              // fdt[0]+fdt[2]               fdt[1]+fdt[3]
     ft1 = _mm_permute_pd(ft0,0x3) ;          // fdt[1]+fdt[3]               fdt[1]+fdt[3]
     ft0 = _mm_add_sd(ft0,ft1) ;              // fdt[0]+fdt[2]+fdt[1]+fdt[3]
-    frt = _mm_cvtsd_ss(frt,ft0) ;            // scalar convert double to float
-    _mm_store_ss(r   ,frt) ;                 // store scalar float
+    _mm_store_sd(&tu,ft0) ;                  // store scalar float
 
     ft1 = _mm256_extractf128_pd(fdtv,1) ;    // fdt[2]                      fdt[3]
     ft0 = _mm256_extractf128_pd(fdtv,0) ;    // fdt[0]                      fdt[1]
     ft0 = _mm_add_pd(ft0,ft1) ;              // fdt[0]+fdt[2]               fdt[1]+fdt[3]
     ft1 = _mm_permute_pd(ft0,0x3) ;          // fdt[1]+fdt[3]               fdt[1]+fdt[3]
     ft0 = _mm_add_sd(ft0,ft1) ;              // fdt[0]+fdt[2]+fdt[1]+fdt[3]
-    frt = _mm_cvtsd_ss(frt,ft0) ;            // scalar convert double to float
-    _mm_store_ss(r+nk,frt) ;                 // store scalar float
+    _mm_store_sd(&tv,ft0) ;                  // store scalar float
 
+    ru[k] = tu*s[0] + tv*s[1] ;              // rotate wind components
+    rv[k] = tu*s[2] + tv*s[3] ;
     u+= ninj;
     v+= ninj;
-    r++;
   }
 #else
+  for(k=0 ; k<nk ; k++){
+    for(i=0 ; i<4 ; i++){                   // easily vectorizable form
+      ud0[i] = ( u[i]*wyu[0] + u[i+ni]*wyu[1] + u[i+ni2]*wyu[2] + u[i+ni3]*wyu[3] ) * wxu[i];
+      vd0[i] = ( v[i]*wyv[0] + v[i+ni]*wyv[1] + v[i+ni2]*wyv[2] + v[i+ni3]*wyv[3] ) * wxv[i];
+    }
+    tu = ud0[0] + ud0[1] + ud0[2] + ud0[3];
+    tv = vd0[0] + vd0[1] + vd0[2] + vd0[3];
+    ru[k] = tu*s[0] + tv*s[1] ;              // rotate wind components
+    rv[k] = tu*s[2] + tv*s[3] ;
+    u+= ninj;
+    v+= ninj;
+  }
 #endif
 }
 
-void intrp_bicub_yx_uv(float *u, float *v, float *r1, float *r2, int ni, int ninj, int nk, int np, double xx, double yy, double s[4]){
+// interpolate u and v with rotation, u and v on same grid, at position (xx,yy)
+// xx, yy in fractional index space, same as intrp_bicub_yx_s
+void intrp_bicub_yx_uv(float *u, float *v, float *ru, float *rv, int ni, int ninj, int nk, double xx, double yy, double s[4]){
 #if defined(__AVX__) && defined(__x86_64__)
   __m256d ud0, ud1, ud2, ud3, vd0, vd1, vd2, vd3, fwx, fwy0, fwy1, fwy2, fwy3, udt, vdt ;
   __m128d ft0, ft1;
@@ -524,6 +568,7 @@ void intrp_bicub_yx_uv(float *u, float *v, float *r1, float *r2, int ni, int nin
   int ni3 = ni2 + ni;   // + 3 rows
   int i, k;
   int ix, iy;
+  double tu, tv;
 
   x = xx - 1.0 ; y = yy - 1.0;                      // xx and yy are in "ORIGIN 1"
   ix = xx ; if(ix > xx) ix = ix -1 ; ix = ix - 2;
@@ -596,20 +641,19 @@ void intrp_bicub_yx_uv(float *u, float *v, float *r1, float *r2, int ni, int nin
     ft0 = _mm_add_pd(ft0,ft1) ;             // fdt[0]+fdt[2]               fdt[1]+fdt[3]
     ft1 = _mm_permute_pd(ft0,0x3) ;         // fdt[1]+fdt[3]               fdt[1]+fdt[3]
     ft0 = _mm_add_sd(ft0,ft1) ;             // fdt[0]+fdt[2]+fdt[1]+fdt[3]
-    frt = _mm_cvtsd_ss(frt,ft0) ;           // convert fdt[0]+fdt[2]+fdt[1]+fdt[3] to float
-    _mm_store_ss(r1,frt) ;                  // store float
+//     frt = _mm_cvtsd_ss(frt,ft0) ;           // convert fdt[0]+fdt[2]+fdt[1]+fdt[3] to float
+    _mm_store_sd(&tu,ft0) ;                  // store float
 
     ft1 = _mm256_extractf128_pd(vdt,1) ;    // fdt[2]                      fdt[3]
     ft0 = _mm256_extractf128_pd(vdt,0) ;    // fdt[0]                      fdt[1]
     ft0 = _mm_add_pd(ft0,ft1) ;             // fdt[0]+fdt[2]               fdt[1]+fdt[3]
     ft1 = _mm_permute_pd(ft0,0x3) ;         // fdt[1]+fdt[3]               fdt[1]+fdt[3]
     ft0 = _mm_add_sd(ft0,ft1) ;             // fdt[0]+fdt[2]+fdt[1]+fdt[3]
-    frt = _mm_cvtsd_ss(frt,ft0) ;           // convert fdt[0]+fdt[2]+fdt[1]+fdt[3] to float
-    _mm_store_ss(r2,frt) ;                  // store float
-    // need to add rotation for U V pair using s
+//     frt = _mm_cvtsd_ss(frt,ft0) ;           // convert fdt[0]+fdt[2]+fdt[1]+fdt[3] to float
+    _mm_store_sd(&tv,ft0) ;                  // store float
 
-    r1 += np;
-    r2 += np;
+    ru[k] = tu*s[0] + tv*s[1] ;              // rotate wind components
+    rv[k] = tu*s[2] + tv*s[3] ;
   }
   udt = _mm256_mul_pd(ud0,fwy0) ;               // sum of row[j] * coefficient[j] ( 0 <= j < 4)
   vdt = _mm256_mul_pd(vd0,fwy0) ;
@@ -627,29 +671,31 @@ void intrp_bicub_yx_uv(float *u, float *v, float *r1, float *r2, int ni, int nin
   ft0 = _mm_add_pd(ft0,ft1) ;             // fdt[0]+fdt[2]               fdt[1]+fdt[3]
   ft1 = _mm_permute_pd(ft0,0x3) ;         // fdt[1]+fdt[3]               fdt[1]+fdt[3]
   ft0 = _mm_add_sd(ft0,ft1) ;             // fdt[0]+fdt[2]+fdt[1]+fdt[3]
-  frt = _mm_cvtsd_ss(frt,ft0) ;           // convert fdt[0]+fdt[2]+fdt[1]+fdt[3] to float
-  _mm_store_ss(r1,frt) ;                  // store float
+//   frt = _mm_cvtsd_ss(frt,ft0) ;           // convert fdt[0]+fdt[2]+fdt[1]+fdt[3] to float
+  _mm_store_sd(&tu,ft0) ;                  // store float
 
   ft1 = _mm256_extractf128_pd(vdt,1) ;    // fdt[2]                      fdt[3]
   ft0 = _mm256_extractf128_pd(vdt,0) ;    // fdt[0]                      fdt[1]
   ft0 = _mm_add_pd(ft0,ft1) ;             // fdt[0]+fdt[2]               fdt[1]+fdt[3]
   ft1 = _mm_permute_pd(ft0,0x3) ;         // fdt[1]+fdt[3]               fdt[1]+fdt[3]
   ft0 = _mm_add_sd(ft0,ft1) ;             // fdt[0]+fdt[2]+fdt[1]+fdt[3]
-  frt = _mm_cvtsd_ss(frt,ft0) ;           // convert fdt[0]+fdt[2]+fdt[1]+fdt[3] to float
-  _mm_store_ss(r2,frt) ;                  // store float
-  // need to add rotation for U V pair using s
+//   frt = _mm_cvtsd_ss(frt,ft0) ;           // convert fdt[0]+fdt[2]+fdt[1]+fdt[3] to float
+  _mm_store_sd(&tv,ft0) ;                  // store float
+
+  ru[k] = tu*s[0] + tv*s[1] ;              // rotate wind components
+  rv[k] = tu*s[2] + tv*s[3] ;
 #else
   for(k=0 ; k<nk ; k++){
     for(i=0 ; i<4 ; i++){                   // easily vectorizable form
       ud0[i] = ( u[i]*wy[0] + u[i+ni]*wy[1] + u[i+ni2]*wy[2] + u[i+ni3]*wy[3] ) * wx[i];
       vd0[i] = ( v[i]*wy[0] + v[i+ni]*wy[1] + v[i+ni2]*wy[2] + v[i+ni3]*wy[3] ) * wx[i];
     }
-    r1[0] = ud0[0] + ud0[1] + ud0[2] + ud0[3];
-    r2[0] = vd0[0] + vd0[1] + vd0[2] + vd0[3];
+    tu = ud0[0] + ud0[1] + ud0[2] + ud0[3];
+    tv = vd0[0] + vd0[1] + vd0[2] + vd0[3];
+    ru[k] = tu*s[0] + tv*s[1] ;              // rotate wind components
+    rv[k] = tu*s[2] + tv*s[3] ;
     u  += ninj;
     v  += ninj;
-    r1 += np;
-    r2 += np;
   }
 #endif
 }
@@ -763,135 +809,7 @@ void intrp_bicub_yx(float *f, float *r, int ni, int ninj, int nk, int np, double
 #endif
 }
 
-void intrp_bicub_yx_2(float *f, float *r, int ni, int ninj, int nk, int np, double xx, double yy){
-#if defined(__AVX__) && defined(__x86_64__)
-  __m256d fd0, fd1, fd2, fd3, gd0, gd1, gd2, gd3, fwx, fwy0, fwy1, fwy2, fwy3, fdt, gdt ;
-  __m128  frt, grt ;
-  __m128d ft0, ft1, gt0, gt1;
-#else
-  double fd0[4], fd1[4], fd2[4], fd3[4] ;
-#endif
-  float *g;
-  double  wx[4], wy[4] ;
-  double  x, y;
-  int ni2 = ni + ni;    // + 2 rows
-  int ni3 = ni2 + ni;   // + 3 rows
-  int i, k;
-  int ix, iy;
-// printf("DEBUG: f = %p, r = %p \n",f,r);
-// printf("DEBUG: f[0] = %f, r[0] = %f, ni = %d, ninj = %d, nk = %d, np = %d, xx = %f, yy = %f\n",f[0],r[0],ni,ninj,nk,np,xx,yy);
-  x = xx - 1.0 ; y = yy - 1.0; // xx and yy are in "ORIGIN 1"
-  ix = xx ; if(ix > xx) ix = ix -1 ; ix = ix - 2;   // xx and yy are in "ORIGIN 1"
-  iy = yy ; if(iy > yy) iy = iy -1 ; iy = iy - 2;
-  ix = (ix < qminx) ? qminx : ix;
-  ix = (ix > qmaxx) ? qmaxx : ix;
-  iy = (iy < qminy) ? qminy : iy;
-  iy = (iy > qmaxy) ? qmaxy : iy;
-  x  = x - 1 - ix;
-  y  = y - 1 - iy;
-  f = f + ix + iy * ni;
-  g = f + ninj;
-//   printf("DEBUG: ix=%d, iy=%d, ni=%d\n",ix, iy, ni);
-// printf("DEBUG: f[0] = %f, ix = %d, iy = %d, x = %f, y = %f\n",f[0],ix,iy,x,y);
-  wx[0] = cm133*x*(x-one)*(x-two);       // polynomial coefficients along i
-  wx[1] = cp5*(x+one)*(x-one)*(x-two);
-  wx[2] = cm5*x*(x+one)*(x-two);
-  wx[3] = cp133*x*(x+one)*(x-one);
-
-  wy[0] = cm133*y*(y-one)*(y-two);       // polynomial coefficients along j
-  wy[1] = cp5*(y+one)*(y-one)*(y-two);
-  wy[2] = cm5*y*(y+one)*(y-two);
-  wy[3] = cp133*y*(y+one)*(y-one);
-
-#if defined(__AVX__) && defined(__x86_64__)
-  fwx = _mm256_loadu_pd(wx) ;              // vector of coefficients along i
-  fwy0 = _mm256_set1_pd(wy[0]) ;           // scalar * vector not available, promote scalar to vector
-  fwy1 = _mm256_set1_pd(wy[1]) ;
-  fwy2 = _mm256_set1_pd(wy[2]) ;
-  fwy3 = _mm256_set1_pd(wy[3]) ;
-  for(k=0 ; k<nk-2 ; k+=2){               // levels done 2 by 2
-    // fetch 4 rows, level k (f) and level k + 1 (g)
-    // interpolation along J level k, and level k+1
-    fd0 = _mm256_cvtps_pd(_mm_loadu_ps(f    )) ;            // promote row 1 to double
-    gd0 = _mm256_cvtps_pd(_mm_loadu_ps(g    )) ;            // promote row 1 to double
-    fdt = _mm256_mul_pd(fd0,fwy0) ;                         // sum of row[j] * coefficient[j]
-    gdt = _mm256_mul_pd(gd0,fwy0) ;                         // sum of row[j] * coefficient[j]
-
-    fd1 = _mm256_cvtps_pd(_mm_loadu_ps(f+ni )) ;            // promote row 2 to double
-    gd1 = _mm256_cvtps_pd(_mm_loadu_ps(g+ni )) ;            // promote row 2 to double
-    fdt = _mm256_fmadd_pd(fd1,fwy1,fdt) ;                   // sum of row[j] * coefficient[j]
-    gdt = _mm256_fmadd_pd(gd1,fwy1,gdt) ;                   // sum of row[j] * coefficient[j]
-
-    fd2 = _mm256_cvtps_pd(_mm_loadu_ps(f+ni2)) ;            // promote row 3 to double
-    gd2 = _mm256_cvtps_pd(_mm_loadu_ps(g+ni2)) ;            // promote row 3 to double
-    fdt = _mm256_fmadd_pd(fd2,fwy2,fdt) ;                   // sum of row[j] * coefficient[j]
-    gdt = _mm256_fmadd_pd(gd2,fwy2,gdt) ;                   // sum of row[j] * coefficient[j]
-
-    fd3 = _mm256_cvtps_pd(_mm_loadu_ps(f+ni3)) ;            // promote row 4 to double
-    gd3 = _mm256_cvtps_pd(_mm_loadu_ps(g+ni3)) ;            // promote row 4 to double
-    fdt = _mm256_fmadd_pd(fd3,fwy3,fdt) ;                   // sum of row[j] * coefficient[j]
-    gdt = _mm256_fmadd_pd(gd3,fwy3,gdt) ;                   // sum of row[j] * coefficient[j]
-
-    f = g + ninj; g = f + ninj;
-
-    // interpolation along i: multiply by coefficients along x , then sum elements (using vector folding)
-    fdt = _mm256_mul_pd(fdt,fwx) ;
-    gdt = _mm256_mul_pd(gdt,fwx) ;
-    ft1 = _mm256_extractf128_pd(fdt,1) ;    // fdt[2]                      fdt[3]
-    ft0 = _mm256_extractf128_pd(fdt,0) ;    // fdt[0]                      fdt[1]
-    ft0 = _mm_add_pd(ft0,ft1) ;             // fdt[0]+fdt[2]               fdt[1]+fdt[3]
-    gt1 = _mm256_extractf128_pd(gdt,1) ;    // gdt[2]                      gdt[3]
-    gt0 = _mm256_extractf128_pd(gdt,0) ;    // gdt[0]                      gdt[1]
-    gt0 = _mm_add_pd(gt0,gt1) ;             // gdt[0]+gdt[2]               gdt[1]+gdt[3]
-    ft1 = _mm_permute_pd(ft0,0x3) ;         // fdt[1]+fdt[3]               fdt[1]+fdt[3]
-    gt1 = _mm_permute_pd(gt0,0x3) ;         // gdt[1]+gdt[3]               gdt[1]+gdt[3]
-    ft0 = _mm_add_sd(ft0,ft1) ;             // fdt[0]+fdt[2]+fdt[1]+fdt[3]
-    gt0 = _mm_add_sd(gt0,gt1) ;             // gdt[0]+gdt[2]+gdt[1]+gdt[3]
-    frt = _mm_cvtsd_ss(frt,ft0) ;           // convert fdt[0]+fdt[2]+fdt[1]+fdt[3] to float
-    grt = _mm_cvtsd_ss(grt,gt0) ;           // convert gdt[0]+gdt[2]+gdt[1]+gdt[3] to float
-    _mm_store_ss(r,frt) ;                   // store float
-    r += np;
-    _mm_store_ss(r,grt) ;                   // store float
-    r += np;
-  }
-  // interpolation, level nk if nk odd
-  if(k == nk-1){
-    // interpolation along J level nk
-    fd0 = _mm256_cvtps_pd(_mm_loadu_ps(f    )) ;            // promote row 1 to double
-    fdt = _mm256_mul_pd(fd0,fwy0) ;                         // sum of row[j] * coefficient[j]
-
-    fd1 = _mm256_cvtps_pd(_mm_loadu_ps(f+ni )) ;            // promote row 2 to double
-    fdt = _mm256_fmadd_pd(fd1,fwy1,fdt) ;
-
-    fd2 = _mm256_cvtps_pd(_mm_loadu_ps(f+ni2)) ;            // promote row 3 to double
-    fdt = _mm256_fmadd_pd(fd2,fwy2,fdt) ;
-
-    fd3 = _mm256_cvtps_pd(_mm_loadu_ps(f+ni3)) ;            // promote row 4 to double
-    fdt = _mm256_fmadd_pd(fd3,fwy3,fdt) ;
-
-    // interpolation along i: multiply by coefficients along x , then sum elements (using vector folding)
-    fdt = _mm256_mul_pd(fdt,fwx) ;
-    ft1 = _mm256_extractf128_pd(fdt,1) ;    // fdt[2]                      fdt[3]
-    ft0 = _mm256_extractf128_pd(fdt,0) ;    // fdt[0]                      fdt[1]
-    ft0 = _mm_add_pd(ft0,ft1) ;             // fdt[0]+fdt[2]               fdt[1]+fdt[3]
-    ft1 = _mm_permute_pd(ft0,0x3) ;         // fdt[1]+fdt[3]               fdt[1]+fdt[3]
-    ft0 = _mm_add_sd(ft0,ft1) ;             // fdt[0]+fdt[2]+fdt[1]+fdt[3]
-    frt = _mm_cvtsd_ss(frt,ft0) ;           // convert fdt[0]+fdt[2]+fdt[1]+fdt[3] to float
-    _mm_store_ss(r,frt) ;                   // store float
-  }
-#else
-  for(k=0 ; k<nk ; k++){
-    for(i=0 ; i<4 ; i++){                   // easily vectorizable form
-      fd0[i] = ( f[i]*wy[0] + f[i+ni]*wy[1] + f[i+ni2]*wy[2] + f[i+ni3]*wy[3] ) * wx[i];
-    }
-    r[0] = fd0[0] + fd0[1] + fd0[2] + fd0[3];
-    f+= ninj;
-    r += np;
-  }
-#endif
-}
-
-void intrp_bicub_yx_mono(float *f, float *r, int ni, int ninj, int nk, int np, double xx, double yy){
+void intrp_bicub_yx_s_mono(float *f, float *r, int ni, int ninj, int nk, double xx, double yy){
 #if defined(__AVX__) && defined(__x86_64__)
   __m256d fd0, fd1, fd2, fd3, fwx, fwy0, fwy1, fwy2, fwy3, fdt, fmi, fma ; 
   __m128  fr0, fr1, fr2, fr3, frt ; ;       // frt is used as a scalar, fr0->fr3 are 128 bit aliases for fd0->fd3
@@ -986,7 +904,7 @@ void intrp_bicub_yx_mono(float *f, float *r, int ni, int ninj, int nk, int np, d
     frt = _mm_cvtsd_ss(frt,ft0) ;           // convert result to float
 
     _mm_store_ss(r,frt) ;                   // store float
-    r += np;
+    r ++;
   }
   // interpolation along j , level nk
   fma = _mm256_max_pd(fd1,fd0);
@@ -1039,7 +957,7 @@ void intrp_bicub_yx_mono(float *f, float *r, int ni, int ninj, int nk, int np, d
     r[0] = (r[0] < minval ) ? minval : r[0] ;  // apply monotonic limits
     r[0] = (r[0] > maxval ) ? maxval : r[0] ;
     f += ninj;
-    r += np;
+    r ++;
   }
 #endif
 }
@@ -1092,6 +1010,46 @@ int main(int argc,char **argv){
 #endif
 
 #else
+#if defined(NEVER_TRUE)
+  interface                                                                                       !InTf!
+    subroutine set_intrp_bicub_yx(x1,x2,y1,y2) bind(C,name='set_intrp_bicub_yx')                  !InTf!
+      integer, intent(IN), value :: x1,x2,y1,y2                                                   !InTf!
+    end subroutine set_intrp_bicub_yx                                                             !InTf!
+    subroutine set_intrp_bicub_quv(x1,x2,y1,y2,u1,u2,u3,u4,v1,v2,v3,v4) bind(C,name='set_intrp_bicub_quv')   !InTf!
+      integer, intent(IN), value :: x1,x2,y1,y2,u1,u2,u3,u4,v1,v2,v3,v4                           !InTf!
+    end subroutine set_intrp_bicub_quv                                                            !InTf!
+    subroutine intrp_bicub_yx_s(f, r, ni, ninj, nk, x, y) bind(C,name='intrp_bicub_yx_s')         !InTf!
+      import :: C_INT, C_FLOAT, C_DOUBLE                                                          !InTf!
+      real(C_FLOAT), dimension(*), intent(IN) :: f                                                !InTf!
+      real(C_FLOAT), dimension(*), intent(OUT) :: r                                               !InTf!
+      real(C_DOUBLE), intent(IN), value :: x, y                                                   !InTf!
+      integer(C_INT), intent(IN), value :: ni, ninj, nk                                           !InTf!
+    end subroutine intrp_bicub_yx_s                                                               !InTf!
+    subroutine intrp_bicub_yx_s_mono(f, r, ni, ninj, nk, x, y) bind(C,name='intrp_bicub_yx_s_mono') !InTf!
+      import :: C_INT, C_FLOAT, C_DOUBLE                                                          !InTf!
+      real(C_FLOAT), dimension(*), intent(IN) :: f                                                !InTf!
+      real(C_FLOAT), dimension(*), intent(OUT) :: r                                               !InTf!
+      real(C_DOUBLE), intent(IN), value :: x, y                                                   !InTf!
+      integer(C_INT), intent(IN), value :: ni, ninj, nk                                           !InTf!
+    end subroutine intrp_bicub_yx_s_mono                                                          !InTf!
+    subroutine intrp_bicub_yx_vec(u,v,ru,rv,ni,ninj,nk,xu,yu,xv,yv,s) bind(C,name='intrp_bicub_yx_vec')  !InTf!
+      import :: C_INT, C_FLOAT, C_DOUBLE                                                          !InTf!
+      real(C_FLOAT), dimension(*), intent(IN) :: u, v                                             !InTf!
+      real(C_FLOAT), dimension(*), intent(OUT) :: ru, rv                                          !InTf!
+      real(C_DOUBLE), intent(IN), value :: xu, yu, xv, yv                                         !InTf!
+      real(C_DOUBLE), intent(IN), dimension(*) :: s                                               !InTf!
+      integer(C_INT), intent(IN), value :: ni, ninj, nk                                           !InTf!
+    end subroutine intrp_bicub_yx_vec                                                             !InTf!
+    subroutine intrp_bicub_yx_uv(u,v,r1,r2,ni,ninj,nk,x,y,s) bind(C,name='intrp_bicub_yx_uv')     !InTf!
+      import :: C_INT, C_FLOAT, C_DOUBLE                                                          !InTf!
+      real(C_FLOAT), dimension(*), intent(IN) :: u, v                                             !InTf!
+      real(C_FLOAT), dimension(*), intent(OUT) :: r1, r2                                          !InTf!
+      real(C_DOUBLE), intent(IN), value :: x, y                                                   !InTf!
+      real(C_DOUBLE), intent(IN), dimension(*) :: s                                               !InTf!
+      integer(C_INT), intent(IN), value :: ni, ninj, nk                                           !InTf!
+    end subroutine intrp_bicub_yx_uv                                                              !InTf!
+  end interface                                                                                   !InTf!
+#endif
 program test_interp
   use ISO_C_BINDING
   implicit none
@@ -1103,7 +1061,7 @@ program test_interp
   integer, parameter :: HY=2
   integer, parameter :: NR=10
   real(C_FLOAT), dimension(1-HX:NI+HX , 1-HY:NJ+HY , NK) :: f, f2
-  real(C_FLOAT), dimension(NP,NK*2) :: r, r2, r1
+  real(C_FLOAT), dimension(NK,NP*2) :: r, r2, r1
   real(C_DOUBLE), dimension(NP) :: x, y, xmin, xmax, xmin2, xmax2
   real(C_DOUBLE) :: xi, yi
   real(C_DOUBLE), dimension(4) :: s
@@ -1112,62 +1070,13 @@ program test_interp
   integer*8, external :: rdtsc
   integer*8 :: t1, t2, tmg1(NR), tmg2(nr), tmg3(nr), tmg4(nr)
   integer :: nidim, ninjdim
-  interface
-    subroutine intrp_nk2d_yx3(f, r, ni, ninj, nk, np, x, y) bind(C,name='intrp_nk2d_yx3')         !InTf!
-      import :: C_INT, C_FLOAT, C_DOUBLE                                                          !InTf!
-      real(C_FLOAT), dimension(*), intent(IN) :: f                                                !InTf!
-      real(C_FLOAT), dimension(*), intent(OUT) :: r                                               !InTf!
-      real(C_DOUBLE), intent(IN), value :: x, y                                                   !InTf!
-      integer(C_INT), intent(IN), value :: ni, ninj, nk, np                                       !InTf!
-    end subroutine intrp_nk2d_yx3                                                                 !InTf!
-    subroutine intrp_bicub_yx_2(f, r, ni, ninj, nk, np, x, y) bind(C,name='intrp_bicub_yx_2')     !InTf!
-      import :: C_INT, C_FLOAT, C_DOUBLE                                                          !InTf!
-      real(C_FLOAT), dimension(*), intent(IN) :: f                                                !InTf!
-      real(C_FLOAT), dimension(*), intent(OUT) :: r                                               !InTf!
-      real(C_DOUBLE), intent(IN), value :: x, y                                                   !InTf!
-      integer(C_INT), intent(IN), value :: ni, ninj, nk, np                                       !InTf!
-    end subroutine intrp_bicub_yx_2                                                               !InTf!
-    subroutine intrp_bicub_yx(f, r, ni, ninj, nk, np, x, y) bind(C,name='intrp_bicub_yx')         !InTf!
-      import :: C_INT, C_FLOAT, C_DOUBLE                                                          !InTf!
-      real(C_FLOAT), dimension(*), intent(IN) :: f                                                !InTf!
-      real(C_FLOAT), dimension(*), intent(OUT) :: r                                               !InTf!
-      real(C_DOUBLE), intent(IN), value :: x, y                                                   !InTf!
-      integer(C_INT), intent(IN), value :: ni, ninj, nk, np                                       !InTf!
-    end subroutine intrp_bicub_yx                                                                 !InTf!
-    subroutine intrp_bicub_yx_mono(f, r, ni, ninj, nk, np, x, y) bind(C,name='intrp_bicub_yx_mono') !InTf!
-      import :: C_INT, C_FLOAT, C_DOUBLE                                                          !InTf!
-      real(C_FLOAT), dimension(*), intent(IN) :: f                                                !InTf!
-      real(C_FLOAT), dimension(*), intent(OUT) :: r                                               !InTf!
-      real(C_DOUBLE), intent(IN), value :: x, y                                                   !InTf!
-      integer(C_INT), intent(IN), value :: ni, ninj, nk, np                                       !InTf!
-    end subroutine intrp_bicub_yx_mono                                                            !InTf!
-    subroutine set_intrp_bicub_yx(x1,x2,y1,y2) bind(C,name='set_intrp_bicub_yx')
-      integer, intent(IN), value :: x1,x2,y1,y2
-    end subroutine set_intrp_bicub_yx
-    subroutine set_intrp_bicub_quv(x1,x2,y1,y2,u1,u2,u3,u4,v1,v2,v3,v4) bind(C,name='set_intrp_bicub_quv')
-      integer, intent(IN), value :: x1,x2,y1,y2,u1,u2,u3,u4,v1,v2,v3,v4
-    end subroutine set_intrp_bicub_quv
-    subroutine intrp_bicub_yx_vec(u,v,r,ni,ninj,nk,np,x,y,s) bind(C,name='intrp_bicub_yx_vec')
-      import :: C_INT, C_FLOAT, C_DOUBLE
-      real(C_FLOAT), dimension(*), intent(IN) :: u, v
-      real(C_FLOAT), dimension(*), intent(OUT) :: r
-      real(C_DOUBLE), intent(IN), value :: x, y
-      real(C_DOUBLE), intent(IN), dimension(*) :: s
-      integer(C_INT), intent(IN), value :: ni, ninj, nk, np
-    end subroutine intrp_bicub_yx_vec
-    subroutine intrp_bicub_yx_uv(u,v,r1,r2,ni,ninj,nk,np,x,y,s) bind(C,name='intrp_bicub_yx_uv')
-      import :: C_INT, C_FLOAT, C_DOUBLE
-      real(C_FLOAT), dimension(*), intent(IN) :: u, v
-      real(C_FLOAT), dimension(*), intent(OUT) :: r1, r2
-      real(C_DOUBLE), intent(IN), value :: x, y
-      real(C_DOUBLE), intent(IN), dimension(*) :: s
-      integer(C_INT), intent(IN), value :: ni, ninj, nk, np
-    end subroutine intrp_bicub_yx_uv
-  end interface
+  include 'intrp_bicub_yx.inc'
 
 #define FXY(A,B,C) (1.3*(A)**3 + 1.4*(A)**2 + (A)*1.5 + 2.3*(B)**3 + 2.4*(B)**2 + (B)*2.5 + (C))
 
-call set_intrp_bicub_quv(1,NI-3,1,NJ-3,1,NI-3,1,NJ-3,1,NI-3,1,NJ-3)
+  call set_intrp_bicub_quv(1,NI-3,1,NJ-3,1,NI-3,1,NJ-3,1,NI-3,1,NJ-3)
+  s = [1.0, 0.0, 0.0, 1.0]
+
   r = 9999.99
   do k = 1 , NK
     do j = 1-HY , NJ+HY
@@ -1178,7 +1087,7 @@ call set_intrp_bicub_quv(1,NI-3,1,NJ-3,1,NI-3,1,NJ-3,1,NI-3,1,NJ-3)
     enddo
 !    print *,f(1,1,k),f(2,2,k)
   enddo
-  f2 = f
+  f2 = f + 1
   do i = 1 , NP
     x(i) = i - .999 + 1.0
     y(i) = i - .999 + 1.0
@@ -1204,8 +1113,7 @@ call set_intrp_bicub_quv(1,NI-3,1,NJ-3,1,NI-3,1,NJ-3,1,NI-3,1,NJ-3)
       iy = max(1,iy-1)
       iy = min(iy,NJ-3)
       yi = y(i) - (iy - 1)
-      call intrp_nk2d_yx3(f(ix,iy,1), r(i,1), nidim, ninjdim, NK, NP, xi, yi)
-!       call intrp_bicub_yx_2( f(1,1,1), r(i,1), nidim, ninjdim, NK, NP, x(i), y(i) )
+      call intrp_bicub_yx_s(f(ix,iy,1), r(i,1), nidim, ninjdim, NK, xi, yi)
     enddo
     t2 = rdtsc()
     tmg1(j) = t2 - t1
@@ -1213,21 +1121,21 @@ call set_intrp_bicub_quv(1,NI-3,1,NJ-3,1,NI-3,1,NJ-3,1,NI-3,1,NJ-3)
 
     t1 = rdtsc()
     do i = 1 , NP
-      call intrp_bicub_yx_vec( f(1,1,1), f2(1,1,1), r(i,1), nidim, ninjdim, NK, NP, x(i), y(i), s )
+      call intrp_bicub_yx_vec( f(1,1,1), f2(1,1,1), r(1,i), r2(1,i), nidim, ninjdim, NK, x(i), y(i), x(1+mod(i+1,NP)), y(1+mod(i+1,NP)), s )
     enddo
     t2 = rdtsc()
     tmg3(j) = t2 - t1
 
     t1 = rdtsc()
     do i = 1 , NP
-      call intrp_bicub_yx_uv( f(1,1,1), f2(1,1,1), r(i,1), r2(i,1), nidim, ninjdim, NK, NP, x(i), y(i), s )
+      call intrp_bicub_yx_uv( f(1,1,1), f2(1,1,1), r(1,i), r2(1,i), nidim, ninjdim, NK, x(i), y(i), s )
     enddo
     t2 = rdtsc()
     tmg4(j) = t2 - t1
 
     t1 = rdtsc()
     do i = 1 , NP
-      call intrp_bicub_yx_mono( f(1,1,1), r(i,1), nidim, ninjdim, NK, NP, x(i), y(i) )
+      call intrp_bicub_yx_s_mono( f(1,1,1), r(1,i), nidim, ninjdim, NK, x(i), y(i) )
     enddo
     t2 = rdtsc()
     tmg2(j) = t2 - t1
@@ -1273,11 +1181,11 @@ call set_intrp_bicub_quv(1,NI-3,1,NJ-3,1,NI-3,1,NJ-3,1,NI-3,1,NJ-3)
               max(xmin2(:),min(xmax2(:),FXY(x(:),y(:),NK)))
 !  print 102,x(:)+y(:)+1, x(:)+y(:)+NK
   print *,' got'
-  print 102,r(:,1),r(:,NK)
+  print 102,r(1,1:NP),r(NK,1:NP)
   print *,' delta'
-  print 102,(r(:,1)-FXY(x(:),y(:),1)),(r(:,NK)-FXY(x(:),y(:),NK))
-  print 103,(r(:, 1)-FXY(x(:),y(:), 1))  / FXY(x(:),y(:), 1) , & 
-            (r(:,NK)-FXY(x(:),y(:),NK))  / FXY(x(:),y(:),NK)
+  print 102,(r(1,1:NP)-FXY(x(:),y(:),1)),(r(NK,1:NP)-FXY(x(:),y(:),NK))
+  print 103,(r(1,1:NP)-FXY(x(:),y(:), 1))  / FXY(x(:),y(:), 1) , & 
+            (r(NK,1:NP)-FXY(x(:),y(:),NK))  / FXY(x(:),y(:),NK)
 
   do i = 1 , NP
     ix = x(i)
@@ -1289,24 +1197,30 @@ call set_intrp_bicub_quv(1,NI-3,1,NJ-3,1,NI-3,1,NJ-3,1,NI-3,1,NJ-3)
     iy = min(iy,NJ-3)
     yi = y(i) - (iy + 1)
 !    print *,"DEBUG: x(i), ix, xi, Y(i), iy , y(i)",x(i),ix,xi,y(i),iy,yi
-!    call intrp_nk2d_yx3(f(ix,iy,1), r(i,1), nidim, ninjdim, NK, NP, xi, yi)
-    call intrp_bicub_yx( f(1,1,1), r(i,1), nidim, ninjdim, NK, NP, x(i), y(i) )
-!    call intrp_bicub_yx_2( f(1,1,1), r(i,1), nidim, ninjdim, NK, NP, x(i), y(i) )
-    call intrp_bicub_yx_uv( f(1,1,1), f2(1,1,1), r1(i,1), r2(i,1), nidim, ninjdim, NK, NP, x(i), y(i), s )
+    call intrp_bicub_yx_s( f(1,1,1), r(1,i), nidim, ninjdim, NK, x(i), y(i) )
+    call intrp_bicub_yx_uv( f(1,1,1), f2(1,1,1), r1(1,i), r2(1,i), nidim, ninjdim, NK, x(i), y(i), s )
   enddo
 !  print 102,f(nint(x(1)),nint(y(1)),1),f(nint(x(2)),nint(y(2)),1),f(nint(x(1)),nint(y(1)),NK),f(nint(x(2)),nint(y(2)),NK)
 !  print 102,x(1)+y(1)+1,x(2)+y(2)+1,x(1)+y(1)+NK,x(2)+y(2)+NK
-  print *,'DIRECT: expected'
+  print *,"DIRECT: expected"
   print 102,FXY(x(:),y(:),1), FXY(x(:),y(:),NK)
   print *,' got'
-  print 102,r(:,1),r(:,NK)
+  print 102,r(1,1:NP),r(NK,1:NP)
   print *,' gotuv'
-  print 102,r1(:,1),r1(:,NK)
-  print 102,r2(:,1),r2(:,NK)
+  print 102,r1(1,1:NP),r1(NK,1:NP)
+  print 102,r2(1,1:NP),r2(NK,1:NP)
   print *,' delta'
-  print 102,(r(:,1)-FXY(x(:),y(:),1)),(r(:,NK)-FXY(x(:),y(:),NK))
-  print 103,(r(:, 1)-FXY(x(:),y(:), 1))  / FXY(x(:),y(:), 1) , & 
-            (r(:,NK)-FXY(x(:),y(:),NK))  / FXY(x(:),y(:),NK)
+  print 102,(r(1,1:NP)-FXY(x(:),y(:),1)),(r(NK,1:NP)-FXY(x(:),y(:),NK))
+  print 103,(r(1,1:NP)-FXY(x(:),y(:), 1))  / FXY(x(:),y(:), 1) , & 
+            (r(NK,1:NP)-FXY(x(:),y(:),NK))  / FXY(x(:),y(:),NK)
+  r1 = 999.999
+  r2 = 999.999
+  do i = 1 , NP
+    call intrp_bicub_yx_vec( f(1,1,1), f2(1,1,1), r1(1,i), r2(1,i), nidim, ninjdim, NK, x(1+mod(i,NP)), y(1+mod(i,NP)), x(i), y(i), s )
+  enddo
+  print *,' vec'
+  print 102,r1(1,1:NP),r1(NK,1:NP)
+  print 102,r2(1,1:NP),r2(NK,1:NP)
 
 102 format(16F15.6)
 103 format(16E15.2)

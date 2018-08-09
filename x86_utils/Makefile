@@ -35,14 +35,22 @@ fp_x87_xmm_control.h: fp_x87_xmm_control.c
 	./a.out f >fp_x87_xmm_control.h
 	rm -f a.out
 
+intrp_bicub_yx.inc: intrp_bicub_yx.c
+	grep -w InTf intrp_bicub_yx.c >intrp_bicub_yx.inc
+
 intrp_bicub_yx_f.F90:
 	ln -sf  intrp_bicub_yx.c intrp_bicub_yx_f.F90
 
 intrp_bicub_yx.o: intrp_bicub_yx.c
-	s.cc -O2 -DTIMING -c ${EXTRA_C} intrp_bicub_yx.c -DWITH_MONO
+	s.cc -O2 -DTIMING -c ${EXTRA_C} intrp_bicub_yx.c
 
-intrp_bicub_yx: intrp_bicub_yx.o intrp_bicub_yx_f.F90
+intrp_bicub_yx: intrp_bicub_yx.c intrp_bicub_yx_f.F90 intrp_bicub_yx.inc
+	s.cc -O2 -DTIMING -c ${EXTRA_C} intrp_bicub_yx.c
 	s.f90 ${EXTRA_FTN} -DF_TEST -o intrp_bicub_yx intrp_bicub_yx_f.F90 intrp_bicub_yx.o
+	rm -f intrp_bicub_yx.o
+	s.cc -O3 -DTIMING -c intrp_bicub_yx.c
+	s.f90 ${EXTRA_FTN} -DF_TEST -o intrp_bicub_yx0 intrp_bicub_yx_f.F90 intrp_bicub_yx.o
+	rm -f intrp_bicub_yx.o
 
 clean:
-	rm -f intrp_bicub_yx intrp_bicub_yx.o intrp_bicub_yx.s a.out fp_x87_xmm_control.o 
+	rm -f intrp_bicub_yx0 intrp_bicub_yx intrp_bicub_yx.o intrp_bicub_yx.s a.out fp_x87_xmm_control.o intrp_bicub_yx.inc
