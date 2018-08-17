@@ -2,17 +2,8 @@
 #include <stdlib.h>
 #include <immintrin.h>
 
-// following 2 macros missing in gcc primitives
-// make 256 bit item (ymm) from 2 x 128 bit items (xmm)
-#define _mm256i_from_2m128i( lo, hi) \
-    _mm256_insertf128_si256(_mm256_castsi128_si256(lo), (hi), 0x1)
-// fetch 2 128 bit items and load them into a 256 bit register (ymm)
-#define _mm256_loadu_lh__m128i( loaddr, hiaddr) \
-    _mm256i_from_2m128i(_mm_loadu_si128(loaddr), _mm_loadu_si128(hiaddr))
-
 // NOTE: Fortran order assumed for matrices
-int TransposeBy4bytes(void *a, int la1, void *b, int lb1, int ni, int nj){
-#if defined(NEVER_TRUE)
+/*
   basic block, 8x8 transpose of 32 bit elements within 256 bit AVX/AVX2 registers
   3 pass shuffle, first 2 operations are within 128 bit lane, last one is across 128 bit lanes
 
@@ -29,7 +20,9 @@ int TransposeBy4bytes(void *a, int la1, void *b, int lb1, int ni, int nj){
 
 permLL uses _mm256_permute2f128_si256 (a,b, 0x20), bot128 = bot128 from a, top128 = bot128 from b
 permHH uses _mm256_permute2f128_si256 (a,b, 0x31), bot128 = top128 from a, top128 = top128 from b
-#endif
+*/
+#if ! defined(TEST_ONLY)
+int TransposeBy4bytes(void *a, int la1, void *b, int lb1, int ni, int nj){
   int *a00, *a01, *b00, *b01;
   int *a000, *b000;
   int i, j, j0, ja0, ja00, jb0, jb00;
@@ -59,10 +52,9 @@ permHH uses _mm256_permute2f128_si256 (a,b, 0x31), bot128 = top128 from a, top12
 // basic block for transpose is 8x8
   for (j=0 ; j<nj8 ; j+= 8){
     a00 = a000;   // base address for row
+    a01 = a00 + la4;   // base of next block of 4x8
     b00 = b000;   // base address for column
     for ( i=0 ; i<ni8 ; i+=8){     // transpose a[i:i+7,J:j+7] into b[j:j+7,i:i+7]
-      a01 = a00 + la4;   // base of next block of 4x8
-      b01 = b00 + lb4;   // base of next block of 4x8
       y0 = _mm256_loadu_si256 ((__m256i const *) &a00[  0]);
       y1 = _mm256_loadu_si256 ((__m256i const *) &a00[la1]);
       y2 = _mm256_loadu_si256 ((__m256i const *) &a00[la2]);
@@ -71,15 +63,17 @@ permHH uses _mm256_permute2f128_si256 (a,b, 0x31), bot128 = top128 from a, top12
       y5 = _mm256_loadu_si256 ((__m256i const *) &a01[la1]);
       y6 = _mm256_loadu_si256 ((__m256i const *) &a01[la2]);
       y7 = _mm256_loadu_si256 ((__m256i const *) &a01[la3]);
+      a00 = a00 + 8;           // bump by 8 cols
+      a01 = a00 + la4;   // base of next block of 4x8
 
-      t0 = _mm256_unpacklo_epi32(y0,y1);
-      t1 = _mm256_unpackhi_epi32(y0,y1);
-      t2 = _mm256_unpacklo_epi32(y2,y3);
-      t3 = _mm256_unpackhi_epi32(y2,y3);
-      t4 = _mm256_unpacklo_epi32(y4,y5);
-      t5 = _mm256_unpackhi_epi32(y4,y5);
-      t6 = _mm256_unpacklo_epi32(y6,y7);
-      t7 = _mm256_unpackhi_epi32(y6,y7);
+      t0 = _mm256_unpacklo_epi32(y0,y1); // _mm_prefetch (a00    , 3) ;
+      t1 = _mm256_unpackhi_epi32(y0,y1); // _mm_prefetch (a00+la1, 3) ;
+      t2 = _mm256_unpacklo_epi32(y2,y3); // _mm_prefetch (a00+la2, 3) ;
+      t3 = _mm256_unpackhi_epi32(y2,y3); // _mm_prefetch (a00+la3, 3) ;
+      t4 = _mm256_unpacklo_epi32(y4,y5); // _mm_prefetch (a01    , 3) ;
+      t5 = _mm256_unpackhi_epi32(y4,y5); // _mm_prefetch (a01+la1, 3) ;
+      t6 = _mm256_unpacklo_epi32(y6,y7); // _mm_prefetch (a01+la2, 3) ;
+      t7 = _mm256_unpackhi_epi32(y6,y7); // _mm_prefetch (a01+la3, 3) ;
 
       y0 = _mm256_unpacklo_epi64(t0,t2);
       y1 = _mm256_unpackhi_epi64(t0,t2);
@@ -91,23 +85,23 @@ permHH uses _mm256_permute2f128_si256 (a,b, 0x31), bot128 = top128 from a, top12
       y7 = _mm256_unpackhi_epi64(t5,t7);
 
       t0 = _mm256_permute2f128_si256 (y0,y4, 0x20);
-      t1 = _mm256_permute2f128_si256 (y1,y5, 0x20);
-      t2 = _mm256_permute2f128_si256 (y2,y6, 0x20);
-      t3 = _mm256_permute2f128_si256 (y3,y7, 0x20);
       t4 = _mm256_permute2f128_si256 (y0,y4, 0x31);
-      t6 = _mm256_permute2f128_si256 (y2,y6, 0x31);
+      t1 = _mm256_permute2f128_si256 (y1,y5, 0x20);
       t5 = _mm256_permute2f128_si256 (y1,y5, 0x31);
+      t2 = _mm256_permute2f128_si256 (y2,y6, 0x20);
+      t6 = _mm256_permute2f128_si256 (y2,y6, 0x31);
+      t3 = _mm256_permute2f128_si256 (y3,y7, 0x20);
       t7 = _mm256_permute2f128_si256 (y3,y7, 0x31);
 
+      b01 = b00 + lb4;   // base of next block of 4x8
       _mm256_storeu_si256((__m256i *) &b00[  0],t0);
-      _mm256_storeu_si256((__m256i *) &b00[lb1],t1);
-      _mm256_storeu_si256((__m256i *) &b00[lb2],t2);
-      _mm256_storeu_si256((__m256i *) &b00[lb3],t3);
       _mm256_storeu_si256((__m256i *) &b01[  0],t4);
+      _mm256_storeu_si256((__m256i *) &b00[lb1],t1);
       _mm256_storeu_si256((__m256i *) &b01[lb1],t5);
+      _mm256_storeu_si256((__m256i *) &b00[lb2],t2);
       _mm256_storeu_si256((__m256i *) &b01[lb2],t6);
+      _mm256_storeu_si256((__m256i *) &b00[lb3],t3);
       _mm256_storeu_si256((__m256i *) &b01[lb3],t7);
-      a00 = a00 + 8;           // bump by 8 cols
       b00 = b00 + lb4 + lb4;   // bump by 8 rows
     } // for i
     for ( ; i<ni ; i++){  // leftovers along i , j -> j+7
@@ -172,74 +166,33 @@ int TransposeBy8bytes(void *a, int la1, void *b, int lb1, int ni, int nj){
   nj8 = nj & 0x7FFFFFF8 ;   // lower multiple of 8
 
 #if defined(FETCH128)
-// faster if ni * nj <= 2048
+// following 2 macros missing in gcc primitives
+// make 256 bit item (ymm) from 2 x 128 bit items (xmm)
+#define _mm256i_from_2m128i( lo, hi) \
+    _mm256_insertf128_si256(_mm256_castsi128_si256(lo), (hi), 0x1)
+// fetch 2 128 bit items and load them into a 256 bit register (ymm)
+#define _mm256_loadu_lh__m128i( loaddr, hiaddr) \
+    _mm256i_from_2m128i(_mm_loadu_si128(loaddr), _mm_loadu_si128(hiaddr))
+
+// faster if ni * nj <= 2048 ?
   for ( i=0 ; i<ni8 ; i+=4){
     a00 = &a000[i] ;
     b00 = &b000[i*lb1] ;
     for (j=0 ; j<nj8 ; j+= 4){
-//       a00 = &a000[i + j*la1] ; 
-//       a01 = a00 + 4 ; a10 = a00 + la4 ; a11 = a10 + 4; 
-//       b00 = &b000[j + i*lb1] ; 
-//       b01 = b00 + 4 ; b10 = b00 + lb4 ; b11 = b10 + 4;
       y0 = _mm256_loadu_lh__m128i( (__m128i const*) &a00[    0] , (__m128i const*) &a00[la2  ] ) ;   // a0 a1 c0 c1
       y1 = _mm256_loadu_lh__m128i( (__m128i const*) &a00[la1  ] , (__m128i const*) &a00[la3  ] ) ;   // b0 b1 d0 d1
       y2 = _mm256_loadu_lh__m128i( (__m128i const*) &a00[    2] , (__m128i const*) &a00[la2+2] ) ;   // a2 a3 c2 c3
       y3 = _mm256_loadu_lh__m128i( (__m128i const*) &a00[la1+2] , (__m128i const*) &a00[la3+2] ) ;   // b2 b3 d2 d3
 
-      x0 = _mm256_unpacklo_epi64(y0,y1);                     // a0 b0 c0 d0
-      x1 = _mm256_unpackhi_epi64(y0,y1);                     // a1 b1 c1 d1
-      x2 = _mm256_unpacklo_epi64(y2,y3);                     // a2 b2 c2 d2
-      x3 = _mm256_unpackhi_epi64(y2,y3);                     // a3 b3 c3 d3
+      x0 = _mm256_unpacklo_epi64(y0,y1);              // a0 b0 c0 d0
+      x1 = _mm256_unpackhi_epi64(y0,y1);              // a1 b1 c1 d1
+      x2 = _mm256_unpacklo_epi64(y2,y3);              // a2 b2 c2 d2
+      x3 = _mm256_unpackhi_epi64(y2,y3);              // a3 b3 c3 d3
 
       _mm256_storeu_si256((__m256i *)&b00[  0],x0);   // store 4 x 4 into b00 (from a00)
       _mm256_storeu_si256((__m256i *)&b00[lb1],x1);
       _mm256_storeu_si256((__m256i *)&b00[lb2],x2);
       _mm256_storeu_si256((__m256i *)&b00[lb3],x3);
-
-//       y0 = _mm256_loadu_lh__m128i( (__m128i const*) &a01[    0] , (__m128i const*) &a01[la2  ] ) ;
-//       y1 = _mm256_loadu_lh__m128i( (__m128i const*) &a01[la1  ] , (__m128i const*) &a01[la3  ] ) ;
-//       y2 = _mm256_loadu_lh__m128i( (__m128i const*) &a01[    2] , (__m128i const*) &a01[la2+2] ) ;
-//       y3 = _mm256_loadu_lh__m128i( (__m128i const*) &a01[la1+2] , (__m128i const*) &a01[la3+2] ) ;
-// 
-//       x0 = _mm256_unpacklo_epi64(y0,y1);                     // a0 b0 c0 d0
-//       x1 = _mm256_unpackhi_epi64(y0,y1);                     // a1 b1 c1 d1
-//       x2 = _mm256_unpacklo_epi64(y2,y3);                     // a2 b2 c2 d2
-//       x3 = _mm256_unpackhi_epi64(y2,y3);                     // a3 b3 c3 d3
-// 
-//       _mm256_storeu_si256((__m256i *)&b10[  0],x0);   // store 4 x 4 into b10 (from a01)
-//       _mm256_storeu_si256((__m256i *)&b10[lb1],x1);
-//       _mm256_storeu_si256((__m256i *)&b10[lb2],x2);
-//       _mm256_storeu_si256((__m256i *)&b10[lb3],x3);
-// 
-//       y0 = _mm256_loadu_lh__m128i( (__m128i const*) &a10[    0] , (__m128i const*) &a10[la2  ] ) ;
-//       y1 = _mm256_loadu_lh__m128i( (__m128i const*) &a10[la1  ] , (__m128i const*) &a10[la3  ] ) ;
-//       y2 = _mm256_loadu_lh__m128i( (__m128i const*) &a10[    2] , (__m128i const*) &a10[la2+2] ) ;
-//       y3 = _mm256_loadu_lh__m128i( (__m128i const*) &a10[la1+2] , (__m128i const*) &a10[la3+2] ) ;
-// 
-//       x0 = _mm256_unpacklo_epi64(y0,y1);                     // a0 b0 c0 d0
-//       x1 = _mm256_unpackhi_epi64(y0,y1);                     // a1 b1 c1 d1
-//       x2 = _mm256_unpacklo_epi64(y2,y3);                     // a2 b2 c2 d2
-//       x3 = _mm256_unpackhi_epi64(y2,y3);                     // a3 b3 c3 d3
-// 
-//       _mm256_storeu_si256((__m256i *)&b01[  0],x0);   // store 4 x 4 into b01 (from a10)
-//       _mm256_storeu_si256((__m256i *)&b01[lb1],x1);
-//       _mm256_storeu_si256((__m256i *)&b01[lb2],x2);
-//       _mm256_storeu_si256((__m256i *)&b01[lb3],x3);
-// 
-//       y0 = _mm256_loadu_lh__m128i( (__m128i const*) &a11[    0] , (__m128i const*) &a11[la2  ] ) ;
-//       y1 = _mm256_loadu_lh__m128i( (__m128i const*) &a11[la1  ] , (__m128i const*) &a11[la3  ] ) ;
-//       y2 = _mm256_loadu_lh__m128i( (__m128i const*) &a11[    2] , (__m128i const*) &a11[la2+2] ) ;
-//       y3 = _mm256_loadu_lh__m128i( (__m128i const*) &a11[la1+2] , (__m128i const*) &a11[la3+2] ) ;
-// 
-//       x0 = _mm256_unpacklo_epi64(y0,y1);                     // a0 b0 c0 d0
-//       x1 = _mm256_unpackhi_epi64(y0,y1);                     // a1 b1 c1 d1
-//       x2 = _mm256_unpacklo_epi64(y2,y3);                     // a2 b2 c2 d2
-//       x3 = _mm256_unpackhi_epi64(y2,y3);                     // a3 b3 c3 d3
-// 
-//       _mm256_storeu_si256((__m256i *)&b11[  0],x0);   // store 4 x 4 into b11 (from a11)
-//       _mm256_storeu_si256((__m256i *)&b11[lb1],x1);
-//       _mm256_storeu_si256((__m256i *)&b11[lb2],x2);
-//       _mm256_storeu_si256((__m256i *)&b11[lb3],x3);
 
       a00 += la4 ;
       b00 += 4;
@@ -249,9 +202,7 @@ int TransposeBy8bytes(void *a, int la1, void *b, int lb1, int ni, int nj){
     a00 = &a000[i] ;
     b00 = &b000[i*lb1] ;
     for (j=0 ; j<nj8 ; j+= 8){
-//       a00 = &a000[i + j*la1] ; 
       a01 = a00 + 4 ; a10 = a00 + la4 ; a11 = a10 + 4; 
-//       b00 = &b000[j + i*lb1] ; 
       b01 = b00 + 4 ; b10 = b00 + lb4 ; b11 = b10 + 4;
       // basic 8 x 8 transpose (a00, a01, a10, a11 into b00, b10, b01, b11) ( 4 4x4 sub matrices)
       // fetch 4 x 4 from a00
@@ -353,10 +304,27 @@ int TransposeBy8bytes(void *a, int la1, void *b, int lb1, int ni, int nj){
   }
   return(0);
 }
+#endif
 
 #if defined(SELF_TEST)
 #include <stdio.h>
 #include <stdlib.h>
+#include <stdint.h>
+
+static uint64_t rdtsc(void) {   // version rapide "out of order"
+  uint32_t lo, hi;
+  __asm__ volatile ("rdtscp"
+      : /* outputs */ "=a" (lo), "=d" (hi)
+      : /* no inputs */
+      : /* clobbers */ "%rcx");
+  return (uint64_t)lo | (((uint64_t)hi) << 32);
+}
+static double cvt = 1.0 / 3.7E+9 ;  // assumes 3.7GHz clock
+
+double MPI_Wtime(){
+  return cvt * rdtsc();
+}
+
 main(int argc, char **argv){
   double *mtx1_4x4;
   double *mtx2_4x4;
@@ -390,7 +358,7 @@ main(int argc, char **argv){
     mat2_4x4[i] = 999;
   }
   printf("\nInput Matrix\n");
-  if(NI*NJ < 1000) {
+  if(NI*NJ < 10) {
     for(j=NJ-1 ; j>= 0 ; j--){
       printf("row %2d ",j);
       for (i=0 ; i<NI ; i++){
@@ -426,7 +394,7 @@ main(int argc, char **argv){
     bytes = bytes + ni * nj * 16;
   }
   t1 = MPI_Wtime() ;
-  printf("\nT8 = %f, %f GB/s, %f ns/pt, %f us/transpose\n",
+  printf("\nT8 = %g, %f GB/s, %f ns/pt, %f us/transpose\n",
 	 (t1-t0),bytes/1000./1000./1000./(t1-t0),(t1-t0)/ni/nj/nk*1000*1000*1000,(t1-t0)/nk*1000*1000);
 
   errors = 0;
@@ -436,7 +404,7 @@ main(int argc, char **argv){
     }
   }
   printf("\nOutput Matrix (double), errors = %d\n\n",errors);
-  if(NI*NJ < 1000) {
+  if(NI*NJ < 10) {
     for(j=NI-1 ; j>= 0 ; j--){
       printf("row %2d ",j);
       for (i=0 ; i<NJ ; i++){
@@ -480,8 +448,8 @@ main(int argc, char **argv){
     }
   }
   printf("\nOutput Matrix (int), errors = %d\n",errors);
-  printf("T4 = %f, %f GB/s, %f ns/pt, %f us/transpose\n",(t1-t0),bytes/1000./1000./1000./(t1-t0),(t1-t0)/ni/nj/nk*1000*1000*1000,(t1-t0)/nk*1000*1000);
-  if(NI*NJ < 1000) {
+  printf("T4 = %g, %f GB/s, %f ns/pt, %f us/transpose\n",(t1-t0),bytes/1000./1000./1000./(t1-t0),(t1-t0)/ni/nj/nk*1000*1000*1000,(t1-t0)/nk*1000*1000);
+  if(NI*NJ < 10) {
     for(j=NI-1 ; j>= 0 ; j--){
       printf("row %2d ",j);
       for (i=0 ; i<NJ ; i++){
