@@ -9,22 +9,16 @@
 #define VSHIFT 3
 #define VMASK 7
 
-// IEEE 754 components
-#define IEEE32_EXP(a) ( ((unsigned int) (a) >> 23) & 0xFF )
-#define IEEE32_SGN(a) ( ((unsigned int) (a) >> 31) )
-#define IEEE32(sign,exp,mantissa) ( (sign << 31) | ( (exp+127) << 23) | ((mantissa) & 0x7FFFFF) )
+// IEEE 754 components (float)
+#define IEEE32_EXP(a) ( ((uint32_t) (a) >> 23) & 0xFF )
+#define IEEE32_SGN(a) ( ((uint32_t) (a) >> 31) )
+// rebuild IEEE 754 float from components
+#define IEEE32(sign,exp,mantissa) ( (sign << 31) | ( ((exp+127) & 0xFF) << 23) | ((mantissa) & 0x7FFFFF) )
 // minmax
 #define MAX(a,b) ( (a > b) ? (a) : (b) )
 #define MIN(a,b) ( (a < b) ? (a) : (b) )
-// shuffle control
+// build immediate operand for shuffle control, 2 bits per selector (0-3)
 #define SELECT(a,b,c,d) ( a + (b<<2) + (c<<4) + (d<<6) )
-// endian swap macros
-#define ESWAP8x4_128(xmm)                    // 8 in 32
-#define ESWAP8x4_256(ymm)
-#define ESWAP16x2_128(xmm)                    // 16 in 32
-#define ESWAP16x2_256(ymm)
-#define ESWAP8x2_128(xmm)                    // 8 in 16
-#define ESWAP8x2_256(ymm)
 
 // endian swap of bytes in 32 bit tokens (s -> d)
 static uint8_t swapindex_8_32[] = {  3,  2,  1,  0,  7,  6,  5,  4, 11, 10,  9,  8, 15, 14, 13, 12};
@@ -62,7 +56,8 @@ void swap_8_in_32(void *s, void *d, int n){
 #endif
   for( ; i < n ; i++){    // loop over remainder
     t = *s1++;
-    t = (t >> 24) | (t << 24) | ((t >> 8) & 0xFF00) | ((t & 0xFF00) << 8);    // bswap
+    t = (t >> 24) | (t << 24) | ((t >> 8) & 0xFF00) | ((t << 8) & 0xFF0000);    // bswap
+//     t = (t >> 24) | (t << 24) | ((t >> 8) & 0xFF00) | ((t & 0xFF00) << 8);    // bswap
     *d1++ = t;
   }
 }
@@ -74,13 +69,13 @@ void swap_32_in_64(void *s, void *d, int n){
 #endif
   uint32_t i, n2;
   uint64_t t;
-  uint32_t *s0, *s1;
-  uint32_t *d0, *d1;
+  uint64_t *s0, *s1;
+  uint64_t *d0, *d1;
 
   n2 = (n >> 3);        // number of 8 token chunks
-  s0 = (uint32_t *) s;
+  s0 = (uint64_t *) s;
   s1 = s0;
-  d0 = (uint32_t *) d;
+  d0 = (uint64_t *) d;
   d1 = d0;
   i = 0;
 #if defined(__AVX2__)
