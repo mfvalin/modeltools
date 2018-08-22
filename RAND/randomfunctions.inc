@@ -169,3 +169,13 @@
    integer(c_INT), dimension(cSeed), intent(IN) :: piSeed
    end subroutine RanNormalZigSetSeed
  end interface
+!float_fuzz(float *f, int n, int start, int stride, int mask, float epsilon, int mode)
+ interface
+   subroutine float_fuzz(f, n, start, stride, mask, epsilon, mode) bind(C,name='float_fuzz')
+     import :: C_INT, C_FLOAT
+     integer(C_INT), intent(IN), value :: n, start, stride, mask, mode
+     real(C_FLOAT), intent(IN), value :: epsilon
+     real(C_FLOAT), dimension(n), intent(INOUT) :: f
+   end subroutine float_fuzz
+ end interface
+ 

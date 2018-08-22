@@ -28,7 +28,7 @@ static inline uint64_t rani() {
   return z ^ (z >> 31);
 }
 
-/*  Written in 2017 by M.Valin */
+/*  Added in 2017 by M.Valin */
 static const double INVM31   =  4.65661287307739257812e-010 ;        /* 1.0 / 2^31 */
 static const double INVM32   =  2.32830643653869628906e-010 ;        /* 1.0 / 2^32 */
 #define CVTDBLS_32(i1)      ((int)(i1)  * INVM31 + (INVM32))
