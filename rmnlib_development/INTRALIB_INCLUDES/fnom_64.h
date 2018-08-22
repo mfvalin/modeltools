@@ -2,9 +2,10 @@
 
 typedef struct {
   uint32_t 
-     stream:1, std:1,     burp:1,  rnd:1,  wa:1,         ftn:1,    unf:1,    read_only:1, 
-     old:1,    scratch:1, paged:1, pipe:1, write_mode:1, remote:1, sparse:1, atomic:1,
-     nopages:1,dopages:1, padding:14;
+     stream:1,  std:1,     burp:1,  rnd:1,  wa:1,         ftn:1,    unf:1,    read_only:1, 
+     old:1,     scratch:1, paged:1, pipe:1, write_mode:1, remote:1, sparse:1, atomic:1,
+     nopages:1, dopages:1, mapped:1,
+     padding:13;
 } attributs;
 
 typedef struct {
