@@ -220,9 +220,10 @@
   end function
 
   function get_ftn_free_unit_number() result(iun) bind(C,name='FtnFreeUnitNumber')
+    use ISO_C_BINDING
     implicit none
-    integer :: iun
-    integer, external :: get_free_unit_number
+    integer(C_INT) :: iun
+    integer(C_INT), external :: get_free_unit_number
 
     iun = get_free_unit_number()
   end function get_ftn_free_unit_number
@@ -234,11 +235,11 @@
     character (len=16) :: access_mode
       iun = -1
       do i = 99, 1, -1  ! find an available Fortran unit number
-	inquire(UNIT=i,ACCESS=access_mode)
-	if(trim(access_mode) == 'UNDEFINED')then ! found
-	  iun = i
-	  exit
-	endif
+        inquire(UNIT=i,ACCESS=access_mode)
+        if(trim(access_mode) == 'UNDEFINED')then ! found
+          iun = i
+          exit
+        endif
       enddo
     return
   end function get_free_unit_number
@@ -383,10 +384,11 @@ print *,'closing unit =',iun
   END
 !
 integer function fretour(iun)
+  integer, intent(IN) :: iun
 ! ARGUMENTS: in iun   unit number, ignored
 ! RETURNS: zero.
 ! Kept only for backward compatibility. NO-OP
-  fretour = 0
+  fretour = 0 * iun
   return
 end
 !
@@ -825,4 +827,34 @@ subroutine wawrit64(iun,buf,adr,nmots,mode)
 
   call cwawrit64(iun,buf,adr,nmots,mode)
 end subroutine wawrit64
+
+!int32_t f77name(qqqfnom)(int32_t *iun,char *nom,char *type,int32_t *flrec,F2Cl l1,F2Cl l2)
+function qqqfnom(iun, nomf, typf, lrec) result(status)
+  use ISO_C_BINDING
+  implicit none
+  integer, intent(IN) :: iun
+  character(len=*), intent(OUT) :: nomf, typf
+  integer, intent(OUT) :: lrec
+  integer :: status
+  interface
+    function strloc(what) result (address) bind(C,name='StrLoc')
+      import :: C_PTR, C_CHAR
+      type(C_PTR) :: address
+      character(kind=C_CHAR), intent(IN) , target :: what
+    end function strloc
+    function c_qqqfnom(iun, nomf, typf, lrec, lnomf, ltypf) result(status) bind(C,name='QqqFnom')
+      import :: C_PTR, C_INT
+      integer(C_INT), intent(IN) :: iun
+      integer(C_INT), intent(IN), value :: lnomf, ltypf
+      type(C_PTR), intent(IN), value :: typf, nomf
+      integer(C_INT), intent(OUT) :: lrec
+      integer(C_INT) :: status
+    end function c_qqqfnom
+  end interface
+
+  nomf = ""
+  typf = ""
+  status = c_qqqfnom(iun, strloc(nomf), strloc(typf), lrec, len(nomf), len(typf))
+    
+end function qqqfnom
 
