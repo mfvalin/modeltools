@@ -24,10 +24,16 @@
 
 #include <stdint.h>
 
-#include <rpnmacros.h>
-// #define F2Cl int32_t
-// #define f77name(a) a##_
-// #define D77MULT 4
+#include <rpn_macros_arch.h>
+
+#define swap_word_endianness(mot) { register  uint32_t tmp =( uint32_t)mot; \
+   mot = (tmp>>24) | (tmp<<24) | ((tmp>>8)&0xFF00) | ((tmp&0xFF00)<<8); }
+   
+#define swap_buffer_endianness(buff,nwds) {\
+     uint32_t *buf=( uint32_t *)buff ;\
+   register uint32_t nwords=nwds ;\
+   while(nwords--) { swap_word_endianness(*buf);buf++; };\
+   }
 
 #include <ctype.h>
 #include <string.h>
@@ -1575,13 +1581,13 @@ int c_sqgets(int iun, char *bufptr, int nchar) {
    nlu = read(fd,bufptr,nchar);
    return( (nlu > 0) ? nlu : -1);
 }
-int32_t f77name(sqgets)(int32_t *iun, char  *bufptr, int32_t *nchar, F2Cl llbuf) {
-   int lbuf=llbuf;
-   if (lbuf >= *nchar)
-      return( c_sqgets(*iun, bufptr , *nchar));
-   else
-      return( c_sqgets(*iun, bufptr , lbuf));
-}
+// int32_t f77name(sqgets)(int32_t *iun, char  *bufptr, int32_t *nchar, F2Cl llbuf) {
+//    int lbuf=llbuf;
+//    if (lbuf >= *nchar)
+//       return( c_sqgets(*iun, bufptr , *nchar));
+//    else
+//       return( c_sqgets(*iun, bufptr , lbuf));
+// }
 /***************************************************************************
 *                     C _ S Q P U T S ,   S Q P U T S                      *
 ****************************************************************************
@@ -1606,13 +1612,13 @@ int c_sqputs(int iun, char *bufptr, int nchar) {
    nlu = write(fd,bufptr,nchar);
    return( (nlu > 0) ? nlu : -1);
 }
-int32_t f77name(sqputs)(int32_t *iun, char  *bufptr, int32_t *nchar, F2Cl llbuf) {
-   int lbuf=llbuf;
-   if (lbuf >= *nchar)
-      return( c_sqputs(*iun, bufptr , *nchar));
-   else
-      return( c_sqputs(*iun, bufptr , lbuf));
-}
+// int32_t f77name(sqputs)(int32_t *iun, char  *bufptr, int32_t *nchar, F2Cl llbuf) {
+//    int lbuf=llbuf;
+//    if (lbuf >= *nchar)
+//       return( c_sqputs(*iun, bufptr , *nchar));
+//    else
+//       return( c_sqputs(*iun, bufptr , lbuf));
+// }
 
 
 /****************************************************************************

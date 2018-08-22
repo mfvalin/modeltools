@@ -861,3 +861,53 @@ function qqqfnom(iun, nomf, typf, lrec) result(status)
     
 end function qqqfnom
 
+! int c_sqgets(int iun, char *bufptr, int nchar)
+! int32_t f77name(sqgets)(int32_t *iun, char  *bufptr, int32_t *nchar, F2Cl llbuf)
+function sqgets(iun, buf, nchar) result(nlu)
+  use ISO_C_BINDING
+  implicit none  
+  interface
+    function strloc(what) result (address) bind(C,name='StrLoc')
+      import :: C_PTR, C_CHAR
+      type(C_PTR) :: address
+      character(kind=C_CHAR), intent(IN) , target :: what
+    end function strloc
+    function c_sqgets(iun, buf, nchar) result(status) bind(C,name='c_sqgets')
+      import :: C_PTR, C_CHAR, C_INT
+      integer(C_INT), intent(IN) :: iun
+      type(C_PTR), intent(IN) :: buf
+      integer(C_INT), intent(IN) :: nchar
+      integer(C_INT) :: status
+    end function c_sqgets
+  end interface
+  integer, intent(IN) :: iun, nchar
+  character(len=*), intent(OUT) :: buf
+  integer :: nlu
+
+  buf(1:1) = " "
+  nlu = c_sqgets(iun, strloc(buf), min(len(buf),nchar))
+end function sqgets
+
+function sqputs(iun, buf, nchar) result(necr)
+  use ISO_C_BINDING
+  implicit none  
+  interface
+    function strloc(what) result (address) bind(C,name='StrLoc')
+      import :: C_PTR, C_CHAR
+      type(C_PTR) :: address
+      character(kind=C_CHAR), intent(IN) , target :: what
+    end function strloc
+    function c_sqputs(iun, buf, nchar) result(status) bind(C,name='c_sqputs')
+      import :: C_PTR, C_CHAR, C_INT
+      integer(C_INT), intent(IN) :: iun
+      type(C_PTR), intent(IN) :: buf
+      integer(C_INT), intent(IN) :: nchar
+      integer(C_INT) :: status
+    end function c_sqputs
+  end interface
+  integer, intent(IN) :: iun, nchar
+  character(len=*), intent(IN) :: buf
+  integer :: necr
+
+  necr = c_sqputs(iun, strloc(buf), min(len(buf),nchar))
+end function sqputs
