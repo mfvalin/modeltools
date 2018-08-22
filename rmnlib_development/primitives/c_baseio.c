@@ -770,7 +770,21 @@ static int c_qqqfscr(char *type)
 *          in  l2      length of type 
 *
 */
-int32_t f77name(qqqfnom)(int32_t *iun,char *nom,char *type,int32_t *flrec,F2Cl l1,F2Cl l2)
+// int32_t f77name(qqqfnom)(int32_t *iun,char *nom,char *type,int32_t *flrec,F2Cl l1,F2Cl l2)
+// {
+//    int i,j;
+// 
+//    j=*iun;
+//    if ((i=find_file_entry("qqqfnom",j)) < 0) return(i);
+// 
+//    strncpy(nom,FGFDT[i].file_name,l1);
+//    for(j=strlen(FGFDT[i].file_name);j<l1;j++) nom[j]=' ';
+//    strncpy(type,FGFDT[i].file_type,l2);
+//    for(j=strlen(FGFDT[i].file_type);j<l2;j++) type[j]=' ';
+//    *flrec=FGFDT[i].lrec;
+//    return(0);
+// }
+int32_t QqqFnom(int32_t *iun,char *nom,char *type,int32_t *flrec,int32_t l1,int32_t l2)
 {
    int i,j;
 
@@ -2933,3 +2947,8 @@ uint32_t check_host_id()
 {
 return(0);
 }
+
+void *StrLoc(void *what){
+  return what;
+}
+

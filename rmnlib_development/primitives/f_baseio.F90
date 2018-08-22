@@ -22,14 +22,15 @@
   program self_test   ! bare bones test
     use ISO_C_BINDING
     implicit none
-    integer :: status, iun1, iun2, iun3, errors, nw
+    integer :: status, iun1, iun2, iun3, errors, nw, my_iun, my_lrec
     integer*8 :: nblks, fsize
     integer :: i
     integer*8 :: wa8
-    integer, external :: fnom, fclos, existe, wasize, numblks, waread2, wawrit2
+    integer, external :: fnom, fclos, existe, wasize, numblks, waread2, wawrit2, qqqfnom
     integer*8, external :: numblks64, wasize64
     integer, dimension(4) :: buf
     integer, dimension(512) :: buf512
+    character(len=128) :: my_nomf, my_typf
 
     iun1 = 0
     status = fnom(iun1,'./fortran_formatted','SEQ+FMT+FTN+APPEND',0)
@@ -44,6 +45,9 @@
     iun3 = 0
     status = fnom(iun3,'fortran_d77','UNF+FTN+D77+SCRATCH',5)
     print *,'iun3, fnom status =',iun3,status
+    my_iun = iun3
+    status = qqqfnom(my_iun, my_nomf, my_typf, my_lrec)
+    print *,'iun,nom,typ,lrec',my_iun,"'"//trim(my_nomf)//"'","'"//trim(my_typf)//"'",my_lrec
     buf = 1
     write(iun3,rec=1)buf
     buf = 2
@@ -828,7 +832,6 @@ subroutine wawrit64(iun,buf,adr,nmots,mode)
   call cwawrit64(iun,buf,adr,nmots,mode)
 end subroutine wawrit64
 
-!int32_t f77name(qqqfnom)(int32_t *iun,char *nom,char *type,int32_t *flrec,F2Cl l1,F2Cl l2)
 function qqqfnom(iun, nomf, typf, lrec) result(status)
   use ISO_C_BINDING
   implicit none
