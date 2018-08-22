@@ -515,7 +515,7 @@ int main(int argc, char **argv){
     index = 1001 + rval * 100;
     biggaussdist[index] ++;
   }
-  printf("dmin = %6.3f, dmax = %6.3f, avg = %10.7f\n",dmin,dmax,avg/i);
+  printf("for %d samples, min = %6.3f, max = %6.3f, avg = %10.7f\n",i,dmin,dmax,avg/i);
   ptot = 0.0;
   for( i=0 ; i < 2000 ; i++){
     x = (i-1001) / 100.0 ;
@@ -527,9 +527,10 @@ int main(int argc, char **argv){
     p1 = 1000000000 * prob / 2.5066283;  // sqrt(2 * pi)
     est[i] = p1 * 1;
   }
-  printf("ptot = %g\n",ptot);
+  printf("ptot = %g, expecting 2.5066283\n",ptot);
 //   for( i=0 ; i < 10 ; i++) printf("%9d ",gaussdist[i]);
 //   for( i=0 ; i < 2000 ; i++) printf("%9d %9d\n",i,biggaussdist[i]);
+  printf("%9s %9s %10s\n","slot","population","deviation(ppm) (center at slot 1000)");
   for( i=991 ; i <= 1010 ; i++) printf("%9d %9d %10.0f\n",i,biggaussdist[i],1000000.0*(biggaussdist[i]-est[i])*1.0/est[i]);
   printf("\n");
   MPI_Barrier(MPI_COMM_WORLD);
