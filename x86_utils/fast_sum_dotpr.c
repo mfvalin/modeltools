@@ -672,8 +672,11 @@ xsum_flt compensated_sum_f (const xsum_flt *vec, xsum_length n){
   vc0 = _mm256_sub_pd(vc0,vy0);  // vc[i] = (vs[i] - vt[i]) - vy[i]
   vs0 = _mm256_add_pd(vs0,vc0);  // add error terms  [0+1,1+0,2+3,3+2]
 
-  _mm256_storeu_pd ((double *) &vs[0], vs0) ;   // store for scalar wrapup
-  return vs[0] + vs[2] ;                        // no fancy footwork for last addition
+//   _mm256_storeu_pd ((double *) &vs[0], vs0) ;   // store for scalar wrapup
+//   return vs[0] + vs[2] ;                        // no fancy footwork for last addition
+
+  _mm_store_sd (vs, _mm_add_sd( _mm256_extractf128_pd(vs0,0) , _mm256_extractf128_pd(vs0,1) ) ) ;
+  return vs[0];
 #endif
 }
 
