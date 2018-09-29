@@ -37,6 +37,9 @@ int TransposeBy4bytes(void *a, int la1, void *b, int lb1, int ni, int nj){
   __m256i t0, t1, t2, t3, t4, t5, t6, t7;
   __m256i y0, y1, y2, y3, y4, y5, y6, y7;
   __m256i x0, x1, x2, x3, x4, x5, x6, x7;
+  __m128i r0, r1, r2, r3;
+  __m128i d0, d1, d2, d3;
+  __m128i s0, s1, s2, s3;
 
   if (ni <= 0) ni = la1 ;
   if (nj <= 0) nj = lb1;
@@ -50,6 +53,40 @@ int TransposeBy4bytes(void *a, int la1, void *b, int lb1, int ni, int nj){
   a000 = (int *)a;
   b000 = (int *)b;
 // basic block for transpose is 8x8
+#if defined(FETCH128)
+  for (j=0 ; j<nj8 ; j+= 8){
+    a00 = a000;        // base address for row
+    a01 = a00 + la4;   // base of next block of 4x8
+    b00 = b000;   // base address for column
+    for ( i=0 ; i<ni8 ; i+=8){     // transpose a[i:i+7,J:j+7] into b[j:j+7,i:i+7] using 4 x 4 blocks
+
+      r0 = _mm_loadu_si128(a00    );
+      r1 = _mm_loadu_si128(a00+la1);
+      r2 = _mm_loadu_si128(a00+la2);
+      r3 = _mm_loadu_si128(a00+la3);
+      
+      a00 = a00 + 8;           // bump by 8 cols
+      a01 = a00 + la4;         // base of next block of 4x8
+
+      b01 = b00 + lb4;         // base of next block of 4x8
+      b00 = b00 + lb4 + lb4;   // bump by 8 rows
+    } // for i
+    for ( ; i<ni ; i++){  // leftovers along i , j -> j+7
+      b00[0] = a00[  0] ;  // b[j  ,i] = a[i,j  ]
+      b00[1] = a00[la1] ;  // b[j+1,i] = a[i,j+1]
+      b00[2] = a00[la2] ;  // b[j+2,i] = a[i,j+2]
+      b00[3] = a00[la3] ;  // b[j+3,i] = a[i,j+3]
+      b00[4] = a00[la4    ] ;  // b[j+4,i] = a[i,j+4]
+      b00[5] = a00[la4+la1] ;  // b[j+5,i] = a[i,j+5]
+      b00[6] = a00[la4+la2] ;  // b[j+6,i] = a[i,j+6]
+      b00[7] = a00[la4+la3] ;  // b[j+7,i] = a[i,j+7]
+      b00 += lb1;
+      a00++;
+    }
+    a000 = a000 + la4 + la4;   // bump by 8 rows
+    b000 = b000 + 8;           // bump by 8 cols
+  }  // for j
+#else
   for (j=0 ; j<nj8 ; j+= 8){
     a00 = a000;   // base address for row
     a01 = a00 + la4;   // base of next block of 4x8
@@ -119,6 +156,7 @@ int TransposeBy4bytes(void *a, int la1, void *b, int lb1, int ni, int nj){
     a000 = a000 + la4 + la4;   // bump by 8 rows
     b000 = b000 + 8;           // bump by 8 cols
   }  // for j
+#endif
   a000 = (int *)a;
   b000 = (int *)b;
   jb00 = j;
@@ -196,6 +234,8 @@ int TransposeBy8bytes(void *a, int la1, void *b, int lb1, int ni, int nj){
 
       a00 += la4 ;
       b00 += 4;
+    }
+  }
 #else
 // faster if ni * nj > 2048
   for ( i=0 ; i<ni8 ; i+=8){
@@ -289,9 +329,9 @@ int TransposeBy8bytes(void *a, int la1, void *b, int lb1, int ni, int nj){
       _mm256_storeu_si256((__m256i *)&b11[lb3],x3);
       a00 += la8 ;
       b00 += 8;
-#endif
     }
   }
+#endif
   for (i=ni8 ; i<ni ; i++){
     for ( jj=0 ; jj<nj ; jj++){   // b[jj,i] = a[i,jj]
       b000[jj + lb1*i] = a000[i + jj*la1];
