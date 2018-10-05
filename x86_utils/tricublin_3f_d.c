@@ -51,7 +51,7 @@ void Bicubic_coeffs_d(double *px, double *py, double x, double y){
 // 3 values are interpolated using the same cubic/linear polynomial coefficients
 // pz(3) and pz(4) both == 0.0 mean linear interpolation along z
 // pz(1) = 1.0 - dz, pz(2) = dz are expected (0.0 <= dz <= 1.0)
-void Tricublin_zyx3_d(float *d, float *f, double *px, double *py, double *pz, int NI, int NINJ){
+void Tricublin_zyx3f_d(float *d, float *f, double *px, double *py, double *pz, int NI, int NINJ){
   int ni = 3*NI;
   int ninj = 3*NINJ;
   int ninjl;    // ninj (cubic along z) or 0 (linear along z)
@@ -193,7 +193,7 @@ void Tricublin_zyx3_d(float *d, float *f, double *px, double *py, double *pz, in
   cx = _mm256_broadcast_sd(px+3) ;
   x0 = _mm256_fmadd_pd(_mm256_loadu_pd(dst+9), cx ,x0);  // column 3
 
-  vd =  _mm256_cvtpd_ps(x0);
+  vd =  _mm256_cvtpd_ps(x0);                  // back to float precision
   l[0] = _mm_extract_epi32((__m128i) vd, 0);  // extract element 0 and store
   l[1] = _mm_extract_epi32((__m128i) vd, 1);  // extract element 1 and store
   l[2] = _mm_extract_epi32((__m128i) vd, 2);  // extract element 2 and store
@@ -222,7 +222,7 @@ void Tricublin_zyx3_d(float *d, float *f, double *px, double *py, double *pz, in
 int main(int argc, char **argv){
   float array[3*NI*NJ*NK];
   float dest[3*NI*NJ*NK];
-  double a[4], px[4], py[4];
+  double pz[4], px[4], py[4];
   float avg=0.0;
   double dx, dy, dz;
   float expected1, expected2;
@@ -258,23 +258,22 @@ int main(int argc, char **argv){
   printf("py =  %10.6f %10.6f %10.6f %10.6f\n",py[0],py[1],py[2],py[3]);
 
   if(argc > 1) {  // z linear
-    a[0] = 1.0 - dz;
-    a[1] = dz;
-    a[2] = 0.0;
-    a[3] = 0.0;
+    pz[0] = 1.0 - dz;
+    pz[1] = dz;
+    pz[2] = 0.0;
+    pz[3] = 0.0;
     expected1 = II + 1 + dx + JJ + 1 + dy + KK + 0 + dz ;
     expected2 = II + 1 + dx + JJ + 1 + dy + KK + 0 + dz ;
   }else{          // z cubic
-    a[0] = cm167*dz*(dz-one)*(dz-two);        // coefficients for interpolation along z
-    a[1] = cp5*(dz+one)*(dz-one)*(dz-two);
-    a[2] = cm5*dz*(dz+one)*(dz-two);
-    a[3] = cp167*dz*(dz+one)*(dz-one);
+    pz[0] = cm167*dz*(dz-one)*(dz-two);        // coefficients for interpolation along z
+    pz[1] = cp5*(dz+one)*(dz-one)*(dz-two);
+    pz[2] = cm5*dz*(dz+one)*(dz-two);
+    pz[3] = cp167*dz*(dz+one)*(dz-one);
     expected1 = II + 1 + dx + JJ + 1 + dy + KK + 1 + dz ;
     expected2 = II + 1 + dx + JJ + 1 + dy + KK + 1 + dz ;
   }
-  printf("a  =  %10.6f %10.6f %10.6f %10.6f\n",a[0],a[1],a[2],a[3]);
-  Tricublin_zyx3_d(&dest[0], &array[II*3 + JJ*NI*3 + KK*NI*NJ*3], px, py, a, NI, NI*NJ);
-//   Tricublin_zyx3_d(&dest[0], &array[3*NI*NJ + 3 + 3*NI], px, py, a, NI, NI*NJ);
+  printf("pz  =  %10.6f %10.6f %10.6f %10.6f\n",pz[0],pz[1],pz[2],pz[3]);
+  Tricublin_zyx3f_d(&dest[0], &array[II*3 + JJ*NI*3 + KK*NI*NJ*3], px, py, pz, NI, NI*NJ);
   printf("got %10.6f, %10.6f, %10.6f, expected %10.6f %10.6f %10.6f\n",dest[0],dest[1],dest[2],expected2,expected2+10,expected2+100);
 }
 #endif
