@@ -88,7 +88,8 @@ void Tricublin_zyx3f_d(float *d, float *f, double *px, double *py, double *pz, i
   float *s = f;
   double dst[13];
   int32_t *l = (int32_t *)d;
-  int ni2, ni3, i;
+//   int64_t *L = (int64_t *)d;
+  int ni2, ni3;
 
 #if defined(__AVX2__) && defined(__x86_64__)
   __m256d cz0, cz1, cz2, cz3, cy, cx;
@@ -98,7 +99,7 @@ void Tricublin_zyx3f_d(float *d, float *f, double *px, double *py, double *pz, i
   __m128  vd;
 #else
   double va4[12], vb4[12], vc4[12], vd4[12];
-  int ninj2, ninj3;
+  int ninj2, ninj3, i;
 #endif
 
   ni2 = ni + ni;
@@ -223,6 +224,9 @@ void Tricublin_zyx3f_d(float *d, float *f, double *px, double *py, double *pz, i
   cx = _mm256_broadcast_sd(px+3) ;
   x0 = _mm256_fmadd_pd(_mm256_loadu_pd(dst+9), cx ,x0);  // column 3
 
+//   L[0] = _mm256_extract_epi64((__m256i) x0, 0);
+//   L[1] = _mm256_extract_epi64((__m256i) x0, 1);
+//   L[2] = _mm256_extract_epi64((__m256i) x0, 2);
   vd =  _mm256_cvtpd_ps(x0);                  // back to float precision
   l[0] = _mm_extract_epi32((__m128i) vd, 0);  // extract element 0 and store
   l[1] = _mm_extract_epi32((__m128i) vd, 1);  // extract element 1 and store
@@ -253,7 +257,6 @@ void Tricublin_zyxf3_d(float *d, float *f1, float *f2, float *f3, double *px, do
   float *s1, *s2, *s3;
   int32_t *l = (int32_t *)d;
   __m256d cz0, cz1, cz2, cz3, cy, cx;
-  __m256d x0;
   __m256d za, zb, zc;
   __m256d ya, yb, yc;
   __m128d va, vb, vc;
@@ -368,7 +371,7 @@ void Tricublin_zyxf3_d(float *d, float *f1, float *f2, float *f3, double *px, do
   yc  = _mm256_fmadd_pd(zc,cy,yc);
 
   // interpolation along x
-  cx = _mm256_load_pd(px) ;
+  cx = _mm256_loadu_pd(px) ;
   ya = _mm256_mul_pd(ya, cx ); yb = _mm256_mul_pd(yb, cx ); yc = _mm256_mul_pd(yc, cx );   // multiply by px
   // use folding to sum 4 terms
   va = _mm_add_pd( _mm256_extractf128_pd(ya,0) , _mm256_extractf128_pd(ya,1) ); va = _mm_hadd_pd(va,va);
@@ -421,7 +424,6 @@ void Tricublin_zyxf_d(float *d, float *f1, double *px, double *py, double *pz, i
   float *s1;
   int32_t *l = (int32_t *)d;
   __m256d cz0, cz1, cz2, cz3, cy, cx;
-  __m256d x0;
   __m256d za;
   __m256d ya;
   __m128d va;
@@ -496,7 +498,7 @@ void Tricublin_zyxf_d(float *d, float *f1, double *px, double *py, double *pz, i
   ya  = _mm256_fmadd_pd(za,cy,ya);
 
   // interpolation along x
-  cx = _mm256_load_pd(px) ;
+  cx = _mm256_loadu_pd(px) ;
   ya = _mm256_mul_pd(ya, cx );   // multiply by px
   // use folding to sum 4 terms
   va = _mm_add_pd( _mm256_extractf128_pd(ya,0) , _mm256_extractf128_pd(ya,1) ); va = _mm_hadd_pd(va,va);
@@ -532,7 +534,7 @@ int main(int argc, char **argv){
   double pz[4], px[4], py[4];
   float avg=0.0;
   double dx, dy, dz;
-  float expected1, expected2;
+  double expected1, expected2;
   struct timeval t1, t2;
   long long tm1, tm2;
   int i,j,k,ijk;
