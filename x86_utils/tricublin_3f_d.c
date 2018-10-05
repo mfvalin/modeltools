@@ -20,6 +20,18 @@
 #include <immintrin.h>
 #include <stdint.h>
 
+#if defined(TIMING)
+uint64_t rdtscp_(void) {   // version "in order" avec "serialization"
+  uint32_t lo, hi;
+  __asm__ volatile ("rdtscp"
+      : /* outputs */ "=a" (lo), "=d" (hi)
+      : /* no inputs */
+      : /* clobbers */ "%rcx");
+  __asm__ volatile ("mfence");
+  return (uint64_t)lo | (((uint64_t)hi) << 32);
+}
+#endif
+
 static double cp167 =  1.0/6.0;
 static double cm167 = -1.0/6.0;
 static double cp5 = 0.5;
@@ -371,7 +383,7 @@ void Tricublin_zyxf3_d(float *d, float *f1, float *f2, float *f3, double *px, do
   yc  = _mm256_fmadd_pd(zc,cy,yc);
 
   // interpolation along x
-  cx = _mm256_loadu_pd(px) ;
+  cx = _mm256_loadu_pd(px) ;     // make sure to use "unaligned" load to avoid segfault
   ya = _mm256_mul_pd(ya, cx ); yb = _mm256_mul_pd(yb, cx ); yc = _mm256_mul_pd(yc, cx );   // multiply by px
   // use folding to sum 4 terms
   va = _mm_add_pd( _mm256_extractf128_pd(ya,0) , _mm256_extractf128_pd(ya,1) ); va = _mm_hadd_pd(va,va);
@@ -498,7 +510,7 @@ void Tricublin_zyxf_d(float *d, float *f1, double *px, double *py, double *pz, i
   ya  = _mm256_fmadd_pd(za,cy,ya);
 
   // interpolation along x
-  cx = _mm256_loadu_pd(px) ;
+  cx = _mm256_loadu_pd(px) ;     // make sure to use "unaligned" load to avoid segfault
   ya = _mm256_mul_pd(ya, cx );   // multiply by px
   // use folding to sum 4 terms
   va = _mm_add_pd( _mm256_extractf128_pd(ya,0) , _mm256_extractf128_pd(ya,1) ); va = _mm_hadd_pd(va,va);
