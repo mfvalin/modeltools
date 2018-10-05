@@ -49,9 +49,9 @@ void Bicubic_coeffs_d(double *px, double *py, double x, double y){
 // f : address of lower left corner of the 4 x 4 x 4 or 4 x 4 x 2 box
 // interpolation is done along z, then along y, then along x
 // 3 values are interpolated using the same cubic/linear polynomial coefficients
-// abcd(3) and abcd(4) both == 0.0 mean linear interpolation along z
-// abcd(1) = 1.0 - dz, abcd(2) = dz are expected (0.0 <= dz <= 1.0)
-void Tricublin_zyx3_d(float *d, float *f, double *px, double *py, double *abcd, int NI, int NINJ){
+// pz(3) and pz(4) both == 0.0 mean linear interpolation along z
+// pz(1) = 1.0 - dz, pz(2) = dz are expected (0.0 <= dz <= 1.0)
+void Tricublin_zyx3_d(float *d, float *f, double *px, double *py, double *pz, int NI, int NINJ){
   int ni = 3*NI;
   int ninj = 3*NINJ;
   int ninjl;    // ninj (cubic along z) or 0 (linear along z)
@@ -75,14 +75,14 @@ void Tricublin_zyx3_d(float *d, float *f, double *px, double *py, double *abcd, 
   ni3 = ni2 + ni;
   dst[12] = 0;
   ninjl = ninj ; // assuming cubic case. in the linear case, ninjl will be set to 0
-  if(abcd[2] == 0.0 && abcd[3] == 0.0) ninjl = 0;
+  if(pz[2] == 0.0 && pz[3] == 0.0) ninjl = 0;
 
 #if defined(__AVX2__) && defined(__x86_64__)
   // ==== interpolation along Z, vector length is 12 (3 vectors of length 4 per plane) ====
-  cz0 = _mm256_broadcast_sd(abcd  );   // coefficients for interpolation along z, promote to vectors
-  cz1 = _mm256_broadcast_sd(abcd+1);
-  cz2 = _mm256_broadcast_sd(abcd+2);
-  cz3 = _mm256_broadcast_sd(abcd+3);
+  cz0 = _mm256_broadcast_sd(pz  );   // coefficients for interpolation along z, promote to vectors
+  cz1 = _mm256_broadcast_sd(pz+1);
+  cz2 = _mm256_broadcast_sd(pz+2);
+  cz3 = _mm256_broadcast_sd(pz+3);
 
   s = f;                   // row 0, 4 planes (Z0, Z1, Z2, Z3)
   cy  = _mm256_broadcast_sd(py);
@@ -201,10 +201,10 @@ void Tricublin_zyx3_d(float *d, float *f, double *px, double *py, double *abcd, 
   ninj2 = ninj + ninjl;
   ninj3 = ninj2 + ninjl;
   for (i=0 ; i<12 ; i++){
-    va4[i] = s[i    ]*abcd[0] + s[i    +ninj]*abcd[1] +  s[i    +ninj2]*abcd[2] + s[i    +ninj3]*abcd[3];
-    vb4[i] = s[i+ni ]*abcd[0] + s[i+ni +ninj]*abcd[1] +  s[i+ni +ninj2]*abcd[2] + s[i+ni +ninj3]*abcd[3];
-    vc4[i] = s[i+ni2]*abcd[0] + s[i+ni2+ninj]*abcd[1] +  s[i+ni2+ninj2]*abcd[2] + s[i+ni2+ninj3]*abcd[3];
-    vd4[i] = s[i+ni3]*abcd[0] + s[i+ni3+ninj]*abcd[1] +  s[i+ni3+ninj2]*abcd[2] + s[i+ni3+ninj3]*abcd[3];
+    va4[i] = s[i    ]*pz[0] + s[i    +ninj]*pz[1] +  s[i    +ninj2]*pz[2] + s[i    +ninj3]*pz[3];
+    vb4[i] = s[i+ni ]*pz[0] + s[i+ni +ninj]*pz[1] +  s[i+ni +ninj2]*pz[2] + s[i+ni +ninj3]*pz[3];
+    vc4[i] = s[i+ni2]*pz[0] + s[i+ni2+ninj]*pz[1] +  s[i+ni2+ninj2]*pz[2] + s[i+ni2+ninj3]*pz[3];
+    vd4[i] = s[i+ni3]*pz[0] + s[i+ni3+ninj]*pz[1] +  s[i+ni3+ninj2]*pz[2] + s[i+ni3+ninj3]*pz[3];
     dst[i] = va4[i]*py[0] + vb4[i]*py[1] + vc4[i]*py[2] + vd4[i]*py[3];
   }
   d[0] = dst[0]*px[0] + dst[3]*px[1] + dst[6]*px[2] + dst[ 9]*px[3];
@@ -219,7 +219,7 @@ void Tricublin_zyx3_d(float *d, float *f, double *px, double *py, double *abcd, 
 #include <stdio.h>
 #include <sys/time.h>
 
-main(int argc, char **argv){
+int main(int argc, char **argv){
   float array[3*NI*NJ*NK];
   float dest[3*NI*NJ*NK];
   double a[4], px[4], py[4];
