@@ -55,12 +55,12 @@ void V2cubic_coeffs_d(double *pxy, double *xy){
   vc5  = _mm_set1_pd(cp5);               //  cp5    (0.5)
   vc3  = _mm_set1_pd(cp133);             //  cp133  (1/3)
   vp6  = _mm_set1_pd(cp167);             //  cp167  (1/6)
-  // alternate formula to compute coefficients
-  //   p = cm167*xy*(xy-one)*(xy-two)       xy*(xy-one) * (-cp167)*(xy-two)  =  (xy*xy  - xy)   * (-(cp167*xy) + cp133)
-  //   p = cp5*(xy+one)*(xy-one)*(xy-two)   cp5*(xy-two) * (xy+one)*(xy-one)  =  (cp5*xy - one)  * (xy*xy       - one)
-  //   p = cm5*xy*(xy+one)*(xy-two)         xy*(xy+one) * (-cp5)*(xy-two)    =  (xy*xy  + xy)   * (-(cp5*xy)   + one)
-  //   p = cp167*xy*(xy+one)*(xy-one)       xy*(xy+one) * cp167*(xy-one)     =  (xy*xy  + xy)   * (cp167*xy    - cp167)
-  // STEP1 : 7 terms using 3 different FMAs  a*b+c, a*b-c, (-a*b)+c
+  // alternate formula to compute coefficients to take advantage of FMAs
+  //   p = cm167*xy*(xy-one)*(xy-two)     = xy*(xy-one) * (-cp167)*(xy-two)  =  (xy*xy  - xy)   * (-(cp167*xy) + cp133)
+  //   p = cp5*(xy+one)*(xy-one)*(xy-two) = cp5*(xy-two) * (xy+one)*(xy-one) =  (cp5*xy - one)  * (xy*xy       - one)
+  //   p = cm5*xy*(xy+one)*(xy-two)       = xy*(xy+one) * (-cp5)*(xy-two)    =  (xy*xy  + xy)   * (-(cp5*xy)   + one)
+  //   p = cp167*xy*(xy+one)*(xy-one)     = xy*(xy+one) * cp167*(xy-one)     =  (xy*xy  + xy)   * (cp167*xy    - cp167)
+  // STEP1 : 7 independent terms using 3 different FMAs  a*b+c, a*b-c, (-a*b)+c
   xxmx = _mm_fmsub_pd(vxy,vxy,vxy);      //  xy*xy       - xy
   x6m3 = _mm_fnmadd_pd(vxy,vp6,vc3);     //  -(cp167*xy) + cp133
   x5p1 = _mm_fmsub_pd(vc5,vxy,vc1);      //  cp5*xy      - one
@@ -68,12 +68,12 @@ void V2cubic_coeffs_d(double *pxy, double *xy){
   xxpx = _mm_fmadd_pd(vxy,vxy,vxy);      //  xy*xy       + xy
   x5m1 = _mm_fnmadd_pd(vxy,vc5,vc1);     //  -(cp5*xy)   + one
   x6m6 = _mm_fmsub_pd(vxy,vp6,vp6);      //  cp167*xy    - cp167
-  // STEP2 : multiply STEP 1 terms
+  // STEP2 : multiply STEP 1 terms (4 independent operations)
   vr0  = _mm_mul_pd(xxmx,x6m3);          // coefficients for x and y are interleaved
   vr1  = _mm_mul_pd(x5p1,xxm1);
   vr2  = _mm_mul_pd(xxpx,x5m1);
   vr3  = _mm_mul_pd(xxpx,x6m6);
-  // final unshuffle to separate even terms (px) and odd terms (py) before storing them
+  // final unshuffle to separate even terms (px) and odd terms (py) before storing them (independent operations)
   _mm_storeu_pd(pxy  ,_mm_unpacklo_pd(vr0,vr1));  // pxy[0:1] = px[0], px[1]
   _mm_storeu_pd(pxy+2,_mm_unpacklo_pd(vr2,vr3));  // pxy[2:3] = px[2], px[3]
   _mm_storeu_pd(pxy+4,_mm_unpackhi_pd(vr0,vr1));  // pxy[4:5] = py[0], py[1]
@@ -88,6 +88,71 @@ void V2cubic_coeffs_d(double *pxy, double *xy){
   pxy[5] = cp5*(xy[1]+one)*(xy[1]-one)*(xy[1]-two);
   pxy[6] = cm5*xy[1]*(xy[1]+one)*(xy[1]-two);
   pxy[7] = cp167*xy[1]*(xy[1]+one)*(xy[1]-one);
+#endif
+}
+
+// same as above, 4 sets of coefficients at a time
+void V4cubic_coeffs_d(double *pxy, double *xy){
+#if defined(__AVX2__) && defined(__x86_64__)
+  __m256d vxy;
+  __m256d vc1, vc5, vc3, vp6, xxmx, xxpx, xxm1, x5p1, x6m3, x5m1, x6m6;
+  __m256d vr0, vr1, vr2, vr3;
+  __m256d vt0, vt1, vt2, vt3;
+
+  vxy  = _mm256_loadu_pd(xy);
+  vc1  = _mm256_broadcast_sd(&one);         //  one    (1.0)
+  vc5  = _mm256_broadcast_sd(&cp5);         //  cp5    (0.5)
+  vc3  = _mm256_broadcast_sd(&cp133);       //  cp133  (1/3)
+  vp6  = _mm256_broadcast_sd(&cp167);       //  cp167  (1/6)
+
+  xxmx = _mm256_fmsub_pd(vxy,vxy,vxy);      //  xy*xy       - xy
+  x6m3 = _mm256_fnmadd_pd(vxy,vp6,vc3);     //  -(cp167*xy) + cp133
+  x5p1 = _mm256_fmsub_pd(vc5,vxy,vc1);      //  cp5*xy      - one
+  xxm1 = _mm256_fmsub_pd(vxy,vxy,vc1);      //  xy*xy       - one
+  xxpx = _mm256_fmadd_pd(vxy,vxy,vxy);      //  xy*xy       + xy
+  x5m1 = _mm256_fnmadd_pd(vxy,vc5,vc1);     //  -(cp5*xy)   + one
+  x6m6 = _mm256_fmsub_pd(vxy,vp6,vp6);      //  cp167*xy    - cp167
+
+  vr0  = _mm256_mul_pd(xxmx,x6m3);          // px[0] py[0] pz[0] pt[0]
+  vr1  = _mm256_mul_pd(x5p1,xxm1);          // px[1] py[1] pz[1] pt[1]
+  vr2  = _mm256_mul_pd(xxpx,x5m1);          // px[2] py[2] pz[2] pt[2]
+  vr3  = _mm256_mul_pd(xxpx,x6m6);          // px[3] py[3] pz[3] pt[3]
+
+  vt0 = _mm256_unpacklo_pd(vr0,vr1);        // px[0] px[1] pz[0] pz[1]
+  vt1 = _mm256_unpacklo_pd(vr2,vr3);        // px[2] px[3] pz[2] pz[3]
+  vt2 = _mm256_unpackhi_pd(vr0,vr1);        // py[0] py[1] pt[0] pt[1]
+  vt3 = _mm256_unpackhi_pd(vr2,vr3);        // py[2] py[3] pt[2] pt[3]
+  _mm_storeu_pd(pxy   ,_mm256_extractf128_pd (vt0,0));   // px[0] px[1]
+  _mm_storeu_pd(pxy+ 2,_mm256_extractf128_pd (vt1,0));   // px[2] px[3]
+  _mm_storeu_pd(pxy+ 4,_mm256_extractf128_pd (vt2,0));   // py[0] py[1]
+  _mm_storeu_pd(pxy+ 6,_mm256_extractf128_pd (vt3,0));   // py[2] py[3]
+  _mm_storeu_pd(pxy+ 8,_mm256_extractf128_pd (vt0,1));   // pz[0] pz[1]
+  _mm_storeu_pd(pxy+10,_mm256_extractf128_pd (vt1,1));   // pz[2] pz[3]
+  _mm_storeu_pd(pxy+12,_mm256_extractf128_pd (vt2,1));   // pt[0] pt[1]
+  _mm_storeu_pd(pxy+14,_mm256_extractf128_pd (vt3,1));   // pt[2] pt[3]
+#else
+  pxy[0] = cm167*xy[0]*(xy[0]-one)*(xy[0]-two);        // coefficients for interpolation along x
+  pxy[1] = cp5*(xy[0]+one)*(xy[0]-one)*(xy[0]-two);
+  pxy[2] = cm5*xy[0]*(xy[0]+one)*(xy[0]-two);
+  pxy[3] = cp167*xy[0]*(xy[0]+one)*(xy[0]-one);
+
+  pxy += 4 ; xy += 4;
+  pxy[0] = cm167*xy[0]*(xy[0]-one)*(xy[0]-two);        // coefficients for interpolation along y
+  pxy[1] = cp5*(xy[0]+one)*(xy[0]-one)*(xy[0]-two);
+  pxy[2] = cm5*xy[0]*(xy[0]+one)*(xy[0]-two);
+  pxy[3] = cp167*xy[0]*(xy[0]+one)*(xy[0]-one);
+
+  pxy += 4 ; xy += 4;
+  pxy[0] = cm167*xy[0]*(xy[0]-one)*(xy[0]-two);        // coefficients for interpolation along z
+  pxy[1] = cp5*(xy[0]+one)*(xy[0]-one)*(xy[0]-two);
+  pxy[2] = cm5*xy[0]*(xy[0]+one)*(xy[0]-two);
+  pxy[3] = cp167*xy[0]*(xy[0]+one)*(xy[0]-one);
+
+  pxy += 4 ; xy += 4;
+  pxy[0] = cm167*xy[0]*(xy[0]-one)*(xy[0]-two);        // coefficients for interpolation along t
+  pxy[1] = cp5*(xy[0]+one)*(xy[0]-one)*(xy[0]-two);
+  pxy[2] = cm5*xy[0]*(xy[0]+one)*(xy[0]-two);
+  pxy[3] = cp167*xy[0]*(xy[0]+one)*(xy[0]-one);
 #endif
 }
 
