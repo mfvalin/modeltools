@@ -32,12 +32,43 @@ uint64_t rdtscp_(void) {   // version "in order" avec "serialization"
 }
 #endif
 
+static double cp133 =  1.0/3.0;
 static double cp167 =  1.0/6.0;
 static double cm167 = -1.0/6.0;
 static double cp5 = 0.5;
 static double cm5 = -0.5;
 static double one = 1.0;
 static double two = 2.0;
+
+void V2cubic_coeffs_d(double *pxy, double *xy){
+  __m128d vxy;
+  __m128d vc1, vc5, vc3, vp6, xxmx, xxpx, xxm1, x5p1, x6m3, x5m1, x6m6;
+  __m128d vr0, vr1, vr2, vr3;
+
+  vxy  = _mm_loadu_pd(xy);
+  vc1  = _mm_set1_pd(one);               //  one    (1.0)
+  vc5  = _mm_set1_pd(cp5);               //  cp5    (0.5)
+  vc3  = _mm_set1_pd(cp133);             //  cp133  (1/3)
+  vp6  = _mm_set1_pd(cp167);             //  cp167  (1/6)
+
+  xxmx = _mm_fmsub_pd(vxy,vxy,vxy);      //  xy*xy       - xy
+  x6m3 = _mm_fnmadd_pd(vxy,vp6,vc3);     //  -(cp167*xy) + cp133
+  x5p1 = _mm_fmsub_pd(vc5,vxy,vc1);      //  cp5*xy      - one
+  xxm1 = _mm_fmsub_pd(vxy,vxy,vc1);      //  xy*xy       - one
+  xxpx = _mm_fmadd_pd(vxy,vxy,vxy);      //  xy*xy       + xy
+  x5m1 = _mm_fnmadd_pd(vxy,vc5,vc1);     //  -(cp5*xy)   + one
+  x6m6 = _mm_fmsub_pd(vxy,vp6,vp6);      //  cp167*xy    - cp167
+
+  vr0  = _mm_mul_pd(xxmx,x6m3);
+  vr1  = _mm_mul_pd(x5p1,xxm1);
+  vr2  = _mm_mul_pd(xxpx,x5m1);
+  vr3  = _mm_mul_pd(xxpx,x6m6);
+
+  _mm_storeu_pd(pxy  ,vr0);
+  _mm_storeu_pd(pxy+2,vr1);
+  _mm_storeu_pd(pxy+4,vr2);
+  _mm_storeu_pd(pxy+6,vr3);
+}
 
 // compute polynomial coefficients for a cubic interpolation along x and y
 // x, y : -1.0 <= x,y <= 2.0 (fractional position with respect to middle interval in 4 point set)

@@ -1,4 +1,9 @@
 interface
+  subroutine v2cubic_coeffs_d(pxy, xy) bind(C,name='V2cubic_coeffs_d')
+    import C_DOUBLE
+    real(C_DOUBLE), dimension(8), intent(OUT) :: pxy
+    real(C_DOUBLE), dimension(2), intent(IN) :: xy
+  end subroutine v2cubic_coeffs_d
   subroutine cubic_coeffs_d(px, x) bind(C,name='Cubic_coeffs_d')
     import C_DOUBLE
     real(C_DOUBLE), dimension(4), intent(OUT) :: px

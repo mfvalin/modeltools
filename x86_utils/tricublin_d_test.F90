@@ -10,6 +10,8 @@ program tricublin_d_test
   integer*8 :: t0, t1
   real*8 :: dx, dy, dz
   real*8, dimension(4) :: px, py, pz
+  real*8, dimension(8) :: pxy
+  real*8, dimension(2) :: xy
   real, dimension(NI,NJ,NK), target :: f1, f2, f3
   real, dimension(3,NI,NJ,NK), target :: f123
   integer :: i, j, k, ii, jj, kk, rr
@@ -61,6 +63,8 @@ program tricublin_d_test
   xx = ii + 1 + dx
   yy = jj + 1 + dy
   zz = kk + 1 + dz
+  xy(1) = dx
+  xy(2) = dy
 !   print 101,'target = ',xx,yy,zz
   print *,'===== tricublin_zyx3f_d test ====='
   call tricublin_zyx3f_d(r1,f123(1,ii,jj,kk),px,py,pz,ni,ni*nj)
@@ -96,7 +100,8 @@ program tricublin_d_test
   do KK = 1, NK - 3
     do JJ = 1, NJ - 3
       do II = 1, NI - 3
-        call tricubic_coeffs_d(px,py,pz,dx,dy,dz)
+!         call tricubic_coeffs_d(px,py,pz,dx,dy,dz)
+        call v2cubic_coeffs_d(pxy,xy)
         call tricublin_zyx3f_d(r1,f123(1,ii,jj,kk),px,py,pz,ni,ni*nj)
       enddo
     enddo
@@ -115,7 +120,8 @@ program tricublin_d_test
   do KK = 1, NK - 3
     do JJ = 1, NJ - 3
       do II = 1, NI - 3
-        call tricubic_coeffs_d(px,py,pz,dx,dy,dz)
+!         call tricubic_coeffs_d(px,py,pz,dx,dy,dz)
+        call v2cubic_coeffs_d(pxy,xy)
         call tricublin_zyxf3_d(r1,f1(ii,jj,kk),f2(ii,jj,kk),f3(ii,jj,kk),px,py,pz,ni,ni*nj)
       enddo
     enddo
@@ -134,7 +140,8 @@ program tricublin_d_test
   do KK = 1, NK - 3
     do JJ = 1, NJ - 3
       do II = 1, NI - 3
-        call tricubic_coeffs_d(px,py,pz,dx,dy,dz)
+!         call tricubic_coeffs_d(px,py,pz,dx,dy,dz)
+        call v2cubic_coeffs_d(pxy,xy)
         call tricublin_zyxf_d(r1(1),f1(ii,jj,kk),px,py,pz,ni,ni*nj)
         call tricublin_zyxf_d(r2(1),f2(ii,jj,kk),px,py,pz,ni,ni*nj)
         call tricublin_zyxf_d(r3(1),f3(ii,jj,kk),px,py,pz,ni,ni*nj)
