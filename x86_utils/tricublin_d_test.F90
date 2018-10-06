@@ -5,7 +5,7 @@ program tricublin_d_test
   integer, parameter :: NI = 300
   integer, parameter :: NJ = 200
   integer, parameter :: NK = 110
-  integer, parameter :: NR = 100
+  integer, parameter :: NR = 10
   integer*8, external :: rdtscp
   integer*8 :: t0, t1
   real*8 :: dx, dy, dz
@@ -117,6 +117,27 @@ program tricublin_d_test
       do II = 1, NI - 3
         call tricubic_coeffs_d(px,py,pz,dx,dy,dz)
         call tricublin_zyxf3_d(r1,f1(ii,jj,kk),f2(ii,jj,kk),f3(ii,jj,kk),px,py,pz,ni,ni*nj)
+      enddo
+    enddo
+  enddo
+  enddo
+  t1 = rdtscp() - t0
+  
+  print *, 'tot cycles   = ',t1
+  print *, 'per interp   = ',t1/((ni-3)*(nj-3)*(nk-3))/NR
+  print *, 'FLOPS/interp = ',3*(32*4 + 32 + 8 + 64)  ! interpolation + float -> double conversions
+  print *,'===== tricublin_zyxf_d timing ====='
+  f2 = f1 + 10
+  f3 = f2 + 10
+  t0 = rdtscp()
+  do rr = 1 , NR
+  do KK = 1, NK - 3
+    do JJ = 1, NJ - 3
+      do II = 1, NI - 3
+        call tricubic_coeffs_d(px,py,pz,dx,dy,dz)
+        call tricublin_zyxf_d(r1(1),f1(ii,jj,kk),px,py,pz,ni,ni*nj)
+        call tricublin_zyxf_d(r2(1),f2(ii,jj,kk),px,py,pz,ni,ni*nj)
+        call tricublin_zyxf_d(r3(1),f3(ii,jj,kk),px,py,pz,ni,ni*nj)
       enddo
     enddo
   enddo
