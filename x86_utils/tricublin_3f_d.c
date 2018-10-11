@@ -707,6 +707,32 @@ void Tricublin_zyxf_d(float *d, float *f1, double *px, double *py, double *pz, i
 
 #define MAX(a,b) ((a>b)?a:b)
 #define MIN(a,b) ((a<b)?a:b)
+static int NIx1  = 0;
+static int NIxNJ = 0;
+static int NKx1  = 0;
+
+void SetTricub_ninjnk(int ni, int nj, int nk){
+  NIx1  = ni;
+  NIxNJ = ni*nj;
+  NKx1  = nk;
+}
+// same as above but for one array f1(ni,nj,nk), it also returns 
+//   - the min and max values used for the tricubic or bicubic/linear interpolation
+//   - the result of a tri-linear interpolation 
+// dx, dy : fractional position in center interval ( 0.0 <= dx.dy <= 1.0 )
+// pz[0:3] coefficients for cubic interpolation along z
+// pz[4:7] is expected to contain ( 0 , 1-dz , dz , 0 )
+// k      : base level ( k <2  or k > nk-2 means linear interpolation along z)
+// d[0] = cubic result
+// d[1] = linear result
+// d[2] = min
+// d[3] = max
+// NI, NJ, NK passed previously to SetTricub_ninjnk
+void Cublin3D_zyx_clmm_d(float *d, float *f1, double dx, double dy, double *pz, int k){
+  int ninj = NIxNJ;
+  int ni = NIx1;
+  int ninjl;
+}
 // same as above but for one array f1(ni,nj,nk), it also returns 
 //   - the min and max values used for the tricubic or bicubic/linear interpolation
 //   - the result of a tri-linear interpolation 
