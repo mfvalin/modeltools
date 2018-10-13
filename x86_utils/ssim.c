@@ -1,0 +1,87 @@
+#include <immintrin.h>
+
+// process 4 elements of x and y on 4 lines (16 values)
+// ni = distance between 2 lines
+// output 5 values
+// sum(x), sum(x*x), sum(y), sum(y*y), sum(x*y)
+// building block for SSIM score
+void sumx2(float *r, float *x, float *y, int ni){
+#if defined(__AVX2__) && defined(__x86_64__)
+  __m128 vx0, vy0, sxy, vt0, vt1, vts;
+  __m256 vxy, vs1, vs2, vst;
+  int *l = (int *) r;
+#else
+  int i, j;
+  float x2[4], xy[4], sx[4], sy[4], y2[4];
+#endif
+
+#if defined(__AVX2__) && defined(__x86_64__)
+  vx0 = _mm_loadu_ps(x);   // row 0
+  vy0 = _mm_loadu_ps(y);
+  vxy = _mm256_insertf128_ps(vxy,vx0,0);   // _mm256_set_m128(vy0,vx0);
+  vxy = _mm256_insertf128_ps(vxy,vy0,1);   // x[0,1,2,3] y[0,1,2,3]
+  sxy = _mm_mul_ps(vy0,vx0);               // x*y[0,1,2,3]
+  vs1 = vxy;                               // sums of x and y
+  vs2 = _mm256_mul_ps(vxy,vxy);            // sums of x*x and y*y
+
+  x += ni ; y += ni;
+  vx0 = _mm_loadu_ps(x);   // row 1
+  vy0 = _mm_loadu_ps(y);
+  vxy = _mm256_insertf128_ps(vxy,vx0,0);   // _mm256_set_m128(vy0,vx0);
+  vxy = _mm256_insertf128_ps(vxy,vy0,1);
+  sxy = _mm_fmadd_ps(vx0,vy0,sxy);         // running sums of x*x and y*y
+  vs1 = _mm256_add_ps(vxy,vs1);            // running sums of x and y
+  vs2 = _mm256_fmadd_ps(vxy,vxy,vs2);      // running sums of x*x and y*y
+
+  x += ni ; y += ni;
+  vx0 = _mm_loadu_ps(x);   // row 2
+  vy0 = _mm_loadu_ps(y);
+  vxy = _mm256_insertf128_ps(vxy,vx0,0);   // _mm256_set_m128(vy0,vx0);
+  vxy = _mm256_insertf128_ps(vxy,vy0,1);
+  sxy = _mm_fmadd_ps(vx0,vy0,sxy);         // running sums of x*x and y*y
+  vs1 = _mm256_add_ps(vxy,vs1);            // running sums of x and y
+  vs2 = _mm256_fmadd_ps(vxy,vxy,vs2);      // running sums of x*x and y*y
+
+  x += ni ; y += ni;
+  vx0 = _mm_loadu_ps(x);   // row 3
+  vy0 = _mm_loadu_ps(y);
+  vxy = _mm256_insertf128_ps(vxy,vx0,0);   // _mm256_set_m128(vy0,vx0);
+  vxy = _mm256_insertf128_ps(vxy,vy0,1);
+  sxy = _mm_fmadd_ps(vx0,vy0,sxy);        // xy = sum(x*y)
+  vs1 = _mm256_add_ps(vxy,vs1);           // x1 = sum(x)  , y1 = sum(y)
+  vs2 = _mm256_fmadd_ps(vxy,vxy,vs2);     // x2 = sum(x*x), y2 = sum(y*y)
+
+  // now fold sums
+  vst = _mm256_hadd_ps(vs1,vs2);          // x1[0+1] x1[2+3]  x2[0+1] x2[2+3] y1[0+1] y1[2+3]  y2[0+1] y2[2+3] 
+  vt0 = _mm256_extractf128_ps(vst,0);     // x1[0+1] x1[2+3]  x2[0+1] x2[2+3]
+  vt1 = _mm256_extractf128_ps(vst,1);     // y1[0+1] y1[2+3]  y2[0+1] y2[2+3] 
+  vts = _mm_hadd_ps(vt0,vt1);             // x1[0+1+2+3] x2[0+1+2+3] y1[0+1+2+3] y2[0+1+2+3]
+  _mm_storeu_ps(r,vts);                   // sum(x), sum(x*x), sum(y), sum(y*y)
+  vt0 = _mm_hadd_ps(sxy,sxy);             // xy[0+1] xy[2+3] xy[0+1] xy[2+3]
+  vt1 = _mm_hadd_ps(vt0,vt0);             // xy[0+1+2+3] xy[0+1+2+3] xy[0+1+2+3] xy[0+1+2+3]
+  l[4] = _mm_extract_epi32( (__m128i) vt1, 0);   // store first value, sum(x*y)
+#else
+  for(i=0 ; i<3 ; i++){
+    x2[i] = x[i] * x[i];
+    y2[i] = y[i] * y[i];
+    sx[i] = x[i];
+    sy[i] = y[i];
+    xy[i] = x[i] * y[i];
+  }
+  for(j=0 ; j<2 ; j++){
+    x += ni ; y += ni;
+    for(i=0 ; i<3 ; i++){
+      x2[i] += x[i] * x[i];
+      y2[i] += y[i] * y[i];
+      sx[i] += x[i];
+      sy[i] += y[i];
+      xy[i] = x[i] * y[i];
+    }
+  }
+  r[0] = sx[0] + sx[1] + sx[2] + sx[3];
+  r[1] = x2[0] + x2[1] + x2[2] + x2[3];
+  r[2] = sy[0] + sy[1] + sy[2] + sy[3];
+  r[3] = y2[0] + y2[1] + y2[2] + y2[3];
+  r[4] = xy[0] + xy[1] + xy[2] + xy[3];
+#endif
+}
