@@ -1,5 +1,5 @@
 /* RMNLIB - Library of useful routines for C and FORTRAN programming
- * Copyright (C) 1975-2015  Environnement Canada
+ * Copyright (C) 2018  Environnement Canada
  *
  * This library is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public
