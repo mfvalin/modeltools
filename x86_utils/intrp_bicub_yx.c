@@ -708,17 +708,19 @@ void intrp_bicub_yx_s_mono(float *f, float *r, int ni, int ninj, int nk, double 
   _mm_store_ss(r,frt) ;                   // store float
 #else
   for(k=0 ; k<nk ; k++){
-    minval = f[0];
+//     minval = f[0];
+    minval = f[1];
     maxval = minval;
-    for(i=0 ; i<4 ; i++){   // compute monotonic limits
-      minval = (f[i    ] < minval) ? f[i    ] : minval;
+//     for(i=0 ; i<4 ; i++){   // compute monotonic limits
+    for(i=1 ; i<3 ; i++){   // compute monotonic limits, center 2x2 points
+//       minval = (f[i    ] < minval) ? f[i    ] : minval;
       minval = (f[i+ni ] < minval) ? f[i+ni ] : minval;
       minval = (f[i+ni2] < minval) ? f[i+ni2] : minval;
-      minval = (f[i+ni3] < minval) ? f[i+ni3] : minval;
-      maxval = (f[i    ] > maxval) ? f[i    ] : maxval;
+//       minval = (f[i+ni3] < minval) ? f[i+ni3] : minval;
+//       maxval = (f[i    ] > maxval) ? f[i    ] : maxval;
       maxval = (f[i+ni ] > maxval) ? f[i+ni ] : maxval;
       maxval = (f[i+ni2] > maxval) ? f[i+ni2] : maxval;
-      maxval = (f[i+ni3] > maxval) ? f[i+ni3] : maxval;
+//       maxval = (f[i+ni3] > maxval) ? f[i+ni3] : maxval;
     }
     for(i=0 ; i<4 ; i++){                   // easily vectorizable form
       fd0[i] = ( f[i]*wy[0] + f[i+ni]*wy[1] + f[i+ni2]*wy[2] + f[i+ni3]*wy[3] ) * wx[i];
