@@ -139,7 +139,7 @@ void Tricublin_zyxf_beta(float *d, float *f1, double *px, double *py, double *pz
   ya = _mm256_mul_pd(ya, cx );   // multiply by px
   // use folding to sum 4 terms
   va = _mm_add_pd( _mm256_extractf128_pd(ya,0) , _mm256_extractf128_pd(ya,1) ); va = _mm_hadd_pd(va,va);
-  ta = _mm_cvtpd_ps(va); l[0] = _mm_extract_epi32((__m128i) ta, 0);  // convert results to float and store
+  ta = _mm_cvtpd_ps(va); d[0] = _mm_cvtss_f32(ta) ;// l[0] = _mm_extract_epi32((__m128i) ta, 0);  // convert results to float and store
 #else
   ninj2 = ninj + ninjl;
   ninj3 = ninj2 + ninjl;

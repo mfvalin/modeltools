@@ -409,9 +409,6 @@ void Tricublin_zyx3f_d(float *d, float *f, double *px, double *py, double *pz, i
   cx = _mm256_broadcast_sd(px+3) ;
   x0 = _mm256_fmadd_pd(_mm256_loadu_pd(dst+9), cx ,x0);  // column 3
 
-//   L[0] = _mm256_extract_epi64((__m256i) x0, 0);
-//   L[1] = _mm256_extract_epi64((__m256i) x0, 1);
-//   L[2] = _mm256_extract_epi64((__m256i) x0, 2);
   vd =  _mm256_cvtpd_ps(x0);                  // back to float precision
   l[0] = _mm_extract_epi32((__m128i) vd, 0);  // extract element 0 and store
   l[1] = _mm_extract_epi32((__m128i) vd, 1);  // extract element 1 and store
@@ -441,7 +438,7 @@ void Tricublin_zyxf3_d(float *d, float *f1, float *f2, float *f3, double *px, do
   int ni2, ni3;
 #if defined(__AVX2__) && defined(__x86_64__)
   float *s1, *s2, *s3;
-  int32_t *l = (int32_t *)d;
+//   int32_t *l = (int32_t *)d;
   __m256d cz0, cz1, cz2, cz3, cy, cx;
   __m256d za, zb, zc;
   __m256d ya, yb, yc;
@@ -563,9 +560,12 @@ void Tricublin_zyxf3_d(float *d, float *f1, float *f2, float *f3, double *px, do
   va = _mm_add_pd( _mm256_extractf128_pd(ya,0) , _mm256_extractf128_pd(ya,1) ); va = _mm_hadd_pd(va,va);
   vb = _mm_add_pd( _mm256_extractf128_pd(yb,0) , _mm256_extractf128_pd(yb,1) ); vb = _mm_hadd_pd(vb,vb);
   vc = _mm_add_pd( _mm256_extractf128_pd(yc,0) , _mm256_extractf128_pd(yc,1) ); vc = _mm_hadd_pd(vc,vc);
-  ta = _mm_cvtpd_ps(va); l[0] = _mm_extract_epi32((__m128i) ta, 0);  // convert results to float and store
-  tb = _mm_cvtpd_ps(vb); l[1] = _mm_extract_epi32((__m128i) tb, 0);
-  tc = _mm_cvtpd_ps(vc); l[2] = _mm_extract_epi32((__m128i) tc, 0);
+//   ta = _mm_cvtpd_ps(va); l[0] = _mm_extract_epi32((__m128i) ta, 0);  // convert results to float and store
+//   tb = _mm_cvtpd_ps(vb); l[1] = _mm_extract_epi32((__m128i) tb, 0);
+//   tc = _mm_cvtpd_ps(vc); l[2] = _mm_extract_epi32((__m128i) tc, 0);
+  d[0] = _mm_cvtss_f32( _mm_cvtpd_ps(va) ) ;  // convert results to float and store
+  d[1] = _mm_cvtss_f32( _mm_cvtpd_ps(vb) ) ;
+  d[2] = _mm_cvtss_f32( _mm_cvtpd_ps(vc) ) ;
 #else
   ninj2 = ninj + ninjl;
   ninj3 = ninj2 + ninjl;
@@ -609,7 +609,7 @@ void Tricublin_zyxf_d(float *d, float *f1, double *px, double *py, double *pz, i
   int ni2, ni3;
 #if defined(__AVX2__) && defined(__x86_64__)
   float *s1;
-  int32_t *l = (int32_t *)d;
+//   int32_t *l = (int32_t *)d;
   __m256d cz0, cz1, cz2, cz3, cy, cx;
   __m256d za;
   __m256d ya;
@@ -689,7 +689,8 @@ void Tricublin_zyxf_d(float *d, float *f1, double *px, double *py, double *pz, i
   ya = _mm256_mul_pd(ya, cx );   // multiply by px
   // use folding to sum 4 terms
   va = _mm_add_pd( _mm256_extractf128_pd(ya,0) , _mm256_extractf128_pd(ya,1) ); va = _mm_hadd_pd(va,va);
-  ta = _mm_cvtpd_ps(va); l[0] = _mm_extract_epi32((__m128i) ta, 0);  // convert results to float and store
+//   ta = _mm_cvtpd_ps(va); l[0] = _mm_extract_epi32((__m128i) ta, 0);  // convert results to float and store
+  d[0] = _mm_cvtss_f32( _mm_cvtpd_ps(va) ) ;   // convert results to float and store
 #else
   ninj2 = ninj + ninjl;
   ninj3 = ninj2 + ninjl;
@@ -746,7 +747,7 @@ void Tricublin_zyxf_mm_d(float *d, float *lin, float *min, float *max, float *f1
   int ni2, ni3;
 #if defined(__AVX2__) && defined(__x86_64__)
   float *s1;
-  int32_t *l = (int32_t *)d;
+//   int32_t *l = (int32_t *)d;
   __m256d cz0, cz1, cz2, cz3, cy, cx, cl, cyl;
   __m256d za, zt;
   __m256d mi, ma;  // min, max
@@ -881,24 +882,28 @@ void Tricublin_zyxf_mm_d(float *d, float *lin, float *min, float *max, float *f1
   vma = _mm_shuffle_pd(vma, vma, 1); // shuffle to get [1] [0]
   vmi = _mm_min_pd(vmi, _mm256_extractf128_pd(mi,1));   // min ([1] [0] , [2] [3])
   vma = _mm_max_pd(vma, _mm256_extractf128_pd(ma,1));   // max ([1] [0] , [2] [3])
-  l = (int32_t *)min;
-  l[0] = _mm_extract_epi32((__m128i) _mm_cvtpd_ps(vmi), 0);  // convert min to float and store
-  l = (int32_t *)max;
-  l[0] = _mm_extract_epi32((__m128i) _mm_cvtpd_ps(vma), 0);  // convert max to float and store
+//   l = (int32_t *)min;
+//   l[0] = _mm_extract_epi32((__m128i) _mm_cvtpd_ps(vmi), 0);  // convert min to float and store
+  min[0] = _mm_cvtss_f32( _mm_cvtpd_ps(vmi) );
+//   l = (int32_t *)max;
+//   l[0] = _mm_extract_epi32((__m128i) _mm_cvtpd_ps(vma), 0);  // convert max to float and store
+  max[0] = _mm_cvtss_f32( _mm_cvtpd_ps(vma) );
 
   // interpolation along x (linear)
   cx = _mm256_loadu_pd(px+4);    // linear interpolation coefficients
   vyl = _mm256_mul_pd(vyl,cx);
   va = _mm_add_pd( _mm256_extractf128_pd(vyl,0) , _mm256_extractf128_pd(vyl,1) ); va = _mm_hadd_pd(va,va);
-  l = (int32_t *)lin;
-  ta = _mm_cvtpd_ps(va); l[0] = _mm_extract_epi32((__m128i) ta, 0);  // convert linear interp result to float and store
+//   l = (int32_t *)lin;
+//   ta = _mm_cvtpd_ps(va); l[0] = _mm_extract_epi32((__m128i) ta, 0);  // convert linear interp result to float and store
+  lin[0] = _mm_cvtss_f32( _mm_cvtpd_ps(va) ) ;   // convert results to float and store
   // interpolation along x (cubic)
   cx = _mm256_loadu_pd(px) ;     // make sure to use "unaligned" load to avoid segfault
   ya = _mm256_mul_pd(ya, cx );   // multiply by px
   // use folding to sum 4 terms
   va = _mm_add_pd( _mm256_extractf128_pd(ya,0) , _mm256_extractf128_pd(ya,1) ); va = _mm_hadd_pd(va,va);
-  l = (int32_t *)d;
-  ta = _mm_cvtpd_ps(va); l[0] = _mm_extract_epi32((__m128i) ta, 0);  // convert results to float and store
+//   l = (int32_t *)d;
+//   ta = _mm_cvtpd_ps(va); l[0] = _mm_extract_epi32((__m128i) ta, 0);  // convert results to float and store
+  d[0] = _mm_cvtss_f32( _mm_cvtpd_ps(va) ) ;   // convert results to float and store
 #else
   ninj2 = ninj + ninjl;
   ninj3 = ninj2 + ninjl;

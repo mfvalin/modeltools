@@ -9,7 +9,7 @@ program tricublin_d_test
   integer*8, external :: rdtscp
   integer*8 :: t0, t1
   real*8 :: dx, dy, dz
-  real*8, dimension(4) :: px, py, pz
+  real*8, dimension(8) :: px, py, pz
   real*8, dimension(8) :: pxy
   real*8, dimension(2) :: xy
   real, dimension(NI,NJ,NK), target :: f1, f2, f3
@@ -39,8 +39,9 @@ program tricublin_d_test
 !   call bicubic_coeffs_d(px,py,dx,dy)
 !   print 100,px,py,pz
   call tricubic_coeffs_d(px,py,pz,dx,dy,dz)
-  print 103,'px   = ',px,'py   = ',py,'pz   = ',pz
-  print 103,'sums = ', sum(px),sum(py),sum(pz)
+  print 103,'px   = ',px(1:4),'py   = ',py(1:4),'pz   = ',pz(1:4)
+  print 103,'pzl  = ',pz(5:8)
+  print 103,'sums = ', sum(px(1:4)),sum(py(1:4)),sum(pz(1:4))
 
   do k = 1, NK
   do j = 1, NJ
