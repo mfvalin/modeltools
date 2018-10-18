@@ -777,11 +777,12 @@ void Tricublin_zyxf_mm_d(float *d, float *lin, float *min, float *max, float *f1
   cy  = _mm256_broadcast_sd(py);
 
   zt = _mm256_cvtps_pd(_mm_loadu_ps(s1));       // plane 0
-  mi = zt ; ma = zt;                           // initialize min, max to first values
+//   mi = zt ; ma = zt;                           // initialize min, max to first values
   za  = _mm256_mul_pd(zt, cz0);
   s1 += ninjl;
   zt = _mm256_cvtps_pd(_mm_loadu_ps(s1));       // plane 1
-  mi = _mm256_min_pd(mi, zt); ma = _mm256_max_pd(ma, zt); 
+  mi = zt ; ma = zt;                            // initialize min, max to first values
+//   mi = _mm256_min_pd(mi, zt); ma = _mm256_max_pd(ma, zt); 
   za  = _mm256_fmadd_pd(zt, cz1, za);
   s1 += ninj;
   zt = _mm256_cvtps_pd(_mm_loadu_ps(s1));       // plane 2
@@ -789,7 +790,7 @@ void Tricublin_zyxf_mm_d(float *d, float *lin, float *min, float *max, float *f1
   za  = _mm256_fmadd_pd(zt, cz2, za);
   s1 += ninjl;
   zt = _mm256_cvtps_pd(_mm_loadu_ps(s1));       // plane 3
-  mi = _mm256_min_pd(mi, zt); ma = _mm256_max_pd(ma, zt); 
+//   mi = _mm256_min_pd(mi, zt); ma = _mm256_max_pd(ma, zt); 
   za  = _mm256_fmadd_pd(zt, cz3, za);
 
   ya  = _mm256_mul_pd(za,cy);  // row 0 
@@ -799,7 +800,7 @@ void Tricublin_zyxf_mm_d(float *d, float *lin, float *min, float *max, float *f1
   cyl = _mm256_broadcast_sd(py+5);
 
   zt = _mm256_cvtps_pd(_mm_loadu_ps(s1));       // plane 0
-  mi = _mm256_min_pd(mi, zt); ma = _mm256_max_pd(ma, zt); 
+//   mi = _mm256_min_pd(mi, zt); ma = _mm256_max_pd(ma, zt); 
   za  = _mm256_mul_pd(zt, cz0);
   s1 += ninjl;
   zt = _mm256_cvtps_pd(_mm_loadu_ps(s1));       // plane 1
@@ -815,7 +816,7 @@ void Tricublin_zyxf_mm_d(float *d, float *lin, float *min, float *max, float *f1
   vzl = _mm256_fmadd_pd(zt, cl, vzl);  // linear interpolation along z
   s1 += ninjl;
   zt = _mm256_cvtps_pd(_mm_loadu_ps(s1));       // plane 3
-  mi = _mm256_min_pd(mi, zt); ma = _mm256_max_pd(ma, zt); 
+//   mi = _mm256_min_pd(mi, zt); ma = _mm256_max_pd(ma, zt); 
   za  = _mm256_fmadd_pd(zt, cz3, za);
 
   ya  = _mm256_fmadd_pd(za,cy,ya);  // + row 1
@@ -826,7 +827,7 @@ void Tricublin_zyxf_mm_d(float *d, float *lin, float *min, float *max, float *f1
   cyl = _mm256_broadcast_sd(py+6);
 
   zt = _mm256_cvtps_pd(_mm_loadu_ps(s1));       // plane 0
-  mi = _mm256_min_pd(mi, zt); ma = _mm256_max_pd(ma, zt); 
+//   mi = _mm256_min_pd(mi, zt); ma = _mm256_max_pd(ma, zt); 
   za  = _mm256_mul_pd(zt, cz0);
   s1 += ninjl;
   zt = _mm256_cvtps_pd(_mm_loadu_ps(s1));       // plane 1
@@ -842,7 +843,7 @@ void Tricublin_zyxf_mm_d(float *d, float *lin, float *min, float *max, float *f1
   vzl = _mm256_fmadd_pd(zt, cl, vzl);  // linear interpolation along z
   s1 += ninjl;
   zt = _mm256_cvtps_pd(_mm_loadu_ps(s1));       // plane 3
-  mi = _mm256_min_pd(mi, zt); ma = _mm256_max_pd(ma, zt); 
+//   mi = _mm256_min_pd(mi, zt); ma = _mm256_max_pd(ma, zt); 
   za  = _mm256_fmadd_pd(zt, cz3, za);
 
   ya  = _mm256_fmadd_pd(za,cy,ya);  // + row 2
@@ -852,7 +853,7 @@ void Tricublin_zyxf_mm_d(float *d, float *lin, float *min, float *max, float *f1
   cy  = _mm256_broadcast_sd(py+3);
 
   zt = _mm256_cvtps_pd(_mm_loadu_ps(s1));       // plane 0
-  mi = _mm256_min_pd(mi, zt); ma = _mm256_max_pd(ma, zt); 
+//   mi = _mm256_min_pd(mi, zt); ma = _mm256_max_pd(ma, zt); 
   za  = _mm256_mul_pd(zt, cz0);
   s1 += ninjl;
   zt = _mm256_cvtps_pd(_mm_loadu_ps(s1));       // plane 1
@@ -864,15 +865,22 @@ void Tricublin_zyxf_mm_d(float *d, float *lin, float *min, float *max, float *f1
   za  = _mm256_fmadd_pd(zt, cz2, za);
   s1 += ninjl;
   zt = _mm256_cvtps_pd(_mm_loadu_ps(s1));       // plane 3
-  mi = _mm256_min_pd(mi, zt); ma = _mm256_max_pd(ma, zt); 
+//   mi = _mm256_min_pd(mi, zt); ma = _mm256_max_pd(ma, zt); 
   za  = _mm256_fmadd_pd(zt, cz3, za);
 
   ya  = _mm256_fmadd_pd(za,cy,ya);  // + row 3
-  // fold min and max from 4 values to 1
-  vmi = _mm_min_pd(_mm256_extractf128_pd(mi,0), _mm256_extractf128_pd(mi,1));  // min max ([0] [1] , [2] [3])
-  vma = _mm_max_pd(_mm256_extractf128_pd(ma,0), _mm256_extractf128_pd(ma,1));
-  vmi = _mm_min_pd(vmi, _mm_shuffle_pd(vmi, vmi, 1));   // min max ([0] [1] , [1] [0])
-  vma = _mm_max_pd(vma, _mm_shuffle_pd(vma, vma, 1));
+  // fold min and max from 4 values to 1 (old version foldins [0] [1] [2] [3]
+//   vmi = _mm_min_pd(_mm256_extractf128_pd(mi,0), _mm256_extractf128_pd(mi,1));  // min max ([0] [1] , [2] [3])
+//   vma = _mm_max_pd(_mm256_extractf128_pd(ma,0), _mm256_extractf128_pd(ma,1));
+//   vmi = _mm_min_pd(vmi, _mm_shuffle_pd(vmi, vmi, 1));   // min max ([0] [1] , [1] [0])
+//   vma = _mm_max_pd(vma, _mm_shuffle_pd(vma, vma, 1));
+  // only fold to get min max ([1] [2])
+  vmi = _mm256_extractf128_pd(mi,0);
+  vma = _mm256_extractf128_pd(ma,0);
+  vmi = _mm_shuffle_pd(vmi, vmi, 1); // shuffle to get [1] [0]
+  vma = _mm_shuffle_pd(vma, vma, 1); // shuffle to get [1] [0]
+  vmi = _mm_min_pd(vmi, _mm256_extractf128_pd(mi,1));   // min ([1] [0] , [2] [3])
+  vma = _mm_max_pd(vma, _mm256_extractf128_pd(ma,1));   // max ([1] [0] , [2] [3])
   l = (int32_t *)min;
   l[0] = _mm_extract_epi32((__m128i) _mm_cvtpd_ps(vmi), 0);  // convert min to float and store
   l = (int32_t *)max;
