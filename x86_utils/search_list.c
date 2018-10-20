@@ -93,12 +93,11 @@ int Vsearch_list_inc(double target, lvtab *lv){
   dlr.d = lv->t0[0];
   dlm.d = lv->top;
   t     = _mm256_broadcast_sd(&target);
-  if(dlt.l < dlr.l) dlt.l = dlr.l;    // target < first element in table
-  if(dlt.l > dlm.l) dlt.l = dlm.l;    // target > next to last element in table
-  t = _mm256_broadcast_sd(&dlt.d);
+  vc    = (__m256i) _mm256_broadcast_sd((double *) &ONE);
+  if(dlt.l < dlr.l) t = _mm256_broadcast_sd(&dlr.d);    // target < first element in table
+  if(dlt.l > dlm.l) t = _mm256_broadcast_sd(&dlm.d);    // target > next to last element in table
 //   printf("target = %f\n",dlt.d);
 
-  vc   = (__m256i) _mm256_broadcast_sd((double *) &ONE);
   t    = (__m256d) _mm256_add_epi64((__m256i) t, vc);   // we want target < tbl[i] so we add 1 to target
 
   tbl0 = _mm256_load_pd(&(lv->t0[0]));                  // 8 values to scan from table t0
@@ -163,12 +162,11 @@ int Vsearch_list_dec(double target, lvtab *lv){
   dlr.d = lv->t0[0];
   dlm.d = lv->top;
   t    = _mm256_broadcast_sd(&target);
-  if(dlt.l > dlr.l) dlt.l = dlr.l;    // target > first element in table
-  if(dlt.l < dlm.l) dlt.l = dlm.l;    // target < next to last element in table
-  t = _mm256_broadcast_sd(&dlt.d);
+  vc   = (__m256i) _mm256_broadcast_sd((double *) &ONE);
+  if(dlt.l > dlr.l)  t = _mm256_broadcast_sd(&dlr.d);   // target > first element in table
+  if(dlt.l < dlm.l)  t = _mm256_broadcast_sd(&dlm.d);   // target < next to last element in table
 // printf("target = %f\n",dlt.d);
 
-  vc   = (__m256i) _mm256_broadcast_sd((double *) &ONE);
   t    = (__m256d) _mm256_sub_epi64((__m256i) t, vc);   // we want target > tbl[i] so we subtract 1 from target
 
   tbl0 = _mm256_load_pd(&(lv->t0[0]));                  // 8 values to scan from table t0
@@ -345,14 +343,14 @@ int main(){
   cnt = 0;
   gettimeofday(&tv0,NULL);
   for(T=1.000000 ; T<NT ; T=T+.000001){
-//     if(Vsearch_list_dec(T,lv) == -1) exit(1);
+    if(Vsearch_list_dec(T,lv) == -1) exit(1);
 //     count++;
-    ix = Vsearch_list_dec(T,lv); ; // cnt += ix;
-    if(T > lv->t2[ix] || T < lv->t2[ix+1]){
-      printf("ERROR(Vdecr)  : T = %f, index = %d , tbl[index] = %f, tbl[index+1] = %f\n",T, ix, lv->t2[ix], lv->t2[ix+1]);
-      printf("                T - tbl[index] = %f, T - tbl[index+1] = %f\n",T-lv->t2[ix], T-lv->t2[ix+1]);
-      exit(1);
-    }
+//     ix = Vsearch_list_dec(T,lv); ; // cnt += ix;
+//     if(T > lv->t2[ix] || T < lv->t2[ix+1]){
+//       printf("ERROR(Vdecr)  : T = %f, index = %d , tbl[index] = %f, tbl[index+1] = %f\n",T, ix, lv->t2[ix], lv->t2[ix+1]);
+//       printf("                T - tbl[index] = %f, T - tbl[index+1] = %f\n",T-lv->t2[ix], T-lv->t2[ix+1]);
+//       exit(1);
+//     }
   }
   gettimeofday(&tv1,NULL);
   t0 = tv0.tv_sec; t0 *= 1000000 ; t0 += tv0.tv_usec ;
@@ -363,13 +361,13 @@ int main(){
   cnt = 0;
   gettimeofday(&tv0,NULL);
   for(T=1.000000 ; T<NT ; T=T+.000001){
-//     if(Vsearch_list_inc(T,lv2) == -1) exit(1);
-    ix = Vsearch_list_inc(T,lv2); // cnt += ix;
-    if(T < lv2->t2[ix] || T > lv2->t2[ix+1]){
-      printf("ERROR(Vincr)  : T = %f, index = %d , tbl[index] = %f, tbl[index+1] = %f\n",T, ix, lv2->t2[ix], lv2->t2[ix+1]);
-      printf("                T - tbl[index] = %f, T - tbl[index+1] = %f\n",T-lv2->t2[ix], T-lv2->t2[ix+1]);
-      exit(1);
-    }
+    if(Vsearch_list_inc(T,lv2) == -1) exit(1);
+//     ix = Vsearch_list_inc(T,lv2); // cnt += ix;
+//     if(T < lv2->t2[ix] || T > lv2->t2[ix+1]){
+//       printf("ERROR(Vincr)  : T = %f, index = %d , tbl[index] = %f, tbl[index+1] = %f\n",T, ix, lv2->t2[ix], lv2->t2[ix+1]);
+//       printf("                T - tbl[index] = %f, T - tbl[index+1] = %f\n",T-lv2->t2[ix], T-lv2->t2[ix+1]);
+//       exit(1);
+//     }
   }
   gettimeofday(&tv1,NULL);
   t0 = tv0.tv_sec; t0 *= 1000000 ; t0 += tv0.tv_usec ;
@@ -380,13 +378,13 @@ int main(){
   cnt = 0;
   gettimeofday(&tv0,NULL);
   for(T=1.000000 ; T<NT ; T=T+.000001){
-//     if(search_list_dec(T,lv) == -1) exit(1);
-    ix = search_list_dec(T,lv); // cnt += ix;
-    if(T > lv->t2[ix] || T < lv->t2[ix+1]){
-      printf("ERROR(Vdecr)  : T = %f, index = %d , tbl[index] = %f, tbl[index+1] = %f\n",T, ix, lv->t2[ix], lv->t2[ix+1]);
-      printf("                T - tbl[index] = %f, T - tbl[index+1] = %f\n",T-lv->t2[ix], T-lv->t2[ix+1]);
-      exit(1);
-    }
+    if(search_list_dec(T,lv) == -1) exit(1);
+//     ix = search_list_dec(T,lv); // cnt += ix;
+//     if(T > lv->t2[ix] || T < lv->t2[ix+1]){
+//       printf("ERROR(Vdecr)  : T = %f, index = %d , tbl[index] = %f, tbl[index+1] = %f\n",T, ix, lv->t2[ix], lv->t2[ix+1]);
+//       printf("                T - tbl[index] = %f, T - tbl[index+1] = %f\n",T-lv->t2[ix], T-lv->t2[ix+1]);
+//       exit(1);
+//     }
   }
   gettimeofday(&tv1,NULL);
   t0 = tv0.tv_sec; t0 *= 1000000 ; t0 += tv0.tv_usec ;
@@ -397,13 +395,13 @@ int main(){
   cnt = 0;
   gettimeofday(&tv0,NULL);
   for(T=1.000000 ; T<NT ; T=T+.000001){
-//     if(search_list_inc(T,lv2) == -1) exit(1);
-    ix = search_list_inc(T,lv2); // cnt += ix;
-    if(T < lv2->t2[ix] || T > lv2->t2[ix+1]){
-      printf("ERROR(incr)  : T = %f, index = %d , tbl[index] = %f, tbl[index+1] = %f\n",T, ix, lv2->t2[ix], lv2->t2[ix+1]);
-      printf("                T - tbl[index] = %f, T - tbl[index+1] = %f\n",T-lv2->t2[ix], T-lv2->t2[ix+1]);
-      exit(1);
-    }
+    if(search_list_inc(T,lv2) == -1) exit(1);
+//     ix = search_list_inc(T,lv2); // cnt += ix;
+//     if(T < lv2->t2[ix] || T > lv2->t2[ix+1]){
+//       printf("ERROR(incr)  : T = %f, index = %d , tbl[index] = %f, tbl[index+1] = %f\n",T, ix, lv2->t2[ix], lv2->t2[ix+1]);
+//       printf("                T - tbl[index] = %f, T - tbl[index+1] = %f\n",T-lv2->t2[ix], T-lv2->t2[ix+1]);
+//       exit(1);
+//     }
   }
   gettimeofday(&tv1,NULL);
   t0 = tv0.tv_sec; t0 *= 1000000 ; t0 += tv0.tv_usec ;
