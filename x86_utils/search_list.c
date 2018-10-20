@@ -130,16 +130,16 @@ int Vsearch_list_inc(double target, lvtab *lv){
   if(dlt.l < dlr.l) target = dlr.d;  // target < first element in table
   if(dlt.l > dlm.l) target = dlm.d;    // target > next to last element in table
 
-//   j = 7;
+  j = 7;
 //   printf("target = %f\n",target);
   for(i=7 ; i>0 ; i--) { if(target < lv->t0[i]) j = i - 1; }
   ix = j << 3;
 //   printf("j = %d, ix = %d, %f %f, %f %f\n",j,ix,lv->t0[j-1],lv->t0[j],lv->t1[ix],lv->t1[ix+7]);
-//   j = 7;
+  j = 7;
   for(i=7 ; i>0 ; i--) { if(target < lv->t1[ix+i]) j = i - 1; }
   ix = (ix + j) <<2 ;
 //   printf("j = %d, ix = %d, %f %f, %f %f\n",j,ix,lv->t1[j-1],lv->t1[j],lv->t2[ix],lv->t2[ix+7]);
-//   j = 3;
+  j = 3;
   for(i=3 ; i>0 ; i--) { if(target < lv->t2[ix+i]) j = i - 1; }
   ix = ix + j;
 //   printf("j = %d, ix = %d, %f %f\n",j,ix,lv->t1[j-1],lv->t1[j]);
