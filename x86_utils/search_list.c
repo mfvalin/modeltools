@@ -102,41 +102,39 @@ printf("Vsearch_setup: n = %d, %10.3f %10.3f %10.3f %10.3f \n",n,targets[0],targ
 // version 2 for monotonically increasing positive table values
 // target and tables are of type double but processed as if they were 64 bit positive integers
 // 8 8 4 scan pattern
-int Vsearch_list_inc_2(double target, lvtab *lvd){
+int Vsearch_list_inc_2(double target, lvtab *lv){
   int ix = 0;
 #if defined(__AVX2__) && defined(__x86_64__)
   int j;
-  lvtabi *lv = (lvtabi *) lvd;
-  __m256d t;
-  __m256i tbl0, tbl1;
-  __m256i v0, v1;
+//   lvtabi *lv = (lvtabi *) lvd;
+  __m256i v0, v1, t;
   int m0, m1;
 
-  t     = _mm256_broadcast_sd(&target);
+  t     = (__m256i) _mm256_broadcast_sd(&target);
 
-  tbl0 = _mm256_loadu_si256((__m256i const *) &(lv->t0[1]));                 // 8 values to scan from table t0
-  tbl1 = _mm256_loadu_si256((__m256i const *) &(lv->t0[5]));
-  v0   = _mm256_sub_epi64(tbl0,(__m256i) t);            // tbl - t < 0 if tbl < t 
-  v1   = _mm256_sub_epi64(tbl1,(__m256i) t);
+  v0   = _mm256_lddqu_si256((__m256i const *) &(lv->t0[1]));                 // 8 values to scan from table t0
+  v1   = _mm256_lddqu_si256((__m256i const *) &(lv->t0[5]));
+  v0   = _mm256_sub_epi64(v0,(__m256i) t);            // tbl - t < 0 if tbl < t 
+  v1   = _mm256_sub_epi64(v1,(__m256i) t);
   m0   = _mm256_movemask_pd((__m256d) v0);              // transform subtract result signs into mask
   m1   = _mm256_movemask_pd((__m256d) v1);
   j    = _mm_popcnt_u32(m0) + _mm_popcnt_u32(m1)    ;   // count bits on in mask
   ix   = j << 3;                                        // index into t1 table for 8 values scan
 
-  tbl0 = _mm256_loadu_si256((__m256i const *) &(lv->t1[ix+1]));               // 8 values to scan from table t1
-  tbl1 = _mm256_loadu_si256((__m256i const *) &(lv->t1[ix+5]));
-  v0   = _mm256_sub_epi64(tbl0,(__m256i) t);
-  v1   = _mm256_sub_epi64(tbl1,(__m256i) t);
+  v0 = _mm256_lddqu_si256((__m256i const *) &(lv->t1[ix+1]));               // 8 values to scan from table t1
+  v1 = _mm256_lddqu_si256((__m256i const *) &(lv->t1[ix+5]));
+  v0   = _mm256_sub_epi64(v0,(__m256i) t);
+  v1   = _mm256_sub_epi64(v1,(__m256i) t);
   m0   = _mm256_movemask_pd((__m256d) v0);
   m1   = _mm256_movemask_pd((__m256d) v1);
   j    = _mm_popcnt_u32(m0) + _mm_popcnt_u32(m1)    ;   // count bits on in mask
   ix   = (ix + j) <<2 ;                                 // index into t2 table for final 4 value scan
 
-  tbl0 = _mm256_loadu_si256((__m256i const *) &(lv->t2[ix+1]));               // only 4 values to scan from table t2
-  v0   = _mm256_sub_epi64(tbl0,(__m256i) t);
+  v0 = _mm256_lddqu_si256((__m256i const *) &(lv->t2[ix+1]));               // only 4 values to scan from table t2
+  v0   = _mm256_sub_epi64(v0,(__m256i) t);
   m0   = _mm256_movemask_pd((__m256d) v0);
   ix = ix + _mm_popcnt_u32(m0)     ;
-  ix = (ix < lv->nk - 1) ? ix : lv->nk - 2;
+  ix = (ix < lv->nk - 1) ? ix : lv->nk - 2;    // clamp below nk - 2
 #else
   d_l_p dlt, dlr, dlm;
   int i, j;
@@ -165,6 +163,12 @@ int Vsearch_list_inc_2(double target, lvtab *lvd){
   return ix;
 }
 
+// NOTE: 
+//      min(x,y) :  y + ( (x - y) & ( (x - y) >> 63 ) )
+//      max(x,y) :  x - ( (x - y) & ( (x - y) >> 63 ) )
+//      _mm256_blendv_pd (__m256d a, __m256d b, __m256d mask)  a if masksign == 0 , b if == 1
+//      max(x,y) = blendv(x , y, x-y)
+//      min(x,y) = blendv(y , x, x-y)
 // version for monotonically increasing positive table values
 // target and tables are of type double but processed as if they were 64 bit positive integers
 // 8 8 4 scan pattern
@@ -172,41 +176,39 @@ int Vsearch_list_inc(double target, lvtab *lv){
   d_l_p dlt, dlr, dlm;
   int ix, j;
 #if defined(__AVX2__) && defined(__x86_64__)
-  __m256d t;
-  __m256d tbl0, tbl1;
-  __m256i v0, v1, vc;
+  __m256i v0, v1, vc, t;
   int m0, m1;
 
   dlt.d = target;
   dlr.d = lv->t0[0];
   dlm.d = lv->top;
-  t     = _mm256_broadcast_sd(&target);
+  t     = (__m256i) _mm256_broadcast_sd(&target);
   vc    = (__m256i) _mm256_broadcast_sd((double *) &ONE);
-  if(dlt.l < dlr.l) t = _mm256_broadcast_sd(&dlr.d);    // target < first element in table
-  if(dlt.l > dlm.l) t = _mm256_broadcast_sd(&dlm.d);    // target > next to last element in table
+  if(dlt.l < dlr.l) t =(__m256i)  _mm256_broadcast_sd(&dlr.d);    // target < first element in table
+  if(dlt.l > dlm.l) t =(__m256i)  _mm256_broadcast_sd(&dlm.d);    // target > next to last element in table
 
-  t    = (__m256d) _mm256_add_epi64((__m256i) t, vc);   // we want target < tbl[i] so we add 1 to target
+  t    = _mm256_add_epi64((__m256i) t, vc);   // we want target < tbl[i] so we add 1 to target
 
-  tbl0 = _mm256_load_pd(&(lv->t0[0]));                  // 8 values to scan from table t0
-  tbl1 = _mm256_load_pd(&(lv->t0[4]));
-  v0   = _mm256_sub_epi64((__m256i) tbl0,(__m256i) t);  // t - tbl >= 0 if (target-1) < tbl
-  v1   = _mm256_sub_epi64((__m256i) tbl1,(__m256i) t);
+  v0   = _mm256_lddqu_si256((__m256i const *) &(lv->t0[0]));                  // 8 values to scan from table t0
+  v1   = _mm256_lddqu_si256((__m256i const *) &(lv->t0[4]));
+  v0   = _mm256_sub_epi64((__m256i) v0,(__m256i) t);  // t - tbl >= 0 if (target-1) < tbl
+  v1   = _mm256_sub_epi64((__m256i) v1,(__m256i) t);
   m0   = _mm256_movemask_pd((__m256d) v0);              // transform subtract result signs into mask
   m1   = _mm256_movemask_pd((__m256d) v1);
   j    = _mm_popcnt_u32(m0) + _mm_popcnt_u32(m1) - 1;   // count bits on in mask
   ix   = j << 3;                                        // index into t1 table for 8 values scan
 
-  tbl0 = _mm256_load_pd(&(lv->t1[ix  ]));               // 8 values to scan from table t1
-  tbl1 = _mm256_load_pd(&(lv->t1[ix+4]));
-  v0   = _mm256_sub_epi64((__m256i) tbl0,(__m256i) t);
-  v1   = _mm256_sub_epi64((__m256i) tbl1,(__m256i) t);
+  v0   = _mm256_lddqu_si256((__m256i const *) &(lv->t1[ix  ]));               // 8 values to scan from table t1
+  v1   = _mm256_lddqu_si256((__m256i const *) &(lv->t1[ix+4]));
+  v0   = _mm256_sub_epi64((__m256i) v0,(__m256i) t);
+  v1   = _mm256_sub_epi64((__m256i) v1,(__m256i) t);
   m0   = _mm256_movemask_pd((__m256d) v0);
   m1   = _mm256_movemask_pd((__m256d) v1);
   j    = _mm_popcnt_u32(m0) + _mm_popcnt_u32(m1) - 1;   // count bits on in mask
   ix   = (ix + j) <<2 ;                                 // index into t2 table for final 4 value scan
 
-  tbl0 = _mm256_load_pd(&(lv->t2[ix  ]));               // only 4 values to scan from table t2
-  v0   = _mm256_sub_epi64((__m256i) tbl0,(__m256i) t);
+  v0   = _mm256_lddqu_si256((__m256i const *) &(lv->t2[ix  ]));               // only 4 values to scan from table t2
+  v0   = _mm256_sub_epi64((__m256i) v0,(__m256i) t);
   m0   = _mm256_movemask_pd((__m256d) v0);
   ix = ix + _mm_popcnt_u32(m0) - 1 ;
 #else
@@ -308,26 +310,24 @@ int Vsearch_list_dec(double target, lvtab *lv){
   d_l_p dlt, dlr, dlm;
   int ix, j;
 #if defined(__AVX2__) && defined(__x86_64__)
-  __m256d t;
-  __m256d tbl0, tbl1;
-  __m256i v0, v1, vc;
+  __m256i v0, v1, vc, t;
   int m0, m1, pop0, pop1;
 
   dlt.d = target;
   dlr.d = lv->t0[0];
   dlm.d = lv->top;
-  t    = _mm256_broadcast_sd(&target);
+  t    = (__m256i) _mm256_broadcast_sd(&target);
   vc   = (__m256i) _mm256_broadcast_sd((double *) &ONE);
-  if(dlt.l > dlr.l)  t = _mm256_broadcast_sd(&dlr.d);   // target > first element in table
-  if(dlt.l < dlm.l)  t = _mm256_broadcast_sd(&dlm.d);   // target < next to last element in table
+  if(dlt.l > dlr.l)  t = (__m256i) _mm256_broadcast_sd(&dlr.d);   // target > first element in table
+  if(dlt.l < dlm.l)  t = (__m256i) _mm256_broadcast_sd(&dlm.d);   // target < next to last element in table
 // printf("target = %f\n",dlt.d);
 
-  t    = (__m256d) _mm256_sub_epi64((__m256i) t, vc);   // we want target > tbl[i] so we subtract 1 from target
+  t    = _mm256_sub_epi64((__m256i) t, vc);   // we want target > tbl[i] so we subtract 1 from target
 
-  tbl0 = _mm256_load_pd(&(lv->t0[0]));                  // 8 values to scan from table t0
-  tbl1 = _mm256_load_pd(&(lv->t0[4]));
-  v0   = _mm256_sub_epi64((__m256i) t,(__m256i) tbl0);  // t - tbl >= 0 if (target+1) > tbl
-  v1   = _mm256_sub_epi64((__m256i) t,(__m256i) tbl1);
+  v0   = _mm256_lddqu_si256((__m256i const *) &(lv->t0[0]));                  // 8 values to scan from table t0
+  v1   = _mm256_lddqu_si256((__m256i const *) &(lv->t0[4]));
+  v0   = _mm256_sub_epi64((__m256i) t,(__m256i) v0);  // t - tbl >= 0 if (target+1) > tbl
+  v1   = _mm256_sub_epi64((__m256i) t,(__m256i) v1);
   m0   = _mm256_movemask_pd((__m256d) v0);              // transform subtract result signs into mask
   m1   = _mm256_movemask_pd((__m256d) v1);
   pop0 = _mm_popcnt_u32(m0);                            // count bits on in mask
@@ -335,10 +335,10 @@ int Vsearch_list_dec(double target, lvtab *lv){
   j    = pop0+pop1-1;
   ix   = j << 3;                                        // index into t1 table for 8 values scan
 // printf("ix = %d %f %f %f %f\n",ix,lv->t1[ix],lv->t1[ix+1],lv->t1[ix+6],lv->t1[ix+7]);
-  tbl0 = _mm256_load_pd(&(lv->t1[ix  ]));              // 8 entries to scan from table t1
-  tbl1 = _mm256_load_pd(&(lv->t1[ix+4]));
-  v0   = _mm256_sub_epi64((__m256i) t,(__m256i) tbl0);
-  v1   = _mm256_sub_epi64((__m256i) t,(__m256i) tbl1);
+  v0   = _mm256_lddqu_si256((__m256i const *) &(lv->t1[ix  ]));              // 8 entries to scan from table t1
+  v1   = _mm256_lddqu_si256((__m256i const *) &(lv->t1[ix+4]));
+  v0   = _mm256_sub_epi64((__m256i) t,(__m256i) v0);
+  v1   = _mm256_sub_epi64((__m256i) t,(__m256i) v1);
   m0   = _mm256_movemask_pd((__m256d) v0);
   m1   = _mm256_movemask_pd((__m256d) v1);
   pop0 = _mm_popcnt_u32(m0);
@@ -347,8 +347,8 @@ int Vsearch_list_dec(double target, lvtab *lv){
 // printf("j = %d, %f %f %f \n",j,lv->t1[ix+j],lv->t1[ix+j+1],lv->t1[ix+j+2]);
   ix   = (ix + j) <<2 ;                                 // index into t2 table for final 4 value scan
 // printf("j = %d, ix = %d, %f %f, %f %f\n",j,ix,lv->t2[ix],lv->t2[ix+1],lv->t2[ix+2],lv->t2[ix+3]);
-  tbl0 = _mm256_load_pd(&(lv->t2[ix  ]));              // only 4 entries to scan from table t2
-  v0   = _mm256_sub_epi64((__m256i) t,(__m256i) tbl0);
+  v0   = _mm256_lddqu_si256((__m256i const *) &(lv->t2[ix  ]));              // only 4 entries to scan from table t2
+  v0   = _mm256_sub_epi64((__m256i) t,(__m256i) v0);
   m0   = _mm256_movemask_pd((__m256d) v0);
   pop0 = _mm_popcnt_u32(m0);
   pop1 = 0;
