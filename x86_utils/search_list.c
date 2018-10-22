@@ -174,14 +174,14 @@ int Vsearch_list_inc_2(double target, lvtab *lv){
 // 8 8 4 scan pattern
 int Vsearch_list_inc(double target, lvtab *lv){
   d_l_p dlt, dlr, dlm;
-  int ix, j;
+  int ix;
 #if defined(__AVX2__) && defined(__x86_64__)
   __m256i v0, v1, vc, t;
   int m0, m1;
 
   dlt.d = target;
-  dlr.d = lv->t0[0];
-  dlm.d = lv->top;
+  dlr.d = lv->t0[0];   // smallest value in table
+  dlm.d = lv->top;     // next to largest value in table
   t     = (__m256i) _mm256_broadcast_sd(&target);
   vc    = (__m256i) _mm256_broadcast_sd((double *) &ONE);
   if(dlt.l < dlr.l) t =(__m256i)  _mm256_broadcast_sd(&dlr.d);    // target < first element in table
@@ -195,8 +195,7 @@ int Vsearch_list_inc(double target, lvtab *lv){
   v1   = _mm256_sub_epi64((__m256i) v1,(__m256i) t);
   m0   = _mm256_movemask_pd((__m256d) v0);              // transform subtract result signs into mask
   m1   = _mm256_movemask_pd((__m256d) v1);
-  j    = _mm_popcnt_u32(m0) + _mm_popcnt_u32(m1) - 1;   // count bits on in mask
-  ix   = j << 3;                                        // index into t1 table for 8 values scan
+  ix   = (_mm_popcnt_u32(m0) + _mm_popcnt_u32(m1) - 1) << 3;         // index into t1 table for 8 values scan
 
   v0   = _mm256_lddqu_si256((__m256i const *) &(lv->t1[ix  ]));               // 8 values to scan from table t1
   v1   = _mm256_lddqu_si256((__m256i const *) &(lv->t1[ix+4]));
@@ -204,15 +203,14 @@ int Vsearch_list_inc(double target, lvtab *lv){
   v1   = _mm256_sub_epi64((__m256i) v1,(__m256i) t);
   m0   = _mm256_movemask_pd((__m256d) v0);
   m1   = _mm256_movemask_pd((__m256d) v1);
-  j    = _mm_popcnt_u32(m0) + _mm_popcnt_u32(m1) - 1;   // count bits on in mask
-  ix   = (ix + j) <<2 ;                                 // index into t2 table for final 4 value scan
+  ix   = (ix + _mm_popcnt_u32(m0) + _mm_popcnt_u32(m1) - 1) <<2 ;             // index into t2 table for final 4 value scan
 
   v0   = _mm256_lddqu_si256((__m256i const *) &(lv->t2[ix  ]));               // only 4 values to scan from table t2
   v0   = _mm256_sub_epi64((__m256i) v0,(__m256i) t);
   m0   = _mm256_movemask_pd((__m256d) v0);
   ix = ix + _mm_popcnt_u32(m0) - 1 ;
 #else
-  int i;
+  int i, j;
   dlt.d = target;
   dlr.d = lv->t0[0];
   dlm.d = lv->top;
@@ -492,11 +490,11 @@ int main(){
 
   T = NT+.5  ;
   ix = Vsearch_list_dec(T,lv);
-  printf("Tdec = %f, index = %d , tbl[index] = %f, tbl[index+1] = %f\n",T, ix, lv->t2[ix], lv->t2[ix+1]);
+  printf("Tdec = %f, index = %d , tbl[index] = %g, tbl[index+1] = %g\n",T, ix, lv->t2[ix], lv->t2[ix+1]);
   ix = Vsearch_list_dec_2(T,lv);
-  printf("Tdec2= %f, index = %d , tbl[index] = %f, tbl[index+1] = %f\n",T, ix, lv->t2[ix], lv->t2[ix+1]);
+  printf("Tdec2= %f, index = %d , tbl[index] = %g, tbl[index+1] = %g\n",T, ix, lv->t2[ix], lv->t2[ix+1]);
   ix = search_list_dec(T,lv);
-  printf("Td   = %f, index = %d , tbl[index] = %f, tbl[index+1] = %f\n",T, ix, lv->t2[ix], lv->t2[ix+1]);
+  printf("Td   = %f, index = %d , tbl[index] = %g, tbl[index+1] = %g\n",T, ix, lv->t2[ix], lv->t2[ix+1]);
   ix = Vsearch_list_inc(T,lv2);
   printf("Tinc = %f, index = %d , tbl[index] = %f, tbl[index+1] = %f\n",T, ix, lv2->t2[ix], lv2->t2[ix+1]);
   ix = Vsearch_list_inc_2(T,lv2);
