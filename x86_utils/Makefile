@@ -7,12 +7,32 @@ ifneq (,$(findstring intel,$(EC_ARCH)))
 # $(error FATAL: intel compiler  detected)
 EXTRA_FTN := -no-wrap-margin
 EXTRA_C   := -march=core-avx2
+COMPILER = s.cc
+FCOMPILER = s.f90
 endif
 
 ifneq (,$(findstring gfortran,$(EC_ARCH)))
 # $(error FATAL: intel compiler  detected)
 EXTRA_FTN := 
 EXTRA_C   := -mavx2 -mfma
+COMPILER = s.cc
+FCOMPILER = s.f90
+endif
+
+ifneq (,$(findstring gnu,$(EC_ARCH)))
+# $(error FATAL: intel compiler  detected)
+EXTRA_FTN := 
+EXTRA_C   := -mavx2 -mfma
+COMPILER = gcc
+FCOMPILER = gfortran
+endif
+
+ifneq (,$(findstring llvm,$(EC_ARCH)))
+# $(error FATAL: intel compiler  detected)
+EXTRA_FTN := 
+EXTRA_C   := -mavx2 -mfma
+COMPILER = clang
+FCOMPILER = flang
 endif
 
 all: fp_x87_xmm_control.o fp_x87_xmm_control.h fp_x87_xmm_control.inc
@@ -42,15 +62,21 @@ intrp_bicub_yx_f.F90:
 	ln -sf  intrp_bicub_yx.c intrp_bicub_yx_f.F90
 
 intrp_bicub_yx.o: intrp_bicub_yx.c
-	s.cc -O2 -DTIMING -c ${EXTRA_C} intrp_bicub_yx.c
+	$(COMPILER) -O2 -DTIMING -c ${EXTRA_C} intrp_bicub_yx.c
 
 intrp_bicub_yx: intrp_bicub_yx.c intrp_bicub_yx_f.F90 intrp_bicub_yx.inc
-	s.cc -O2 -DTIMING -c ${EXTRA_C} intrp_bicub_yx.c
-	s.f90 ${EXTRA_FTN} -DF_TEST -o intrp_bicub_yx intrp_bicub_yx_f.F90 intrp_bicub_yx.o
+	$(COMPILER) -O2 -DTIMING -c ${EXTRA_C} intrp_bicub_yx.c
+	$(FCOMPILER) ${EXTRA_FTN} -DF_TEST -o intrp_bicub_yx intrp_bicub_yx_f.F90 intrp_bicub_yx.o
 	rm -f intrp_bicub_yx.o
-	s.cc -O3 -DTIMING -c intrp_bicub_yx.c
-	s.f90 ${EXTRA_FTN} -DF_TEST -o intrp_bicub_yx0 intrp_bicub_yx_f.F90 intrp_bicub_yx.o
+	$(COMPILER) -O3 -DTIMING -c intrp_bicub_yx.c
+	$(FCOMPILER) ${EXTRA_FTN} -DF_TEST -o intrp_bicub_yx0 intrp_bicub_yx_f.F90 intrp_bicub_yx.o
 	rm -f intrp_bicub_yx.o
+
+test_search_list: search_list.c test_search_list.c
+	$(COMPILER) -O3 -DSELF_TEST -c ${EXTRA_C} search_list.c
+	$(COMPILER) -O3 ${EXTRA_C} test_search_list.c search_list.o -o test_search_list
+	rm -f search_list.o
 
 clean:
 	rm -f intrp_bicub_yx0 intrp_bicub_yx intrp_bicub_yx.o intrp_bicub_yx.s a.out fp_x87_xmm_control.o intrp_bicub_yx.inc
+	rm -f test_search_list search_list.o 
