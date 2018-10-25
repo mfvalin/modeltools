@@ -73,6 +73,15 @@ program tricublin_d_test
   print 102,'rel error :',(e-r3)/r3
   print *, 'FLOPS/interp = ',3*(32*4 + 32 + 8 + 64)  ! interpolation + float -> double conversions
 
+  print *,'===== tricublin_zyx3f_beta test (cubic) ====='
+  call tricublin_zyx3f_beta(r3,f123(1,ii,jj,kk),px,py,pz,ni,ni*nj)
+  e(1) = real(fxyz(xx,yy,zz))
+  e(2) = e(1) + 10.0
+  e(3) = e(1) + 20.0
+  print 101,'expected :',e,' , got :',r3
+  print 102,'rel error :',(e-r3)/r3
+  print *, 'FLOPS/interp = ',3*(32*4 + 32 + 8 + 64)  ! interpolation + float -> double conversions
+
   print *,'===== tricublin_zyxf_beta test (linear) ====='
   kk = 1
   zz = kk + 0 + dz
@@ -86,7 +95,7 @@ program tricublin_d_test
   print 102,'rel error :',(e-r3)/r3
   print *, 'FLOPS/interp = ',3*(32*4 + 32 + 8 + 64)  ! interpolation + float -> double conversions
 
-  print *,'===== tricublin_zyxf_d timing (cubic) ====='
+  print *,'===== tricublin_zyxf_beta timing (cubic) ====='
   kk = 4
   f2 = f1 + 10
   f3 = f2 + 10
@@ -99,6 +108,27 @@ program tricublin_d_test
         call tricublin_zyxf_beta(r1(1),f1(ii,jj,kk),px,py,pz,ni,ni*nj)
         call tricublin_zyxf_beta(r2(1),f2(ii,jj,kk),px,py,pz,ni,ni*nj)
         call tricublin_zyxf_beta(r3(1),f3(ii,jj,kk),px,py,pz,ni,ni*nj)
+      enddo
+    enddo
+  enddo
+  enddo
+  t1 = rdtscp() - t0
+  
+  print *, 'tot cycles   = ',t1
+  print *, 'per interp   = ',t1/((ni-3)*(nj-3)*(nk-3))/NR
+  print *, 'FLOPS/interp = ',3*(32*4 + 32 + 8 + 64)  ! interpolation + float -> double conversions
+
+  print *,'===== tricublin_zyx3f_beta timing (cubic) ====='
+  kk = 4
+  f2 = f1 + 10
+  f3 = f2 + 10
+  t0 = rdtscp()
+  do rr = 1 , NR
+  do KK = 1, NK - 3
+    do JJ = 1, NJ - 3
+      do II = 1, NI - 3
+        call tricubic_coeffs_d(px,py,pz,dx,dy,dz)
+        call tricublin_zyx3f_beta(r3,f123(1,ii,jj,kk),px,py,pz,ni,ni*nj)
       enddo
     enddo
   enddo

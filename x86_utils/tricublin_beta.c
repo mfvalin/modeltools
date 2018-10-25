@@ -154,6 +154,182 @@ void Tricublin_zyxf_beta(float *d, float *f1, double *px, double *py, double *pz
   d[0] = dst[0]*px[0] + dst[1]*px[1] + dst[2]*px[2] + dst[3]*px[3];
 #endif
 }
+// Fortran dimensions: d(3) , f(3,NI,NJ,NK)
+// NI   : length of a line
+// NINJ : length of a plane
+// f : address of lower left corner of the 4 x 4 x 4 or 4 x 4 x 2 box
+// interpolation is done along z, then along y, then along x
+// 3 values are interpolated using the same cubic/linear polynomial coefficients
+// pz(1) and pz(4) both == 0.0 mean linear interpolation along z
+// pz(2) = 1.0 - dz, pz(3) = dz are expected (0.0 <= dz <= 1.0)
+// the above might get adjusted in the future
+// in the z linear case, planes 0 and 1 are the same as are planes 2 and 3
+// note for future expansion:
+// should both interpolations have to be done, planes 1 and 2 can be used for the z linear case,
+// and planes 0, 1, 2, 3 for the z cubic case
+// in that case another mechanism will have to be used to signal the z linear case
+void Tricublin_zyx3f_beta(float *d, float *f, double *px, double *py, double *pz, int NI, int NINJ){
+  int ni = 3*NI;
+  int ninj = 3*NINJ;
+  int ninjl;    // ninj (cubic along z) or 0 (linear along z)
+  float *s = f;
+  double dst[13];
+//   int64_t *L = (int64_t *)d;
+  int ni2, ni3;
+
+#if defined(__AVX2__) && defined(__x86_64__)
+  __m256d cz0, cz1, cz2, cz3, cy, cx;
+  __m256d x0;
+  __m256d za, zb, zc;
+  __m256d ya, yb, yc;
+  __m128  vd;
+  int32_t *l = (int32_t *)d;
+#else
+  double va4[12], vb4[12], vc4[12], vd4[12];
+  int ninj2, ninj3, i;
+#endif
+
+  ni2 = ni + ni;
+  ni3 = ni2 + ni;
+  dst[12] = 0;
+  ninjl = ninj ; // assuming cubic case. in the linear case, ninjl will be set to 0
+  if(pz[0] == 0.0 && pz[3] == 0.0) ninjl = 0;
+
+#if defined(__AVX2__) && defined(__x86_64__)
+  // ==== interpolation along Z, vector length is 12 (3 vectors of length 4 per plane) ====
+  cz0 = _mm256_broadcast_sd(pz  );   // coefficients for interpolation along z, promote to vectors
+  cz1 = _mm256_broadcast_sd(pz+1);
+  cz2 = _mm256_broadcast_sd(pz+2);
+  cz3 = _mm256_broadcast_sd(pz+3);
+
+  s = f;                   // row 0, 4 planes (Z0, Z1, Z2, Z3)
+  cy  = _mm256_broadcast_sd(py);
+
+  za  = _mm256_mul_pd( _mm256_cvtps_pd(_mm_loadu_ps(s  )), cz0);           // plane 0
+  zb  = _mm256_mul_pd( _mm256_cvtps_pd(_mm_loadu_ps(s+4)), cz0);
+  zc  = _mm256_mul_pd( _mm256_cvtps_pd(_mm_loadu_ps(s+8)), cz0);
+  s += ninjl;
+  za  = _mm256_fmadd_pd( _mm256_cvtps_pd(_mm_loadu_ps(s  )),cz1,za);       // plane 1
+  zb  = _mm256_fmadd_pd( _mm256_cvtps_pd(_mm_loadu_ps(s+4)),cz1,zb);
+  zc  = _mm256_fmadd_pd( _mm256_cvtps_pd(_mm_loadu_ps(s+8)),cz1,zc);
+  s += ninj;
+  za  = _mm256_fmadd_pd( _mm256_cvtps_pd(_mm_loadu_ps(s  )),cz2,za);       // plane 2
+  zb  = _mm256_fmadd_pd( _mm256_cvtps_pd(_mm_loadu_ps(s+4)),cz2,zb);
+  zc  = _mm256_fmadd_pd( _mm256_cvtps_pd(_mm_loadu_ps(s+8)),cz2,zc);
+  s += ninjl;
+  za  = _mm256_fmadd_pd( _mm256_cvtps_pd(_mm_loadu_ps(s  )),cz3,za);       // plane 3
+  zb  = _mm256_fmadd_pd( _mm256_cvtps_pd(_mm_loadu_ps(s+4)),cz3,zb);
+  zc  = _mm256_fmadd_pd( _mm256_cvtps_pd(_mm_loadu_ps(s+8)),cz3,zc);
+
+  ya  = _mm256_mul_pd(za,cy);
+  yb  = _mm256_mul_pd(zb,cy);
+  yc  = _mm256_mul_pd(zc,cy);
+
+  s = f + ni;              // row 1, 4 planes (Z0, Z1, Z2, Z3)
+  cy  = _mm256_broadcast_sd(py+1);
+
+  za  = _mm256_mul_pd( _mm256_cvtps_pd(_mm_loadu_ps(s  )), cz0);           // plane 0
+  zb  = _mm256_mul_pd( _mm256_cvtps_pd(_mm_loadu_ps(s+4)), cz0);
+  zc  = _mm256_mul_pd( _mm256_cvtps_pd(_mm_loadu_ps(s+8)), cz0);
+  s += ninjl;
+  za  = _mm256_fmadd_pd( _mm256_cvtps_pd(_mm_loadu_ps(s  )),cz1,za);       // plane 1
+  zb  = _mm256_fmadd_pd( _mm256_cvtps_pd(_mm_loadu_ps(s+4)),cz1,zb);
+  zc  = _mm256_fmadd_pd( _mm256_cvtps_pd(_mm_loadu_ps(s+8)),cz1,zc);
+  s += ninj;
+  za  = _mm256_fmadd_pd( _mm256_cvtps_pd(_mm_loadu_ps(s  )),cz2,za);       // plane 2
+  zb  = _mm256_fmadd_pd( _mm256_cvtps_pd(_mm_loadu_ps(s+4)),cz2,zb);
+  zc  = _mm256_fmadd_pd( _mm256_cvtps_pd(_mm_loadu_ps(s+8)),cz2,zc);
+  s += ninjl;
+  za  = _mm256_fmadd_pd( _mm256_cvtps_pd(_mm_loadu_ps(s  )),cz3,za);       // plane 3
+  zb  = _mm256_fmadd_pd( _mm256_cvtps_pd(_mm_loadu_ps(s+4)),cz3,zb);
+  zc  = _mm256_fmadd_pd( _mm256_cvtps_pd(_mm_loadu_ps(s+8)),cz3,zc);
+
+  ya  = _mm256_fmadd_pd(za,cy,ya);
+  yb  = _mm256_fmadd_pd(zb,cy,yb);
+  yc  = _mm256_fmadd_pd(zc,cy,yc);
+
+  s = f + ni2;            // row 2, 4 planes (Z0, Z1, Z2, Z3)
+  cy  = _mm256_broadcast_sd(py+2);
+
+  za  = _mm256_mul_pd( _mm256_cvtps_pd(_mm_loadu_ps(s  )), cz0);           // plane 0
+  zb  = _mm256_mul_pd( _mm256_cvtps_pd(_mm_loadu_ps(s+4)), cz0);
+  zc  = _mm256_mul_pd( _mm256_cvtps_pd(_mm_loadu_ps(s+8)), cz0);
+  s += ninjl;
+  za  = _mm256_fmadd_pd( _mm256_cvtps_pd(_mm_loadu_ps(s  )),cz1,za);       // plane 1
+  zb  = _mm256_fmadd_pd( _mm256_cvtps_pd(_mm_loadu_ps(s+4)),cz1,zb);
+  zc  = _mm256_fmadd_pd( _mm256_cvtps_pd(_mm_loadu_ps(s+8)),cz1,zc);
+  s += ninj;
+  za  = _mm256_fmadd_pd( _mm256_cvtps_pd(_mm_loadu_ps(s  )),cz2,za);       // plane 2
+  zb  = _mm256_fmadd_pd( _mm256_cvtps_pd(_mm_loadu_ps(s+4)),cz2,zb);
+  zc  = _mm256_fmadd_pd( _mm256_cvtps_pd(_mm_loadu_ps(s+8)),cz2,zc);
+  s += ninjl;
+  za  = _mm256_fmadd_pd( _mm256_cvtps_pd(_mm_loadu_ps(s  )),cz3,za);       // plane 3
+  zb  = _mm256_fmadd_pd( _mm256_cvtps_pd(_mm_loadu_ps(s+4)),cz3,zb);
+  zc  = _mm256_fmadd_pd( _mm256_cvtps_pd(_mm_loadu_ps(s+8)),cz3,zc);
+
+  ya  = _mm256_fmadd_pd(za,cy,ya);
+  yb  = _mm256_fmadd_pd(zb,cy,yb);
+  yc  = _mm256_fmadd_pd(zc,cy,yc);
+
+  s = f + ni3;            // row 3, 4 planes (Z0, Z1, Z2, Z3)
+  cy  = _mm256_broadcast_sd(py+3);
+
+  za  = _mm256_mul_pd( _mm256_cvtps_pd(_mm_loadu_ps(s  )), cz0);           // plane 0
+  zb  = _mm256_mul_pd( _mm256_cvtps_pd(_mm_loadu_ps(s+4)), cz0);
+  zc  = _mm256_mul_pd( _mm256_cvtps_pd(_mm_loadu_ps(s+8)), cz0);
+  s += ninjl;
+  za  = _mm256_fmadd_pd( _mm256_cvtps_pd(_mm_loadu_ps(s  )),cz1,za);       // plane 1
+  zb  = _mm256_fmadd_pd( _mm256_cvtps_pd(_mm_loadu_ps(s+4)),cz1,zb);
+  zc  = _mm256_fmadd_pd( _mm256_cvtps_pd(_mm_loadu_ps(s+8)),cz1,zc);
+  s += ninj;
+  za  = _mm256_fmadd_pd( _mm256_cvtps_pd(_mm_loadu_ps(s  )),cz2,za);       // plane 2
+  zb  = _mm256_fmadd_pd( _mm256_cvtps_pd(_mm_loadu_ps(s+4)),cz2,zb);
+  zc  = _mm256_fmadd_pd( _mm256_cvtps_pd(_mm_loadu_ps(s+8)),cz2,zc);
+  s += ninjl;
+  za  = _mm256_fmadd_pd( _mm256_cvtps_pd(_mm_loadu_ps(s  )),cz3,za);       // plane 3
+  zb  = _mm256_fmadd_pd( _mm256_cvtps_pd(_mm_loadu_ps(s+4)),cz3,zb);
+  zc  = _mm256_fmadd_pd( _mm256_cvtps_pd(_mm_loadu_ps(s+8)),cz3,zc);
+
+  ya  = _mm256_fmadd_pd(za,cy,ya);
+  yb  = _mm256_fmadd_pd(zb,cy,yb);
+  yc  = _mm256_fmadd_pd(zc,cy,yc);
+
+  // interpolation along x, split 3 vectors of 4 elements into 4 vectors of 3 elements
+  // dst : x(0,0) x(1,0) x(2,0) x(0,1)  x(1,1) x(2,1) x(0,2) x(1,2)   x(2,2) x(0,3) x(1,3) x(2,3)    0
+          _mm256_storeu_pd(dst,ya);     _mm256_storeu_pd(dst+4,yb);   _mm256_storeu_pd(dst+8,yc);
+  // cheating loads : only the first 3 values are of any interest
+  //    x(0,0) x(1,0) x(2,0) x(0,1)  i.e. ya
+  cx = _mm256_broadcast_sd(px) ;
+  x0 = _mm256_mul_pd(ya, cx );                           // column 0
+  //    x(0,1) x(1,1) x(2,1) x(0,2)
+  cx = _mm256_broadcast_sd(px+1) ;
+  x0 = _mm256_fmadd_pd(_mm256_loadu_pd(dst+3), cx ,x0);  // column 1
+  //    x(0,2) x(1,2) x(2,2) x(0,3)
+  cx = _mm256_broadcast_sd(px+2) ;
+  x0 = _mm256_fmadd_pd(_mm256_loadu_pd(dst+6), cx ,x0);  // column 2
+  //    x(0,3) x(1,3) x(2,3) 0 
+  cx = _mm256_broadcast_sd(px+3) ;
+  x0 = _mm256_fmadd_pd(_mm256_loadu_pd(dst+9), cx ,x0);  // column 3
+
+  vd =  _mm256_cvtpd_ps(x0);                  // back to float precision
+  l[0] = _mm_extract_epi32((__m128i) vd, 0);  // extract element 0 and store
+  l[1] = _mm_extract_epi32((__m128i) vd, 1);  // extract element 1 and store
+  l[2] = _mm_extract_epi32((__m128i) vd, 2);  // extract element 2 and store
+#else
+  ninj2 = ninj + ninjl;
+  ninj3 = ninj2 + ninjl;
+  for (i=0 ; i<12 ; i++){
+    va4[i] = s[i    ]*pz[0] + s[i    +ninjl]*pz[1] +  s[i    +ninj2]*pz[2] + s[i    +ninj3]*pz[3];
+    vb4[i] = s[i+ni ]*pz[0] + s[i+ni +ninjl]*pz[1] +  s[i+ni +ninj2]*pz[2] + s[i+ni +ninj3]*pz[3];
+    vc4[i] = s[i+ni2]*pz[0] + s[i+ni2+ninjl]*pz[1] +  s[i+ni2+ninj2]*pz[2] + s[i+ni2+ninj3]*pz[3];
+    vd4[i] = s[i+ni3]*pz[0] + s[i+ni3+ninjl]*pz[1] +  s[i+ni3+ninj2]*pz[2] + s[i+ni3+ninj3]*pz[3];
+    dst[i] = va4[i]*py[0] + vb4[i]*py[1] + vc4[i]*py[2] + vd4[i]*py[3];
+  }
+  d[0] = dst[0]*px[0] + dst[3]*px[1] + dst[6]*px[2] + dst[ 9]*px[3];
+  d[1] = dst[1]*px[0] + dst[4]*px[1] + dst[7]*px[2] + dst[10]*px[3];
+  d[2] = dst[2]*px[0] + dst[5]*px[1] + dst[8]*px[2] + dst[11]*px[3];
+#endif
+}
 
 void Tricubic_coeffs_d(double *px, double *py, double *pz, double x, double y, double z){
 
