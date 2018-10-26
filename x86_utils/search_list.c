@@ -30,8 +30,8 @@ typedef union{
 }d_l_p;
 
 typedef struct{
-  double t0[12];
-  double t1[68];   // will support at most 255 levels
+  double t0[ 8];
+  double t1[64];   // will support at most 256 levels
   double t2[257];
   double top;      // t2[nk-2]
   double x0;       // x origin
@@ -45,23 +45,6 @@ typedef struct{
   uint32_t nk;     // number of planes (max 255)
   uint32_t nij;    // ni*nj, distance between planes
 }lvtab;
-
-typedef struct{
-  uint64_t t0[12];
-  uint64_t t1[68];   // will support at most 255 levels
-  uint64_t t2[257];
-  uint64_t top;      // t2[nk-2]
-  double x0;       // x origin
-  double odx;      // inverse of deltax
-  double y0;       // y origin
-  double ody;      // inverse of deltay
-  double *odz;     // pointer to inverse of deltaz array [nk doubles]
-  double *ocz;     // pointer to inverse of coefficient denominators [4*nk doubles]
-  uint32_t ni;     // distance between rows
-  uint32_t nj;     // number of rows
-  uint32_t nk;     // number of planes (max 255)
-  uint32_t nij;    // ni*nj, distance between planes
-}lvtabi;
 
 #if defined(__AVX2__) && defined(__x86_64__)
 static int64_t ONE = 1;
@@ -106,12 +89,10 @@ printf("Vsearch_setup: n = %d, %10.3f %10.3f %10.3f %10.3f \n",n,targets[0],targ
 
   if(targets[1] < targets[0]) pad = -pad;    // decreasing values
   for(i=0 ; i<n   ; i++) { lv->t2[i] = targets[i] ; }   // z coordinate table
-  for(i=n ; i<257 ; i++) { lv->t2[i] = pad ; }          // pad at end of table
+  for(i=n ; i<256 ; i++) { lv->t2[i] = pad ; }          // pad at end of table
 
   for(i=0  ; i<64 ; i++) { lv->t1[i] = lv->t2[(i<<2)] ; } ;   // lookup for t2 (every fourth entry)
-  for(i=64 ; i<68 ; i++) { lv->t1[i] = pad ; } ;              // pad at end of table
   for(i=0  ; i<8  ; i++) { lv->t0[i] = lv->t1[(i<<3)] ; } ;   // lookup for t1 (every eighth entry)
-  for(i=8  ; i<11 ; i++) { lv->t0[i] = pad ; } ;              // pad at end of table
   // inverse of intervals ( 0 to n-2 only make sense )
   lv->odz = malloc(n * sizeof(double));
   if(NULL == lv->odz){
@@ -145,67 +126,6 @@ printf("Vsearch_setup: n = %d, %10.3f %10.3f %10.3f %10.3f \n",n,targets[0],targ
   return lv;
 }
 
-// version 2 for monotonically increasing positive table values
-// target and tables are of type double but processed as if they were 64 bit positive integers
-// 8 8 4 scan pattern
-int Vsearch_list_inc_2(double target, lvtab *lv){
-  int ix = 0;
-#if defined(__AVX2__) && defined(__x86_64__)
-  int j;
-//   lvtabi *lv = (lvtabi *) lvd;
-  __m256i v0, v1, t;
-  int m0, m1;
-
-  t     = (__m256i) _mm256_broadcast_sd(&target);
-
-  v0   = _mm256_lddqu_si256((__m256i const *) &(lv->t0[1]));                 // 8 values to scan from table t0
-  v1   = _mm256_lddqu_si256((__m256i const *) &(lv->t0[5]));
-  v0   = _mm256_sub_epi64(v0,(__m256i) t);            // tbl - t < 0 if tbl < t 
-  v1   = _mm256_sub_epi64(v1,(__m256i) t);
-  m0   = _mm256_movemask_pd((__m256d) v0);              // transform subtract result signs into mask
-  m1   = _mm256_movemask_pd((__m256d) v1);
-  j    = _mm_popcnt_u32(m0) + _mm_popcnt_u32(m1)    ;   // count bits on in mask
-  ix   = j << 3;                                        // index into t1 table for 8 values scan
-
-  v0 = _mm256_lddqu_si256((__m256i const *) &(lv->t1[ix+1]));               // 8 values to scan from table t1
-  v1 = _mm256_lddqu_si256((__m256i const *) &(lv->t1[ix+5]));
-  v0   = _mm256_sub_epi64(v0,(__m256i) t);
-  v1   = _mm256_sub_epi64(v1,(__m256i) t);
-  m0   = _mm256_movemask_pd((__m256d) v0);
-  m1   = _mm256_movemask_pd((__m256d) v1);
-  j    = _mm_popcnt_u32(m0) + _mm_popcnt_u32(m1)    ;   // count bits on in mask
-  ix   = (ix + j) <<2 ;                                 // index into t2 table for final 4 value scan
-
-  v0 = _mm256_lddqu_si256((__m256i const *) &(lv->t2[ix+1]));               // only 4 values to scan from table t2
-  v0   = _mm256_sub_epi64(v0,(__m256i) t);
-  m0   = _mm256_movemask_pd((__m256d) v0);
-  ix = ix + _mm_popcnt_u32(m0)     ;
-  ix = (ix < lv->nk - 1) ? ix : lv->nk - 2;    // clamp below nk - 2
-#else
-  d_l_p dlt, dlr, dlm;
-  lvtabi *lvd = (lvtabi *) lv;
-  int i, j;
-
-  dlt.d = target;
-  dlr.d = lvd->t0[0];
-  dlm.d = lvd->top;
-  if(dlt.l < dlr.l) dlt.d = dlr.d;  // target < first element in table
-  if(dlt.l > dlm.l) dlt.d = dlm.d;    // target > next to last element in table
-
-  j = 7;
-  for(i=7 ; i>0 ; i--) { if(dlt.l < lvd->t0[i]) j = i - 1; }
-  ix = j << 3;
-  j = 7;
-  for(i=7 ; i>0 ; i--) { if(dlt.l < lvd->t1[ix+i]) j = i - 1; }
-  ix = (ix + j) <<2 ;
-  j = 3;
-  for(i=3 ; i>0 ; i--) { if(dlt.l < lvd->t2[ix+i]) j = i - 1; }
-  ix = ix + j;
-#endif
-
-  return ix;
-}
-
 // NOTE: 
 //      min(x,y) :  y + ( (x - y) & ( (x - y) >> 63 ) )
 //      max(x,y) :  x - ( (x - y) & ( (x - y) >> 63 ) )
@@ -216,19 +136,15 @@ int Vsearch_list_inc_2(double target, lvtab *lv){
 // target and tables are of type double but processed as if they were 64 bit positive integers
 // 8 8 4 scan pattern
 int Vsearch_list_inc(double target, lvtab *lv){
-  d_l_p dlt, dlr, dlm;
   int ix;
 #if defined(__AVX2__) && defined(__x86_64__)
   __m256i v0, v1, vc, t;
   int m0, m1;
 
-  dlt.d = target;
-  dlr.d = lv->t0[0];   // smallest value in table
-  dlm.d = lv->top;     // next to largest value in table
   t     = (__m256i) _mm256_broadcast_sd(&target);
   vc    = (__m256i) _mm256_broadcast_sd((double *) &ONE);
-  if(dlt.l < dlr.l) t =(__m256i)  _mm256_broadcast_sd(&dlr.d);    // target < first element in table
-  if(dlt.l > dlm.l) t =(__m256i)  _mm256_broadcast_sd(&dlm.d);    // target > next to last element in table
+  if(target < lv->t0[0]) t =(__m256i)  _mm256_broadcast_sd(&lv->t0[0]);    // target < first element in table
+  if(target > lv->top  ) t =(__m256i)  _mm256_broadcast_sd(&lv->top  );    // target > next to last element in table
 
   t    = _mm256_add_epi64((__m256i) t, vc);   // we want target < tbl[i] so we add 1 to target
 
@@ -254,25 +170,19 @@ int Vsearch_list_inc(double target, lvtab *lv){
   ix = ix + _mm_popcnt_u32(m0) - 1 ;
 #else
   int i, j;
-  dlt.d = target;
-  dlr.d = lv->t0[0];
-  dlm.d = lv->top;
-  if(dlt.l < dlr.l) target = dlr.d;  // target < first element in table
-  if(dlt.l > dlm.l) target = dlm.d;    // target > next to last element in table
+
+  if(target < lv->t0[0]) target = lv->t0[0];  // target < first element in table
+  if(target > lv->top  ) target = lv->top  ;    // target > next to last element in table
 
   j = 7;
-//   printf("target = %f\n",target);
   for(i=7 ; i>0 ; i--) { if(target < lv->t0[i]) j = i - 1; }
   ix = j << 3;
-//   printf("j = %d, ix = %d, %f %f, %f %f\n",j,ix,lv->t0[j-1],lv->t0[j],lv->t1[ix],lv->t1[ix+7]);
   j = 7;
   for(i=7 ; i>0 ; i--) { if(target < lv->t1[ix+i]) j = i - 1; }
   ix = (ix + j) <<2 ;
-//   printf("j = %d, ix = %d, %f %f, %f %f\n",j,ix,lv->t1[j-1],lv->t1[j],lv->t2[ix],lv->t2[ix+7]);
   j = 3;
   for(i=3 ; i>0 ; i--) { if(target < lv->t2[ix+i]) j = i - 1; }
   ix = ix + j;
-//   printf("j = %d, ix = %d, %f %f\n",j,ix,lv->t1[j-1],lv->t1[j]);
 #endif
   return ix;
 }
@@ -286,7 +196,6 @@ int Vsearch_list_inc(double target, lvtab *lv){
 //         cxyz[16-23] : along z
 // lv    : x y z axis description
 int Vcoef_xyz_inc(double *cxyz, double px, double py, double pz, lvtab *lv){
-  d_l_p dlt, dlr, dlm;
   int ix;
   double pxy[2], *base, *denom, *pos;
 #if defined(__AVX2__) && defined(__x86_64__)
@@ -295,10 +204,6 @@ int Vcoef_xyz_inc(double *cxyz, double px, double py, double pz, lvtab *lv){
   __m128d vr0, vr1, vr2, vr3;
   __m128i itmp;
   int m0, m1;
-
-  dlt.d = pz;
-  dlr.d = lv->t0[0];   // smallest value in table
-  dlm.d = lv->top;     // next to largest value in table
 
   pxy[0] = (px - lv->x0) * lv->odx;      // position to fractional index
   pxy[1] = (py - lv->y0) * lv->ody;      // position to fractional index
@@ -315,8 +220,8 @@ int Vcoef_xyz_inc(double *cxyz, double px, double py, double pz, lvtab *lv){
   vc    = (__m256i) _mm256_broadcast_sd((double *) &ONE);
   tbot  = (__m256i) _mm256_broadcast_sd(&(lv->t0[0]));    // first element in table
   ttop  = (__m256i) _mm256_broadcast_sd(&(lv->top  ));    // next to last element in table
-  if(dlt.l < dlr.l) t = tbot ;    // pz < first element in table, set to first element in table
-  if(dlt.l > dlm.l) t = ttop;     // pz > next to last element in table et to next to last element
+  if(pz < lv->t0[0]) t = tbot ;    // pz < first element in table, set to first element in table
+  if(pz > lv->top  ) t = ttop;     // pz > next to last element in table et to next to last element
 //   ttemp = (__m256i) _mm256_sub_epi64(t,tbot);
 //   t     = (__m256i) _mm256_blendv_pd((__m256d) t, (__m256d) tbot, (__m256d) ttemp);
 //   ttemp = (__m256i) _mm256_sub_epi64(ttop,t);
@@ -375,25 +280,19 @@ int Vcoef_xyz_inc(double *cxyz, double px, double py, double pz, lvtab *lv){
 
 #else
   int i, j;
-  dlt.d = pz;
-  dlr.d = lv->t0[0];
-  dlm.d = lv->top;
-  if(dlt.l < dlr.l) pz = dlr.d;  // pz < first element in table
-  if(dlt.l > dlm.l) pz = dlm.d;    // pz > next to last element in table
+
+  if(pz < lv->t0[0]) pz = lv->t0[0];  // pz < first element in table
+  if(pz > lv->top  ) pz = lv->top  ;    // pz > next to last element in table
 
   j = 7;
-//   printf("pz = %f\n",pz);
   for(i=7 ; i>0 ; i--) { if(pz < lv->t0[i]) j = i - 1; }
   ix = j << 3;
-//   printf("j = %d, ix = %d, %f %f, %f %f\n",j,ix,lv->t0[j-1],lv->t0[j],lv->t1[ix],lv->t1[ix+7]);
   j = 7;
   for(i=7 ; i>0 ; i--) { if(pz < lv->t1[ix+i]) j = i - 1; }
   ix = (ix + j) <<2 ;
-//   printf("j = %d, ix = %d, %f %f, %f %f\n",j,ix,lv->t1[j-1],lv->t1[j],lv->t2[ix],lv->t2[ix+7]);
   j = 3;
   for(i=3 ; i>0 ; i--) { if(pz < lv->t2[ix+i]) j = i - 1; }
   ix = ix + j;
-//   printf("j = %d, ix = %d, %f %f\n",j,ix,lv->t1[j-1],lv->t1[j]);
   pxy[ 0] = px;
   pxy[ 1] = py;
 
@@ -418,91 +317,19 @@ int Vcoef_xyz_inc(double *cxyz, double px, double py, double pz, lvtab *lv){
   return ix;
 }
 
-// version 2 for monotonically decreasing positive table values
-// target and tables are of type double but processed as if they were 64 bit positive integers
-// 8 8 4 scan pattern
-int Vsearch_list_dec_2(double target, lvtab *lv){
-  int ix;
-#if defined(__AVX2__) && defined(__x86_64__)
-  __m256d t;
-  __m256d tbl0, tbl1;
-  __m256i v0, v1;
-  int m0, m1, pop0, pop1;
-
-  t    = _mm256_broadcast_sd(&target);
-
-  tbl0 = _mm256_loadu_pd(&(lv->t0[1]));                  // 8 values to scan from table t0
-  tbl1 = _mm256_loadu_pd(&(lv->t0[5]));
-  v0   = _mm256_sub_epi64((__m256i) t,(__m256i) tbl0);  // t - tbl >= 0 if (target+1) > tbl
-  v1   = _mm256_sub_epi64((__m256i) t,(__m256i) tbl1);
-  m0   = _mm256_movemask_pd((__m256d) v0);              // transform subtract result signs into mask
-  m1   = _mm256_movemask_pd((__m256d) v1);
-  pop0 = _mm_popcnt_u32(m0);                            // count bits on in mask
-  pop1 = _mm_popcnt_u32(m1);
-  ix   = (pop0 + pop1) << 3;                                        // index into t1 table for 8 values scan
-// printf("ix = %d %f %f %f %f\n",ix,lv->t1[ix],lv->t1[ix+1],lv->t1[ix+6],lv->t1[ix+7]);
-  tbl0 = _mm256_loadu_pd(&(lv->t1[ix+1]));              // 8 entries to scan from table t1
-  tbl1 = _mm256_loadu_pd(&(lv->t1[ix+5]));
-  v0   = _mm256_sub_epi64((__m256i) t,(__m256i) tbl0);
-  v1   = _mm256_sub_epi64((__m256i) t,(__m256i) tbl1);
-  m0   = _mm256_movemask_pd((__m256d) v0);
-  m1   = _mm256_movemask_pd((__m256d) v1);
-  pop0 = _mm_popcnt_u32(m0);
-  pop1 = _mm_popcnt_u32(m1);
-// printf("j = %d, %f %f %f \n",j,lv->t1[ix+j],lv->t1[ix+j+1],lv->t1[ix+j+2]);
-  ix   = (ix + pop0 + pop1) <<2 ;                                 // index into t2 table for final 4 value scan
-// printf("j = %d, ix = %d, %f %f, %f %f\n",j,ix,lv->t2[ix],lv->t2[ix+1],lv->t2[ix+2],lv->t2[ix+3]);
-  tbl0 = _mm256_loadu_pd(&(lv->t2[ix+1]));              // only 4 entries to scan from table t2
-  v0   = _mm256_sub_epi64((__m256i) t,(__m256i) tbl0);
-  m0   = _mm256_movemask_pd((__m256d) v0);
-  pop0 = _mm_popcnt_u32(m0);
-  pop1 = 0;
-  ix = (ix + pop0  +pop1) ;
-  ix = (ix < lv->nk - 1) ? ix : lv->nk - 2;
-// printf("j = %d, ix = %d\n",j,ix);
-#else
-  d_l_p dlt, dlr, dlm;
-  int i, j;
-  dlt.d = target;
-  dlr.d = lv->t0[0];
-  dlm.d = lv->top;
-  if(dlt.l > dlr.l) target = dlr.d;  // target > first element in table
-  if(dlt.l < dlm.l) target = dlm.d;  // target < next to last element in table
-  j = 7;
-//   printf("target = %f\n",target);
-  for(i=7 ; i>0 ; i--) { if(target > lv->t0[i]) j = i - 1; }
-  ix = j << 3;
-//   printf("j = %d, ix = %d, %f %f, %f %f\n",j,ix,lv->t0[j-1],lv->t0[j],lv->t1[ix],lv->t1[ix+7]);
-  j = 7;
-  for(i=7 ; i>0 ; i--) { if(target > lv->t1[ix+i]) j = i - 1; }
-  ix = (ix + j) <<2 ;
-//   printf("j = %d, ix = %d, %f %f, %f %f\n",j,ix,lv->t1[j-1],lv->t1[j],lv->t2[ix],lv->t2[ix+7]);
-  j = 3;
-  for(i=3 ; i>0 ; i--) { if(target > lv->t2[ix+i]) j = i - 1; }
-  ix = ix + j;
-//   printf("j = %d, ix = %d, %f %f\n",j,ix,lv->t1[j-1],lv->t1[j]);
-#endif
-  return ix;
-}
-
 // version for monotonically decreasing positive table values
 // target and tables are of type double but processed as if they were 64 bit positive integers
 // 8 8 4 scan pattern
 int Vsearch_list_dec(double target, lvtab *lv){
-  d_l_p dlt, dlr, dlm;
   int ix, j;
 #if defined(__AVX2__) && defined(__x86_64__)
   __m256i v0, v1, vc, t;
   int m0, m1, pop0, pop1;
 
-  dlt.d = target;
-  dlr.d = lv->t0[0];
-  dlm.d = lv->top;
   t    = (__m256i) _mm256_broadcast_sd(&target);
   vc   = (__m256i) _mm256_broadcast_sd((double *) &ONE);
-  if(dlt.l > dlr.l)  t = (__m256i) _mm256_broadcast_sd(&dlr.d);   // target > first element in table
-  if(dlt.l < dlm.l)  t = (__m256i) _mm256_broadcast_sd(&dlm.d);   // target < next to last element in table
-// printf("target = %f\n",dlt.d);
+  if(target > lv->t0[0])  t = (__m256i) _mm256_broadcast_sd(&lv->t0[0]);   // target > first element in table
+  if(target < lv->top  )  t = (__m256i) _mm256_broadcast_sd(&lv->top  );   // target < next to last element in table
 
   t    = _mm256_sub_epi64((__m256i) t, vc);   // we want target > tbl[i] so we subtract 1 from target
 
@@ -516,7 +343,7 @@ int Vsearch_list_dec(double target, lvtab *lv){
   pop1 = _mm_popcnt_u32(m1);
   j    = pop0+pop1-1;
   ix   = j << 3;                                        // index into t1 table for 8 values scan
-// printf("ix = %d %f %f %f %f\n",ix,lv->t1[ix],lv->t1[ix+1],lv->t1[ix+6],lv->t1[ix+7]);
+
   v0   = _mm256_lddqu_si256((__m256i const *) &(lv->t1[ix  ]));              // 8 entries to scan from table t1
   v1   = _mm256_lddqu_si256((__m256i const *) &(lv->t1[ix+4]));
   v0   = _mm256_sub_epi64((__m256i) t,(__m256i) v0);
@@ -526,9 +353,8 @@ int Vsearch_list_dec(double target, lvtab *lv){
   pop0 = _mm_popcnt_u32(m0);
   pop1 = _mm_popcnt_u32(m1);
   j    = pop0+pop1-1;
-// printf("j = %d, %f %f %f \n",j,lv->t1[ix+j],lv->t1[ix+j+1],lv->t1[ix+j+2]);
   ix   = (ix + j) <<2 ;                                 // index into t2 table for final 4 value scan
-// printf("j = %d, ix = %d, %f %f, %f %f\n",j,ix,lv->t2[ix],lv->t2[ix+1],lv->t2[ix+2],lv->t2[ix+3]);
+
   v0   = _mm256_lddqu_si256((__m256i const *) &(lv->t2[ix  ]));              // only 4 entries to scan from table t2
   v0   = _mm256_sub_epi64((__m256i) t,(__m256i) v0);
   m0   = _mm256_movemask_pd((__m256d) v0);
@@ -536,27 +362,21 @@ int Vsearch_list_dec(double target, lvtab *lv){
   pop1 = 0;
   j = pop0+pop1-1;
   ix = (ix + j) ;
-// printf("j = %d, ix = %d\n",j,ix);
 #else
   int i;
-  dlt.d = target;
-  dlr.d = lv->t0[0];
-  dlm.d = lv->top;
-  if(dlt.l > dlr.l) target = dlr.d;  // target > first element in table
-  if(dlt.l < dlm.l) target = dlm.d;  // target < next to last element in table
+
+  if(target > lv->t0[0]) target = lv->t0[0];  // target > first element in table
+  if(target < lv->top  ) target = lv->top;  // target < next to last element in table
+
   j = 7;
-//   printf("target = %f\n",target);
   for(i=7 ; i>0 ; i--) { if(target > lv->t0[i]) j = i - 1; }
   ix = j << 3;
-//   printf("j = %d, ix = %d, %f %f, %f %f\n",j,ix,lv->t0[j-1],lv->t0[j],lv->t1[ix],lv->t1[ix+7]);
   j = 7;
   for(i=7 ; i>0 ; i--) { if(target > lv->t1[ix+i]) j = i - 1; }
   ix = (ix + j) <<2 ;
-//   printf("j = %d, ix = %d, %f %f, %f %f\n",j,ix,lv->t1[j-1],lv->t1[j],lv->t2[ix],lv->t2[ix+7]);
   j = 3;
   for(i=3 ; i>0 ; i--) { if(target > lv->t2[ix+i]) j = i - 1; }
   ix = ix + j;
-//   printf("j = %d, ix = %d, %f %f\n",j,ix,lv->t1[j-1],lv->t1[j]);
 #endif
   return ix;
 }
@@ -592,13 +412,13 @@ int search_list_dec(double target, lvtab *lv){
 int search_list_inc(double target, lvtab *lv){
   int ix;
   int i, j;
-  d_l_p dlt, dlr, dlm;
+//   d_l_p dlt, dlr, dlm;
 
-  dlt.d = target;
-  dlr.d = lv->t0[0];
-  dlm.d = lv->top;
-  if(dlt.l < dlr.l) target = dlr.d;  // target < first element in table
-  if(dlt.l > dlm.l) target = dlm.d;    // target > next to last element in table
+//   dlt.d = target;
+//   dlr.d = lv->t0[0];
+//   dlm.d = lv->top;
+  if(target < lv->t0[0]) target = lv->t0[0];  // target < first element in table
+  if(target > lv->top  ) target = lv->top;    // target > next to last element in table
 
   j = 7;
 //   printf("target = %f\n",target);

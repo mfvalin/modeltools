@@ -30,8 +30,8 @@ typedef union{
 }d_l_p;
 
 typedef struct{
-  double t0[12];
-  double t1[68];   // will support at most 255 levels
+  double t0[ 8];
+  double t1[64];   // will support at most 255 levels
   double t2[257];
   double top;      // t2[nk-2]
   double x0;       // x origin
@@ -46,27 +46,10 @@ typedef struct{
   uint32_t nij;    // ni*nj, distance between planes
 }lvtab;
 
-typedef struct{
-  uint64_t t0[12];
-  uint64_t t1[68];   // will support at most 255 levels
-  uint64_t t2[257];
-  uint64_t top;      // t2[nk-2]
-  double x0;       // x origin
-  double odx;      // inverse of deltax
-  double y0;       // y origin
-  double ody;      // inverse of deltay
-  double *odz;     // pointer to inverse of deltaz array [nk doubles]
-  double *ocz;     // pointer to inverse of coefficient denominators [4*nk doubles]
-  uint32_t ni;     // distance between rows
-  uint32_t nj;     // number of rows
-  uint32_t nk;     // number of planes (max 255)
-  uint32_t nij;    // ni*nj, distance between planes
-}lvtabi;
-
 lvtab * Vsearch_setup(double *targets, int n);
-int Vsearch_list_inc_2(double target, lvtab *lv);
+// int Vsearch_list_inc_2(double target, lvtab *lv);
 int Vsearch_list_inc(double target, lvtab *lv);
-int Vsearch_list_dec_2(double target, lvtab *lv);
+// int Vsearch_list_dec_2(double target, lvtab *lv);
 int Vsearch_list_dec(double target, lvtab *lv);
 // straight C version for comparison purposes
 int search_list_dec(double target, lvtab *lv);
@@ -119,13 +102,14 @@ int main(){
   T = NT  ;
   ix = Vsearch_list_dec(T,lv);
   printf("Tdec = %f, index = %d , tbl[index] = %f, tbl[index+1] = %f\n",T, ix, lv->t2[ix], lv->t2[ix+1]);
-  ix = Vsearch_list_dec_2(T,lv);
-  printf("Tdec2= %f, index = %d , tbl[index] = %f, tbl[index+1] = %f\n",T, ix, lv->t2[ix], lv->t2[ix+1]);
+//   ix = Vsearch_list_dec_2(T,lv);
+//   printf("Tdec2= %f, index = %d , tbl[index] = %f, tbl[index+1] = %f\n",T, ix, lv->t2[ix], lv->t2[ix+1]);
   ix = search_list_dec(T,lv);
   printf("Td   = %f, index = %d , tbl[index] = %f, tbl[index+1] = %f\n",T, ix, lv->t2[ix], lv->t2[ix+1]);
   ix = Vsearch_list_inc(T,lv2);
   printf("Tinc = %f, index = %d , tbl[index] = %f, tbl[index+1] = %f\n",T, ix, lv2->t2[ix], lv2->t2[ix+1]);
-  ix = Vsearch_list_inc_2(T,lv2);
+//   ix = Vsearch_list_inc_2(T,lv2);
+  ix = Vcoef_xyz_inc(cxyz, .5, .5, T, lv2);
   printf("Tinc2= %f, index = %d , tbl[index] = %f, tbl[index+1] = %f\n",T, ix, lv2->t2[ix], lv2->t2[ix+1]);
   ix = search_list_inc(T,lv2);
   printf("Ti   = %f, index = %d , tbl[index] = %f, tbl[index+1] = %f\n",T, ix, lv2->t2[ix], lv2->t2[ix+1]);
@@ -133,13 +117,14 @@ int main(){
   T = NT+.5  ;
   ix = Vsearch_list_dec(T,lv);
   printf("Tdec = %f, index = %d , tbl[index] = %g, tbl[index+1] = %g\n",T, ix, lv->t2[ix], lv->t2[ix+1]);
-  ix = Vsearch_list_dec_2(T,lv);
-  printf("Tdec2= %f, index = %d , tbl[index] = %g, tbl[index+1] = %g\n",T, ix, lv->t2[ix], lv->t2[ix+1]);
+//   ix = Vsearch_list_dec_2(T,lv);
+//   printf("Tdec2= %f, index = %d , tbl[index] = %g, tbl[index+1] = %g\n",T, ix, lv->t2[ix], lv->t2[ix+1]);
   ix = search_list_dec(T,lv);
   printf("Td   = %f, index = %d , tbl[index] = %g, tbl[index+1] = %g\n",T, ix, lv->t2[ix], lv->t2[ix+1]);
   ix = Vsearch_list_inc(T,lv2);
   printf("Tinc = %f, index = %d , tbl[index] = %f, tbl[index+1] = %f\n",T, ix, lv2->t2[ix], lv2->t2[ix+1]);
-  ix = Vsearch_list_inc_2(T,lv2);
+//   ix = Vsearch_list_inc_2(T,lv2);
+  ix = Vcoef_xyz_inc(cxyz, .5, .5, T, lv2);
   printf("Tinc2= %f, index = %d , tbl[index] = %f, tbl[index+1] = %f\n",T, ix, lv2->t2[ix], lv2->t2[ix+1]);
   ix = search_list_inc(T,lv2);
   printf("Ti   = %f, index = %d , tbl[index] = %f, tbl[index+1] = %f\n",T, ix, lv2->t2[ix], lv2->t2[ix+1]);
@@ -147,18 +132,19 @@ int main(){
   T = 0.5 ;
   ix = Vsearch_list_dec(T,lv);
   printf("Tdec = %f, index = %d , tbl[index] = %g, tbl[index+1] = %g\n",T, ix, lv->t2[ix], lv->t2[ix+1]);
-  ix = Vsearch_list_dec_2(T,lv);
-  printf("Tdec2= %f, index = %d , tbl[index] = %g, tbl[index+1] = %g\n",T, ix, lv->t2[ix], lv->t2[ix+1]);
+//   ix = Vsearch_list_dec_2(T,lv);
+//   printf("Tdec2= %f, index = %d , tbl[index] = %g, tbl[index+1] = %g\n",T, ix, lv->t2[ix], lv->t2[ix+1]);
   ix = search_list_dec(T,lv);
   printf("Td   = %f, index = %d , tbl[index] = %g, tbl[index+1] = %g\n",T, ix, lv->t2[ix], lv->t2[ix+1]);
   ix = Vsearch_list_inc(T,lv2);
   printf("Tinc = %f, index = %d , tbl[index] = %f, tbl[index+1] = %f\n",T, ix, lv2->t2[ix], lv2->t2[ix+1]);
-  ix = Vsearch_list_inc_2(T,lv2);
+//   ix = Vsearch_list_inc_2(T,lv2);
+  ix = Vcoef_xyz_inc(cxyz, .5, .5, T, lv2);
   printf("Tinc2= %f, index = %d , tbl[index] = %f, tbl[index+1] = %f\n",T, ix, lv2->t2[ix], lv2->t2[ix+1]);
   ix = search_list_inc(T,lv2);
   printf("Ti   = %f, index = %d , tbl[index] = %f, tbl[index+1] = %f\n",T, ix, lv2->t2[ix], lv2->t2[ix+1]);
   printf("\n");
-
+// exit (0);
   count = (NT - 1) * 1000000;
   cnt = 0;
   gettimeofday(&tv0,NULL);
@@ -169,7 +155,7 @@ int main(){
   t0 = tv0.tv_sec; t0 *= 1000000 ; t0 += tv0.tv_usec ;
   t1 = tv1.tv_sec; t1 *= 1000000 ; t1 += tv1.tv_usec ;
   T = t1-t0; T /= count;
-  printf("SIMDd  : %ld microseconds for %d iterations, %f us/iter (%d)\n",t1-t0,count,T,cnt);
+  printf("SIMDd  : %ld microseconds for %d iterations, %f ns/iter (%d)\n",t1-t0,count,T*1000.0,cnt);
 
   cnt = 0;
   gettimeofday(&tv0,NULL);
@@ -185,34 +171,34 @@ int main(){
   t0 = tv0.tv_sec; t0 *= 1000000 ; t0 += tv0.tv_usec ;
   t1 = tv1.tv_sec; t1 *= 1000000 ; t1 += tv1.tv_usec ;
   T = t1-t0; T /= count;
-  printf("SIMDd+ : %ld microseconds for %d iterations, %f us/iter (%d)\n\n",t1-t0,count,T,cnt);
+  printf("SIMDd+ : %ld microseconds for %d iterations, %f ns/iter (%d)\n\n",t1-t0,count,T*1000.0,cnt);
 
-  cnt = 0;
-  gettimeofday(&tv0,NULL);
-  for(T=1.000000 ; T<NT ; T=T+.000001){
-    if(Vsearch_list_dec_2(T,lv) == -1) exit(1);
-  }
-  gettimeofday(&tv1,NULL);
-  t0 = tv0.tv_sec; t0 *= 1000000 ; t0 += tv0.tv_usec ;
-  t1 = tv1.tv_sec; t1 *= 1000000 ; t1 += tv1.tv_usec ;
-  T = t1-t0; T /= count;
-  printf("SIMDd2 : %ld microseconds for %d iterations, %f us/iter (%d)\n",t1-t0,count,T,cnt);
-
-  cnt = 0;
-  gettimeofday(&tv0,NULL);
-  for(T=1.000000 ; T<NT ; T=T+.000001){
-    ix = Vsearch_list_dec_2(T,lv); ; // cnt += ix;
-    if(T > lv->t2[ix] || T < lv->t2[ix+1]){
-      printf("ERROR(Vdecr)  : T = %f, index = %d , tbl[index] = %f, tbl[index+1] = %f\n",T, ix, lv->t2[ix], lv->t2[ix+1]);
-      printf("                T - tbl[index] = %f, T - tbl[index+1] = %f\n",T-lv->t2[ix], T-lv->t2[ix+1]);
-      exit(1);
-    }
-  }
-  gettimeofday(&tv1,NULL);
-  t0 = tv0.tv_sec; t0 *= 1000000 ; t0 += tv0.tv_usec ;
-  t1 = tv1.tv_sec; t1 *= 1000000 ; t1 += tv1.tv_usec ;
-  T = t1-t0; T /= count;
-  printf("SIMDd2+: %ld microseconds for %d iterations, %f us/iter (%d)\n\n",t1-t0,count,T,cnt);
+//   cnt = 0;
+//   gettimeofday(&tv0,NULL);
+//   for(T=1.000000 ; T<NT ; T=T+.000001){
+//     if(Vsearch_list_dec_2(T,lv) == -1) exit(1);
+//   }
+//   gettimeofday(&tv1,NULL);
+//   t0 = tv0.tv_sec; t0 *= 1000000 ; t0 += tv0.tv_usec ;
+//   t1 = tv1.tv_sec; t1 *= 1000000 ; t1 += tv1.tv_usec ;
+//   T = t1-t0; T /= count;
+//   printf("SIMDd2 : %ld microseconds for %d iterations, %f ns/iter (%d)\n",t1-t0,count,T*1000.0,cnt);
+// 
+//   cnt = 0;
+//   gettimeofday(&tv0,NULL);
+//   for(T=1.000000 ; T<NT ; T=T+.000001){
+//     ix = Vsearch_list_dec_2(T,lv); ; // cnt += ix;
+//     if(T > lv->t2[ix] || T < lv->t2[ix+1]){
+//       printf("ERROR(Vdecr)  : T = %f, index = %d , tbl[index] = %f, tbl[index+1] = %f\n",T, ix, lv->t2[ix], lv->t2[ix+1]);
+//       printf("                T - tbl[index] = %f, T - tbl[index+1] = %f\n",T-lv->t2[ix], T-lv->t2[ix+1]);
+//       exit(1);
+//     }
+//   }
+//   gettimeofday(&tv1,NULL);
+//   t0 = tv0.tv_sec; t0 *= 1000000 ; t0 += tv0.tv_usec ;
+//   t1 = tv1.tv_sec; t1 *= 1000000 ; t1 += tv1.tv_usec ;
+//   T = t1-t0; T /= count;
+//   printf("SIMDd2+: %ld microseconds for %d iterations, %f ns/iter (%d)\n\n",t1-t0,count,T*1000.0,cnt);
 
   cnt = 0;
   gettimeofday(&tv0,NULL);
@@ -223,7 +209,7 @@ int main(){
   t0 = tv0.tv_sec; t0 *= 1000000 ; t0 += tv0.tv_usec ;
   t1 = tv1.tv_sec; t1 *= 1000000 ; t1 += tv1.tv_usec ;
   T = t1-t0; T /= count;
-  printf("SIMDi  : %ld microseconds for %d iterations, %f us/iter (%d)\n",t1-t0,count,T,cnt);
+  printf("SIMDi  : %ld microseconds for %d iterations, %f ns/iter (%d)\n",t1-t0,count,T*1000.0,cnt);
 
   cnt = 0;
   gettimeofday(&tv0,NULL);
@@ -239,7 +225,7 @@ int main(){
   t0 = tv0.tv_sec; t0 *= 1000000 ; t0 += tv0.tv_usec ;
   t1 = tv1.tv_sec; t1 *= 1000000 ; t1 += tv1.tv_usec ;
   T = t1-t0; T /= count;
-  printf("SIMDi+ : %ld microseconds for %d iterations, %f us/iter (%d)\n\n",t1-t0,count,T,cnt);
+  printf("SIMDi+ : %ld microseconds for %d iterations, %f ns/iter (%d)\n\n",t1-t0,count,T*1000.0,cnt);
 
   cnt = 0;
   gettimeofday(&tv0,NULL);
@@ -251,7 +237,7 @@ int main(){
   t0 = tv0.tv_sec; t0 *= 1000000 ; t0 += tv0.tv_usec ;
   t1 = tv1.tv_sec; t1 *= 1000000 ; t1 += tv1.tv_usec ;
   T = t1-t0; T /= count;
-  printf("SIMDi2 : %ld microseconds for %d iterations, %f us/iter (%d)\n",t1-t0,count,T,cnt);
+  printf("SIMDi2 : %ld microseconds for %d iterations, %f ns/iter (%d)\n",t1-t0,count,T*1000.0,cnt);
 
   cnt = 0;
   gettimeofday(&tv0,NULL);
@@ -268,7 +254,7 @@ int main(){
   t0 = tv0.tv_sec; t0 *= 1000000 ; t0 += tv0.tv_usec ;
   t1 = tv1.tv_sec; t1 *= 1000000 ; t1 += tv1.tv_usec ;
   T = t1-t0; T /= count;
-  printf("SIMDi2+: %ld microseconds for %d iterations, %f us/iter (%d)\n\n",t1-t0,count,T,cnt);
+  printf("SIMDi2+: %ld microseconds for %d iterations, %f ns/iter (%d)\n\n",t1-t0,count,T*1000.0,cnt);
 
   cnt = 0;
   gettimeofday(&tv0,NULL);
@@ -285,7 +271,7 @@ int main(){
   t0 = tv0.tv_sec; t0 *= 1000000 ; t0 += tv0.tv_usec ;
   t1 = tv1.tv_sec; t1 *= 1000000 ; t1 += tv1.tv_usec ;
   T = t1-t0; T /= count;
-  printf("SCALARd : %ld microseconds for %d iterations, %f us/iter\n",t1-t0,count,T);
+  printf("SCALARd : %ld microseconds for %d iterations, %f ns/iter\n",t1-t0,count,T*1000.0);
 
   cnt = 0;
   gettimeofday(&tv0,NULL);
@@ -302,5 +288,5 @@ int main(){
   t0 = tv0.tv_sec; t0 *= 1000000 ; t0 += tv0.tv_usec ;
   t1 = tv1.tv_sec; t1 *= 1000000 ; t1 += tv1.tv_usec ;
   T = t1-t0; T /= count;
-  printf("SCALARi : %ld microseconds for %d iterations, %f us/iter\n",t1-t0,count,T);
+  printf("SCALARi : %ld microseconds for %d iterations, %f ns/iter\n",t1-t0,count,T*1000.0);
 }
