@@ -187,6 +187,58 @@ int Vsearch_list_inc(double target, lvtab *lv){
   return ix;
 }
 
+double Vsearch_list_inc_d(double target, lvtab *lv){
+  int ix;
+#if defined(__AVX2__) && defined(__x86_64__)
+  __m256i v0, v1, vc, t;
+  int m0, m1;
+
+  t     = (__m256i) _mm256_broadcast_sd(&target);
+  vc    = (__m256i) _mm256_broadcast_sd((double *) &ONE);
+  if(target < lv->t0[0]) t =(__m256i)  _mm256_broadcast_sd(&lv->t0[0]);    // target < first element in table
+  if(target > lv->top  ) t =(__m256i)  _mm256_broadcast_sd(&lv->top  );    // target > next to last element in table
+
+  t    = _mm256_add_epi64((__m256i) t, vc);   // we want target < tbl[i] so we add 1 to target
+
+  v0   = _mm256_lddqu_si256((__m256i const *) &(lv->t0[0]));                  // 8 values to scan from table t0
+  v1   = _mm256_lddqu_si256((__m256i const *) &(lv->t0[4]));
+  v0   = _mm256_sub_epi64((__m256i) v0,(__m256i) t);  // t - tbl >= 0 if (target-1) < tbl
+  v1   = _mm256_sub_epi64((__m256i) v1,(__m256i) t);
+  m0   = _mm256_movemask_pd((__m256d) v0);              // transform subtract result signs into mask
+  m1   = _mm256_movemask_pd((__m256d) v1);
+  ix   = (_mm_popcnt_u32(m0) + _mm_popcnt_u32(m1) - 1) << 3;         // index into t1 table for 8 values scan
+
+  v0   = _mm256_lddqu_si256((__m256i const *) &(lv->t1[ix  ]));               // 8 values to scan from table t1
+  v1   = _mm256_lddqu_si256((__m256i const *) &(lv->t1[ix+4]));
+  v0   = _mm256_sub_epi64((__m256i) v0,(__m256i) t);
+  v1   = _mm256_sub_epi64((__m256i) v1,(__m256i) t);
+  m0   = _mm256_movemask_pd((__m256d) v0);
+  m1   = _mm256_movemask_pd((__m256d) v1);
+  ix   = (ix + _mm_popcnt_u32(m0) + _mm_popcnt_u32(m1) - 1) <<2 ;             // index into t2 table for final 4 value scan
+
+  v0   = _mm256_lddqu_si256((__m256i const *) &(lv->t2[ix  ]));               // only 4 values to scan from table t2
+  v0   = _mm256_sub_epi64((__m256i) v0,(__m256i) t);
+  m0   = _mm256_movemask_pd((__m256d) v0);
+  ix = ix + _mm_popcnt_u32(m0) - 1 ;
+#else
+  int i, j;
+
+  if(target < lv->t0[0]) target = lv->t0[0];  // target < first element in table
+  if(target > lv->top  ) target = lv->top  ;    // target > next to last element in table
+
+  j = 7;
+  for(i=7 ; i>0 ; i--) { if(target < lv->t0[i]) j = i - 1; }
+  ix = j << 3;
+  j = 7;
+  for(i=7 ; i>0 ; i--) { if(target < lv->t1[ix+i]) j = i - 1; }
+  ix = (ix + j) <<2 ;
+  j = 3;
+  for(i=3 ; i>0 ; i--) { if(target < lv->t2[ix+i]) j = i - 1; }
+  ix = ix + j;
+#endif
+  return ix + ( (target - lv->t2[ix]) * lv->odz[ix] );
+}
+
 // px    : position along x
 // py    : position along y
 // pz    : position along z

@@ -49,6 +49,7 @@ typedef struct{
 lvtab * Vsearch_setup(double *targets, int n);
 // int Vsearch_list_inc_2(double target, lvtab *lv);
 int Vsearch_list_inc(double target, lvtab *lv);
+double Vsearch_list_inc_d(double target, lvtab *lv);
 // int Vsearch_list_dec_2(double target, lvtab *lv);
 int Vsearch_list_dec(double target, lvtab *lv);
 // straight C version for comparison purposes
@@ -230,8 +231,8 @@ int main(){
   cnt = 0;
   gettimeofday(&tv0,NULL);
   for(T=1.000000 ; T<NT ; T=T+.000001){
-//     if((ix = Vsearch_list_inc_2(T,lv2) ) == -1) exit(1);
-    if((ix = Vcoef_xyz_inc(cxyz, .5, .5, T, lv2) ) == -1) exit(1);
+    if((ix = Vsearch_list_inc_d(T,lv2) ) == -1) exit(1);
+//     if((ix = Vcoef_xyz_inc(cxyz, .5, .5, T, lv2) ) == -1) exit(1);
   }
   gettimeofday(&tv1,NULL);
   t0 = tv0.tv_sec; t0 *= 1000000 ; t0 += tv0.tv_usec ;
@@ -242,8 +243,8 @@ int main(){
   cnt = 0;
   gettimeofday(&tv0,NULL);
   for(T=1.000000 ; T<NT ; T=T+.000001){
-//     ix = Vsearch_list_inc_2(T,lv2);
-    ix = Vcoef_xyz_inc(cxyz, .5, .5, T, lv2);
+    ix = Vsearch_list_inc_d(T,lv2);
+//     ix = Vcoef_xyz_inc(cxyz, .5, .5, T, lv2);
     if(T < lv2->t2[ix] || T > lv2->t2[ix+1]){
       printf("ERROR(Vincr2) : T = %f, index = %d , tbl[index] = %f, tbl[index+1] = %f\n",T, ix, lv2->t2[ix], lv2->t2[ix+1]);
       printf("                T - tbl[index] = %f, T - tbl[index+1] = %f\n",T-lv2->t2[ix], T-lv2->t2[ix+1]);
