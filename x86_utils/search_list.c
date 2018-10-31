@@ -32,6 +32,7 @@ typedef union{
 typedef struct{
   double t0[ 8];   // search accelerator for t1 (64 entries max in t1)
   double t1[64];   // search accelerator for t2 (at most 256 levels in t2)
+  double t2m1;     // normally equal to t2[0]
   double t2[257];  // table for levels (max 256 usable)
   double top;      // t2[nk-2]
   double x0;       // x origin
@@ -46,7 +47,7 @@ typedef struct{
   uint32_t nij;    // ni*nj, distance between levels
 }lvtab;
 
-#if defined(__AVX2__) && defined(__x86_64__)
+#if defined(__AVX2__) && defined(__x86_64__) && defined(SIMD)
 static int64_t ONE = 1;
 static double cp133 =  1.0/3.0;
 #endif
@@ -93,6 +94,8 @@ lvtab * Vsearch_setup(double *targets, int n){
   if(targets[1] < targets[0]) pad = -pad;               // decreasing values, pad with large negative number
   for(i=0 ; i<n   ; i++) { lv->t2[i] = targets[i] ; }   // z coordinate table
   for(i=n ; i<256 ; i++) { lv->t2[i] = pad ; }          // pad at end of table
+  lv->t2[n] = 2*lv->t2[n-1] - lv->t2[n-2];
+  lv->t2m1 = 2*targets[0] - targets[1];
 
   for(i=0  ; i<64 ; i++) { lv->t1[i] = lv->t2[(i<<2)] ; } ;   // lookup for t2 (every fourth entry)
   for(i=0  ; i<8  ; i++) { lv->t0[i] = lv->t1[(i<<3)] ; } ;   // lookup for t1 (every eighth entry)
@@ -105,17 +108,24 @@ lvtab * Vsearch_setup(double *targets, int n){
   for(i=0 ; i<n-1   ; i++) { lv->odz[i] = (targets[i+1] - targets[i]) ; }
   lv->odz[n - 1] = 0.0;   // NEVER USED
   // denominators for Lagrange cubic polynomials coefficients ( entries 1 to n-2 make sense )
+  // entries 0 and n-1 are fudged
   lv->ocz = malloc(4 * n * sizeof(double));
   if(NULL == lv->ocz){    // malloc failed
     free(lv->odz);        // deallocate odz
     free(lv);             // deallocate lv
     return NULL;
   }
-  denominators( &(lv->ocz[0]) , targets[0], targets[1], targets[2], targets[3]);                 // level 0 coeffs are normally not used
-  for(i=1 ; i<n-1   ; i++) {
-    denominators( &(lv->ocz[4*i]) , targets[i-1], targets[i  ], targets[i+1], targets[i+2]);
+//   denominators( &(lv->ocz[0]) , targets[0], targets[1], targets[2], targets[3]);                 // level 0 coeffs are normally not used
+  for(i=0 ; i<n-1   ; i++) {
+    denominators( &(lv->ocz[4*i]) , lv->t2[i-1], lv->t2[i  ], lv->t2[i+1], lv->t2[i+2]);
   }
-  denominators( &(lv->ocz[4*(n-1)]) , targets[n-4], targets[n-3], targets[n-2], targets[n-1]);   // level n-1 coeffs are normally not used
+// i = n-2;
+// printf("DE : %8.5f %8.5f %8.5f %8.5f \n",lv->t2[i-1], lv->t2[i  ], lv->t2[i+1], lv->t2[i+2]);
+// i = 4*(n-3);
+// printf("OV : %8.5f %8.5f %8.5f %8.5f \n",lv->ocz[i-1], lv->ocz[i  ], lv->ocz[i+1], lv->ocz[i+2]);
+// i = 4*(n-2);
+// printf("OV : %8.5f %8.5f %8.5f %8.5f \n",lv->ocz[i-1], lv->ocz[i  ], lv->ocz[i+1], lv->ocz[i+2]);
+//   denominators( &(lv->ocz[4*(n-1)]) , targets[n-4], targets[n-3], targets[n-2], targets[n-1]);   // level n-1 coeffs are normally not used
 
   lv->top = lv->t2[n-2]; // next to last value along z
   lv->x0 = 0.0;          // origin of x coordinates
@@ -162,7 +172,7 @@ int Vsearch_free(lvtab *lv){
 // ix will never be negative nor larger than nk - 2
 int Vsearch_list_inc(double target, lvtab *lv){
   int ix;
-#if defined(__AVX2__) && defined(__x86_64__)
+#if defined(__AVX2__) && defined(__x86_64__) && defined(SIMD)
   __m256i v0, v1, vc, t;
   int m0, m1;
 
@@ -221,7 +231,7 @@ double Vsearch_list_inc_do(double target, lvtab *lv){
 // may be < 0 or > nk-1 if target is beyond table lv-t2 extreme values
 double Vsearch_list_inc_d(double target, lvtab *lv){
   int ix;
-#if defined(__AVX2__) && defined(__x86_64__)
+#if defined(__AVX2__) && defined(__x86_64__) && defined(SIMD)
   __m256i v0, v1, vc, t;
   int m0, m1;
 
@@ -291,7 +301,7 @@ int Vcoef_xyz_inc(uint32_t *ixyz, double *cxyz, double *PX, double *PY, double *
   int ix, irep;
   double pxy[2], *base, *pos;
   double zza, zzb, zzc, zzd, zzab, zzcd, dz, px, py, pz;
-#if defined(__AVX2__) && defined(__x86_64__)
+#if defined(__AVX2__) && defined(__x86_64__) && defined(SIMD)
   __m256i v0, v1, vc, t, ttop, tbot, ttemp;
   __m128d vxy, vc1, vc5, vc3, vp6, xxmx, xxpx, xxm1, x5p1, x6m3, x5m1, x6m6, dtmp;
   __m128d vr0, vr1, vr2, vr3;
@@ -306,7 +316,7 @@ for(irep=0 ; irep <n ; irep++){
   ix = px ; px = px - ix;  // px is now dx (fractional part of px)
   ix = py ; py = py - ix;  // py is now dy (fractional part of py)
 
-#if defined(__AVX2__) && defined(__x86_64__)
+#if defined(__AVX2__) && defined(__x86_64__) && defined(SIMD)
   pxy[0] = px;
   pxy[1] = py;
   vxy  = _mm_loadu_pd(pxy);              // coefficients for x and y will be interleaved
@@ -401,9 +411,14 @@ for(irep=0 ; irep <n ; irep++){
   // now we compute the coefficients along z using ix
   base  = &(lv->ocz[4*ix]);  // precomputed inverses of denominators
   pos   = &(lv->t2[ix]);
-  zza = pz - pos[0] ; zzb = pz - pos[1] ; zzc = pz - pos[2] ; zzd = pz - pos[3] ; 
-  dz = lv->odz[ix] * zzc;   // (pz - pos[2]) / (pos[2] - pos[1])
+  pz = *PZ;
+  zza = pz - pos[-1] ; zzb = pz - pos[0] ; zzc = pz - pos[1] ; zzd = pz - pos[2] ; 
+  dz = lv->odz[ix] * zzb;   // (pz - pos[2]) / (pos[2] - pos[1])
   zzab = zza * zzb ; zzcd = zzc * zzd;
+// printf("target = %8.5f, dz = %8.5f, levels = %8.5f %8.5f\n",*PZ,dz,pos[0],pos[1]);
+// printf("target = %8.5f, base = %8.5f %8.5f %8.5f %8.5f\n",pz,base[0],base[1],base[2],base[3]);
+// printf("dz     = %8.5f, zz   = %8.5f %8.5f %8.5f %8.5f\n",dz,zza,zzb,zzc,zzd);
+// printf("ix     = %d, lv->odz[ix] = %8.5f\n",ix,lv->odz[ix]);
   cxyz[16] = zzb * zzcd * base[0];   //   cxyz[16] = TRIPRD(pz,pos[1],pos[2],pos[3]) * base[0];
   cxyz[17] = zza * zzcd * base[1];   //   cxyz[17] = TRIPRD(pz,pos[0],pos[2],pos[3]) * base[1];
   cxyz[18] = zzd * zzab * base[2];   //   cxyz[18] = TRIPRD(pz,pos[0],pos[1],pos[3]) * base[2];
@@ -431,7 +446,7 @@ for(irep=0 ; irep <n ; irep++){
 // 8 8 4 scan pattern
 int Vsearch_list_dec(double target, lvtab *lv){
   int ix, j;
-#if defined(__AVX2__) && defined(__x86_64__)
+#if defined(__AVX2__) && defined(__x86_64__) && defined(SIMD)
   __m256i v0, v1, vc, t;
   int m0, m1, pop0, pop1;
 
