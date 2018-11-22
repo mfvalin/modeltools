@@ -502,7 +502,8 @@ int Vcoef_xyz_incr(uint32_t *ixyz, double *cxyz, double *PX, double *PY, double 
     ijk = ijk + ix -1;              // add x displacement (elements)
     ix = py ; py = py - ix;         // py is now dy (fractional part of py)
     ijk = ijk + (ix -1) * lv->ni;   // add y displacement (rows)
-    ix = pz ; dz = pz - ix;         // dz is now dz (fractional part of pz)
+    ix = pz ; // if(ix<1) ix = 1; if(ix>lv->nk-1) ix = lv->nk-1;    // ix < 1 or ix > nk-1 will result in linear extrapolation
+    dz = pz - ix;                   // dz is now dz (fractional part of pz)
     ijk = ijk + (ix -1) * lv->nij;  // add z displacement (2D planes)
     ix--;                           // px, py, pz are in "origin 1", ix needed in "origin 0"
     linear = (ix - 1) | (lv->nk - 3 - ix); 
