@@ -481,7 +481,14 @@ int Vcoef_xyz_inc(uint32_t *ixyz, double *cxyz, double *PX, double *PY, double *
 //
 // Fortran dimensions : PX(n), PY(n), PZ(n), ixys(n), cxyz(24,n)
 // function return : index for last point along z
-int Vcoef_xyz_incr(uint32_t *ixyz, double *cxyz, double *PX, double *PY, double *PZ, lvtab *lv, int n){
+typedef struct{
+  double px;    // position along x in index space
+  double py;    // position along y in index space
+  double pz;    // position along z in index space
+  double z;     // absolute position along z 
+} pxpypzz;           // NOTE: px, py, pz, z may become float in the future
+// int Vcoef_xyz_incr(uint32_t *ixyz, double *cxyz, double *PX, double *PY, double *PZ, lvtab *lv, int n){
+int Vcoef_ixyz8_pxyz8(uint32_t *ixyz, double *cxyz, pxpypzz *PXYZ, lvtab *lv, int n){
   int ix, irep, ijk, linear;
   double pxy[2], *base, *pos;
   double zza, zzb, zzc, zzd, zzab, zzcd, dz, px, py, pz;
@@ -495,32 +502,38 @@ int Vcoef_xyz_incr(uint32_t *ixyz, double *cxyz, double *PX, double *PY, double 
   int i, j;
 #endif
   for(irep=0 ; irep <n ; irep++){                      // loop over points
-    px = PX[irep] ; py = PY[irep] ; pz = PZ[irep] ;    // target positions along x, y, z
+    px = PXYZ[irep].px ; py = PXYZ[irep].py ; pz = PXYZ[irep].pz ;    // fractional index positions along x, y, z
 
-    ijk = 0;
-    ix = px ; px = px - ix;         // px is now dx (fractional part of px)
-    ijk = ijk + ix -1;              // add x displacement (elements)
-    ix = py ; py = py - ix;         // py is now dy (fractional part of py)
-    ijk = ijk + (ix -1) * lv->ni;   // add y displacement (rows)
-    ix = pz ; // if(ix<1) ix = 1; if(ix>lv->nk-1) ix = lv->nk-1;    // ix < 1 or ix > nk-1 will result in linear extrapolation
-    dz = pz - ix;                   // dz is now dz (fractional part of pz)
+    ix = px ; px = px - ix;         // px is now deltax (fractional part of px)
+    ijk = ix - 2;                   // x displacement (elements), ix assumed to always be >1 and < ni-1
+
+    ix = py ; py = py - ix;         // py is now deltay (fractional part of py)
+    ijk = ijk + (ix -2) * lv->ni;   // add y displacement (rows), ix assumed to always be >1 and < nj-1
+
+    ix = pz ; 
+    if(ix<1) ix = 1; 
+    if(ix>lv->nk-1) ix = lv->nk-1;  // ix < 1 or ix > nk-1 will result in linear extrapolation
+    dz = pz - ix;                   // dz is now "fractional" part of pz  (may be <0 or >1 if extrapolating)
     ijk = ijk + (ix -1) * lv->nij;  // add z displacement (2D planes)
-    ix--;                           // px, py, pz are in "origin 1", ix needed in "origin 0"
+
+    ix--;                           // ix needs to be in "origin 0" (C index from Fortran index)
     linear = (ix - 1) | (lv->nk - 3 - ix); 
     linear >>= 31;                  // nonzero only if ix < 1 or ix > nk -3 (top and bottom intervals)
-    *ixyz++ = ijk;    // store collapsed displacement
-    // now we compute the coefficients along z using ix
-    base  = &(lv->ocz[4*ix]);  // precomputed inverses of denominators
-    pos   = &(lv->t2[ix]);
-    pz  = dz * pos[1] + (1.0 - dz) * pos[0];
-    zza = pz - pos[-1] ; zzb = pz - pos[0] ; zzc = pz - pos[1] ; zzd = pz - pos[2] ; 
-    zzab = zza * zzb ; zzcd = zzc * zzd;
+    if(! linear) ijk = ijk - lv->nij;  // not the linear case, go down one 2D place to get lower left corner of 4x4x4 cube
+    ixyz[irep] = ijk;               // store collapsed displacement
+    // now we compute the coefficients along z using ix and dx
     if(linear){
       cxyz[16] = 0.0;                    // coefficients for linear interpolation along z
       cxyz[17] = 1.0 - dz;
       cxyz[18] = dz;
       cxyz[19] = 0.0;
     }else{
+      base  = &(lv->ocz[4*ix]);  // precomputed inverses of denominators
+      pos   = &(lv->t2[ix]);
+//     pz  = dz * pos[1] + (1.0 - dz) * pos[0];
+      pz = PXYZ[irep].z  ;       // absolute position along z is used to compute coefficients
+      zza = pz - pos[-1] ; zzb = pz - pos[0] ; zzc = pz - pos[1] ; zzd = pz - pos[2] ; 
+      zzab = zza * zzb ; zzcd = zzc * zzd;
       // printf("target = %8.5f, dz = %8.5f, levels = %8.5f %8.5f\n",*PZ,dz,pos[0],pos[1]);
       // printf("target = %8.5f, base = %8.5f %8.5f %8.5f %8.5f\n",pz,base[0],base[1],base[2],base[3]);
       // printf("dz     = %8.5f, zz   = %8.5f %8.5f %8.5f %8.5f\n",dz,zza,zzb,zzc,zzd);

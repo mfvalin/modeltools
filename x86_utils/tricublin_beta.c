@@ -154,6 +154,17 @@ void Tricublin_zyxf_beta(float *d, float *f1, double *px, double *py, double *pz
   d[0] = dst[0]*px[0] + dst[1]*px[1] + dst[2]*px[2] + dst[3]*px[3];
 #endif
 }
+
+// process n points
+// for each point use 1 value from ixyz, 24 values from pxyz
+void Tricublin_zyxf_beta_n(float *d, float *f1, double *pxyz, int *ixyz, int NI, int NINJ, n){
+  while(n--){
+    Tricublin_zyxf_beta(d, f1 + *ixyz, pxyz, pxyz+8, pxyz+16, NI, NINJ);
+    d++;         // next result
+    ixyz++;      // next position
+    pxyz += 24;  // next set of coefficients
+  }
+}
 // Fortran dimensions: d(3) , f(3,NI,NJ,NK)
 // NI   : length of a line
 // NINJ : length of a plane
@@ -331,6 +342,8 @@ void Tricublin_zyx3f_beta(float *d, float *f, double *px, double *py, double *pz
 #endif
 }
 
+#if defined(SELF_TEST)
+// x, y, z are in delta form (0 <= delta <= 1.0)
 void Tricubic_coeffs_d(double *px, double *py, double *pz, double x, double y, double z){
 
   pz[0] = cm167*z*(z-one)*(z-two);        // coefficients for interpolation along z
@@ -361,7 +374,6 @@ void Tricubic_coeffs_d(double *px, double *py, double *pz, double x, double y, d
   px[7] = 0.0;
 }
 
-#if defined(SELF_TEST)
 #define NI 300
 #define NJ 200
 #define NK 85
