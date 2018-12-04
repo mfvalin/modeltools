@@ -24,38 +24,57 @@
 #include <sys/time.h>
 #include <sys/types.h>
 
-#pragma weak generate_unique_name__=generate_unique_name
-int32_t generate_unique_name__(char *str, int32_t *sz);
-#pragma weak generate_unique_name_=generate_unique_name
-int32_t generate_unique_name_(char *str, int32_t *sz);
-int32_t generate_unique_name(char *str, int32_t *sz){
+// generate a quick and dirty NULL terminated "unique" character string
+// the string including the NULL character must fit within sz characters
+// the function returns the number of usable characters in name
+
+// the string is "locally" unique (at least within a cluster)
+// it uses hostid, process id, and the time of day in microseconds
+
+// generate the most "popular" Fortran name manglings
+#pragma weak generate_qad_unique_name__=generate_qad_unique_name
+int32_t generate_qad_unique_name__(char *str, int32_t *sz);
+#pragma weak generate_qad_unique_name_=generate_qad_unique_name
+int32_t generate_qad_unique_name_(char *str, int32_t *sz);
+
+int32_t generate_qad_unique_name(char *str, int32_t *sz){
   int32_t hid = gethostid();
   int32_t pid = getpid();
-  int32_t t1;
-  int64_t tf;
+  int32_t t1, nc, i;
+  int32_t ts, tu;
   struct timeval t;
   size_t szt = *sz;
+  char lsz[33];
 
   t1 = gettimeofday(&t, NULL);
-  tf = t.tv_sec;
-  tf *= 1000000;
-  tf += t.tv_usec;
-  t1 = snprintf(str, szt, "%8.8x%8.8x%16.16x" , hid, pid, tf);
-  return t1 > *sz ? *sz : t1;
+  ts = t.tv_sec ;
+  tu = t.tv_usec ;
+  t1 = snprintf(lsz, 33, "%8.8x%8.8x%8.8x%8.8x" , hid, pid, ts, tu); // host pid sec usec
+  nc = t1 > szt ? szt - 1 : t1;
+  for(i=0 ; i<nc ; i++) { str[i] = lsz[t1-1-i] ; }  // reverse string to get max changes at beginning
+  str[nc] = '\0';                                   // make sure the string is NULL terminated
+  return nc;
 }
+/*
+ Fortran usage :
+ character(len=33) :: buffer
+ integer, external :: generate_qad_unique_name
+ integer :: number_of_chars
+ number_of_chars = generate_qad_unique_name(buffer,len(buffer))
+*/
+#if defined(WITH_MAIN)
+int main(int argc,char **argv){
+  char str[256];
+  int nc, sz;
+
+  sz = sizeof(str);
+  if(argc > 1) sz = atoi(argv[1]);
+  nc = generate_qad_unique_name(str,&sz);
+  str[255] = '\0';
+  fprintf(stdout,"%s",str);
 #if defined(SELF_TEST)
-main(){
-  char str[33];
-  int szt = sizeof(str);
-  int nc = generate_unique_name(str, &szt);
-  fprintf(stderr,"nc = %d\n",nc);
-  fprintf(stderr,"'%s'\n",str);
+  fprintf(stdout,"\nnc = %d\n",nc);
+#endif
+  return 0;
 }
 #endif
-/*
- Fortran calling sequence
- character(len=33) :: buffer
- integer, external :: generate_unique_name
- integer :: number_of_chars
- number_of_chars = generate_unique_name(buffer,len(buffer))
-*/
