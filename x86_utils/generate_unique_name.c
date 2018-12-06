@@ -25,7 +25,7 @@
 #include <sys/types.h>
 
 // base 64 encoding table
-static char *b64="ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789@=++++++++++++++++++";
+static char *b64="ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789@=";
 
 // generate a quick and dirty NULL terminated "unique" character string
 // the string including the NULL character must fit within sz characters
