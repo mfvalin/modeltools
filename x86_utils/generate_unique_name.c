@@ -24,6 +24,9 @@
 #include <sys/time.h>
 #include <sys/types.h>
 
+// base 64 encoding table
+static char *b64="ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789@=++++++++++++++++++";
+
 // generate a quick and dirty NULL terminated "unique" character string
 // the string including the NULL character must fit within sz characters
 // the function returns the number of usable characters in name
@@ -37,21 +40,31 @@ int32_t generate_qad_unique_name__(char *str, int32_t *sz);
 #pragma weak generate_qad_unique_name_=generate_qad_unique_name
 int32_t generate_qad_unique_name_(char *str, int32_t *sz);
 
-int32_t generate_qad_unique_name(char *str, int32_t *sz){
-  int32_t hid = gethostid();
-  int32_t pid = getpid();
+int32_t generate_qad_unique_name(unsigned char *str, int32_t *sz){
+  uint32_t hid = gethostid();
+  uint32_t pid = getpid();
   int32_t t1, nc, i;
-  int32_t ts, tu;
+  uint64_t ts;
   struct timeval t;
   size_t szt = *sz;
-  char lsz[33];
+  unsigned char lsz[33];
 
   t1 = gettimeofday(&t, NULL);
   ts = t.tv_sec ;
-  tu = t.tv_usec ;
-  t1 = snprintf(lsz, 33, "%8.8x%8.8x%8.8x%8.8x" , hid, pid, ts, tu); // host pid sec usec
+  ts = ts * 10000000 ;       // convert seconds to microseconds
+  ts = ts + t.tv_usec ;      // 32 bits for seconds, 20 bits for microseconds, we will encode 9*6 =  54 bits
+  for(i=0 ; i<9 ; i++) {lsz[i] = b64[ts & 0x3F] ; ts = ts >> 6; } ;  // encode 6 bits at a time (9 chars)
+
+  ts = pid ;
+  ts = ts << 32;
+  ts = ts | hid;
+  for(i=0 ; i<11 ; i++) {lsz[i+9] = b64[ts & 0x3F] ; ts = ts >> 6; } ;  // encode 6 bits at a time (11 chars)
+
+  lsz[20] = '\0' ;
+  t1 = 20 ; // need 20 chars to encode the whole thing
+
   nc = t1 > szt ? szt - 1 : t1;
-  for(i=0 ; i<nc ; i++) { str[i] = lsz[t1-1-i] ; }  // reverse string to get max changes at beginning
+  for(i=0 ; i<nc ; i++) { str[i] = lsz[i] ; } ;
   str[nc] = '\0';                                   // make sure the string is NULL terminated
   return nc;
 }
