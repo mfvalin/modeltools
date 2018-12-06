@@ -482,11 +482,11 @@ int Vcoef_xyz_inc(uint32_t *ixyz, double *cxyz, double *PX, double *PY, double *
 // Fortran dimensions : PX(n), PY(n), PZ(n), ixys(n), cxyz(24,n)
 // function return : index for last point along z
 typedef struct{
-  double px;    // position along x in index space
-  double py;    // position along y in index space
-  double pz;    // position along z in index space
-  double z;     // absolute position along z 
-} pxpypzz;           // NOTE: px, py, pz, z may become float in the future
+  float px;    // position along x in index space
+  float py;    // position along y in index space
+  float pz;    // position along z in index space
+  float z;     // absolute position along z 
+} pxpypzz;
 // int Vcoef_xyz_incr(uint32_t *ixyz, double *cxyz, double *PX, double *PY, double *PZ, lvtab *lv, int n){
 int Vcoef_ixyz8_pxyz8(uint32_t *ixyz, double *cxyz, pxpypzz *PXYZ, lvtab *lv, int n){
   int ix, irep, ijk, linear;
@@ -502,15 +502,19 @@ int Vcoef_ixyz8_pxyz8(uint32_t *ixyz, double *cxyz, pxpypzz *PXYZ, lvtab *lv, in
   int i, j;
 #endif
   for(irep=0 ; irep <n ; irep++){                      // loop over points
-    px = PXYZ[irep].px ; py = PXYZ[irep].py ; pz = PXYZ[irep].pz ;    // fractional index positions along x, y, z
+    px = PXYZ[irep].px ;            // fractional index positions along x, y, z (float to double)
+    py = PXYZ[irep].py ;
+    pz = PXYZ[irep].pz ;
 
-    ix = px ; px = px - ix;         // px is now deltax (fractional part of px)
+    ix = PXYZ[irep].px ;
+    px = px - ix;                   // px is now deltax (fractional part of px)
     ijk = ix - 2;                   // x displacement (elements), ix assumed to always be >1 and < ni-1
 
-    ix = py ; py = py - ix;         // py is now deltay (fractional part of py)
+    ix = PXYZ[irep].py ;
+    py = py - ix;                   // py is now deltay (fractional part of py)
     ijk = ijk + (ix -2) * lv->ni;   // add y displacement (rows), ix assumed to always be >1 and < nj-1
 
-    ix = pz ; 
+    ix = PXYZ[irep].pz ; 
     if(ix<1) ix = 1; 
     if(ix>lv->nk-1) ix = lv->nk-1;  // ix < 1 or ix > nk-1 will result in linear extrapolation
     dz = pz - ix;                   // dz is now "fractional" part of pz  (may be <0 or >1 if extrapolating)
