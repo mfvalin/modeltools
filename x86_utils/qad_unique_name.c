@@ -35,12 +35,12 @@ static char *b64="ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789
 // it uses hostid, process id, and the time of day in microseconds
 
 // generate the most "popular" Fortran name manglings
-#pragma weak generate_qad_unique_name__=generate_qad_unique_name
-int32_t generate_qad_unique_name__(char *str, int32_t *sz);
-#pragma weak generate_qad_unique_name_=generate_qad_unique_name
-int32_t generate_qad_unique_name_(char *str, int32_t *sz);
+#pragma weak qad_unique_name__=qad_unique_name
+int32_t qad_unique_name__(char *str, int32_t *sz);
+#pragma weak qad_unique_name_=qad_unique_name
+int32_t qad_unique_name_(char *str, int32_t *sz);
 
-int32_t generate_qad_unique_name(unsigned char *str, int32_t *sz){
+int32_t qad_unique_name(unsigned char *str, int32_t *sz){
   uint32_t hid = gethostid();
   uint32_t pid = getpid();
   int32_t t1, nc, i;
@@ -63,8 +63,8 @@ int32_t generate_qad_unique_name(unsigned char *str, int32_t *sz){
   lsz[20] = '\0' ;
   t1 = 20 ; // need 20 chars to encode the whole thing
 
-  nc = t1 > szt ? szt - 1 : t1;
-  for(i=0 ; i<nc ; i++) { str[i] = lsz[i] ; } ;
+  nc = t1 > szt - 1 ? szt - 1 : t1;                 // there is room for at most szt - 1 characters
+  for(i=0 ; i<nc ; i++) { str[i] = lsz[i] ; } ;     // copy nc characters
   str[nc] = '\0';                                   // make sure the string is NULL terminated
   return nc;
 }
@@ -82,7 +82,7 @@ int main(int argc,char **argv){
 
   sz = sizeof(str);
   if(argc > 1) sz = atoi(argv[1]);
-  nc = generate_qad_unique_name(str,&sz);
+  nc = qad_unique_name(str,&sz);
   str[255] = '\0';
   fprintf(stdout,"%s",str);
 #if defined(SELF_TEST)
