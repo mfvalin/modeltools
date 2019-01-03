@@ -27,7 +27,7 @@ uint64_t rdtscp_(void) {   // version "in order" avec "serialization"
       : /* outputs */ "=a" (lo), "=d" (hi)
       : /* no inputs */
       : /* clobbers */ "%rcx");
-  __asm__ volatile ("mfence");
+//   __asm__ volatile ("mfence");
   return (uint64_t)lo | (((uint64_t)hi) << 32);
 }
 #endif
@@ -42,21 +42,224 @@ static double cp5 = 0.5;
 static double one = 1.0;
 static double two = 2.0;
 
-// Fortran dimensions: f(NI,NJ,NK)
-// NI   : length of a line
-// NINJ : length of a plane
-// f : address of lower left corner of the 4 x 4 x 4 or 4 x 4 x 2 box
+typedef struct{
+  float px;    // position along x in index space
+  float py;    // position along y in index space
+  float pz;    // position along z in index space
+//   float z;     // absolute position along z 
+} pxpypz;
+
+typedef struct{
+  double *z;       // table for levels (nk doubles)
+  double *ocz;     // pointer to inverse of coefficient denominators [4*nk doubles]
+  uint32_t ni;     // distance between rows
+  uint32_t nj;     // number of rows
+  uint32_t nk;     // number of levels (max 255)
+  uint32_t nij;    // ni*nj, distance between levels
+}ztab;
+
+// triple product used for Lagrange cubic polynomials coefficients in the non constant case
+#define TRIPRD(x,a,b,c) ((x-a)*(x-b)*(x-c))
+
+// inverse denominators r from positions a b c d
+static inline void denominators(double *r, double a, double b, double c, double d){
+  r[0] = 1.0 / TRIPRD(a,b,c,d);
+  r[1] = 1.0 / TRIPRD(b,a,c,d);
+  r[2] = 1.0 / TRIPRD(c,a,b,d);
+  r[3] = 1.0 / TRIPRD(d,a,b,c);
+}
+
+// coefficients c from inverse denominators d, levels z, and position t
+static inline void zcoeffs(double *c, double t, double *z, double *d){
+  c[0] = TRIPRD(t,z[1],z[2],z[3]) * d[0];
+  c[1] = TRIPRD(t,z[0],z[2],z[3]) * d[1];
+  c[2] = TRIPRD(t,z[0],z[1],z[3]) * d[2];
+  c[3] = TRIPRD(t,z[0],z[1],z[2]) * d[3];
+}
+
+// allocate lookup table set and
+// return pointer to filled table set
+// targets are expected to be positive, and monotonically increasing or decreasing
+ztab *Vsearch_setup(double *targets, int nk, int ni, int nj){
+  int i;
+  ztab *lv;
+  double pad;
+
+  lv = malloc(sizeof(ztab));
+  if(lv == NULL) return NULL ;
+
+  lv->z = malloc(nk * sizeof(double));
+  if(NULL == lv->z){      // malloc failed
+    free(lv);             // deallocate lv
+    return NULL;
+  }
+  for(i=0 ; i<nk  ; i++) { lv->z[i] = targets[i] ; }   // z coordinate table
+
+  // denominators for Lagrange cubic polynomials coefficients ( entries 1 to n-2 make sense )
+  // entries 0 and n-1 are fudged
+  lv->ocz = malloc(4 * nk * sizeof(double));
+  if(NULL == lv->ocz){    // malloc failed
+    free(lv->z);          // deallocate z
+    free(lv);             // deallocate lv
+    return NULL;
+  }
+//   denominators( &(lv->ocz[0]) , targets[0], targets[1], targets[2], targets[3]);                 // level 0 coeffs are normally not used
+  for(i=0 ; i<nk - 1   ; i++) {
+    denominators( &(lv->ocz[4*i]) , lv->z[i-1], lv->z[i  ], lv->z[i+1], lv->z[i+2]);
+  }
+// i = n-2;
+// printf("DE : %8.5f %8.5f %8.5f %8.5f \n",lv->t2[i-1], lv->t2[i  ], lv->t2[i+1], lv->t2[i+2]);
+// i = 4*(n-3);
+// printf("OV : %8.5f %8.5f %8.5f %8.5f \n",lv->ocz[i-1], lv->ocz[i  ], lv->ocz[i+1], lv->ocz[i+2]);
+// i = 4*(n-2);
+// printf("OV : %8.5f %8.5f %8.5f %8.5f \n",lv->ocz[i-1], lv->ocz[i  ], lv->ocz[i+1], lv->ocz[i+2]);
+//   denominators( &(lv->ocz[4*(n-1)]) , targets[n-4], targets[n-3], targets[n-2], targets[n-1]);   // level n-1 coeffs are normally not used
+
+  lv->ni = ni;           // nb of points along x
+  lv->nj = nj;           // nb of points along y
+  lv->nk = nk;           // nb of points along z
+  lv->nij = ni*nj;       // ni * nj
+  return lv;             // return pointer to filled table
+}
+
+static inline int Vcoef_pxyz4(double *cxyz, int *offset, double px8, double py8, double pz8, ztab *lv){
+  int ix, iy, irep, ijk, zlinear;
+  double pxy[2], *base, *pos;
+  double zza, zzb, zzc, zzd, zzab, zzcd, dz, px, py, pz;
+#if defined(__AVX2__) && defined(__x86_64__) && defined(SIMD)
+  __m256i v0, v1, vc, t, ttop, tbot, ttemp;
+  __m128d vxy, vc1, vc5, vc3, vp6, xxmx, xxpx, xxm1, x5p1, x6m3, x5m1, x6m6, dtmp;
+  __m128d vr0, vr1, vr2, vr3;
+  __m128i itmp;
+  int m0, m1;
+#else
+  int i, j;
+#endif
+    px = px8 ;            // fractional index positions along x, y, z (float to double)
+    py = py8 ;
+    pz = pz8 ;
+
+    ix = px ;
+    px = px - ix;                   // px is now deltax (fractional part of px)
+    ijk = ix - 2;                   // x displacement (elements), ix assumed to always be >1 and < ni-1
+
+    iy = py ;
+    py = py - iy;                   // py is now deltay (fractional part of py)
+    ijk = ijk + (iy -2) * lv->ni;   // add y displacement (rows), ix assumed to always be >1 and < nj-1
+
+    ix = pz ; 
+    if(ix<1) ix = 1; 
+    if(ix>lv->nk-1) ix = lv->nk-1;  // ix < 1 or ix > nk-1 will result in linear extrapolation
+    dz = pz - ix;                   // dz is now "fractional" part of pz  (may be <0 or >1 if extrapolating)
+    ijk = ijk + (ix -1) * lv->nij;  // add z displacement (2D planes)
+
+    ix--;                           // ix needs to be in "origin 0" (C index from Fortran index)
+    zlinear = (ix - 1) | (lv->nk - 3 - ix); 
+    zlinear >>= 31;                  // nonzero only if ix < 1 or ix > nk -3 (top and bottom intervals)
+    if(! zlinear) ijk = ijk - lv->nij;  // not the linear case, go down one 2D plane to get lower left corner of 4x4x4 cube
+    *offset = ijk;
+    // now we can compute the coefficients along z using ix and dz
+    if(zlinear){
+      cxyz[ 8] = 0.0;                    // coefficients for linear interpolation along z
+      cxyz[ 9] = 1.0 - dz;
+      cxyz[10] = dz;
+      cxyz[11] = 0.0;
+    }else{
+      base  = &(lv->ocz[4*ix]);  // precomputed inverses of denominators
+      pos   = &(lv->z[ix]);
+      pz  = dz * pos[1] + (1.0 - dz) * pos[0];   // pz is now an absolute position
+      zza = pz - pos[-1] ; zzb = pz - pos[0] ; zzc = pz - pos[1] ; zzd = pz - pos[2] ; 
+      zzab = zza * zzb ; zzcd = zzc * zzd;
+      // printf("target = %8.5f, dz = %8.5f, levels = %8.5f %8.5f\n",*PZ,dz,pos[0],pos[1]);
+      // printf("target = %8.5f, base = %8.5f %8.5f %8.5f %8.5f\n",pz,base[0],base[1],base[2],base[3]);
+      // printf("dz     = %8.5f, zz   = %8.5f %8.5f %8.5f %8.5f\n",dz,zza,zzb,zzc,zzd);
+      // printf("ix     = %d, lv->odz[ix] = %8.5f\n",ix,lv->odz[ix]);
+      cxyz[ 8] = zzb * zzcd * base[0];   //   cxyz[16] = TRIPRD(pz,pos[1],pos[2],pos[3]) * base[0];
+      cxyz[ 9] = zza * zzcd * base[1];   //   cxyz[17] = TRIPRD(pz,pos[0],pos[2],pos[3]) * base[1];
+      cxyz[10] = zzd * zzab * base[2];   //   cxyz[18] = TRIPRD(pz,pos[0],pos[1],pos[3]) * base[2];
+      cxyz[11] = zzc * zzab * base[3];   //   cxyz[19] = TRIPRD(pz,pos[0],pos[1],pos[2]) * base[3];
+    }
+
+// printf("pz,dz,ix,nk,linear = %8.5f %8.5f %d %d %d\n",pz,dz,ix,lv->nk,linear);
+#if defined(__AVX2__) && defined(__x86_64__) && defined(SIMD)
+    pxy[0] = px;                           // vector of length 2 to do x and y in one shot
+    pxy[1] = py;
+    vxy  = _mm_loadu_pd(pxy);              // coefficients for x and y will be interleaved
+
+    vc1  = _mm_set1_pd(one);               //  one    (1.0)
+    vc5  = _mm_set1_pd(cp5);               //  cp5    (0.5)
+    vc3  = _mm_set1_pd(cp133);             //  cp133  (1/3)
+    vp6  = _mm_set1_pd(cp167);             //  cp167  (1/6)
+
+    // alternate formula to compute coefficients taking advantage of independent FMAs
+    //   pa = cm167*xy*(xy-one)*(xy-two)     = xy*(xy-one) * (-cp167)*(xy-two)  =  (xy*xy  - xy)   * (-(cp167*xy) + cp133)
+    //   pb = cp5*(xy+one)*(xy-one)*(xy-two) = cp5*(xy-two) * (xy+one)*(xy-one) =  (cp5*xy - one)  * (xy*xy       - one)
+    //   pc = cm5*xy*(xy+one)*(xy-two)       = xy*(xy+one) * (-cp5)*(xy-two)    =  (xy*xy  + xy)   * (-(cp5*xy)   + one)
+    //   pd = cp167*xy*(xy+one)*(xy-one)     = xy*(xy+one) * cp167*(xy-one)     =  (xy*xy  + xy)   * (cp167*xy    - cp167)
+    // STEP1 : 7 independent terms using 3 different FMAs  a*b+c, a*b-c, (-a*b)+c
+    xxmx = _mm_fmsub_pd(vxy,vxy,vxy);      //  xy*xy       - xy
+    x6m3 = _mm_fnmadd_pd(vxy,vp6,vc3);     //  -(cp167*xy) + cp133
+    x5p1 = _mm_fmsub_pd(vc5,vxy,vc1);      //  cp5*xy      - one
+    xxm1 = _mm_fmsub_pd(vxy,vxy,vc1);      //  xy*xy       - one
+    xxpx = _mm_fmadd_pd(vxy,vxy,vxy);      //  xy*xy       + xy
+    x5m1 = _mm_fnmadd_pd(vxy,vc5,vc1);     //  -(cp5*xy)   + one
+    x6m6 = _mm_fmsub_pd(vxy,vp6,vp6);      //  cp167*xy    - cp167
+
+    // STEP2 : multiply STEP 1 terms (4 independent operations)
+    vr0  = _mm_mul_pd(xxmx,x6m3);          // coefficients for x and y are interleaved
+    vr1  = _mm_mul_pd(x5p1,xxm1);
+    vr2  = _mm_mul_pd(xxpx,x5m1);
+    vr3  = _mm_mul_pd(xxpx,x6m6);
+
+    // final unshuffle to separate even terms (px) and odd terms (py) before storing them (independent operations)
+    _mm_storeu_pd(cxyz   ,_mm_unpacklo_pd(vr0,vr1));  // cxyz[ 0: 1] = cx[0], cx[1]
+    _mm_storeu_pd(cxyz+ 2,_mm_unpacklo_pd(vr2,vr3));  // cxyz[ 2: 3] = cx[2], cx[3]
+    _mm_storeu_pd(cxyz+ 8,_mm_unpackhi_pd(vr0,vr1));  // cxyz[ 8: 9] = cy[0], cy[1]
+    _mm_storeu_pd(cxyz+10,_mm_unpackhi_pd(vr2,vr3));  // cxyz[10:11] = cy[2], cy[3]
+
+#else
+//     cxyz[ 0] = (px*px  - px)   * (-(cp167*px) + cp133);
+//     cxyz[ 1] = (cp5*px - one)  * (px*px       - one);
+//     cxyz[ 2] = (px*px  + px)   * (-(cp5*px)   + one);
+//     cxyz[ 3] = (px*px  + px)   * (cp167*px    - cp167);
+// 
+//     cxyz[ 8] = (py*py  - py)   * (-(cp167*py) + cp133);
+//     cxyz[ 9] = (cp5*py - one)  * (py*py       - one);
+//     cxyz[10] = (py*py  + py)   * (-(cp5*py)   + one);
+//     cxyz[11] = (py*py  + py)   * (cp167*py    - cp167);
+
+    cxyz[ 0] = cm167*px*(px-one)*(px-two);        // coefficients for cubic interpolation along x
+    cxyz[ 1] = cp5*(px+one)*(px-one)*(px-two);
+    cxyz[ 2] = cm5*px*(px+one)*(px-two);
+    cxyz[ 3] = cp167*px*(px+one)*(px-one);
+
+    cxyz[ 4] = cm167*py*(py-one)*(py-two);        // coefficients for cubic interpolation along y
+    cxyz[ 5] = cp5*(py+one)*(py-one)*(py-two);
+    cxyz[ 6] = cm5*py*(py+one)*(py-two);
+    cxyz[ 7] = cp167*py*(py+one)*(py-one);
+#endif
+  return zlinear;  // linear / cubic flag
+}
+
+// Fortran dimensions: f1(NI,NJ,NK)
+// NI      : length of a line
+// NINJ    : length of a plane
+// zlinear : zero if cubic interpolation along z, non zero if linear interpolation along z
+// f1      : address of lower left corner of the 4 x 4 x 4 or 4 x 4 x 2 interpolation box
 // interpolation is done along z, then along y, then along x
 // values are interpolated using the cubic/linear polynomial coefficients
-// pz(1) and pz(4) both == 0.0 mean linear interpolation along z
-// pz(2) = 1.0 - dz, pz(3) = dz are expected in the linear case (0.0 <= dz <= 1.0)
-// the above might get adjusted in the future
+// pxyz(8) and pxyz(11) both = 0.0 when linear interpolation along z
+// pxyz(9) = 1.0 - dz, pxyz(10) = dz are expected in the linear case
 // in the z linear case, planes 0 and 1 are the same as are planes 2 and 3
-void Tricublin_zyxf_beta(float *d, float *f1, double *px, double *py, double *pz, int NI, int NINJ){
+// static inline void Tricublin_zyxf_beta(float *d, float *f1, double *px, double *py, double *pz, int NI, int NINJ){
+static inline void Tricublin_zyxf1_beta(float *d, float *f1, double *pxyz, int NI, int NINJ, int zlinear){
   int ni = NI;
   int ninj = NINJ;
   int ninjl;    // ninj (cubic along z) or 0 (linear along z)
   int ni2, ni3;
+  double *px = pxyz;
+  double *py = pxyz+4;
+  double *pz = pxyz+8;
 #if defined(__AVX2__) && defined(__x86_64__)
   float *s1;
   int32_t *l = (int32_t *)d;
@@ -73,7 +276,7 @@ void Tricublin_zyxf_beta(float *d, float *f1, double *px, double *py, double *pz
   ni2 = ni + ni;
   ni3 = ni2 + ni;
   ninjl = ninj ; // assuming cubic case. in the linear case, ninjl will be set to 0
-  if(pz[0] == 0.0 && pz[3] == 0.0) ninjl = 0;
+  if(zlinear) ninjl = 0;
 
 #if defined(__AVX2__) && defined(__x86_64__)
   // ==== interpolation along Z, vector length is 12 (3 vectors of length 4 per plane) ====
@@ -157,12 +360,15 @@ void Tricublin_zyxf_beta(float *d, float *f1, double *px, double *py, double *pz
 
 // process n points
 // for each point use 1 value from ixyz, 24 values from pxyz
-void Tricublin_zyxf_beta_n(float *d, float *f1, double *pxyz, int *ixyz, int NI, int NINJ, n){
+void Tricublin_zyx1_n(float *d, float *f1, pxpypz *pxyz,  ztab *lv, int n){
+  double cxyz[12];
+  int ixyz;
+  int zlinear;
   while(n--){
-    Tricublin_zyxf_beta(d, f1 + *ixyz, pxyz, pxyz+8, pxyz+16, NI, NINJ);
+    zlinear = Vcoef_pxyz4(cxyz, &ixyz, pxyz->px, pxyz->py, pxyz->pz, lv);
+    Tricublin_zyxf1_beta(d, f1 + ixyz, cxyz, lv->ni, lv->nij, zlinear);
     d++;         // next result
-    ixyz++;      // next position
-    pxyz += 24;  // next set of coefficients
+    pxyz += 1;  // next set of coefficients
   }
 }
 // Fortran dimensions: d(3) , f(3,NI,NJ,NK)
@@ -179,7 +385,7 @@ void Tricublin_zyxf_beta_n(float *d, float *f1, double *pxyz, int *ixyz, int NI,
 // should both interpolations have to be done, planes 1 and 2 can be used for the z linear case,
 // and planes 0, 1, 2, 3 for the z cubic case
 // in that case another mechanism will have to be used to signal the z linear case
-void Tricublin_zyx3f_beta(float *d, float *f, double *px, double *py, double *pz, int NI, int NINJ){
+static void Tricublin_zyx3f_beta(float *d, float *f, double *px, double *py, double *pz, int NI, int NINJ){
   int ni = 3*NI;
   int ninj = 3*NINJ;
   int ninjl;    // ninj (cubic along z) or 0 (linear along z)
@@ -344,7 +550,7 @@ void Tricublin_zyx3f_beta(float *d, float *f, double *px, double *py, double *pz
 
 #if defined(SELF_TEST)
 // x, y, z are in delta form (0 <= delta <= 1.0)
-void Tricubic_coeffs_d(double *px, double *py, double *pz, double x, double y, double z){
+static void Tricubic_coeffs_d(double *px, double *py, double *pz, double x, double y, double z){
 
   pz[0] = cm167*z*(z-one)*(z-two);        // coefficients for interpolation along z
   pz[1] = cp5*(z+one)*(z-one)*(z-two);
@@ -380,6 +586,11 @@ void Tricubic_coeffs_d(double *px, double *py, double *pz, double x, double y, d
 #include <stdio.h>
 #include <sys/time.h>
 
+float fx(float x) { x = x*.125 ; return (x*x*x*1.011 + x*x*1.022 + x*1.01 + .123); }
+float fy(float y) { y = y*.125 ; return (y*y*y*1.044 + y*y*1.055 + y*1.03 + .234); }
+float fz(float z) { return (z*1.123 + .345); }
+float fxyz(float x, float y, float z) { return fx(x) * fy(y) * fz(z) ; }
+
 int main(int argc, char **argv){
   float array[3*NI*NJ*NK];
   float a1[NI*NJ*NK];
@@ -389,10 +600,10 @@ int main(int argc, char **argv){
   float mi[3];
   float ma[3];
   float lin[3];
-  double pz[16], px[16], py[16];
+  double pz[16], px[16], py[16], pxyz[12];
   float avg=0.0;
-  double dx, dy, dz;
-  double expected1, expected2;
+  float dx, dy, dz;
+  float expected1, expected2;
   struct timeval t1, t2;
   long long tm1, tm2;
   int i,j,k,ijk;
@@ -402,11 +613,21 @@ int main(int argc, char **argv){
   float *p3 = a3;
   int nijk = NI*NJ*NK - 5*NI*NJ;
   int II, JJ, KK;
+  pxpypz posxyz[NI*NK*NK];
+  pxpypz *ptrxyz;
+  double posz[NK];
+  ztab *lv;
+  float e0, e1, e2;
+  uint64_t tt0, tt1;
+  int npts;
 
+  ptrxyz = posxyz;
   for (k=0 ; k<NK ; k++ ){
+    posz[k] = k + 1 ;
     for (j=0 ; j<NJ ; j++ ){
       for (i=0 ; i<NI ; i++ ){
-        p[0] = i + j + k;
+//         p[0] = i + j + k + 3;
+        p[0] = fxyz(i+1.0,j+1.0,k+1.0);
         p[1] = p[0] + 10;
         p[2] = p[0] + 100;
         *p1++ = p[0];
@@ -416,27 +637,84 @@ int main(int argc, char **argv){
       }
     }
   }
-  dz = .333;
-  dx = .555;
-  dy = .777;
-  II = 10;
-  JJ = 10;
-  KK = 10;
-  Tricubic_coeffs_d(px, py, pz, dx, dy, dz);
+
+  II = NI/2;
+  JJ = NJ/2;
+  KK = NK/2;
+  dz = .333; posxyz[0].pz = dz ; posxyz[0].pz = posxyz[0].pz + KK;
+  dx = .555; posxyz[0].px = dx + II;
+  dy = .777; posxyz[0].py = dy + JJ;
+
+  lv = Vsearch_setup(posz, NK, NI, NJ);
+
+//   Tricubic_coeffs_d(pxyz, pxyz+4, pxyz+8, dx, dy, dz);
 
   dest[0] = -1.0 ; dest[1] = -1.0 ; dest[2] = -1.0 ;
-  Tricublin_zyxf_beta(&dest[0], &a1[II + JJ*NI + KK*NI*NJ], px, py, pz, NI, NI*NJ);
-  Tricublin_zyxf_beta(&dest[1], &a2[II + JJ*NI + KK*NI*NJ], px, py, pz, NI, NI*NJ);
-  Tricublin_zyxf_beta(&dest[2], &a3[II + JJ*NI + KK*NI*NJ], px, py, pz, NI, NI*NJ);
-  expected2 = II + 1 + dx + JJ + 1 + dy + KK + 1 + dz ;
-  printf("Cubic case  :\ngot %10.6f, %10.6f, %10.6f, expected %10.6f %10.6f %10.6f\n",dest[0],dest[1],dest[2],expected2,expected2+10,expected2+100);
+  Tricublin_zyx1_n(&dest[0], &a1[0], posxyz,  lv, 1);
+  Tricublin_zyx1_n(&dest[1], &a2[0], posxyz,  lv, 1);
+  Tricublin_zyx1_n(&dest[2], &a3[0], posxyz,  lv, 1);
+//   expected2 = II + dx + JJ + dy + KK + dz ;
+//   expected2 = fxyz(II + dx, JJ + dy, KK + dz);
+  e0 = fxyz(II + dx, JJ + dy, KK + dz) ; e1 = e0+10 ; e2 = e0+100;
+  printf("Cubic case  :\ngot %12.7g, %12.7g, %12.7g, result/expected = %10.8f %10.8f %10.8f\n",dest[0],dest[1],dest[2],dest[0]/e0,dest[1]/e1,dest[2]/e2);
 
   dest[0] = -1.0 ; dest[1] = -1.0 ; dest[2] = -1.0 ;
-  Tricublin_zyxf_beta(&dest[0], &a1[II + JJ*NI + KK*NI*NJ], px, py, pz+4, NI, NI*NJ);
-  Tricublin_zyxf_beta(&dest[1], &a2[II + JJ*NI + KK*NI*NJ], px, py, pz+4, NI, NI*NJ);
-  Tricublin_zyxf_beta(&dest[2], &a3[II + JJ*NI + KK*NI*NJ], px, py, pz+4, NI, NI*NJ);
-  expected2 = II + 1 + dx + JJ + 1 + dy + KK + 0 + dz ;
-  printf("Linear case :\ngot %10.6f, %10.6f, %10.6f, expected %10.6f %10.6f %10.6f\n",dest[0],dest[1],dest[2],expected2,expected2+10,expected2+100);
+  KK = 1;
+  dz = .25; posxyz[0].pz = dz ; posxyz[0].pz = posxyz[0].pz + KK;
+  Tricublin_zyx1_n(&dest[0], &a1[0], posxyz,  lv, 1);
+  Tricublin_zyx1_n(&dest[1], &a2[0], posxyz,  lv, 1);
+  Tricublin_zyx1_n(&dest[2], &a3[0], posxyz,  lv, 1);
+//   expected2 = fxyz(II + dx, JJ + dy, KK + dz);
+  e0 = fxyz(II + dx, JJ + dy, KK + dz) ; e1 = e0+10 ; e2 = e0+100;
+  printf("Linear bottom case  :\ngot %12.7g, %12.7g, %12.7g, result/expected = %10.8f %10.8f %10.8f\n",dest[0],dest[1],dest[2],dest[0]/e0,dest[1]/e1,dest[2]/e2);
 
+  dest[0] = -1.0 ; dest[1] = -1.0 ; dest[2] = -1.0 ;
+  KK = 0;
+  dz = .75; posxyz[0].pz = dz ; posxyz[0].pz = posxyz[0].pz + KK;
+  Tricublin_zyx1_n(&dest[0], &a1[0], posxyz,  lv, 1);
+  Tricublin_zyx1_n(&dest[1], &a2[0], posxyz,  lv, 1);
+  Tricublin_zyx1_n(&dest[2], &a3[0], posxyz,  lv, 1);
+//   expected2 = fxyz(II + dx, JJ + dy, KK + dz);
+  e0 = fxyz(II + dx, JJ + dy, KK + dz) ; e1 = e0+10 ; e2 = e0+100;
+  printf("Linear bot extrap case  :\ngot %12.7g, %12.7g, %12.7g, result/expected = %10.8f %10.8f %10.8f\n",dest[0],dest[1],dest[2],dest[0]/e0,dest[1]/e1,dest[2]/e2);
+
+  dest[0] = -1.0 ; dest[1] = -1.0 ; dest[2] = -1.0 ;
+  KK = NK - 1;
+  dz = .75; posxyz[0].pz = dz ; posxyz[0].pz = posxyz[0].pz + KK;
+  Tricublin_zyx1_n(&dest[0], &a1[0], posxyz,  lv, 1);
+  Tricublin_zyx1_n(&dest[1], &a2[0], posxyz,  lv, 1);
+  Tricublin_zyx1_n(&dest[2], &a3[0], posxyz,  lv, 1);
+//   expected2 = fxyz(II + dx, JJ + dy, KK + dz);
+  e0 = fxyz(II + dx, JJ + dy, KK + dz) ; e1 = e0+10 ; e2 = e0+100;
+  printf("Linear top case  :\ngot %12.7g, %12.7g, %12.7g, result/expected = %10.8f %10.8f %10.8f\n",dest[0],dest[1],dest[2],dest[0]/e0,dest[1]/e1,dest[2]/e2);
+
+  dest[0] = -1.0 ; dest[1] = -1.0 ; dest[2] = -1.0 ;
+  KK = NK;
+  dz = .25; posxyz[0].pz = dz ; posxyz[0].pz = posxyz[0].pz + KK;
+  Tricublin_zyx1_n(&dest[0], &a1[0], posxyz,  lv, 1);
+  Tricublin_zyx1_n(&dest[1], &a2[0], posxyz,  lv, 1);
+  Tricublin_zyx1_n(&dest[2], &a3[0], posxyz,  lv, 1);
+//   expected2 = fxyz(II + dx, JJ + dy, KK + dz);
+  e0 = fxyz(II + dx, JJ + dy, KK + dz) ; e1 = e0+10 ; e2 = e0+100;
+  printf("Linear top extrap case  :\ngot %12.7g, %12.7g, %12.7g, result/expected = %10.8f %10.8f %10.8f\n",dest[0],dest[1],dest[2],dest[0]/e0,dest[1]/e1,dest[2]/e2);
+
+  for (k=0 ; k<NK ; k++ ){
+    for (j=1 ; j<NJ-2 ; j++ ){
+      for (i=1 ; i<NI-2 ; i++ ){
+        ptrxyz->px = i+.5;
+        ptrxyz->py = j+.5;
+        ptrxyz->pz = k+.5;
+        ptrxyz++;
+      }
+    }
+  }
+  npts = NK * (NI-3) * (NJ-3);
+  for(i=0 ; i<npts ; i++) dest[i] = -1.0;
+  tt0 = rdtscp_();
+  Tricublin_zyx1_n(dest,a1,posxyz,lv,npts);
+  tt1 = rdtscp_();
+  tt1 = tt1 - tt0;
+  printf("cycles per interpolation = %f\n",tt1 / (1.0*npts));
+  printf("END\n");
 }
 #endif

@@ -523,7 +523,7 @@ int Vcoef_ixyz8_pxyz8(uint32_t *ixyz, double *cxyz, pxpypzz *PXYZ, lvtab *lv, in
     ix--;                           // ix needs to be in "origin 0" (C index from Fortran index)
     linear = (ix - 1) | (lv->nk - 3 - ix); 
     linear >>= 31;                  // nonzero only if ix < 1 or ix > nk -3 (top and bottom intervals)
-    if(! linear) ijk = ijk - lv->nij;  // not the linear case, go down one 2D place to get lower left corner of 4x4x4 cube
+    if(! linear) ijk = ijk - lv->nij;  // not the linear case, go down one 2D plane to get lower left corner of 4x4x4 cube
     ixyz[irep] = ijk;               // store collapsed displacement
     // now we compute the coefficients along z using ix and dx
     if(linear){

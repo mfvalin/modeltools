@@ -14,6 +14,7 @@ program tricublin_d_test
   real*8, dimension(2) :: xy
   real, dimension(NI,NJ,NK), target :: f1, f2, f3
   real, dimension(3,NI,NJ,NK), target :: f123
+  real*8, dimension(NK) :: zlev
   integer :: i, j, k, ii, jj, kk, rr
   real*8 fx, fy, fz, fxyz, x, y, z, ovni, ovnj, ovnk, xx, yy, zz
   real*4, dimension(3) :: r1, r2, r3, e
