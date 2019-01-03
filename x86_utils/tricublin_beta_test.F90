@@ -18,6 +18,9 @@ program tricublin_d_test
   integer :: i, j, k, ii, jj, kk, rr
   real*8 fx, fy, fz, fxyz, x, y, z, ovni, ovnj, ovnk, xx, yy, zz
   real*4, dimension(3) :: r1, r2, r3, e
+  type(C_PTR) :: lv
+  real*8, dimension(NI,NJ,NK) :: pxpypz
+
   fx(x) = (x+1.0)*(x+1.1)*(x+1.2)*(x+1.3)
   fy(y) = (y+1.05)*(y+1.15)*(y+1.25)*(y+1.35)
   fz(z) = (z*1.25+1.02)
@@ -139,6 +142,10 @@ program tricublin_d_test
   print *, 'tot cycles   = ',t1
   print *, 'per interp   = ',t1/((ni-3)*(nj-3)*(nk-3))/NR
   print *, 'FLOPS/interp = ',3*(32*4 + 32 + 8 + 64)  ! interpolation + float -> double conversions
+
+  if(t1 .eq. 12) then
+    call tricublin_zyx1_n(r1,f1,pxpypz,lv,ni)
+  endif
 
 101 format(A,3F20.10,A,3F20.10,A,3F20.10)
 103 format(A,4F20.10,/A,4F20.10,/A,4F20.10)

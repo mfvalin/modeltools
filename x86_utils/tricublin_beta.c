@@ -69,17 +69,9 @@ static inline void denominators(double *r, double a, double b, double c, double 
   r[3] = 1.0 / TRIPRD(d,a,b,c);
 }
 
-// coefficients c from inverse denominators d, levels z, and position t
-static inline void zcoeffs(double *c, double t, double *z, double *d){
-  c[0] = TRIPRD(t,z[1],z[2],z[3]) * d[0];
-  c[1] = TRIPRD(t,z[0],z[2],z[3]) * d[1];
-  c[2] = TRIPRD(t,z[0],z[1],z[3]) * d[2];
-  c[3] = TRIPRD(t,z[0],z[1],z[2]) * d[3];
-}
-
 // allocate lookup table set and
 // return pointer to filled table set
-// targets are expected to be positive, and monotonically increasing or decreasing
+// targets are expected to be positive, and monotonically increasing
 ztab *Vsearch_setup(double *targets, int nk, int ni, int nj){
   int i;
   ztab *lv;
@@ -103,17 +95,12 @@ ztab *Vsearch_setup(double *targets, int nk, int ni, int nj){
     free(lv);             // deallocate lv
     return NULL;
   }
-//   denominators( &(lv->ocz[0]) , targets[0], targets[1], targets[2], targets[3]);                 // level 0 coeffs are normally not used
-  for(i=0 ; i<nk - 1   ; i++) {
+  denominators( &(lv->ocz[0]) , targets[0], targets[1], targets[2], targets[3]);                 // level 0 coeffs are normally not used
+  for(i=1 ; i<nk - 2   ; i++) {
     denominators( &(lv->ocz[4*i]) , lv->z[i-1], lv->z[i  ], lv->z[i+1], lv->z[i+2]);
   }
-// i = n-2;
-// printf("DE : %8.5f %8.5f %8.5f %8.5f \n",lv->t2[i-1], lv->t2[i  ], lv->t2[i+1], lv->t2[i+2]);
-// i = 4*(n-3);
-// printf("OV : %8.5f %8.5f %8.5f %8.5f \n",lv->ocz[i-1], lv->ocz[i  ], lv->ocz[i+1], lv->ocz[i+2]);
-// i = 4*(n-2);
-// printf("OV : %8.5f %8.5f %8.5f %8.5f \n",lv->ocz[i-1], lv->ocz[i  ], lv->ocz[i+1], lv->ocz[i+2]);
-//   denominators( &(lv->ocz[4*(n-1)]) , targets[n-4], targets[n-3], targets[n-2], targets[n-1]);   // level n-1 coeffs are normally not used
+  denominators( &(lv->ocz[4*(nk-2)]) , targets[nk-4], targets[nk-3], targets[nk-2], targets[nk-1]);  // level nk-2 coeffs are normally not used
+  denominators( &(lv->ocz[4*(nk-1)]) , targets[nk-4], targets[nk-3], targets[nk-2], targets[nk-1]);  // level nk-1 coeffs are normally not used
 
   lv->ni = ni;           // nb of points along x
   lv->nj = nj;           // nb of points along y
@@ -122,8 +109,8 @@ ztab *Vsearch_setup(double *targets, int nk, int ni, int nj){
   return lv;             // return pointer to filled table
 }
 
-static inline int Vcoef_pxyz4(double *cxyz, int *offset, double px8, double py8, double pz8, ztab *lv){
-  int ix, iy, irep, ijk, zlinear;
+static inline int Vcoef_pxyz4_inline(double *cxyz, int *offset, double px8, double py8, double pz8, ztab *lv){
+  int ix, iy, iz, ijk, zlinear;
   double pxy[2], *base, *pos;
   double zza, zzb, zzc, zzd, zzab, zzcd, dz, px, py, pz;
 #if defined(__AVX2__) && defined(__x86_64__) && defined(SIMD)
@@ -147,40 +134,40 @@ static inline int Vcoef_pxyz4(double *cxyz, int *offset, double px8, double py8,
     py = py - iy;                   // py is now deltay (fractional part of py)
     ijk = ijk + (iy -2) * lv->ni;   // add y displacement (rows), ix assumed to always be >1 and < nj-1
 
-    ix = pz ; 
-    if(ix<1) ix = 1; 
-    if(ix>lv->nk-1) ix = lv->nk-1;  // ix < 1 or ix > nk-1 will result in linear extrapolation
-    dz = pz - ix;                   // dz is now "fractional" part of pz  (may be <0 or >1 if extrapolating)
-    ijk = ijk + (ix -1) * lv->nij;  // add z displacement (2D planes)
+    iz = pz ; 
+    if(iz<1) iz = 1; 
+    if(iz>lv->nk-1) iz = lv->nk-1;  // iz < 1 or iz > nk-1 will result in linear extrapolation
+    dz = pz - iz;                   // dz is now "fractional" part of pz  (may be <0 or >1 if extrapolating)
+    ijk = ijk + (iz -1) * lv->nij;  // add z displacement (2D planes)
 
-    ix--;                           // ix needs to be in "origin 0" (C index from Fortran index)
-    zlinear = (ix - 1) | (lv->nk - 3 - ix); 
-    zlinear >>= 31;                  // nonzero only if ix < 1 or ix > nk -3 (top and bottom intervals)
+    iz--;                           // iz needs to be in "origin 0" (C index from Fortran index)
+    zlinear = (iz - 1) | (lv->nk - 3 - iz); 
+    zlinear >>= 31;                  // nonzero only if iz < 1 or iz > nk -3 (top and bottom intervals)
     if(! zlinear) ijk = ijk - lv->nij;  // not the linear case, go down one 2D plane to get lower left corner of 4x4x4 cube
     *offset = ijk;
-    // now we can compute the coefficients along z using ix and dz
+    // now we can compute the coefficients along z using iz and dz
     if(zlinear){
       cxyz[ 8] = 0.0;                    // coefficients for linear interpolation along z
       cxyz[ 9] = 1.0 - dz;
       cxyz[10] = dz;
       cxyz[11] = 0.0;
     }else{
-      base  = &(lv->ocz[4*ix]);  // precomputed inverses of denominators
-      pos   = &(lv->z[ix]);
+      base  = &(lv->ocz[4*iz]);  // precomputed inverses of denominators
+      pos   = &(lv->z[iz]);
       pz  = dz * pos[1] + (1.0 - dz) * pos[0];   // pz is now an absolute position
       zza = pz - pos[-1] ; zzb = pz - pos[0] ; zzc = pz - pos[1] ; zzd = pz - pos[2] ; 
       zzab = zza * zzb ; zzcd = zzc * zzd;
       // printf("target = %8.5f, dz = %8.5f, levels = %8.5f %8.5f\n",*PZ,dz,pos[0],pos[1]);
       // printf("target = %8.5f, base = %8.5f %8.5f %8.5f %8.5f\n",pz,base[0],base[1],base[2],base[3]);
       // printf("dz     = %8.5f, zz   = %8.5f %8.5f %8.5f %8.5f\n",dz,zza,zzb,zzc,zzd);
-      // printf("ix     = %d, lv->odz[ix] = %8.5f\n",ix,lv->odz[ix]);
+      // printf("iz     = %d, lv->odz[iz] = %8.5f\n",iz,lv->odz[iz]);
       cxyz[ 8] = zzb * zzcd * base[0];   //   cxyz[16] = TRIPRD(pz,pos[1],pos[2],pos[3]) * base[0];
       cxyz[ 9] = zza * zzcd * base[1];   //   cxyz[17] = TRIPRD(pz,pos[0],pos[2],pos[3]) * base[1];
       cxyz[10] = zzd * zzab * base[2];   //   cxyz[18] = TRIPRD(pz,pos[0],pos[1],pos[3]) * base[2];
       cxyz[11] = zzc * zzab * base[3];   //   cxyz[19] = TRIPRD(pz,pos[0],pos[1],pos[2]) * base[3];
     }
 
-// printf("pz,dz,ix,nk,linear = %8.5f %8.5f %d %d %d\n",pz,dz,ix,lv->nk,linear);
+// printf("pz,dz,iz,nk,linear = %8.5f %8.5f %d %d %d\n",pz,dz,iz,lv->nk,linear);
 #if defined(__AVX2__) && defined(__x86_64__) && defined(SIMD)
     pxy[0] = px;                           // vector of length 2 to do x and y in one shot
     pxy[1] = py;
@@ -252,7 +239,7 @@ static inline int Vcoef_pxyz4(double *cxyz, int *offset, double px8, double py8,
 // pxyz(9) = 1.0 - dz, pxyz(10) = dz are expected in the linear case
 // in the z linear case, planes 0 and 1 are the same as are planes 2 and 3
 // static inline void Tricublin_zyxf_beta(float *d, float *f1, double *px, double *py, double *pz, int NI, int NINJ){
-static inline void Tricublin_zyxf1_beta(float *d, float *f1, double *pxyz, int NI, int NINJ, int zlinear){
+static inline void Tricublin_zyxf1_inline(float *d, float *f1, double *pxyz, int NI, int NINJ, int zlinear){
   int ni = NI;
   int ninj = NINJ;
   int ninjl;    // ninj (cubic along z) or 0 (linear along z)
@@ -365,8 +352,8 @@ void Tricublin_zyx1_n(float *d, float *f1, pxpypz *pxyz,  ztab *lv, int n){
   int ixyz;
   int zlinear;
   while(n--){
-    zlinear = Vcoef_pxyz4(cxyz, &ixyz, pxyz->px, pxyz->py, pxyz->pz, lv);
-    Tricublin_zyxf1_beta(d, f1 + ixyz, cxyz, lv->ni, lv->nij, zlinear);
+    zlinear = Vcoef_pxyz4_inline(cxyz, &ixyz, pxyz->px, pxyz->py, pxyz->pz, lv);
+    Tricublin_zyxf1_inline(d, f1 + ixyz, cxyz, lv->ni, lv->nij, zlinear);
     d++;         // next result
     pxyz += 1;  // next set of coefficients
   }
