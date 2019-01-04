@@ -1,5 +1,5 @@
 /* 
- * Copyright (C) 2017 Recherche en Prevision Numerique
+ * Copyright (C) 2019 Recherche en Prevision Numerique
  * 
  * This is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public
@@ -17,7 +17,7 @@
  * Boston, MA 02111-1307, USA.
  */
 #if defined(NEVER_TO_BE_TRUE)
-subroutine fortran_test   ! test or Fortran interfaces really
+subroutine fortran_test   ! test of Fortran interfaces syntax
   use ISO_C_BINDING
   implicit none
 
@@ -114,9 +114,12 @@ end
 
 #include <randomgeneric.h>
 /*==========================================================================
- * R250 generators, naming consistent with the MWC8222 code
+ * R250 generators, naming consistent with the other generators
  *==========================================================================*/
 
+// the first items of the following struct MUST match ALL elements of the generic_state struct
+// as defined in file randomgeneric.h
+// the extra elements are specific to THIS generator type
 typedef struct{
   REFILLBUFFUN  refill;
   RANSETSEEDFUN seed;

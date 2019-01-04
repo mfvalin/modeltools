@@ -33,9 +33,9 @@ typedef struct{
   DVECSRANFUN   vec_drans;
   unsigned int *gauss;
   int32_t ngauss;
-  uint32_t part128r;
+  uint32_t part128;
   uint64_t s[2];
-  uint64_t res128r;
+  uint64_t res128;
 } xsr128_state;                  // XSR128 generator stream control structure
 
 static void FillBuffer_XSR128_stream(generic_state *stream) ;
@@ -51,7 +51,9 @@ static xsr128_state XSR128 = {
   (DVECSRANFUN) VecDRanS_XSR128_stream, 
   NULL, 
   0,
-  123456, 456789 } ;
+  0,
+  {123456, 456789 },
+  0 } ;
 
 // #define XSR128 (jz=jsr, jsr^=(jsr<<13), jsr^=(jsr>>17), jsr^=(jsr<<5),jz+jsr)
 
@@ -59,8 +61,6 @@ void *Ran_XSR128_new_stream(void *clone_in, unsigned int *piSeed, int cSeed)   /
 {
   xsr128_state *source ;
   xsr128_state *clone = (xsr128_state *)clone_in;
-  int i;
-
   xsr128_state *new_state = (xsr128_state *) memalign(64,sizeof(xsr128_state)) ;
 
   if(cSeed < 0 && piSeed==NULL){  // clone a stream (mostly used for testing)
@@ -77,8 +77,8 @@ void *Ran_XSR128_new_stream(void *clone_in, unsigned int *piSeed, int cSeed)   /
     new_state->vec_drans = source->vec_drans ;
     new_state->s[0] = source->s[0];
     new_state->s[1] = source->s[1];
-    new_state->res128r = source->res128r;
-    new_state->part128r = source->part128r;
+    new_state->res128 = source->res128;
+    new_state->part128 = source->part128;
   }else{
     new_state->ngauss = 0;
     new_state->gauss = NULL;
@@ -91,8 +91,8 @@ void *Ran_XSR128_new_stream(void *clone_in, unsigned int *piSeed, int cSeed)   /
     new_state->vec_dran  = (DVECRANFUN) VecDRan_XSR128_stream;
     new_state->vec_drans = (DVECSRANFUN) VecDRanS_XSR128_stream;
     RanSetSeed_XSR128_stream((generic_state *) new_state, piSeed, cSeed);  // seed the new stream
-    new_state->res128r = 0; // no residual
-    new_state->part128r = 0;
+    new_state->res128 = 0; // no residual
+    new_state->part128 = 0;
   }
 
   return ( (void *) new_state) ;
@@ -104,9 +104,14 @@ void F_Ran_XSR128_new_stream(statep *s, statep *c, unsigned int *piSeed, int cSe
   
 static void FillBuffer_XSR128_stream(generic_state *stream){ }
 
+static void jump128(uint64_t *s);
 void RanSetSeed_XSR128_stream(generic_state *stream, unsigned int *piSeed, int cSeed)  // !InTc!
 {
   xsr128_state *state = (xsr128_state *) stream ; 
+  if(cSeed == -64) {
+    jump128(state->s);
+    return;
+  }
   if(piSeed == NULL || cSeed == 0) return ; // null call, nothing to do
   if(cSeed == 4) { 
     state->s[0] = piSeed[0] ;  state->s[0] = (state->s[0] << 32) | piSeed[1] ;
@@ -115,7 +120,7 @@ void RanSetSeed_XSR128_stream(generic_state *stream, unsigned int *piSeed, int c
   state->s[0] = (unsigned int) *piSeed ;
 }
 
-static inline uint64_t advance128r(uint64_t *s) {
+static inline uint64_t advance128(uint64_t *s) {
   uint64_t s1 = s[0];
   const uint64_t s0 = s[1];
   const uint64_t result = s0 + s1;
@@ -125,17 +130,41 @@ static inline uint64_t advance128r(uint64_t *s) {
   return result; 
 }
 
+/* This is the jump function for the generator. It is equivalent
+   to 2^64 calls to next(); it can be used to generate 2^64
+   non-overlapping subsequences for parallel computations. */
+
+static void jump128(uint64_t *s) {
+  static const uint64_t JUMP[] = { 0x8a5cd789635d2dff, 0x121fd2155c472f96 };
+
+  uint64_t s0 = 0;
+  uint64_t s1 = 0;
+  int i, b;
+  for(i = 0; i < sizeof JUMP / sizeof *JUMP; i++){
+    for(b = 0; b < 64; b++) {
+      if (JUMP[i] & UINT64_C(1) << b) {
+        s0 ^= s[0];
+        s1 ^= s[1];
+      }
+      advance128(s);
+    }
+  }
+
+  s[0] = s0;
+  s[1] = s1;
+}
+
 unsigned int IRan_XSR128_stream(generic_state *stream)	  // !InTc!	/* returns a random unsigned integer */
 {
   xsr128_state *state = (xsr128_state *) stream ;
   uint32_t result;
 
-  state->part128r = state->part128r ^ 1;         // complement previous residual flag
-  if(state->part128r) {                  // there was no previous residual
-    state->res128r = advance128r(state->s);  // strore residual
-    result = state->res128r >> 32 ;    // return upper part
+  state->part128 = state->part128 ^ 1;         // complement previous residual flag
+  if(state->part128) {                  // there was no previous residual
+    state->res128 = advance128(state->s);  // strore residual
+    result = state->res128 >> 32 ;    // return upper part
   }else{                         // there was a previous residual, return lower part
-    result = state->res128r;
+    result = state->res128;
   }
   return result;
 }
@@ -145,12 +174,12 @@ double DRan_XSR128_stream(generic_state *stream)	  // !InTc!	/* returns a random
   xsr128_state *state = (xsr128_state *) stream ;
   uint32_t result;
 
-  state->part128r = state->part128r ^ 1;         // complement previous residual flag
-  if(state->part128r) {                  // there was no previous residual
-    state->res128r = advance128r(state->s);  // strore residual
-    result = state->res128r >> 32 ;    // return upper part
+  state->part128 = state->part128 ^ 1;         // complement previous residual flag
+  if(state->part128) {                  // there was no previous residual
+    state->res128 = advance128(state->s);  // strore residual
+    result = state->res128 >> 32 ;    // return upper part
   }else{                         // there was a previous residual, return lower part
-    result = state->res128r;
+    result = state->res128;
   }
   return CVTDBL_32(result);   // convert from 32 bit int to (0.0 , 1.0)
 }
@@ -160,12 +189,12 @@ double DRanS_XSR128_stream(generic_state *stream)	  // !InTc!	/* returns a rando
   xsr128_state *state = (xsr128_state *) stream ;
   uint32_t result;
 
-  state->part128r = state->part128r ^ 1;         // complement previous residual flag
-  if(state->part128r) {                  // there was no previous residual
-    state->res128r = advance128r(state->s);  // strore residual
-    result = state->res128r >> 32 ;    // return upper part
+  state->part128 = state->part128 ^ 1;         // complement previous residual flag
+  if(state->part128) {                  // there was no previous residual
+    state->res128 = advance128(state->s);  // strore residual
+    result = state->res128 >> 32 ;    // return upper part
   }else{                         // there was a previous residual, return lower part
-    result = state->res128r;
+    result = state->res128;
   }
   return CVTDBLS_32(result);   // convert from 32 bit int to (-1.0 , 1.0)
 }
@@ -176,16 +205,16 @@ void VecIRan_XSR128_stream(generic_state *stream, unsigned int *ranbuf, int n)  
   uint64_t t;
   xsr128_state *state = (xsr128_state *) stream ;
 
-  ranbuf[0] = state->res128r;               // in case there was a previous residual, store lower part in dest
-  for(i = state->part128r ; i < (n-1) ; i+=2){
-    t = advance128r(state->s);
+  ranbuf[0] = state->res128;               // in case there was a previous residual, store lower part in dest
+  for(i = state->part128 ; i < (n-1) ; i+=2){
+    t = advance128(state->s);
     ranbuf[i] = (t >> 32);
     ranbuf[i+1] = t;
   }
-  state->part128r = (i < n);
-  if(state->part128r){                   // there will be a residual, save it, store upper part in dest
-    t = advance128r(state->s);
-    state->res128r = t;
+  state->part128 = (i < n);
+  if(state->part128){                   // there will be a residual, save it, store upper part in dest
+    t = advance128(state->s);
+    state->res128 = t;
     ranbuf[i] = (t >> 32);
   }
 }
@@ -197,19 +226,19 @@ void VecDRan_XSR128_stream(generic_state *stream, double *ranbuf, int n)  // !In
   xsr128_state *state = (xsr128_state *) stream ;
   uint32_t tt;
 
-  tt = state->res128r;
+  tt = state->res128;
   ranbuf[0] = CVTDBL_32(tt);               // in case there was a previous residual, store lower part in dest
-  for(i = state->part128r ; i < (n-1) ; i+=2){
-    t = advance128r(state->s);
+  for(i = state->part128 ; i < (n-1) ; i+=2){
+    t = advance128(state->s);
     tt = t >> 32;
     ranbuf[i] = CVTDBL_32(tt);
     tt = t;
     ranbuf[i+1] = CVTDBL_32(tt);
   }
-  state->part128r = (i < n);
-  if(state->part128r){                   // there will be a residual, save it, store upper part in dest
-    t = advance128r(state->s);
-    state->res128r = t;
+  state->part128 = (i < n);
+  if(state->part128){                   // there will be a residual, save it, store upper part in dest
+    t = advance128(state->s);
+    state->res128 = t;
     tt = t >> 32;
     ranbuf[i] = CVTDBL_32(tt);
   }
@@ -222,19 +251,19 @@ void VecDRanS_XSR128_stream(generic_state *stream, double *ranbuf, int n)  // !I
   xsr128_state *state = (xsr128_state *) stream ;
   uint32_t tt;
 
-  tt = state->res128r;
+  tt = state->res128;
   ranbuf[0] = CVTDBLS_32(tt);               // in case there was a previous residual, store lower part in dest
-  for(i = state->part128r ; i < (n-1) ; i+=2){
-    t = advance128r(state->s);
+  for(i = state->part128 ; i < (n-1) ; i+=2){
+    t = advance128(state->s);
     tt = t >> 32;
     ranbuf[i] = CVTDBLS_32(tt);
     tt = t;
     ranbuf[i+1] = CVTDBLS_32(tt);
   }
-  state->part128r = (i < n);
-  if(state->part128r){                   // there will be a residual, save it, store upper part in dest
-    t = advance128r(state->s);
-    state->res128r = t;
+  state->part128 = (i < n);
+  if(state->part128){                   // there will be a residual, save it, store upper part in dest
+    t = advance128(state->s);
+    state->res128 = t;
     tt = t >> 32;
     ranbuf[i] = CVTDBLS_32(tt);
   }

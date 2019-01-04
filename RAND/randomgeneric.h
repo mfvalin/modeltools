@@ -1,5 +1,5 @@
 /* 
- * Copyright (C) 2017 Recherche en Prevision Numerique
+ * Copyright (C) 2019 Recherche en Prevision Numerique
  * 
  * This is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public
@@ -44,7 +44,7 @@ static const double INVM65   =  2.710505431213761085e-20    ;        /* 1.0 / 2^
 #define CVTDBL_48(i1, i2)   ((int)(i1)  * INVM32 + (0.5 + INVM48 / 2) + (int)((i2) & 0xFFFF)  * INVM48)
 #define CVTDBL_52(i1, i2)   ((int)(i1)  * INVM32 + (0.5 + INVM52 / 2) + (int)((i2) & 0xFFFFF) * INVM52)
 
-/* plug-in RNG */
+/* plug-in functions, present for ALL generators */
 typedef double          ( * DRANFUN)(void *);
 typedef double          ( * DRANSFUN)(void *);
 typedef unsigned int	( * IRANFUN)(void *);
@@ -59,16 +59,19 @@ typedef struct{                // mimic Fortran derived type (wrapped pointer to
   void *p;
 } statep;
 
+// REFILLBUFFUN to DVECSRANFUN are pointers to a specific function
 typedef struct{
-  REFILLBUFFUN  refill;
-  RANSETSEEDFUN seed;
-  IRANFUN       iran;
-  DRANFUN       dran;
-  DRANSFUN      drans;
-  IVECRANFUN    vec_iran;
-  DVECRANFUN    vec_dran;
-  DVECSRANFUN   vec_drans;
-  unsigned int *gauss;
-  int ngauss;
-} generic_state;               // generic part, identical at start of all stream control structures
+  REFILLBUFFUN  refill;       // buffer refill
+  RANSETSEEDFUN seed;         // set seed
+  IRANFUN       iran;         // generate a single 32 bit random integer value
+  DRANFUN       dran;         // generate a single 64 bit random float value ( 0.0 -> 1.0)
+  DRANSFUN      drans;        // generate a single 64 bit random float value (-1.0 -> 1.0)
+  IVECRANFUN    vec_iran;     // generate a vector of 32 bit random integer values
+  DVECRANFUN    vec_dran;     // generate a vector of 64 bit random float values ( 0.0 -> 1.0)
+  DVECSRANFUN   vec_drans;    // generate a vector of 64 bit random float values (-1.0 -> 1.0)
+  unsigned int *gauss;        // pointer to the buffer used by the gaussian generator
+  int ngauss;                 // used by the gaussian generator
+} generic_state;              // generic part, IDENTICAL at start of ALL stream control structures
+
+// include C function definitions
 #include <randomfunctions.h>
