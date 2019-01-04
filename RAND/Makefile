@@ -1,5 +1,6 @@
 
-SOURCES = random_gaussian.c  randomgeneric.c  random_mt19937.c  random_r250.c  random_shr3.c random_xorshiftrotate.c  random_xsr128.c
+SOURCES = random_gaussian.c  randomgeneric.c  random_mt19937.c  random_r250.c  \
+          random_shr3.c random_xorshiftrotate.c  random_xsr128.c  random_xsr128r.c
 
 all: ftest ctest
 
