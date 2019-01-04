@@ -32,13 +32,9 @@ typedef union{
 typedef struct{
   double t0[ 8];   // search accelerator for t1 (64 entries max in t1)
   double t1[64];   // search accelerator for t2 (at most 256 levels in t2)
-  double t2m1;     // normally equal to t2[0]
-  double t2[257];  // table for levels (max 256 usable)
-  double top;      // t2[nk-2]
-  double x0;       // x origin
-  double odx;      // inverse of deltax
-  double y0;       // y origin
-  double ody;      // inverse of deltay
+  double t2m1;     // normally equal to t2[0] (guard value)
+  double t2[257];  // table for levels (max 256 usable), entry nk is a guard
+  double top;      // t2[nk-2], next to last value used for research clipping
   double *odz;     // pointer to inverse of deltaz array [nk doubles]
   double *ocz;     // pointer to inverse of coefficient denominators [4*nk doubles]
   uint32_t ni;     // distance between rows
@@ -47,11 +43,11 @@ typedef struct{
   uint32_t nij;    // ni*nj, distance between levels
 }lvtab;
 
+// constants used for bicubic interpolation
 #if defined(__AVX2__) && defined(__x86_64__) && defined(SIMD)
 static int64_t ONE = 1;
 static double cp133 =  1.0/3.0;
 #endif
-
 static double cp167 =  1.0/6.0;
 static double cm167 = -1.0/6.0;
 static double cm5 = -0.5;
@@ -78,15 +74,14 @@ static inline void zcoeffs(double *c, double t, double *z, double *d){
   c[3] = TRIPRD(t,z[0],z[1],z[2]) * d[3];
 }
 
-// allocate lookup table and
-// return pointer to filled table
+// allocate lookup table set and
+// return pointer to filled table set
 // targets are expected to be positive, and monotonically increasing or decreasing
-lvtab * Vsearch_setup(double *targets, int n){
+lvtab * Vsearch_setup(double *targets, int n, int ni, int nj){
   int i;
   lvtab *lv;
   double pad;
 
-//   printf("Vsearch_setup: n = %d, %10.3f %10.3f %10.3f %10.3f \n",n,targets[0],targets[1],targets[n-2],targets[n-1]);
   if(n > 256) return NULL;
   if(0 != posix_memalign( (void **) &lv, 32, sizeof(lvtab) ) ) return NULL ;
 
@@ -128,18 +123,14 @@ lvtab * Vsearch_setup(double *targets, int n){
 //   denominators( &(lv->ocz[4*(n-1)]) , targets[n-4], targets[n-3], targets[n-2], targets[n-1]);   // level n-1 coeffs are normally not used
 
   lv->top = lv->t2[n-2]; // next to last value along z
-  lv->x0 = 0.0;          // origin of x coordinates
-  lv->odx = 0.0;         // deltax
-  lv->y0 = 0.0;          // origin of y coordinates
-  lv->ody = 0.0;         // deltay
-  lv->ni = 0;            // nb of points along x
-  lv->nj = 0;            // nb of points along y
+  lv->ni = ni;           // nb of points along x
+  lv->nj = nj;           // nb of points along y
   lv->nk = n;            // nb of points along z
-  lv->nij = 0;           // ni * nj
+  lv->nij = ni*nj;       // ni * nj
   return lv;             // return pointer to filled table
 }
 
-// free lookup table created by Vsearch_setup
+// free lookup table set created by Vsearch_setup
 int Vsearch_free(lvtab *lv){
   int errors = 0;
   if(lv == NULL) return -1;
@@ -170,7 +161,9 @@ int Vsearch_free(lvtab *lv){
 // returns position ix of target in level list lv->t2  (ix has origin 0)
 // such that lv->t2[ix] <= target <= lv->t2[ix+1]
 // ix will never be negative nor larger than nk - 2
-int Vsearch_list_inc(double target, lvtab *lv){
+//
+// inline function used by Vsearch_list_inc and Vsearch_list_inc_n
+static inline int Vsearch_list_inc_inline(double target, lvtab *lv){
   int ix;
 #if defined(__AVX2__) && defined(__x86_64__) && defined(SIMD)
   __m256i v0, v1, vc, t;
@@ -205,9 +198,15 @@ int Vsearch_list_inc(double target, lvtab *lv){
   ix = ix + _mm_popcnt_u32(m0) - 1 ;
 #else
   int i, j;
+  d_l_p dlt, dlr, dlm;
 
-  if(target < lv->t0[0]) target = lv->t0[0];  // target < first element in table
-  if(target > lv->top  ) target = lv->top  ;    // target > next to last element in table
+  dlt.d = target;
+  dlr.d = lv->t0[0];
+  dlm.d = lv->top;
+  if(dlt.l < dlr.l) target = dlr.d;  // target > first element in table
+  if(dlt.l > dlm.l) target = dlm.d;  // target < next to last element in table
+//   if(target < lv->t0[0]) target = lv->t0[0];  // target < first element in table
+//   if(target > lv->top  ) target = lv->top  ;    // target > next to last element in table
 
   j = 7;
   for(i=7 ; i>0 ; i--) { if(target < lv->t0[i]) j = i - 1; }
@@ -221,15 +220,44 @@ int Vsearch_list_inc(double target, lvtab *lv){
 #endif
   return ix;
 }
-
-// used to determine calling overhead
-double Vsearch_list_inc_do(double target, lvtab *lv){
-  return target;
+int Vsearch_list_inc(double target, lvtab *lv){
+  return Vsearch_list_inc_inline(target, lv);
+}
+int Vsearch_list_inc_n(int *ix, double *target, lvtab *lv, int n){
+  int i, ii;
+  for(i=0 ; i<n ; i++){
+    ii = Vsearch_list_inc_inline(target[i], lv);
+    ix[i] = ii;
+  }
+  return ii;
 }
 
+// used to determine calling overhead
+// double Vsearch_list_inc_do(double target, lvtab *lv){
+//   return target;
+// }
+
 // same as Vsearch_list_inc but returns the position as a fractional index
-// may be < 0 or > nk-1 if target is beyond table lv-t2 extreme values
+// may be < 0 or > nk-1 if target is beyond table lv->t2 extreme values
 double Vsearch_list_inc_d(double target, lvtab *lv){
+  double temp;
+  int ix = Vsearch_list_inc_inline(target, lv);
+  temp = ix + ( (target - lv->t2[ix]) * lv->odz[ix] );  // (target - lowerlevel) / deltaz
+  return temp;
+}
+double Vsearch_list_inc_dn(double *list, double *target, lvtab *lv, int n){
+  int i, ix;
+  double temp;
+  for(i=0 ; i<n ; i++){
+    temp = target[i];
+    ix = Vsearch_list_inc_inline(temp, lv);
+    temp = ix + ( (temp - lv->t2[ix]) * lv->odz[ix] );
+    list[i] = temp;
+  }
+  return list[n-1];
+}
+#if defined(OLD_CODE)
+double Vsearch_list_inc_d_orig(double target, lvtab *lv){
   int ix;
 #if defined(__AVX2__) && defined(__x86_64__) && defined(SIMD)
   __m256i v0, v1, vc, t;
@@ -285,11 +313,12 @@ double Vsearch_list_inc_d(double target, lvtab *lv){
 int Vcoef_xyz_inc_o(uint32_t *ixyz, double *cxyz, double *px, double *py, double *pz, lvtab *lv, int n){
   return 0;
 }
+#endif
 
 // calculate coefficients for x, y, z interpolation from lv table (see Vsearch_setup) and positions
-// PX    : array of positions along x (dimension n)
-// PY    : array of positions along y (dimension n)
-// PZ    : array of positions along z (dimension n)
+// PX    : array of positions along x (dimension n) (fractional index space, "origin 1")
+// PY    : array of positions along y (dimension n) (fractional index space, "origin 1")
+// PZ    : array of positions along z (dimension n) (positions in same units as lv->t2)
 // cxyz  : coefficients for tricubic or bicubic-linear interpolation (dimension 24*n)
 //         cxyz[ 0- 7,I] : along x for point I
 //         cxyz[ 8-15,I] : along y for point I
@@ -310,141 +339,294 @@ int Vcoef_xyz_inc(uint32_t *ixyz, double *cxyz, double *PX, double *PY, double *
 #else
   int i, j;
 #endif
-for(irep=0 ; irep <n ; irep++){
-  px = PX[irep] ; py = PY[irep] ; pz = PZ[irep] ;    // target positions along x, y, z
+  for(irep=0 ; irep <n ; irep++){
+    px = PX[irep] ; py = PY[irep] ; pz = PZ[irep] ;    // target positions along x, y, z
 
-  ix = px ; px = px - ix;  // px is now dx (fractional part of px)
-  ix = py ; py = py - ix;  // py is now dy (fractional part of py)
+    ix = px ; px = px - ix;  // px is now dx (fractional part of px)
+    ix = py ; py = py - ix;  // py is now dy (fractional part of py)
 
 #if defined(__AVX2__) && defined(__x86_64__) && defined(SIMD)
-  pxy[0] = px;
-  pxy[1] = py;
-  vxy  = _mm_loadu_pd(pxy);              // coefficients for x and y will be interleaved
+    pxy[0] = px;
+    pxy[1] = py;
+    vxy  = _mm_loadu_pd(pxy);              // coefficients for x and y will be interleaved
 
-  vc1  = _mm_set1_pd(one);               //  one    (1.0)
-  vc5  = _mm_set1_pd(cp5);               //  cp5    (0.5)
-  vc3  = _mm_set1_pd(cp133);             //  cp133  (1/3)
-  vp6  = _mm_set1_pd(cp167);             //  cp167  (1/6)
+    vc1  = _mm_set1_pd(one);               //  one    (1.0)
+    vc5  = _mm_set1_pd(cp5);               //  cp5    (0.5)
+    vc3  = _mm_set1_pd(cp133);             //  cp133  (1/3)
+    vp6  = _mm_set1_pd(cp167);             //  cp167  (1/6)
 
-  t     = (__m256i) _mm256_broadcast_sd(&pz);             // target
-  vc    = (__m256i) _mm256_broadcast_sd((double *) &ONE); // integer constant 1
-  tbot  = (__m256i) _mm256_broadcast_sd(&(lv->t0[0]));    // first element in table
-  ttop  = (__m256i) _mm256_broadcast_sd(&(lv->top  ));    // next to last element in table
-  if(pz < lv->t0[0]) t = tbot ;    // pz < first element in table, set to first element in table
-  if(pz > lv->top  ) t = ttop;     // pz > next to last element in table et to next to last element
-  
-  t    = _mm256_add_epi64((__m256i) t, vc);   // we want pz < tbl[i] so we add 1 to pz (integer mode)
+    t     = (__m256i) _mm256_broadcast_sd(&pz);             // target
+    vc    = (__m256i) _mm256_broadcast_sd((double *) &ONE); // integer constant 1
+    tbot  = (__m256i) _mm256_broadcast_sd(&(lv->t0[0]));    // first element in table
+    ttop  = (__m256i) _mm256_broadcast_sd(&(lv->top  ));    // next to last element in table
+    if(pz < lv->t0[0]) t = tbot ;    // pz < first element in table, set to first element in table
+    if(pz > lv->top  ) t = ttop;     // pz > next to last element in table et to next to last element
+    
+    t    = _mm256_add_epi64((__m256i) t, vc);   // we want pz < tbl[i] so we add 1 to pz (integer mode)
 
-  v0   = _mm256_lddqu_si256((__m256i const *) &(lv->t0[0]));    // 8 values to scan from table t0
-  v1   = _mm256_lddqu_si256((__m256i const *) &(lv->t0[4]));
-  v0   = _mm256_sub_epi64((__m256i) v0,(__m256i) t);            // t - tbl >= 0 if (pz-1) < tbl
-  v1   = _mm256_sub_epi64((__m256i) v1,(__m256i) t);
-  m0   = _mm256_movemask_pd((__m256d) v0);                      // transform subtract result signs into mask
-  m1   = _mm256_movemask_pd((__m256d) v1);
-  ix   = (_mm_popcnt_u32(m0) + _mm_popcnt_u32(m1) - 1) << 3;    // index into t1 table for 8 values scan
+    v0   = _mm256_lddqu_si256((__m256i const *) &(lv->t0[0]));    // 8 values to scan from table t0
+    v1   = _mm256_lddqu_si256((__m256i const *) &(lv->t0[4]));
+    v0   = _mm256_sub_epi64((__m256i) v0,(__m256i) t);            // t - tbl >= 0 if (pz-1) < tbl
+    v1   = _mm256_sub_epi64((__m256i) v1,(__m256i) t);
+    m0   = _mm256_movemask_pd((__m256d) v0);                      // transform subtract result signs into mask
+    m1   = _mm256_movemask_pd((__m256d) v1);
+    ix   = (_mm_popcnt_u32(m0) + _mm_popcnt_u32(m1) - 1) << 3;    // index into t1 table for 8 values scan
 
-  // alternate formula to compute coefficients taking advantage of independent FMAs
-  //   pa = cm167*xy*(xy-one)*(xy-two)     = xy*(xy-one) * (-cp167)*(xy-two)  =  (xy*xy  - xy)   * (-(cp167*xy) + cp133)
-  //   pb = cp5*(xy+one)*(xy-one)*(xy-two) = cp5*(xy-two) * (xy+one)*(xy-one) =  (cp5*xy - one)  * (xy*xy       - one)
-  //   pc = cm5*xy*(xy+one)*(xy-two)       = xy*(xy+one) * (-cp5)*(xy-two)    =  (xy*xy  + xy)   * (-(cp5*xy)   + one)
-  //   pd = cp167*xy*(xy+one)*(xy-one)     = xy*(xy+one) * cp167*(xy-one)     =  (xy*xy  + xy)   * (cp167*xy    - cp167)
-  // STEP1 : 7 independent terms using 3 different FMAs  a*b+c, a*b-c, (-a*b)+c
-  xxmx = _mm_fmsub_pd(vxy,vxy,vxy);      //  xy*xy       - xy
-  x6m3 = _mm_fnmadd_pd(vxy,vp6,vc3);     //  -(cp167*xy) + cp133
-  x5p1 = _mm_fmsub_pd(vc5,vxy,vc1);      //  cp5*xy      - one
-  xxm1 = _mm_fmsub_pd(vxy,vxy,vc1);      //  xy*xy       - one
-  xxpx = _mm_fmadd_pd(vxy,vxy,vxy);      //  xy*xy       + xy
-  x5m1 = _mm_fnmadd_pd(vxy,vc5,vc1);     //  -(cp5*xy)   + one
-  x6m6 = _mm_fmsub_pd(vxy,vp6,vp6);      //  cp167*xy    - cp167
+    // alternate formula to compute coefficients taking advantage of independent FMAs
+    //   pa = cm167*xy*(xy-one)*(xy-two)     = xy*(xy-one) * (-cp167)*(xy-two)  =  (xy*xy  - xy)   * (-(cp167*xy) + cp133)
+    //   pb = cp5*(xy+one)*(xy-one)*(xy-two) = cp5*(xy-two) * (xy+one)*(xy-one) =  (cp5*xy - one)  * (xy*xy       - one)
+    //   pc = cm5*xy*(xy+one)*(xy-two)       = xy*(xy+one) * (-cp5)*(xy-two)    =  (xy*xy  + xy)   * (-(cp5*xy)   + one)
+    //   pd = cp167*xy*(xy+one)*(xy-one)     = xy*(xy+one) * cp167*(xy-one)     =  (xy*xy  + xy)   * (cp167*xy    - cp167)
+    // STEP1 : 7 independent terms using 3 different FMAs  a*b+c, a*b-c, (-a*b)+c
+    xxmx = _mm_fmsub_pd(vxy,vxy,vxy);      //  xy*xy       - xy
+    x6m3 = _mm_fnmadd_pd(vxy,vp6,vc3);     //  -(cp167*xy) + cp133
+    x5p1 = _mm_fmsub_pd(vc5,vxy,vc1);      //  cp5*xy      - one
+    xxm1 = _mm_fmsub_pd(vxy,vxy,vc1);      //  xy*xy       - one
+    xxpx = _mm_fmadd_pd(vxy,vxy,vxy);      //  xy*xy       + xy
+    x5m1 = _mm_fnmadd_pd(vxy,vc5,vc1);     //  -(cp5*xy)   + one
+    x6m6 = _mm_fmsub_pd(vxy,vp6,vp6);      //  cp167*xy    - cp167
 
-  v0   = _mm256_lddqu_si256((__m256i const *) &(lv->t1[ix  ]));               // 8 values to scan from table t1
-  v1   = _mm256_lddqu_si256((__m256i const *) &(lv->t1[ix+4]));
-  v0   = _mm256_sub_epi64((__m256i) v0,(__m256i) t);
-  v1   = _mm256_sub_epi64((__m256i) v1,(__m256i) t);
-  m0   = _mm256_movemask_pd((__m256d) v0);
-  m1   = _mm256_movemask_pd((__m256d) v1);
-  ix   = (ix + _mm_popcnt_u32(m0) + _mm_popcnt_u32(m1) - 1) <<2 ;             // index into t2 table for final 4 value scan
+    v0   = _mm256_lddqu_si256((__m256i const *) &(lv->t1[ix  ]));               // 8 values to scan from table t1
+    v1   = _mm256_lddqu_si256((__m256i const *) &(lv->t1[ix+4]));
+    v0   = _mm256_sub_epi64((__m256i) v0,(__m256i) t);
+    v1   = _mm256_sub_epi64((__m256i) v1,(__m256i) t);
+    m0   = _mm256_movemask_pd((__m256d) v0);
+    m1   = _mm256_movemask_pd((__m256d) v1);
+    ix   = (ix + _mm_popcnt_u32(m0) + _mm_popcnt_u32(m1) - 1) <<2 ;             // index into t2 table for final 4 value scan
 
-  // STEP2 : multiply STEP 1 terms (4 independent operations)
-  vr0  = _mm_mul_pd(xxmx,x6m3);          // coefficients for x and y are interleaved
-  vr1  = _mm_mul_pd(x5p1,xxm1);
-  vr2  = _mm_mul_pd(xxpx,x5m1);
-  vr3  = _mm_mul_pd(xxpx,x6m6);
+    // STEP2 : multiply STEP 1 terms (4 independent operations)
+    vr0  = _mm_mul_pd(xxmx,x6m3);          // coefficients for x and y are interleaved
+    vr1  = _mm_mul_pd(x5p1,xxm1);
+    vr2  = _mm_mul_pd(xxpx,x5m1);
+    vr3  = _mm_mul_pd(xxpx,x6m6);
 
-  v0   = _mm256_lddqu_si256((__m256i const *) &(lv->t2[ix  ]));               // only 4 values to scan from table t2
-  v0   = _mm256_sub_epi64((__m256i) v0,(__m256i) t);
-  m0   = _mm256_movemask_pd((__m256d) v0);
-  ix = ix + _mm_popcnt_u32(m0) - 1 ;
+    v0   = _mm256_lddqu_si256((__m256i const *) &(lv->t2[ix  ]));               // only 4 values to scan from table t2
+    v0   = _mm256_sub_epi64((__m256i) v0,(__m256i) t);
+    m0   = _mm256_movemask_pd((__m256d) v0);
+    ix = ix + _mm_popcnt_u32(m0) - 1 ;
 
-  // final unshuffle to separate even terms (px) and odd terms (py) before storing them (independent operations)
-  _mm_storeu_pd(cxyz   ,_mm_unpacklo_pd(vr0,vr1));  // cxyz[ 0: 1] = cx[0], cx[1]
-  _mm_storeu_pd(cxyz+ 2,_mm_unpacklo_pd(vr2,vr3));  // cxyz[ 2: 3] = cx[2], cx[3]
-  _mm_storeu_pd(cxyz+ 8,_mm_unpackhi_pd(vr0,vr1));  // cxyz[ 8: 9] = cy[0], cy[1]
-  _mm_storeu_pd(cxyz+10,_mm_unpackhi_pd(vr2,vr3));  // cxyz[10:11] = cy[2], cy[3]
+    // final unshuffle to separate even terms (px) and odd terms (py) before storing them (independent operations)
+    _mm_storeu_pd(cxyz   ,_mm_unpacklo_pd(vr0,vr1));  // cxyz[ 0: 1] = cx[0], cx[1]
+    _mm_storeu_pd(cxyz+ 2,_mm_unpacklo_pd(vr2,vr3));  // cxyz[ 2: 3] = cx[2], cx[3]
+    _mm_storeu_pd(cxyz+ 8,_mm_unpackhi_pd(vr0,vr1));  // cxyz[ 8: 9] = cy[0], cy[1]
+    _mm_storeu_pd(cxyz+10,_mm_unpackhi_pd(vr2,vr3));  // cxyz[10:11] = cy[2], cy[3]
 
 #else
 
-  if(pz < lv->t0[0]) pz = lv->t0[0];  // pz < first element in table
-  if(pz > lv->top  ) pz = lv->top  ;  // pz > next to last element in table
+    if(pz < lv->t0[0]) pz = lv->t0[0];  // pz < first element in table
+    if(pz > lv->top  ) pz = lv->top  ;  // pz > next to last element in table
 
-  j = 7;
-  for(i=7 ; i>0 ; i--) { if(pz < lv->t0[i]) j = i - 1; }
-  ix = j << 3;
-  j = 7;
-  for(i=7 ; i>0 ; i--) { if(pz < lv->t1[ix+i]) j = i - 1; }
-  ix = (ix + j) <<2 ;
-  j = 3;
-  for(i=3 ; i>0 ; i--) { if(pz < lv->t2[ix+i]) j = i - 1; }
-  ix = ix + j;           // we have the index along z, we can compute coefficients along z
+    j = 7;
+    for(i=7 ; i>0 ; i--) { if(pz < lv->t0[i]) j = i - 1; }
+    ix = j << 3;
+    j = 7;
+    for(i=7 ; i>0 ; i--) { if(pz < lv->t1[ix+i]) j = i - 1; }
+    ix = (ix + j) <<2 ;
+    j = 3;
+    for(i=3 ; i>0 ; i--) { if(pz < lv->t2[ix+i]) j = i - 1; }
+    ix = ix + j;           // we have the index along z, we can compute coefficients along z
 
-  cxyz[ 0] = cm167*px*(px-one)*(px-two);        // coefficients for cubic interpolation along x
-  cxyz[ 1] = cp5*(px+one)*(px-one)*(px-two);
-  cxyz[ 2] = cm5*px*(px+one)*(px-two);
-  cxyz[ 3] = cp167*px*(px+one)*(px-one);
+    cxyz[ 0] = cm167*px*(px-one)*(px-two);        // coefficients for cubic interpolation along x
+    cxyz[ 1] = cp5*(px+one)*(px-one)*(px-two);
+    cxyz[ 2] = cm5*px*(px+one)*(px-two);
+    cxyz[ 3] = cp167*px*(px+one)*(px-one);
 
-  cxyz[ 8] = cm167*py*(py-one)*(py-two);        // coefficients for cubic interpolation along y
-  cxyz[ 9] = cp5*(py+one)*(py-one)*(py-two);
-  cxyz[10] = cm5*py*(py+one)*(py-two);
-  cxyz[11] = cp167*py*(py+one)*(py-one);
+    cxyz[ 8] = cm167*py*(py-one)*(py-two);        // coefficients for cubic interpolation along y
+    cxyz[ 9] = cp5*(py+one)*(py-one)*(py-two);
+    cxyz[10] = cm5*py*(py+one)*(py-two);
+    cxyz[11] = cp167*py*(py+one)*(py-one);
 #endif
-  *ixyz++ = ix;
-  // now we compute the coefficients along z using ix
-  base  = &(lv->ocz[4*ix]);  // precomputed inverses of denominators
-  pos   = &(lv->t2[ix]);
-  pz = *PZ;
-  zza = pz - pos[-1] ; zzb = pz - pos[0] ; zzc = pz - pos[1] ; zzd = pz - pos[2] ; 
-  dz = lv->odz[ix] * zzb;   // (pz - pos[2]) / (pos[2] - pos[1])
-  zzab = zza * zzb ; zzcd = zzc * zzd;
-// printf("target = %8.5f, dz = %8.5f, levels = %8.5f %8.5f\n",*PZ,dz,pos[0],pos[1]);
-// printf("target = %8.5f, base = %8.5f %8.5f %8.5f %8.5f\n",pz,base[0],base[1],base[2],base[3]);
-// printf("dz     = %8.5f, zz   = %8.5f %8.5f %8.5f %8.5f\n",dz,zza,zzb,zzc,zzd);
-// printf("ix     = %d, lv->odz[ix] = %8.5f\n",ix,lv->odz[ix]);
-  cxyz[16] = zzb * zzcd * base[0];   //   cxyz[16] = TRIPRD(pz,pos[1],pos[2],pos[3]) * base[0];
-  cxyz[17] = zza * zzcd * base[1];   //   cxyz[17] = TRIPRD(pz,pos[0],pos[2],pos[3]) * base[1];
-  cxyz[18] = zzd * zzab * base[2];   //   cxyz[18] = TRIPRD(pz,pos[0],pos[1],pos[3]) * base[2];
-  cxyz[19] = zzc * zzab * base[3];   //   cxyz[19] = TRIPRD(pz,pos[0],pos[1],pos[2]) * base[3];
+    *ixyz++ = ix;
+    // now we compute the coefficients along z using ix
+    base  = &(lv->ocz[4*ix]);  // precomputed inverses of denominators
+    pos   = &(lv->t2[ix]);
+    pz = *PZ;
+    zza = pz - pos[-1] ; zzb = pz - pos[0] ; zzc = pz - pos[1] ; zzd = pz - pos[2] ; 
+    dz = lv->odz[ix] * zzb;   // (pz - pos[2]) / (pos[2] - pos[1])
+    zzab = zza * zzb ; zzcd = zzc * zzd;
+    cxyz[16] = zzb * zzcd * base[0];   //   cxyz[16] = TRIPRD(pz,pos[1],pos[2],pos[3]) * base[0];
+    cxyz[17] = zza * zzcd * base[1];   //   cxyz[17] = TRIPRD(pz,pos[0],pos[2],pos[3]) * base[1];
+    cxyz[18] = zzd * zzab * base[2];   //   cxyz[18] = TRIPRD(pz,pos[0],pos[1],pos[3]) * base[2];
+    cxyz[19] = zzc * zzab * base[3];   //   cxyz[19] = TRIPRD(pz,pos[0],pos[1],pos[2]) * base[3];
 
-  cxyz[ 4] = 0.0;                    // coefficients for linear interpolation along x
-  cxyz[ 5] = 1.0 - px;
-  cxyz[ 6] = px;
-  cxyz[ 7] = 0.0;
-  cxyz[12] = 0.0;                    // coefficients for linear interpolation along y
-  cxyz[13] = 1.0 - py;
-  cxyz[14] = py;
-  cxyz[15] = 0.0;
-  cxyz[20] = 0.0;                    // coefficients for linear interpolation along z
-  cxyz[21] = 1.0 - dz;
-  cxyz[22] = dz;
-  cxyz[23] = 0.0;
-  cxyz += 24;
-}
+    cxyz[ 4] = 0.0;                    // coefficients for linear interpolation along x
+    cxyz[ 5] = 1.0 - px;
+    cxyz[ 6] = px;
+    cxyz[ 7] = 0.0;
+    cxyz[12] = 0.0;                    // coefficients for linear interpolation along y
+    cxyz[13] = 1.0 - py;
+    cxyz[14] = py;
+    cxyz[15] = 0.0;
+    cxyz[20] = 0.0;                    // coefficients for linear interpolation along z
+    cxyz[21] = 1.0 - dz;
+    cxyz[22] = dz;
+    cxyz[23] = 0.0;
+    cxyz += 24;
+  }
   return ix;
+}
+
+// calculate coefficients for x, y, z interpolation from lv table (see Vsearch_setup) and positions
+// PX    : array of positions along x (dimension n) (fractional index space, "origin 1")
+// PY    : array of positions along y (dimension n) (fractional index space, "origin 1")
+// PZ    : array of positions along z (dimension n) (fractional index space, "origin 1")
+// cxyz  : coefficients for tricubic or bicubic-linear interpolation (dimension 24*n)
+//         cxyz[I][ 0- 7] : along x for point I   Fortran cxyz( 0: 7,I)
+//         cxyz[I][ 8-15] : along y for point I   Fortran cxyz( 8:15,I)
+//         cxyz[I][16-23] : along z for point I   Fortran cxyz(16:23,I)
+//         in each group of 8 coefficients, the first 4 are for the cubic case, the last 4 for the linear case
+// ixyz  : array of indices along z
+// lv    : x y z axis description  (see Vsearch_setup) (OPAQUE OBJECT)
+// n     : number of points to process (PX[n], PY[n], PZ[n], ixys[n]) ( cxyz[n][24] )
+//
+// Fortran dimensions : PX(n), PY(n), PZ(n), ixys(n), cxyz(24,n)
+// function return : index for last point along z
+typedef struct{
+  float px;    // position along x in index space
+  float py;    // position along y in index space
+  float pz;    // position along z in index space
+  float z;     // absolute position along z 
+} pxpypzz;
+// int Vcoef_xyz_incr(uint32_t *ixyz, double *cxyz, double *PX, double *PY, double *PZ, lvtab *lv, int n){
+int Vcoef_ixyz8_pxyz8(uint32_t *ixyz, double *cxyz, pxpypzz *PXYZ, lvtab *lv, int n){
+  int ix, irep, ijk, linear;
+  double pxy[2], *base, *pos;
+  double zza, zzb, zzc, zzd, zzab, zzcd, dz, px, py, pz;
+#if defined(__AVX2__) && defined(__x86_64__) && defined(SIMD)
+  __m256i v0, v1, vc, t, ttop, tbot, ttemp;
+  __m128d vxy, vc1, vc5, vc3, vp6, xxmx, xxpx, xxm1, x5p1, x6m3, x5m1, x6m6, dtmp;
+  __m128d vr0, vr1, vr2, vr3;
+  __m128i itmp;
+  int m0, m1;
+#else
+  int i, j;
+#endif
+  for(irep=0 ; irep <n ; irep++){                      // loop over points
+    px = PXYZ[irep].px ;            // fractional index positions along x, y, z (float to double)
+    py = PXYZ[irep].py ;
+    pz = PXYZ[irep].pz ;
+
+    ix = PXYZ[irep].px ;
+    px = px - ix;                   // px is now deltax (fractional part of px)
+    ijk = ix - 2;                   // x displacement (elements), ix assumed to always be >1 and < ni-1
+
+    ix = PXYZ[irep].py ;
+    py = py - ix;                   // py is now deltay (fractional part of py)
+    ijk = ijk + (ix -2) * lv->ni;   // add y displacement (rows), ix assumed to always be >1 and < nj-1
+
+    ix = PXYZ[irep].pz ; 
+    if(ix<1) ix = 1; 
+    if(ix>lv->nk-1) ix = lv->nk-1;  // ix < 1 or ix > nk-1 will result in linear extrapolation
+    dz = pz - ix;                   // dz is now "fractional" part of pz  (may be <0 or >1 if extrapolating)
+    ijk = ijk + (ix -1) * lv->nij;  // add z displacement (2D planes)
+
+    ix--;                           // ix needs to be in "origin 0" (C index from Fortran index)
+    linear = (ix - 1) | (lv->nk - 3 - ix); 
+    linear >>= 31;                  // nonzero only if ix < 1 or ix > nk -3 (top and bottom intervals)
+    if(! linear) ijk = ijk - lv->nij;  // not the linear case, go down one 2D plane to get lower left corner of 4x4x4 cube
+    ixyz[irep] = ijk;               // store collapsed displacement
+    // now we compute the coefficients along z using ix and dx
+    if(linear){
+      cxyz[16] = 0.0;                    // coefficients for linear interpolation along z
+      cxyz[17] = 1.0 - dz;
+      cxyz[18] = dz;
+      cxyz[19] = 0.0;
+    }else{
+      base  = &(lv->ocz[4*ix]);  // precomputed inverses of denominators
+      pos   = &(lv->t2[ix]);
+//     pz  = dz * pos[1] + (1.0 - dz) * pos[0];
+      pz = PXYZ[irep].z  ;       // absolute position along z is used to compute coefficients
+      zza = pz - pos[-1] ; zzb = pz - pos[0] ; zzc = pz - pos[1] ; zzd = pz - pos[2] ; 
+      zzab = zza * zzb ; zzcd = zzc * zzd;
+      // printf("target = %8.5f, dz = %8.5f, levels = %8.5f %8.5f\n",*PZ,dz,pos[0],pos[1]);
+      // printf("target = %8.5f, base = %8.5f %8.5f %8.5f %8.5f\n",pz,base[0],base[1],base[2],base[3]);
+      // printf("dz     = %8.5f, zz   = %8.5f %8.5f %8.5f %8.5f\n",dz,zza,zzb,zzc,zzd);
+      // printf("ix     = %d, lv->odz[ix] = %8.5f\n",ix,lv->odz[ix]);
+      cxyz[16] = zzb * zzcd * base[0];   //   cxyz[16] = TRIPRD(pz,pos[1],pos[2],pos[3]) * base[0];
+      cxyz[17] = zza * zzcd * base[1];   //   cxyz[17] = TRIPRD(pz,pos[0],pos[2],pos[3]) * base[1];
+      cxyz[18] = zzd * zzab * base[2];   //   cxyz[18] = TRIPRD(pz,pos[0],pos[1],pos[3]) * base[2];
+      cxyz[19] = zzc * zzab * base[3];   //   cxyz[19] = TRIPRD(pz,pos[0],pos[1],pos[2]) * base[3];
+    }
+
+    cxyz[ 4] = 0.0;                    // coefficients for linear interpolation along x
+    cxyz[ 5] = 1.0 - px;
+    cxyz[ 6] = px;
+    cxyz[ 7] = 0.0;
+    cxyz[12] = 0.0;                    // coefficients for linear interpolation along y
+    cxyz[13] = 1.0 - py;
+    cxyz[14] = py;
+    cxyz[15] = 0.0;
+    cxyz[20] = 0.0;                    // coefficients for linear interpolation along z
+    cxyz[21] = 1.0 - dz;
+    cxyz[22] = dz;
+    cxyz[23] = 0.0;
+// printf("pz,dz,ix,nk,linear = %8.5f %8.5f %d %d %d\n",pz,dz,ix,lv->nk,linear);
+#if defined(__AVX2__) && defined(__x86_64__) && defined(SIMD)
+    pxy[0] = px;                           // vector of length 2 to do x and y in one shot
+    pxy[1] = py;
+    vxy  = _mm_loadu_pd(pxy);              // coefficients for x and y will be interleaved
+
+    vc1  = _mm_set1_pd(one);               //  one    (1.0)
+    vc5  = _mm_set1_pd(cp5);               //  cp5    (0.5)
+    vc3  = _mm_set1_pd(cp133);             //  cp133  (1/3)
+    vp6  = _mm_set1_pd(cp167);             //  cp167  (1/6)
+
+    // alternate formula to compute coefficients taking advantage of independent FMAs
+    //   pa = cm167*xy*(xy-one)*(xy-two)     = xy*(xy-one) * (-cp167)*(xy-two)  =  (xy*xy  - xy)   * (-(cp167*xy) + cp133)
+    //   pb = cp5*(xy+one)*(xy-one)*(xy-two) = cp5*(xy-two) * (xy+one)*(xy-one) =  (cp5*xy - one)  * (xy*xy       - one)
+    //   pc = cm5*xy*(xy+one)*(xy-two)       = xy*(xy+one) * (-cp5)*(xy-two)    =  (xy*xy  + xy)   * (-(cp5*xy)   + one)
+    //   pd = cp167*xy*(xy+one)*(xy-one)     = xy*(xy+one) * cp167*(xy-one)     =  (xy*xy  + xy)   * (cp167*xy    - cp167)
+    // STEP1 : 7 independent terms using 3 different FMAs  a*b+c, a*b-c, (-a*b)+c
+    xxmx = _mm_fmsub_pd(vxy,vxy,vxy);      //  xy*xy       - xy
+    x6m3 = _mm_fnmadd_pd(vxy,vp6,vc3);     //  -(cp167*xy) + cp133
+    x5p1 = _mm_fmsub_pd(vc5,vxy,vc1);      //  cp5*xy      - one
+    xxm1 = _mm_fmsub_pd(vxy,vxy,vc1);      //  xy*xy       - one
+    xxpx = _mm_fmadd_pd(vxy,vxy,vxy);      //  xy*xy       + xy
+    x5m1 = _mm_fnmadd_pd(vxy,vc5,vc1);     //  -(cp5*xy)   + one
+    x6m6 = _mm_fmsub_pd(vxy,vp6,vp6);      //  cp167*xy    - cp167
+
+    // STEP2 : multiply STEP 1 terms (4 independent operations)
+    vr0  = _mm_mul_pd(xxmx,x6m3);          // coefficients for x and y are interleaved
+    vr1  = _mm_mul_pd(x5p1,xxm1);
+    vr2  = _mm_mul_pd(xxpx,x5m1);
+    vr3  = _mm_mul_pd(xxpx,x6m6);
+
+    // final unshuffle to separate even terms (px) and odd terms (py) before storing them (independent operations)
+    _mm_storeu_pd(cxyz   ,_mm_unpacklo_pd(vr0,vr1));  // cxyz[ 0: 1] = cx[0], cx[1]
+    _mm_storeu_pd(cxyz+ 2,_mm_unpacklo_pd(vr2,vr3));  // cxyz[ 2: 3] = cx[2], cx[3]
+    _mm_storeu_pd(cxyz+ 8,_mm_unpackhi_pd(vr0,vr1));  // cxyz[ 8: 9] = cy[0], cy[1]
+    _mm_storeu_pd(cxyz+10,_mm_unpackhi_pd(vr2,vr3));  // cxyz[10:11] = cy[2], cy[3]
+
+#else
+//     cxyz[ 0] = (px*px  - px)   * (-(cp167*px) + cp133);
+//     cxyz[ 1] = (cp5*px - one)  * (px*px       - one);
+//     cxyz[ 2] = (px*px  + px)   * (-(cp5*px)   + one);
+//     cxyz[ 3] = (px*px  + px)   * (cp167*px    - cp167);
+// 
+//     cxyz[ 8] = (py*py  - py)   * (-(cp167*py) + cp133);
+//     cxyz[ 9] = (cp5*py - one)  * (py*py       - one);
+//     cxyz[10] = (py*py  + py)   * (-(cp5*py)   + one);
+//     cxyz[11] = (py*py  + py)   * (cp167*py    - cp167);
+
+    cxyz[ 0] = cm167*px*(px-one)*(px-two);        // coefficients for cubic interpolation along x
+    cxyz[ 1] = cp5*(px+one)*(px-one)*(px-two);
+    cxyz[ 2] = cm5*px*(px+one)*(px-two);
+    cxyz[ 3] = cp167*px*(px+one)*(px-one);
+
+    cxyz[ 8] = cm167*py*(py-one)*(py-two);        // coefficients for cubic interpolation along y
+    cxyz[ 9] = cp5*(py+one)*(py-one)*(py-two);
+    cxyz[10] = cm5*py*(py+one)*(py-two);
+    cxyz[11] = cp167*py*(py+one)*(py-one);
+#endif
+    cxyz += 24;
+  }
+  return ix;  // vertical index for last point
 }
 
 // version for monotonically decreasing positive table values
 // target and tables are of type double but processed as if they were 64 bit positive integers
 // 8 8 4 scan pattern
-int Vsearch_list_dec(double target, lvtab *lv){
+static inline int Vsearch_list_dec_inline(double target, lvtab *lv){
   int ix, j;
 #if defined(__AVX2__) && defined(__x86_64__) && defined(SIMD)
   __m256i v0, v1, vc, t;
@@ -488,9 +670,15 @@ int Vsearch_list_dec(double target, lvtab *lv){
   ix = (ix + j) ;
 #else
   int i;
+  d_l_p dlt, dlr, dlm;
 
-  if(target > lv->t0[0]) target = lv->t0[0];  // target > first element in table
-  if(target < lv->top  ) target = lv->top;  // target < next to last element in table
+  dlt.d = target;
+  dlr.d = lv->t0[0];
+  dlm.d = lv->top;
+  if(dlt.l > dlr.l) target = dlr.d;  // target > first element in table
+  if(dlt.l < dlm.l) target = dlm.d;  // target < next to last element in table
+//   if(target > lv->t0[0]) target = lv->t0[0];  // target > first element in table
+//   if(target < lv->top  ) target = lv->top;  // target < next to last element in table
 
   j = 7;
   for(i=7 ; i>0 ; i--) { if(target > lv->t0[i]) j = i - 1; }
@@ -503,6 +691,15 @@ int Vsearch_list_dec(double target, lvtab *lv){
   ix = ix + j;
 #endif
   return ix;
+}
+int Vsearch_list_dec(double target, lvtab *lv){
+  return Vsearch_list_dec_inline(target, lv);
+}
+void Vsearch_list_dec_n(int *ix, double *target, lvtab *lv, int n){
+  int i;
+  for(i=0 ; i<n ; i++){
+    ix[i] = Vsearch_list_dec_inline(target[i], lv);
+  }
 }
 
 #if defined(SELF_TEST)
@@ -518,45 +715,43 @@ int search_list_dec(double target, lvtab *lv){
   if(dlt.l > dlr.l) target = dlr.d;  // target > first element in table
   if(dlt.l < dlm.l) target = dlm.d;  // target < next to last element in table
   j = 7;
-//   printf("target = %f\n",target);
+
   for(i=7 ; i>0 ; i--) { if(target > lv->t0[i]) j = i - 1; }
   ix = j << 3;
-//   printf("j = %d, ix = %d, %f %f, %f %f\n",j,ix,lv->t0[j-1],lv->t0[j],lv->t1[ix],lv->t1[ix+7]);
+
   j = 7;
   for(i=7 ; i>0 ; i--) { if(target > lv->t1[ix+i]) j = i - 1; }
   ix = (ix + j) <<2 ;
-//   printf("j = %d, ix = %d, %f %f, %f %f\n",j,ix,lv->t1[j-1],lv->t1[j],lv->t2[ix],lv->t2[ix+7]);
+
   j = 3;
   for(i=3 ; i>0 ; i--) { if(target > lv->t2[ix+i]) j = i - 1; }
   ix = ix + j;
-//   printf("j = %d, ix = %d, %f %f\n",j,ix,lv->t1[j-1],lv->t1[j]);
+
   return ix;
 }
 
 int search_list_inc(double target, lvtab *lv){
   int ix;
   int i, j;
-//   d_l_p dlt, dlr, dlm;
 
-//   dlt.d = target;
-//   dlr.d = lv->t0[0];
-//   dlm.d = lv->top;
-  if(target < lv->t0[0]) target = lv->t0[0];  // target < first element in table
-  if(target > lv->top  ) target = lv->top;    // target > next to last element in table
+  d_l_p dlt, dlr, dlm;
+  dlt.d = target;
+  dlr.d = lv->t0[0];
+  dlm.d = lv->top;
+  if(dlt.l < dlr.l) target = dlr.d;  // target > first element in table
+  if(dlt.l > dlm.l) target = dlm.d;  // target < next to last element in table
 
   j = 7;
-//   printf("target = %f\n",target);
   for(i=7 ; i>0 ; i--) { if(target < lv->t0[i]) j = i - 1; }
   ix = j << 3;
-//   printf("j = %d, ix = %d, %f %f, %f %f\n",j,ix,lv->t0[j-1],lv->t0[j],lv->t1[ix],lv->t1[ix+7]);
+
   j = 7;
   for(i=7 ; i>0 ; i--) { if(target < lv->t1[ix+i]) j = i - 1; }
   ix = (ix + j) <<2 ;
-//   printf("j = %d, ix = %d, %f %f, %f %f\n",j,ix,lv->t1[j-1],lv->t1[j],lv->t2[ix],lv->t2[ix+7]);
+
   j = 3;
   for(i=3 ; i>0 ; i--) { if(target < lv->t2[ix+i]) j = i - 1; }
   ix = ix + j;
-//   printf("j = %d, ix = %d, %f %f\n",j,ix,lv->t1[j-1],lv->t1[j]);
   return ix;
 }
 #endif
