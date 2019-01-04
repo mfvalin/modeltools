@@ -24,7 +24,7 @@
 // sum(x), sum(x*x), sum(y), sum(y*y), sum(x*y)
 // building block for SSIM score
 void sumx2(float *r, float *x, float *y, int ni){
-#if defined(__AVX2__) && defined(__x86_64__)
+#if defined(__AVX2__) && defined(__x86_64__) && defined(SIMD)
   __m128 vx0, vy0, sxy, vt0, vt1, vts;
   __m256 vxy, vs1, vs2, vst;
   int *l = (int *) r;
@@ -33,7 +33,7 @@ void sumx2(float *r, float *x, float *y, int ni){
   float x2[4], xy[4], sx[4], sy[4], y2[4];
 #endif
 
-#if defined(__AVX2__) && defined(__x86_64__)
+#if defined(__AVX2__) && defined(__x86_64__) && defined(SIMD)
   vx0 = _mm_loadu_ps(x);   // row 0
   vy0 = _mm_loadu_ps(y);
   vxy = _mm256_insertf128_ps(vxy,vx0,0);   // _mm256_set_m128(vy0,vx0);
