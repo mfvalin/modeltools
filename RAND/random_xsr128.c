@@ -36,7 +36,7 @@
 #include <randomgeneric.h>
 
 /*==========================================================================
- * XSR128 generators, naming consistent with the MWC8222 code
+ * XSR128 generators, function names consistent with the other generators
  *==========================================================================*/
 /*------------------------ start of XSR128 routines --------------------------*/
 

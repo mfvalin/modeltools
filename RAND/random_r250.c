@@ -16,7 +16,9 @@
  * Free Software Foundation, Inc., 59 Temple Place - Suite 330,
  * Boston, MA 02111-1307, USA.
  */
+
 // R250 random number generator, from S.Kirkpatrick and E.  Stoll (state = 250 32 bit integers)  // !InTc!
+// extremely fast generator (can use SIMD)
 
 // Fortran interfaces for automated extraction
 #if defined(NEVER_TO_BE_TRUE)

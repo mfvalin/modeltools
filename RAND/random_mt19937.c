@@ -38,6 +38,10 @@
 #endif
 
 #include <randomgeneric.h>
+/*==========================================================================
+ * MT19937 generators, function names consistent with the other generators
+ *==========================================================================*/
+/*------------------------ start of MT19937 routines --------------------------*/
 
 #define MT_SIZE 624
 #define MT_PERIOD 397
@@ -65,6 +69,7 @@ typedef struct{
   unsigned int *mt2;
 }mt19937_state ;                  // MT19937 generator stream control structure
 
+// only one value needed for seeding
 void RanSetSeed_MT19937_stream(generic_state *stream, unsigned int *piSeed, int cSeed)    // !InTc!  initial seed
 {
   mt19937_state *mt19937 = (mt19937_state *) stream;

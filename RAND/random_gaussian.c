@@ -504,7 +504,7 @@ int main(int argc, char **argv){
 #if defined(TEST64)
     rval = D64Ran_NormalZig_stream(stream);      // use C entry point
 #else
-    rval = DRan_NormalZig_stream(stream);      // use C entry point
+    rval = DRan_NormalZig_stream(stream);        // use C entry point
 #endif
     avg = avg + rval ;
     dmin = (dmin < rval) ? dmin : rval ;
@@ -536,9 +536,9 @@ int main(int argc, char **argv){
   t0 = MPI_Wtime();
   for( i=0 ; i < 1000000000 ; i++) 
 #if defined(TEST64)
-    rval = F_D64Ran_NormalZig_stream((void **) &stream);  // tiem Fortran entry point (costlier)
+    rval = F_D64Ran_NormalZig_stream((void **) &stream);  // time Fortran entry point (costlier)
 #else
-    rval = F_DRan_NormalZig_stream((void **) &stream);  // tiem Fortran entry point (costlier)
+    rval = F_DRan_NormalZig_stream((void **) &stream);    // time Fortran entry point (costlier)
 #endif
   t1 = MPI_Wtime();
   printf("time for 1E+9 x 1 random DRan_NormalZig_stream/R250 double value = %6.3f \n",t1-t0);  // DRan_NormalZig_stream256

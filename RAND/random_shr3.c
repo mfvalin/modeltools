@@ -36,7 +36,7 @@
 #include <randomgeneric.h>
 
 /*==========================================================================
- * SHR3 generators, naming consistent with the MWC8222 code
+ * SHR3 generators, function names consistent with the other generators
  *==========================================================================*/
 /*------------------------ start of SHR3 routines --------------------------*/
 
