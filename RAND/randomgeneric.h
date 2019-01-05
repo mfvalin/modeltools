@@ -59,7 +59,7 @@ typedef struct{                // mimic Fortran derived type (wrapped pointer to
   void *p;
 } statep;
 
-// REFILLBUFFUN to DVECSRANFUN are pointers to a specific function
+// REFILLBUFFUN to DVECSRANFUN are pointers to a specific function for a specific generator
 typedef struct{
   REFILLBUFFUN  refill;       // buffer refill
   RANSETSEEDFUN seed;         // set seed
@@ -72,6 +72,3 @@ typedef struct{
   unsigned int *gauss;        // pointer to the buffer used by the gaussian generator
   int ngauss;                 // used by the gaussian generator
 } generic_state;              // generic part, IDENTICAL at start of ALL stream control structures
-
-// include C function definitions
-#include <randomfunctions.h>

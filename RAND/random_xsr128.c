@@ -1,3 +1,22 @@
+/* 
+ * Copyright (C) 2019 Recherche en Prevision Numerique
+ * 
+ * This is free software; you can redistribute it and/or
+ * modify it under the terms of the GNU Lesser General Public
+ * License as published by the Free Software Foundation,
+ * version 2.1 of the License.
+ *
+ * This software is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * Lesser General Public License for more details.
+ *
+ * You should have received a copy of the GNU Lesser General Public
+ * License along with this software; if not, write to the
+ * Free Software Foundation, Inc., 59 Temple Place - Suite 330,
+ * Boston, MA 02111-1307, USA.
+ */
+// xorshift generator with 128 bit state   // !InTc!
 #if defined(NEVER_TO_BE_TRUE)
 
 ! void F_Ran_XSR128_new_stream(xsr128_state *clone, int *piSeed, int cSeed)                   !InTf!
@@ -15,7 +34,6 @@
 #define INSTRUMENT(A) ;
 
 #include <randomgeneric.h>
-#include <randomfunctions.h>
 
 /*==========================================================================
  * XSR128 generators, naming consistent with the MWC8222 code
@@ -37,70 +55,6 @@ typedef struct{
   uint64_t s[2];
   uint64_t res128;
 } xsr128_state;                  // XSR128 generator stream control structure
-
-static void FillBuffer_XSR128_stream(generic_state *stream) ;
-
-static xsr128_state XSR128 = { 
-  (REFILLBUFFUN) FillBuffer_XSR128_stream, 
-  (RANSETSEEDFUN) RanSetSeed_XSR128_stream, 
-  (IRANFUN) IRan_XSR128_stream, 
-  (DRANFUN) DRan_XSR128_stream, 
-  (DRANSFUN) DRanS_XSR128_stream, 
-  (IVECRANFUN) VecIRan_XSR128_stream, 
-  (DVECRANFUN) VecDRan_XSR128_stream, 
-  (DVECSRANFUN) VecDRanS_XSR128_stream, 
-  NULL, 
-  0,
-  0,
-  {123456, 456789 },
-  0 } ;
-
-// #define XSR128 (jz=jsr, jsr^=(jsr<<13), jsr^=(jsr>>17), jsr^=(jsr<<5),jz+jsr)
-
-void *Ran_XSR128_new_stream(void *clone_in, unsigned int *piSeed, int cSeed)   // !InTc! // create and seed a new stream
-{
-  xsr128_state *source ;
-  xsr128_state *clone = (xsr128_state *)clone_in;
-  xsr128_state *new_state = (xsr128_state *) memalign(64,sizeof(xsr128_state)) ;
-
-  if(cSeed < 0 && piSeed==NULL){  // clone a stream (mostly used for testing)
-    source = clone ? clone : &XSR128;         // clone == NULL means clone default stream
-    new_state->ngauss = source->ngauss ;
-    new_state->gauss = source->gauss ;
-    new_state->seed  = source->seed;
-    new_state->refill = source->refill ;
-    new_state->iran = source->iran ;
-    new_state->dran = source->dran ;
-    new_state->drans = source->drans ;
-    new_state->vec_iran = source->vec_iran ;
-    new_state->vec_dran = source->vec_dran ;
-    new_state->vec_drans = source->vec_drans ;
-    new_state->s[0] = source->s[0];
-    new_state->s[1] = source->s[1];
-    new_state->res128 = source->res128;
-    new_state->part128 = source->part128;
-  }else{
-    new_state->ngauss = 0;
-    new_state->gauss = NULL;
-    new_state->seed  = (RANSETSEEDFUN) RanSetSeed_XSR128_stream;
-    new_state->refill = (REFILLBUFFUN) FillBuffer_XSR128_stream;
-    new_state->iran   = (IRANFUN) IRan_XSR128_stream;
-    new_state->dran   = (DRANFUN) DRan_XSR128_stream;
-    new_state->drans  = (DRANSFUN) DRanS_XSR128_stream;
-    new_state->vec_iran  = (IVECRANFUN) VecIRan_XSR128_stream;
-    new_state->vec_dran  = (DVECRANFUN) VecDRan_XSR128_stream;
-    new_state->vec_drans = (DVECSRANFUN) VecDRanS_XSR128_stream;
-    RanSetSeed_XSR128_stream((generic_state *) new_state, piSeed, cSeed);  // seed the new stream
-    new_state->res128 = 0; // no residual
-    new_state->part128 = 0;
-  }
-
-  return ( (void *) new_state) ;
-}
-void F_Ran_XSR128_new_stream(statep *s, statep *c, unsigned int *piSeed, int cSeed)  // Fortran interface using derived type
-{
-  s->p = Ran_XSR128_new_stream( c->p, piSeed, cSeed);
-}
   
 static void FillBuffer_XSR128_stream(generic_state *stream){ }
 
@@ -267,6 +221,68 @@ void VecDRanS_XSR128_stream(generic_state *stream, double *ranbuf, int n)  // !I
     tt = t >> 32;
     ranbuf[i] = CVTDBLS_32(tt);
   }
+}
+
+static xsr128_state XSR128 = { 
+  (REFILLBUFFUN) FillBuffer_XSR128_stream, 
+  (RANSETSEEDFUN) RanSetSeed_XSR128_stream, 
+  (IRANFUN) IRan_XSR128_stream, 
+  (DRANFUN) DRan_XSR128_stream, 
+  (DRANSFUN) DRanS_XSR128_stream, 
+  (IVECRANFUN) VecIRan_XSR128_stream, 
+  (DVECRANFUN) VecDRan_XSR128_stream, 
+  (DVECSRANFUN) VecDRanS_XSR128_stream, 
+  NULL, 
+  0,
+  0,
+  {123456, 456789 },
+  0 } ;
+
+// #define XSR128 (jz=jsr, jsr^=(jsr<<13), jsr^=(jsr>>17), jsr^=(jsr<<5),jz+jsr)
+
+void *Ran_XSR128_new_stream(void *clone_in, unsigned int *piSeed, int cSeed)   // !InTc! // create and seed a new stream
+{
+  xsr128_state *source ;
+  xsr128_state *clone = (xsr128_state *)clone_in;
+  xsr128_state *new_state = (xsr128_state *) memalign(64,sizeof(xsr128_state)) ;
+
+  if(cSeed < 0 && piSeed==NULL){  // clone a stream (mostly used for testing)
+    source = clone ? clone : &XSR128;         // clone == NULL means clone default stream
+    new_state->ngauss = source->ngauss ;
+    new_state->gauss = source->gauss ;
+    new_state->seed  = source->seed;
+    new_state->refill = source->refill ;
+    new_state->iran = source->iran ;
+    new_state->dran = source->dran ;
+    new_state->drans = source->drans ;
+    new_state->vec_iran = source->vec_iran ;
+    new_state->vec_dran = source->vec_dran ;
+    new_state->vec_drans = source->vec_drans ;
+    new_state->s[0] = source->s[0];
+    new_state->s[1] = source->s[1];
+    new_state->res128 = source->res128;
+    new_state->part128 = source->part128;
+  }else{
+    new_state->ngauss = 0;
+    new_state->gauss = NULL;
+    new_state->seed  = (RANSETSEEDFUN) RanSetSeed_XSR128_stream;
+    new_state->refill = (REFILLBUFFUN) FillBuffer_XSR128_stream;
+    new_state->iran   = (IRANFUN) IRan_XSR128_stream;
+    new_state->dran   = (DRANFUN) DRan_XSR128_stream;
+    new_state->drans  = (DRANSFUN) DRanS_XSR128_stream;
+    new_state->vec_iran  = (IVECRANFUN) VecIRan_XSR128_stream;
+    new_state->vec_dran  = (DVECRANFUN) VecDRan_XSR128_stream;
+    new_state->vec_drans = (DVECSRANFUN) VecDRanS_XSR128_stream;
+    RanSetSeed_XSR128_stream((generic_state *) new_state, piSeed, cSeed);  // seed the new stream
+    new_state->res128 = 0; // no residual
+    new_state->part128 = 0;
+  }
+
+  return ( (void *) new_state) ;
+}
+void F_Ran_XSR128_new_stream(statep *s, statep *c, unsigned int *piSeed, int cSeed)  // Fortran interface using derived type
+{
+  s->p = Ran_XSR128_new_stream( c->p, piSeed, cSeed);
 }
 
 /*------------------------- end of XSR128 routines ---------------------------*/

@@ -16,12 +16,11 @@
  * Free Software Foundation, Inc., 59 Temple Place - Suite 330,
  * Boston, MA 02111-1307, USA.
  */
+// gaussian generator using the "ziggurat" method (uses one of the linear integer generators)   // !InTc!
+// 128 or 256 boxes (use internal buffer for 320 32 bit integers)   // !InTc!
 
 // Fortran interface, ready to be extracted
-#if defined(NEVER_TRUE)
-! type, bind(C) :: RANDOM_STREAM                                                          !InTf!
-!   type(C_PTR) :: p                                                                      !InTf!
-! end type                                                                                !InTf!
+#if defined(NEVER_TO_BE_TRUE)
 
 ! double F_DRan_NormalZig_stream(statep *s   )                                            !InTf!
  interface                                                                                !InTf!

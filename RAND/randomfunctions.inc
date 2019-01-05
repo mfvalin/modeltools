@@ -61,6 +61,41 @@
    integer(c_INT), dimension(n), intent(OUT) :: ranbuf
    end subroutine VecDRan_generic_stream
  end interface
+! double F_DRan_NormalZig_stream(statep *s   )
+ interface
+   function DRan_Normal_stream(stream) result(ran) bind(C,name='F_DRan_NormalZig_stream')
+   import :: C_DOUBLE,RANDOM_STREAM
+   type(RANDOM_STREAM), intent(IN) :: stream
+   real(C_DOUBLE) :: ran
+   end function DRan_Normal_stream
+ end interface
+! double F_D64Ran_NormalZig_stream(statep *s   )
+ interface
+   function D64Ran_Normal_stream(stream) result(ran) bind(C,name='F_D64Ran_NormalZig_stream')
+   import :: C_DOUBLE,RANDOM_STREAM
+   type(RANDOM_STREAM), intent(IN) :: stream
+   real(C_DOUBLE) :: ran
+   end function D64Ran_Normal_stream
+ end interface
+! void F_RanNormalZigSetSeed(statep *s   , int *piSeed, int cSeed)
+ interface
+   subroutine RanNormalZigSetSeed(stream, piSeed, cSeed) bind(C,name='F_RanNormalZigSetSeed')
+   import :: RANDOM_STREAM,C_INT
+   type(RANDOM_STREAM), intent(IN) :: stream
+   integer(C_INT), intent(IN), value :: cSeed
+   integer(c_INT), dimension(cSeed), intent(IN) :: piSeed
+   end subroutine RanNormalZigSetSeed
+ end interface
+! void F_Ran_MT19937_new_stream(mt19937_state *clone, int *piSeed, int cSeed)
+ interface
+   subroutine Ran_MT19937_new_stream(stream, clone, piSeed, cSeed) bind(C,name='F_Ran_MT19937_new_stream')
+   import :: RANDOM_STREAM,C_INT
+   type(RANDOM_STREAM), intent(OUT) :: stream
+   type(RANDOM_STREAM), intent(IN) :: clone
+   integer(C_INT), intent(IN), value :: cSeed
+   integer(c_INT), dimension(cSeed), intent(IN) :: piSeed
+   end subroutine Ran_MT19937_new_stream
+ end interface
 ! void F_RanSetSeed_R250_stream(statep *s   , int *piSeed, int cSeed)
  interface
    subroutine RanSetSeed_R250_stream(stream, piSeed, cSeed) bind(C,name='F_RanSetSeed_R250_stream')
@@ -141,41 +176,23 @@
    integer(c_INT), dimension(cSeed), intent(IN) :: piSeed
    end subroutine Ran_SHR3_new_stream
  end interface
-! type, bind(C) :: RANDOM_STREAM
-!   type(C_PTR) :: p
-! end type
-! double F_DRan_NormalZig_stream(statep *s   )
+! void F_Ran_XSR128_new_stream(xsr128_state *clone, int *piSeed, int cSeed)
  interface
-   function DRan_Normal_stream(stream) result(ran) bind(C,name='F_DRan_NormalZig_stream')
-   import :: C_DOUBLE,RANDOM_STREAM
-   type(RANDOM_STREAM), intent(IN) :: stream
-   real(C_DOUBLE) :: ran
-   end function DRan_Normal_stream
- end interface
-! double F_D64Ran_NormalZig_stream(statep *s   )
- interface
-   function D64Ran_Normal_stream(stream) result(ran) bind(C,name='F_D64Ran_NormalZig_stream')
-   import :: C_DOUBLE,RANDOM_STREAM
-   type(RANDOM_STREAM), intent(IN) :: stream
-   real(C_DOUBLE) :: ran
-   end function D64Ran_Normal_stream
- end interface
-! void F_RanNormalZigSetSeed(statep *s   , int *piSeed, int cSeed)
- interface
-   subroutine RanNormalZigSetSeed(stream, piSeed, cSeed) bind(C,name='F_RanNormalZigSetSeed')
+   subroutine Ran_XSR128_new_stream(stream, clone, piSeed, cSeed) bind(C,name='F_Ran_XSR128_new_stream')
    import :: RANDOM_STREAM,C_INT
-   type(RANDOM_STREAM), intent(IN) :: stream
+   type(RANDOM_STREAM), intent(OUT) :: stream
+   type(RANDOM_STREAM), intent(IN) :: clone
    integer(C_INT), intent(IN), value :: cSeed
    integer(c_INT), dimension(cSeed), intent(IN) :: piSeed
-   end subroutine RanNormalZigSetSeed
+   end subroutine Ran_XSR128_new_stream
  end interface
-!float_fuzz(float *f, int n, int start, int stride, int mask, float epsilon, int mode)
+! void F_Ran_XSR128R_new_stream(XSR128R_state *clone, int *piSeed, int cSeed)
  interface
-   subroutine float_fuzz(f, n, start, stride, mask, epsilon, mode) bind(C,name='float_fuzz')
-     import :: C_INT, C_FLOAT
-     integer(C_INT), intent(IN), value :: n, start, stride, mask, mode
-     real(C_FLOAT), intent(IN), value :: epsilon
-     real(C_FLOAT), dimension(n), intent(INOUT) :: f
-   end subroutine float_fuzz
+   subroutine Ran_XSR128R_new_stream(stream, clone, piSeed, cSeed) bind(C,name='F_Ran_XSR128R_new_stream')
+   import :: RANDOM_STREAM,C_INT
+   type(RANDOM_STREAM), intent(OUT) :: stream
+   type(RANDOM_STREAM), intent(IN) :: clone
+   integer(C_INT), intent(IN), value :: cSeed
+   integer(c_INT), dimension(cSeed), intent(IN) :: piSeed
+   end subroutine Ran_XSR128R_new_stream
  end interface
- 

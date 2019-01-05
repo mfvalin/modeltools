@@ -1,4 +1,39 @@
-#include <stdint.h>
+/* 
+ * Copyright (C) 2019 Recherche en Prevision Numerique
+ * 
+ * This is free software; you can redistribute it and/or
+ * modify it under the terms of the GNU Lesser General Public
+ * License as published by the Free Software Foundation,
+ * version 2.1 of the License.
+ *
+ * This software is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * Lesser General Public License for more details.
+ *
+ * You should have received a copy of the GNU Lesser General Public
+ * License along with this software; if not, write to the
+ * Free Software Foundation, Inc., 59 Temple Place - Suite 330,
+ * Boston, MA 02111-1307, USA.
+ */
+
+// MT19937 (Mersenne twister) generator (state = 1248 32 bit integers)   // !InTc!
+
+// Fortran interfaces for automated extraction
+#if defined(NEVER_TO_BE_TRUE)
+
+! void F_Ran_MT19937_new_stream(mt19937_state *clone, int *piSeed, int cSeed)                   !InTf!
+ interface                                                                                !InTf!
+   subroutine Ran_MT19937_new_stream(stream, clone, piSeed, cSeed) bind(C,name='F_Ran_MT19937_new_stream')  !InTf!
+   import :: RANDOM_STREAM,C_INT                                                          !InTf!
+   type(RANDOM_STREAM), intent(OUT) :: stream                                             !InTf!
+   type(RANDOM_STREAM), intent(IN) :: clone                                               !InTf!
+   integer(C_INT), intent(IN), value :: cSeed                                             !InTf!
+   integer(c_INT), dimension(cSeed), intent(IN) :: piSeed                                 !InTf!
+   end subroutine Ran_MT19937_new_stream                                                     !InTf!
+ end interface                                                                            !InTf!
+#endif
+
 #include <randomgeneric.h>
 
 #define MT_SIZE 624
@@ -30,78 +65,6 @@ typedef struct{
   unsigned int *mt;
   unsigned int *mt2;
 }mt19937_state ;                  // MT19937 generator stream control structure
-
-static void FillBuffer_MT19937_stream(mt19937_state *MT19937);
-
-static mt19937_state mt19937 = {
-  (REFILLBUFFUN) FillBuffer_MT19937_stream, 
-  (RANSETSEEDFUN) RanSetSeed_MT19937_stream, 
-  (IRANFUN) IRan_MT19937_stream, 
-  (DRANFUN) DRan_MT19937_stream, 
-  (DRANSFUN) DRanS_MT19937_stream, 
-  (IVECRANFUN) VecIRan_MT19937_stream, 
-  (DVECRANFUN) VecDRan_MT19937_stream, 
-  (DVECSRANFUN) VecDRanS_MT19937_stream, 
-  NULL, 
-  0,
-  0 , 
-  MT_SIZE,
-  NULL,
-  NULL };
-
-generic_state *Ran_MT19937_new_stream(generic_state *clone_in, unsigned int *piSeed, int cSeed)   // !InTc! // create and seed a new stream
-{
-  mt19937_state *source ;
-  mt19937_state *clone = (mt19937_state *)clone_in;
-  int i;
-
-  mt19937_state *new_state = (mt19937_state *) memalign(64,sizeof(mt19937_state)) ;
-
-  if(cSeed < 0 && piSeed==NULL){  // clone a stream (mostly used for testing)
-    source = clone ? clone : &mt19937;         // clone == NULL means clone default static state
-    if(source->mt == NULL){                    // static copy not allocated/initialized
-      source->mt = malloc(2 * sizeof(uint32_t) * MT_SIZE);
-      source->mt2 = source->mt + MT_SIZE;
-      RanSetSeed_MT19937_stream((generic_state *) source, piSeed, cSeed);
-       FillBuffer_MT19937_stream(source);
-    }
-    new_state->index = source->index ;
-    new_state->bufsz = source->bufsz ;
-    new_state->ngauss = source->ngauss ;
-    new_state->gauss = source->gauss ;
-    new_state->seed = source->seed ;
-    new_state->refill = source->refill ;
-    new_state->iran = source->iran ;
-    new_state->dran = source->dran ;
-    new_state->drans = source->drans ;
-    new_state->vec_iran = source->vec_iran ;
-    new_state->vec_dran = source->vec_dran ;
-    new_state->vec_drans = source->vec_drans ;
-    new_state->mt = malloc(2 * sizeof(uint32_t) * MT_SIZE);
-    new_state->mt2 = new_state->mt + MT_SIZE;
-    for (i=0 ; i<MT_SIZE ; i++) new_state->mt[i] = source->mt[i] ;
-    for (i=0 ; i<MT_SIZE ; i++) new_state->mt2[i] = source->mt2[i] ;
-  }else{
-    new_state->index = 0;
-    new_state->bufsz = MT_SIZE;
-    new_state->ngauss = 0;
-    new_state->gauss = NULL;
-    new_state->seed  = (RANSETSEEDFUN) RanSetSeed_MT19937_stream;
-    new_state->refill = (REFILLBUFFUN) FillBuffer_MT19937_stream;
-    new_state->iran   = (IRANFUN) IRan_MT19937_stream;
-    new_state->dran   = (DRANFUN) DRan_MT19937_stream;
-    new_state->drans  = (DRANSFUN) DRanS_MT19937_stream;
-    new_state->vec_iran  = (IVECRANFUN) VecIRan_MT19937_stream;
-    new_state->vec_dran  = (DVECRANFUN) VecDRan_MT19937_stream;
-    new_state->vec_drans = (DVECSRANFUN) VecDRanS_MT19937_stream;
-    new_state->mt = malloc(2 * sizeof(uint32_t) * MT_SIZE);
-    new_state->mt2 = new_state->mt + MT_SIZE;
-    RanSetSeed_MT19937_stream((generic_state *) new_state, piSeed, cSeed);  // seed the new stream
-    FillBuffer_MT19937_stream(new_state);                                   // fill state buffer
-  }
-
-  return ( (void *) new_state) ;
-}
 
 void RanSetSeed_MT19937_stream(generic_state *stream, unsigned int *piSeed, int cSeed)    // !InTc!  initial seed
 {
@@ -300,6 +263,81 @@ void VecDRanS_MT19937_stream(generic_state *stream, double *ranbuf, int n)  // !
     }
   }
 }
+
+static mt19937_state mt19937 = {
+  (REFILLBUFFUN) FillBuffer_MT19937_stream, 
+  (RANSETSEEDFUN) RanSetSeed_MT19937_stream, 
+  (IRANFUN) IRan_MT19937_stream, 
+  (DRANFUN) DRan_MT19937_stream, 
+  (DRANSFUN) DRanS_MT19937_stream, 
+  (IVECRANFUN) VecIRan_MT19937_stream, 
+  (DVECRANFUN) VecDRan_MT19937_stream, 
+  (DVECSRANFUN) VecDRanS_MT19937_stream, 
+  NULL, 
+  0,
+  0 , 
+  MT_SIZE,
+  NULL,
+  NULL };
+
+generic_state *Ran_MT19937_new_stream(generic_state *clone_in, unsigned int *piSeed, int cSeed)   // !InTc! // create and seed a new stream
+{
+  mt19937_state *source ;
+  mt19937_state *clone = (mt19937_state *)clone_in;
+  int i;
+
+  mt19937_state *new_state = (mt19937_state *) memalign(64,sizeof(mt19937_state)) ;
+
+  if(cSeed < 0 && piSeed==NULL){               // clone a stream (mostly used for testing)
+    source = clone ? clone : &mt19937;         // clone == NULL means clone default static state
+    if(source->mt == NULL){                    // static copy not allocated/initialized
+      source->mt = malloc(2 * sizeof(uint32_t) * MT_SIZE);
+      source->mt2 = source->mt + MT_SIZE;
+      RanSetSeed_MT19937_stream((generic_state *) source, piSeed, cSeed);
+       FillBuffer_MT19937_stream(source);
+    }
+    new_state->index = source->index ;
+    new_state->bufsz = source->bufsz ;
+    new_state->ngauss = source->ngauss ;
+    new_state->gauss = source->gauss ;
+    new_state->seed = source->seed ;
+    new_state->refill = source->refill ;
+    new_state->iran = source->iran ;
+    new_state->dran = source->dran ;
+    new_state->drans = source->drans ;
+    new_state->vec_iran = source->vec_iran ;
+    new_state->vec_dran = source->vec_dran ;
+    new_state->vec_drans = source->vec_drans ;
+    new_state->mt = malloc(2 * sizeof(uint32_t) * MT_SIZE);
+    new_state->mt2 = new_state->mt + MT_SIZE;
+    for (i=0 ; i<MT_SIZE ; i++) new_state->mt[i] = source->mt[i] ;
+    for (i=0 ; i<MT_SIZE ; i++) new_state->mt2[i] = source->mt2[i] ;
+  }else{
+    new_state->index = 0;
+    new_state->bufsz = MT_SIZE;
+    new_state->ngauss = 0;
+    new_state->gauss = NULL;
+    new_state->seed  = (RANSETSEEDFUN) RanSetSeed_MT19937_stream;
+    new_state->refill = (REFILLBUFFUN) FillBuffer_MT19937_stream;
+    new_state->iran   = (IRANFUN) IRan_MT19937_stream;
+    new_state->dran   = (DRANFUN) DRan_MT19937_stream;
+    new_state->drans  = (DRANSFUN) DRanS_MT19937_stream;
+    new_state->vec_iran  = (IVECRANFUN) VecIRan_MT19937_stream;
+    new_state->vec_dran  = (DVECRANFUN) VecDRan_MT19937_stream;
+    new_state->vec_drans = (DVECSRANFUN) VecDRanS_MT19937_stream;
+    new_state->mt = malloc(2 * sizeof(uint32_t) * MT_SIZE);
+    new_state->mt2 = new_state->mt + MT_SIZE;
+    RanSetSeed_MT19937_stream((generic_state *) new_state, piSeed, cSeed);  // seed the new stream
+    FillBuffer_MT19937_stream(new_state);                                   // fill state buffer
+  }
+
+  return ( (void *) new_state) ;
+}
+void F_Ran_MT19937_new_stream(statep *s, statep *c, unsigned int *piSeed, int cSeed)  // Fortran interface using derived type
+{
+  s->p = Ran_MT19937_new_stream( c->p, piSeed, cSeed);
+}
+
 #if defined(SELF_TEST)
 static uint32_t expected[] = {
   1791095845, 4282876139, 3093770124, 4005303368, 491263, 550290313,
