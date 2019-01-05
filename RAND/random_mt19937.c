@@ -48,10 +48,6 @@
 #define B30_0 0x7FFFFFFF
 #define MAGIC 0x9908b0df
 
-static int32_t MT[MT_SIZE];
-static int32_t MT2[MT_SIZE];
-static int32_t mt_index = 0;
-
 typedef struct{
   REFILLBUFFUN  refill;
   RANSETSEEDFUN seed;
