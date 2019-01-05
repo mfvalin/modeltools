@@ -17,6 +17,9 @@
  * Boston, MA 02111-1307, USA.
  */
 
+// derived from work by  Christian Stigen Larsen https://csl.name/
+// https://github.com/cslarsen/mersenne-twister
+
 // MT19937 (Mersenne twister) generator (state = 1248 32 bit integers)   // !InTc!
 
 // Fortran interfaces for automated extraction
