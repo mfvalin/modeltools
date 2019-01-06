@@ -730,6 +730,7 @@ static uint32_t doubled_reference_seed1[] = {
 int main()
 {
   uint32_t errors = 0;
+  uint32_t irbuf[1000000];
   int seed = 1;
   size_t n;
   int error;
@@ -764,6 +765,64 @@ int main()
   tt1 -= tt0;
   tt1 *= 1000;
   printf("tmp = %u, %f ns/sample\n",tmp,tt1/1000000);
+
+  gettimeofday(&t0,NULL);
+  for(i=0 ; i<1000000 ; i++) { tmp = IRan_MT19937_stream((generic_state *)state); }
+  gettimeofday(&t1,NULL);
+  tt0 = t0.tv_sec; tt0 *= 1000000 ; tt0 += t0.tv_usec;
+  tt1 = t1.tv_sec; tt1 *= 1000000 ; tt1 += t1.tv_usec;
+  tt1 -= tt0;
+  tt1 *= 1000;
+  printf("native, %f ns/sample\n",tmp,tt1/1000000);
+
+  VecIRan_generic_stream((generic_state *)state, irbuf,1000000);
+  gettimeofday(&t0,NULL);
+  for(i=0 ; i<100000 ; i++) { VecIRan_generic_stream((generic_state *)state, irbuf,10); }
+  gettimeofday(&t1,NULL);
+  tt0 = t0.tv_sec; tt0 *= 1000000 ; tt0 += t0.tv_usec;
+  tt1 = t1.tv_sec; tt1 *= 1000000 ; tt1 += t1.tv_usec;
+  tt1 -= tt0;
+  tt1 *= 1000;
+  printf("10   samples, %f ns/sample\n",tmp,tt1/1000000);
+
+  VecIRan_generic_stream((generic_state *)state, irbuf,1000000);
+  gettimeofday(&t0,NULL);
+  for(i=0 ; i<10000 ; i++) { VecIRan_generic_stream((generic_state *)state, irbuf,100); }
+  gettimeofday(&t1,NULL);
+  tt0 = t0.tv_sec; tt0 *= 1000000 ; tt0 += t0.tv_usec;
+  tt1 = t1.tv_sec; tt1 *= 1000000 ; tt1 += t1.tv_usec;
+  tt1 -= tt0;
+  tt1 *= 1000;
+  printf("100  samples, %f ns/sample\n",tmp,tt1/1000000);
+
+  VecIRan_generic_stream((generic_state *)state, irbuf,1000000);
+  gettimeofday(&t0,NULL);
+  for(i=0 ; i<1000 ; i++) { VecIRan_generic_stream((generic_state *)state, irbuf,1000); }
+  gettimeofday(&t1,NULL);
+  tt0 = t0.tv_sec; tt0 *= 1000000 ; tt0 += t0.tv_usec;
+  tt1 = t1.tv_sec; tt1 *= 1000000 ; tt1 += t1.tv_usec;
+  tt1 -= tt0;
+  tt1 *= 1000;
+  printf("1000 samples, %f ns/sample\n",tmp,tt1/1000000);
+
+  VecIRan_generic_stream((generic_state *)state, irbuf,1000000);
+  gettimeofday(&t0,NULL);
+  for(i=0 ; i<1 ; i++) { VecIRan_generic_stream((generic_state *)state, irbuf,1000000); }
+  gettimeofday(&t1,NULL);
+  tt0 = t0.tv_sec; tt0 *= 1000000 ; tt0 += t0.tv_usec;
+  tt1 = t1.tv_sec; tt1 *= 1000000 ; tt1 += t1.tv_usec;
+  tt1 -= tt0;
+  tt1 *= 1000;
+  printf("1M   samples, %f ns/sample\n",tmp,tt1/1000000);
+
+  gettimeofday(&t0,NULL);
+  for(i=0 ; i<10000 ; i++) { FillBuffer_MT19937_stream((mt19937_state *)state); }
+  gettimeofday(&t1,NULL);
+  tt0 = t0.tv_sec; tt0 *= 1000000 ; tt0 += t0.tv_usec;
+  tt1 = t1.tv_sec; tt1 *= 1000000 ; tt1 += t1.tv_usec;
+  tt1 -= tt0;
+  tt1 *= 1000;
+  printf("buffer fill rate = %f ns/buffer, %f ns/sample \n",tmp,tt1/(10000),tt1/(10000*MT_SIZE));
 //   printf("\nGenerating 64-bit pseudo-random numbers\n\n");
 //   for ( int n=0; n<27; ++n )
 //     printf("%20" PRIu64 "%c", rand_u64(), n % 3 == 2 ? '\n' : ' ');
