@@ -726,6 +726,7 @@ static uint32_t doubled_reference_seed1[] = {
 #include <sys/time.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <math.h>
 
 int main()
 {
@@ -735,9 +736,12 @@ int main()
   size_t n;
   int error;
   mt19937_state *state;
-  uint32_t i, tmp;
+  uint32_t i, j, tmp;
   struct timeval t0, t1;
   double tt0, tt1;
+  int postot, negtot, pos, neg;
+  uint32_t mask;
+  double dcount;
 
   state = (mt19937_state *) Ran_MT19937_new_stream(NULL, &seed, 1);
 
@@ -823,6 +827,22 @@ int main()
   tt1 -= tt0;
   tt1 *= 1000;
   printf("buffer fill rate = %f ns/buffer, %f ns/sample \n",tmp,tt1/(10000),tt1/(10000*MT_SIZE));
+
+  postot = 0 ; negtot = 0;
+  for (j=0 ; j<100 ; j++) {
+    VecIRan_generic_stream(state, irbuf, 1000000) ;
+    mask = 1 ;
+    while (mask) {
+      pos = 0 ; neg = 0 ; 
+      for( i=0 ; i < 1000000 ; i++) if(irbuf[i] & mask) pos++ ; else neg++  ; 
+      postot += pos ; negtot += neg ;
+      mask <<= 1 ;//  printf("%5d ",pos-neg) ;
+    }
+  }
+//   printf("%d\n",postot-negtot);
+  dcount = 32.0 * 100 * 1000000 ; dcount = sqrt(dcount) ;
+  printf("for 1E+3 x 1E+6 random MT19937 integer values, pos - neg = %d (%9.0f)\n",postot-negtot,dcount);
+
 //   printf("\nGenerating 64-bit pseudo-random numbers\n\n");
 //   for ( int n=0; n<27; ++n )
 //     printf("%20" PRIu64 "%c", rand_u64(), n % 3 == 2 ? '\n' : ' ');
