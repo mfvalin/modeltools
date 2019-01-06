@@ -723,6 +723,10 @@ static uint32_t doubled_reference_seed1[] = {
   /* n=4294967295 */ 3468780828
 };
 
+#include <sys/time.h>
+#include <stdio.h>
+#include <stdlib.h>
+
 int main()
 {
   uint32_t errors = 0;
@@ -730,10 +734,13 @@ int main()
   size_t n;
   int error;
   mt19937_state *state;
+  uint32_t i, tmp;
+  struct timeval t0, t1;
+  double tt0, tt1;
 
   state = (mt19937_state *) Ran_MT19937_new_stream(NULL, &seed, 1);
 
-  printf("Mersenne Twister -- printing the first %zu numbers w/seed %d\n\n",
+  printf("Mersenne Twister -- testing the first %zu numbers w/seed %d\n\n",
     sizeof(expected)/sizeof(expected[0]), seed);
 
   for ( n=0; n<sizeof(expected)/sizeof(expected[0]); ++n ) {
@@ -742,12 +749,21 @@ int main()
     error = r != expected[n];
     if ( error ) ++errors;
 
-    printf("%10u%c%c", r,
-      error? '*' : ' ',
-      n % 10 == 9 ? '\n' : ' ');
-    fflush(stdout);
+//     printf("%10u%c%c", r,
+//       error? '*' : ' ',
+//       n % 10 == 9 ? '\n' : ' ');
+//     fflush(stdout);
   }
+  printf("\nFound %u incorrect numbers\n\n", errors);
 
+  gettimeofday(&t0,NULL);
+  for(i=0 ; i<1000000 ; i++) { tmp = IRan_generic_stream((generic_state *)state); }
+  gettimeofday(&t1,NULL);
+  tt0 = t0.tv_sec; tt0 *= 1000000 ; tt0 += t0.tv_usec;
+  tt1 = t1.tv_sec; tt1 *= 1000000 ; tt1 += t1.tv_usec;
+  tt1 -= tt0;
+  tt1 *= 1000;
+  printf("tmp = %u, %f ns/sample\n",tmp,tt1/1000000);
 //   printf("\nGenerating 64-bit pseudo-random numbers\n\n");
 //   for ( int n=0; n<27; ++n )
 //     printf("%20" PRIu64 "%c", rand_u64(), n % 3 == 2 ? '\n' : ' ');
@@ -779,7 +795,6 @@ int main()
 //     ++idx;
 //   }
 
-  printf("\nFound %u incorrect numbers\n\n", errors);
   return errors > 0;
 }
 
