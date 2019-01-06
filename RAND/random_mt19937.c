@@ -69,7 +69,7 @@ typedef struct{
   unsigned int *mt2;
 }mt19937_state ;                  // MT19937 generator stream control structure
 
-// only one value needed for seeding
+// only one value is needed for seeding, cSeed only needs to be positive
 void RanSetSeed_MT19937_stream(generic_state *stream, unsigned int *piSeed, int cSeed)    // !InTc!  initial seed
 {
   mt19937_state *mt19937 = (mt19937_state *) stream;
@@ -117,7 +117,7 @@ void RanSetSeed_MT19937_stream(generic_state *stream, unsigned int *piSeed, int 
   }
 }
 
-static void FillBuffer_MT19937_stream(mt19937_state *stream)
+static void FillBuffer_MT19937_stream(mt19937_state *stream)  // all for loops are vectorizable
 {
   mt19937_state *MT19937 = (mt19937_state *) stream;
   uint32_t i, y, t, v;
