@@ -59,19 +59,28 @@ typedef struct{
 static void FillBuffer_XSR128_stream(generic_state *stream){ }
 
 static void jump128(uint64_t *s);
+
+// 4 32 bit quantities are needed for seeding. 
+// if cSeed > 4, only the first 4 values will be used
+// if cSeed is negative, this is interpreted as a jump ahead in the sequence call
 void RanSetSeed_XSR128_stream(generic_state *stream, unsigned int *piSeed, int cSeed)  // !InTc!
 {
   xsr128_state *state = (xsr128_state *) stream ; 
-  if(cSeed == -64) {
+  if(cSeed < 0) {            // jump call
     jump128(state->s);
+    state->part128 = 0 ;     // force "no residual" condition
+    state->res128 = 0;
     return;
   }
-  if(piSeed == NULL || cSeed == 0) return ; // null call, nothing to do
-  if(cSeed == 4) { 
+  if(cSeed >= 4 && piSeed != NULL) {   // enough bits to seed
     state->s[0] = piSeed[0] ;  state->s[0] = (state->s[0] << 32) | piSeed[1] ;
     state->s[1] = piSeed[2] ;  state->s[1] = (state->s[1] << 32) | piSeed[3] ;
+  }else{
+    state->s[0] = 123456;
+    state->s[1] = 456789;
   }
-  state->s[0] = (unsigned int) *piSeed ;
+  state->part128 = 0 ;       // force "no residual" condition
+  state->res128 = 0;
 }
 
 static inline uint64_t advance128(uint64_t *s) {
@@ -238,8 +247,6 @@ static xsr128_state XSR128 = {
   {123456, 456789 },
   0 } ;
 
-// #define XSR128 (jz=jsr, jsr^=(jsr<<13), jsr^=(jsr>>17), jsr^=(jsr<<5),jz+jsr)
-
 void *Ran_XSR128_new_stream(void *clone_in, unsigned int *piSeed, int cSeed)   // !InTc! // create and seed a new stream
 {
   xsr128_state *source ;
@@ -289,6 +296,7 @@ void F_Ran_XSR128_new_stream(statep *s, statep *c, unsigned int *piSeed, int cSe
 
 #if defined(SELF_TEST)
 #include <mpi.h>
+#include <math.h>
 int main(int argc, char **argv){
   unsigned int lr;
   int i, j;
@@ -303,11 +311,12 @@ int main(int argc, char **argv){
   int gaussdist[10];
   int index;
   generic_state *xsr128;
-  unsigned int piSeed = 123456789;
+  unsigned int piSeed[4] = {123456, 234567, 345678, 456789 };
+  double dcount;
 
   MPI_Init(&argc,&argv);
 
-  xsr128 = Ran_XSR128_new_stream(NULL, &piSeed, 1);
+  xsr128 = Ran_XSR128_new_stream(NULL, piSeed, 4);
 
   for(i=0 ; i<1200000 ; i++) ranbuf[i] = 0;
   for(i=0 ; i<1200000 ; i++) ranbuf2[i] = 0.0;
@@ -357,7 +366,8 @@ int main(int argc, char **argv){
     }
   }
 //   printf("%d\n",postot-negtot);
-  printf("time for 1E+3 x 1E+6 random XSR128 integer values = %6.3f , pos - neg = %d\n",t1-t0,postot-negtot);
+  dcount = 32.0 * 100 * 1000000 ; dcount = sqrt(dcount) ;
+  printf("time for 1E+3 x 1E+6 random XSR128 integer values = %6.3f , pos - neg = %d (%9.0f)\n",t1-t0,postot-negtot,dcount);
 
   for( i=0 ; i < 10 ; i++) VecDRan_generic_stream(xsr128, ranbuf2, 1000000) ;
   MPI_Barrier(MPI_COMM_WORLD);
