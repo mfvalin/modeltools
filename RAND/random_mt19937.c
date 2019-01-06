@@ -125,14 +125,14 @@ static void FillBuffer_MT19937_stream(mt19937_state *stream)
   int32_t *MT = MT19937->mt;
   int32_t *MT2 = MT19937->mt2;
 
-  for(i=0 ; i<MT_DIFF ; i++){            // 0 - 396
+  for(i=0 ; i<MT_DIFF ; i++){             // 0 - 226
     y = (MT[i] & BIT31) | (MT[i+1] & B30_0);
     v = MT[i+MT_PERIOD] ^ (y >> 1);
     t = (0 - (y & 1)) & MAGIC ;           //     t = MATRIX[odd(y)]
     MT[i] = v ^ t;
   }
 
-  for(i=MT_DIFF ; i<MT_SIZE-1 ; i++){     // 397 - 622
+  for(i=MT_DIFF ; i<MT_SIZE-1 ; i++){     // 227 - 622
     y = (MT[i] & BIT31) | (MT[i+1] & B30_0);
     v = MT[i-MT_DIFF] ^ (y >> 1);
     t = (0 - (y & 1)) & MAGIC ;           //     t = MATRIX[odd(y)]
