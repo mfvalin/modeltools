@@ -4,6 +4,8 @@ SOURCES = randomgeneric.c random_gaussian.c   random_mt19937.c  random_r250.c  \
 
 all: ftest ctest
 
+self_tests: random_r250.Abs random_mt19937.Abs random_shr3.Abs random_xsr128.Abs random_xsr128r.Abs
+
 interfaces: randomfunctions.h randomfunctions.inc
 
 randomfunctions.h: ${SOURCES}
@@ -28,6 +30,31 @@ librandom.a: randomfunctions.h ${SOURCES}
 	s.cc -O3 -c ${SOURCES}
 	ar rcv librandom.a *.o
 	rm -f *.o
+
+random_r250.Abs: random_r250.c
+	s.cc -mpi -O2 -ftree-vectorize -mfma -mavx2 -DSELF_TEST $< -L. -lrandom -o $@
+	./$@
+	rm $@
+
+random_mt19937.Abs: random_mt19937.c
+	s.cc -mpi -O2 -ftree-vectorize -mfma -mavx2 -DSELF_TEST $< -L. -lrandom -o $@
+	./$@
+	rm $@
+
+random_shr3.Abs: random_shr3.c
+	s.cc -mpi -O2 -ftree-vectorize -mfma -mavx2 -DSELF_TEST $< -L. -lrandom -o $@
+	./$@
+	rm $@
+
+random_xsr128.Abs: random_xsr128.c
+	s.cc -mpi -O2 -ftree-vectorize -mfma -mavx2 -DSELF_TEST $< -L. -lrandom -o $@
+	./$@
+	rm $@
+
+random_xsr128r.Abs: random_xsr128r.c
+	s.cc -mpi -O2 -ftree-vectorize -mfma -mavx2 -DSELF_TEST $< -L. -lrandom -o $@
+	./$@
+	rm $@
 
 clean:
 	rm -f ctest ftest *.o *.a
