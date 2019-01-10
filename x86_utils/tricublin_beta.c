@@ -600,7 +600,7 @@ int main(int argc, char **argv){
   float *p3 = a3;
   int nijk = NI*NJ*NK - 5*NI*NJ;
   int II, JJ, KK;
-  pxpypz posxyz[NI*NK*NK];
+  pxpypz posxyz[NI*NJ*NK];
   pxpypz *ptrxyz;
   double posz[NK];
   ztab *lv;
@@ -695,7 +695,8 @@ int main(int argc, char **argv){
       }
     }
   }
-  npts = NK * (NI-3) * (NJ-3);
+  npts = NK * (NI-3) * (NJ-3); // npts /=2.295; npts = 2167503;
+  printf("npts = %d, ninjnk = %d\n",npts,NK*NI*NJ);
   for(i=0 ; i<npts ; i++) dest[i] = -1.0;
   tt0 = rdtscp_();
   Tricublin_zyx1_n(dest,a1,posxyz,lv,npts);
