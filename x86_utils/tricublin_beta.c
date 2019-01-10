@@ -584,6 +584,7 @@ int main(int argc, char **argv){
   float a2[NI*NJ*NK];
   float a3[NI*NJ*NK];
   float dest[3*NI*NJ*NK];
+  float *destp;
   float mi[3];
   float ma[3];
   float lin[3];
@@ -601,12 +602,15 @@ int main(int argc, char **argv){
   int nijk = NI*NJ*NK - 5*NI*NJ;
   int II, JJ, KK;
   pxpypz posxyz[NI*NJ*NK];
+  double expected[NI*NJ*NK];
   pxpypz *ptrxyz;
+  double *answer = expected;
   double posz[NK];
   ztab *lv;
   float e0, e1, e2;
+  double e8;
   uint64_t tt0, tt1;
-  int npts;
+  int npts, exact;
 
   ptrxyz = posxyz;
   for (k=0 ; k<NK ; k++ ){
@@ -685,13 +689,16 @@ int main(int argc, char **argv){
   e0 = fxyz(II + dx, JJ + dy, KK + dz) ; e1 = e0+10 ; e2 = e0+100;
   printf("Linear top extrap case  :\ngot %12.7g, %12.7g, %12.7g, result/expected = %10.8f %10.8f %10.8f\n",dest[0],dest[1],dest[2],dest[0]/e0,dest[1]/e1,dest[2]/e2);
 
+  answer = expected;
   for (k=0 ; k<NK ; k++ ){
     for (j=1 ; j<NJ-2 ; j++ ){
       for (i=1 ; i<NI-2 ; i++ ){
-        ptrxyz->px = i+.5;
-        ptrxyz->py = j+.5;
-        ptrxyz->pz = k+.5;
+        ptrxyz->px = i+dx+1;
+        ptrxyz->py = j+dy+1;
+        ptrxyz->pz = k+dz+1;
+        *answer = fxyz(ptrxyz->px,ptrxyz->py,ptrxyz->pz);
         ptrxyz++;
+        answer++;
       }
     }
   }
@@ -703,6 +710,21 @@ int main(int argc, char **argv){
   tt1 = rdtscp_();
   tt1 = tt1 - tt0;
   printf("cycles per interpolation = %f\n",tt1 / (1.0*npts));
+
+//   npts = 10;
+  e0 = 0.0;
+  e8 = 0.0;
+  exact = 0;
+  for(i=0 ; i<npts ; i++){
+    if(i%300000 == 0) printf("expected %12.7g, got %12.7g\n",expected[i],dest[i]);
+    e1 = 1.0 - (dest[i]/expected[i]);
+    if(e1 < 0) e1 = -e1;
+    if(e1 == 0)exact++;
+    e8 += e1;
+    if(e1 > e0) e0 = e1;
+  }
+  e1 = npts ; e1 = (exact / e1) * 100.0;
+  printf("worst case error : %12.7g, avg error : %12.7g, exact : %8.2f percent\n",e0,e8/npts,e1);
   printf("END\n");
 }
 #endif
