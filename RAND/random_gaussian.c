@@ -1,21 +1,26 @@
-/* 
- * Copyright (C) 2019 Recherche en Prevision Numerique
- * 
- * This is free software; you can redistribute it and/or
- * modify it under the terms of the GNU Lesser General Public
- * License as published by the Free Software Foundation,
- * version 2.1 of the License.
- *
- * This software is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
- * Lesser General Public License for more details.
- *
- * You should have received a copy of the GNU Lesser General Public
- * License along with this software; if not, write to the
- * Free Software Foundation, Inc., 59 Temple Place - Suite 330,
- * Boston, MA 02111-1307, USA.
- */
+/*==========================================================================
+ *               ORIGINAL Copyright before modifications                    */
+/*==========================================================================
+ *  This code is Copyright (C) 2005, Jurgen A. Doornik.
+ *  Permission to use this code for non-commercial purposes
+ *  is hereby given, provided proper reference is made to:
+ *  Doornik, J.A. (2005), "An Improved Ziggurat Method to Generate Normal
+ *      Random Samples", mimeo, Nuffield College, University of Oxford,
+ *      and www.doornik.com/research.
+ *   or the published version when available.
+ *  This reference is still required when using modified versions of the code.
+ *  This notice should be maintained in modified versions of the code.
+ *  No warranty is given regarding the correctness of this code.
+ *==========================================================================*/
+
+/*==========================================================================
+Amendment 2017-02-22:
+Jurgen A Doornik gives permission to any branch of the government of Canada 
+to use his random number and ziggurat code and any derivatives 
+for any purpose, whether commercial or not.
+ *==========================================================================*/
+
+
 // gaussian generator using the "ziggurat" method (uses one of the linear integer generators)   // !InTc!
 // 128 or 256 boxes (use internal buffer for 320 32 bit integers)   // !InTc!
 
