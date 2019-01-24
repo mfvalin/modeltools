@@ -345,17 +345,41 @@ static inline void Tricublin_zyxf1_inline(float *d, float *f1, double *pxyz, int
 #endif
 }
 
+// Fortran dimensions: d(n) , f1(*), pxyz(3,n), lv(*)
+// d       : results
+// f1      : source array (dimensions found in opaque object lv)
+//           first index along each dimension assumed to be 1
+// pxyz    : positions along x, y, z , in "index" space
+// lv      : opaque object containing vertical description (see Vsearch_setup)
+// n       : number of points
+#if defined(NEVER_TO_BE_TRUE)
+  interface                                                                      !InTf!
+    subroutine tricublin_zyx1_n(d,f1,pxyy,lv,n) bind(C,name='Tricublin_zyx1_n')  !InTf!
+      import :: C_PTR                                                            !InTf!
+      real, dimension(n), intent(OUT)   :: d                                     !InTf!
+      real, dimension(*), intent(IN)    :: f1                                    !InTf!
+      real, dimension(3,n), intent(IN)  :: pxyz                                  !InTf!
+      type(C_PTR), intent(IN), value    :: lv                                    !InTf!
+      integer, intent(IN), value        :: n                                     !InTf!
+    end subroutine tricublin_zyx1_n                                              !InTf!
+  end interface                                                                  !InTf!
+#endif
+
 // process n points
-// for each point use 1 value from ixyz, 24 values from pxyz
+// for each point 1 value from ixyz, 3 values from pxyz are used (1 element)
+// it is ASSUMED that along X and Y interpolation will always be CUBIC 
+// ( 2 <= px < "ni"-1 ) ( 2 <= py < "nj"-1 )
+// pz < 2 and pz >= nk - 1 will induce linear interpolation or extrapolation
 void Tricublin_zyx1_n(float *d, float *f1, pxpypz *pxyz,  ztab *lv, int n){
-  double cxyz[12];
-  int ixyz;
-  int zlinear;
+  double cxyz[12];   // interpolation coefficients 4 for each dimension (x, y, z)
+  int ixyz;          // unilinear index into array f1 (collapsed dimensions)
+  int zlinear;       // non zero if linear interpolation
+                     // all above computed in Vcoef_pxyz4, used in Tricublin_zyxf1
   while(n--){
-    zlinear = Vcoef_pxyz4_inline(cxyz, &ixyz, pxyz->px, pxyz->py, pxyz->pz, lv);
-    Tricublin_zyxf1_inline(d, f1 + ixyz, cxyz, lv->ni, lv->nij, zlinear);
+    zlinear = Vcoef_pxyz4_inline(cxyz, &ixyz, pxyz->px, pxyz->py, pxyz->pz, lv);  // compute coefficients
+    Tricublin_zyxf1_inline(d, f1 + ixyz, cxyz, lv->ni, lv->nij, zlinear);         // interpolate
     d++;         // next result
-    pxyz += 1;  // next set of coefficients
+    pxyz += 1;   // next set of positions
   }
 }
 // Fortran dimensions: d(3) , f(3,NI,NJ,NK)
