@@ -17,6 +17,68 @@
 ! Free Software Foundation, Inc., 59 Temple Place - Suite 330,
 ! Boston, MA 02111-1307, USA.
 !
+!-------------------------------------------------------------------------
+!
+! un peu de geometrie basee sur les relations entre "triangles semblables"
+!
+!                     (x1,y1)*---------*(x0,y1)                  *(X1,Y1)
+!                             \        |                        /|
+!                              \       |                       / |
+!                               \      |                      /  |
+!             ymax  +------------*-----*--------------------+/   |
+!                   |      (x2,y2)\    |(x0,y2)      (X2,Y2)*----*(X1,Y2)
+!                   |              \   |                   /|    |
+!                   |               \  |                  / |    |
+!                   |                \ |                 /  |    |
+!                   |                 \|                /   |    |
+!                   |                  *(x0,y0)        /    |    |
+!                   |                                 /     |    |
+!                   |                         (X0,Y0)*------*----*(X1,Y0)
+!                   |                                       |(X2,Y0)
+!                   |                                       |
+!                   |                                       |
+!                   |                                       |
+!                   |                                       |
+!             ymin  +---------------------------------------+
+!                   xmin                                 xmax
+!
+!  pour le segment de droite (x0,y0) ---> (x1,y1)
+!
+!  point d'intersection (x2,y2): (intersection avec y = constante)
+!
+!                 y2 = constante y (ymin ou ymax)
+!
+!                 (x1-x0)   (y1-y0)
+!                 ------- = -------
+!                 (x2-x0)   (y2-y0)  (y2 = ymax ou ymin selon le cas)
+!
+!         donc    x2 = x0 + (x1-x0)/(y1-y0) * (y2-y0)
+!
+!  pour le segment de droite (X0,Y0) ---> (X1,Y1)
+!
+!  point d'intersection (X2,Y2): (intersection avec x = constante)
+!
+!                 X2 = constante x (xmin ou xmax)
+!
+!                 (X1-X0)   (Y1-Y0)
+!                 ------- = -------
+!                 (X2-X0)   (Y2-Y0)  (X2 = xmax ou xmin selon le cas)
+!
+!         donc    Y2 = Y0 + (Y1-Y0)/(X1-X0) * (X2-X0)
+!
+! recette:
+!
+! (x2,y2) = (x1,y1) , on suppose que (x2,y2) est dans la fenetre
+!
+! si le point (x1,y1) est au "nord" ou au "sud" de la fenetre
+!   on calcule l'intersection (x2,y2) (y2 = ymin ou ymax)
+!
+! si x2 est a l'exterieur de l'intervalle xmin --- xmax
+!   on passe au cas "est" ou "ouest"
+!   on calcule l'intersection (X2,Y2)  (X2 = xmin ou xmax)
+!
+! et dans ce cas, on est sur que Y2 sera dans l'intervalle (ymin --- ymax)
+!
 function boundary_clip_point(p0,p1,p2,l) result(clipped)
   use ISO_C_BINDING
   implicit none
