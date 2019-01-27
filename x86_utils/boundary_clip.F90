@@ -191,6 +191,7 @@ subroutine boundary_clip_coord_n2(p0,p1,p2,l,clipped,n)
   enddo
 end subroutine boundary_clip_coord_n2
 
+#if defined(SELF_TEST)
 program test
   implicit none
   type :: point
@@ -257,3 +258,4 @@ program test
   print *,clippen,a2
   print *,""
 end program
+#endif
