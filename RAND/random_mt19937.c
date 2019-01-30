@@ -53,16 +53,7 @@
 #define MAGIC 0x9908b0df
 
 typedef struct{
-  REFILLBUFFUN  refill;
-  RANSETSEEDFUN seed;
-  IRANFUN       iran;
-  DRANFUN       dran;
-  DRANSFUN      drans;
-  IVECRANFUN    vec_iran;
-  DVECRANFUN    vec_dran;
-  DVECSRANFUN   vec_drans;
-  unsigned int *gauss;
-  int ngauss;
+  GENERIC_STATE
   int index;
   int bufsz;
   unsigned int *mt;
@@ -277,6 +268,8 @@ static mt19937_state mt19937 = {
   (IVECRANFUN) VecIRan_MT19937_stream, 
   (DVECRANFUN) VecDRan_MT19937_stream, 
   (DVECSRANFUN) VecDRanS_MT19937_stream, 
+  NULL, 
+  -1,
   NULL, 
   0,
   0 , 

@@ -41,16 +41,7 @@
 /*------------------------ start of SHR3 routines --------------------------*/
 
 typedef struct{
-  REFILLBUFFUN  refill;
-  RANSETSEEDFUN seed;
-  IRANFUN       iran;
-  DRANFUN       dran;
-  DRANSFUN      drans;
-  IVECRANFUN    vec_iran;
-  DVECRANFUN    vec_dran;
-  DVECSRANFUN   vec_drans;
-  unsigned int *gauss;
-  int ngauss;
+  GENERIC_STATE
   unsigned long jsr;
 } shr3_state;                  // SHR3 generator stream control structure
   
@@ -171,6 +162,8 @@ static shr3_state SHR3 = {
   (IVECRANFUN) VecIRan_SHR3_stream, 
   (DVECRANFUN) VecDRan_SHR3_stream, 
   (DVECSRANFUN) VecDRanS_SHR3_stream, 
+  NULL, 
+  -1,
   NULL, 
   0,
   123456789 } ;

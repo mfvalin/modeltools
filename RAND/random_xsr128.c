@@ -41,16 +41,7 @@
 /*------------------------ start of XSR128 routines --------------------------*/
 
 typedef struct{
-  REFILLBUFFUN  refill;
-  RANSETSEEDFUN seed;
-  IRANFUN       iran;
-  DRANFUN       dran;
-  DRANSFUN      drans;
-  IVECRANFUN    vec_iran;
-  DVECRANFUN    vec_dran;
-  DVECSRANFUN   vec_drans;
-  unsigned int *gauss;
-  int32_t ngauss;
+  GENERIC_STATE
   uint32_t part128;
   uint64_t s[2];
   uint64_t res128;
@@ -241,6 +232,8 @@ static xsr128_state XSR128 = {
   (IVECRANFUN) VecIRan_XSR128_stream, 
   (DVECRANFUN) VecDRan_XSR128_stream, 
   (DVECSRANFUN) VecDRanS_XSR128_stream, 
+  NULL, 
+  -1,
   NULL, 
   0,
   0,

@@ -114,16 +114,7 @@
 // as defined in file randomgeneric.h
 // the extra elements are specific to THIS generator type
 typedef struct{
-  REFILLBUFFUN  refill;
-  RANSETSEEDFUN seed;
-  IRANFUN       iran;
-  DRANFUN       dran;
-  DRANSFUN      drans;
-  IVECRANFUN    vec_iran;
-  DVECRANFUN    vec_dran;
-  DVECSRANFUN   vec_drans;
-  unsigned int *gauss;
-  int ngauss;
+  GENERIC_STATE
   int index;                   // index into internal state buffer
   unsigned int buffer[251];    // internal state (250 32 bit integers + 1 pad)
 }r250_state ;                  // R250 generator stream control structure
@@ -335,6 +326,8 @@ static r250_state r250 = {
   (IVECRANFUN) VecIRan_R250_stream, 
   (DVECRANFUN) VecDRan_R250_stream, 
   (DVECSRANFUN) VecDRanS_R250_stream, 
+  NULL,
+  -1,
   NULL, 
   0,
   0 , 
