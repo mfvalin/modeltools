@@ -96,7 +96,8 @@ ztab *Vsearch_setup(double *targets, int nk, int ni, int nj){
     return NULL;
   }
   for(i=0 ; i<nk  ; i++) { lv->z[i] = targets[i] ; }   // z coordinate table
-
+  
+// for(i=0 ; i<nk  ; i++) { printf("%12.7f ",lv->z[i]) ; } ; printf("\n");
   // denominators for Lagrange cubic polynomials coefficients ( entries 1 to n-2 make sense )
   // entries 0 and n-1 are fudged
   lv->ocz = malloc(4 * nk * sizeof(double));
@@ -119,7 +120,7 @@ ztab *Vsearch_setup(double *targets, int nk, int ni, int nj){
   return lv;             // return pointer to filled table
 }
 
-static inline int Vcoef_pxyz4_inline(double *cxyz, int *offset, double px8, double py8, double pz8, ztab *lv){
+static inline int Vcoef_pxyz4_inline(double *cxyz, int *offset, float px8, float py8, float pz8, ztab *lv){
   int ix, iy, iz, ijk, zlinear;
   double pxy[2], *base, *pos;
   double zza, zzb, zzc, zzd, zzab, zzcd, dz, px, py, pz;
@@ -385,6 +386,7 @@ void Tricublin_zyx1_n(float *d, float *f1, pxpypz *pxyz,  ztab *lv, int n){
   int ixyz;          // unilinear index into array f1 (collapsed dimensions)
   int zlinear;       // non zero if linear interpolation
                      // all above computed in Vcoef_pxyz4, used in Tricublin_zyxf1
+/*printf*/("%12.7f %12.7f %12.7f\n",pxyz->px, pxyz->py, pxyz->pz);
   while(n--){
     zlinear = Vcoef_pxyz4_inline(cxyz, &ixyz, pxyz->px, pxyz->py, pxyz->pz, lv);  // compute coefficients
     Tricublin_zyxf1_inline(d, f1 + ixyz, cxyz, lv->ni, lv->nij, zlinear);         // interpolate
