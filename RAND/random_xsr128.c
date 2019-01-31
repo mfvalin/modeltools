@@ -234,6 +234,7 @@ static xsr128_state XSR128 = {
   (DVECSRANFUN) VecDRanS_XSR128_stream, 
   NULL, 
   -1,
+  -1,
   NULL, 
   0,
   0,

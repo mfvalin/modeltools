@@ -164,6 +164,7 @@ static shr3_state SHR3 = {
   (DVECSRANFUN) VecDRanS_SHR3_stream, 
   NULL, 
   -1,
+  -1,
   NULL, 
   0,
   123456789 } ;

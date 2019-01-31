@@ -69,8 +69,9 @@ typedef struct{                // mimic Fortran derived type (wrapped pointer to
   IVECRANFUN    vec_iran; \
   DVECRANFUN    vec_dran; \
   DVECSRANFUN   vec_drans; \
-  uint32_t      *gbuf; \
-  int32_t       gcur; \
+  uint32_t      *buf; \
+  int32_t       cur; \
+  int32_t       top; \
   unsigned int *gauss; \
   int ngauss;
 
