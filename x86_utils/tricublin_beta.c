@@ -21,7 +21,7 @@
 #include <stdint.h>
 
 #if defined(TIMING)
-uint64_t rdtscp_(void) {   // version "in order" avec "serialization"
+static uint64_t rdtscp_(void) {   // version "in order" avec "serialization"
   uint32_t lo, hi;
   __asm__ volatile ("rdtscp"
       : /* outputs */ "=a" (lo), "=d" (hi)
@@ -69,6 +69,16 @@ static inline void denominators(double *r, double a, double b, double c, double 
   r[3] = 1.0 / TRIPRD(d,a,b,c);
 }
 
+#if defined(NEVER_TO_BE_TRUE)
+  interface                                                                      !InTf!
+    function vsearch_setup(levels, nk, ni, nj) result (ztab) bind(C,name='Vsearch_setup')     !InTf!
+      import :: C_PTR, C_DOUBLE, C_INT                                           !InTf!
+      real(C_DOUBLE), dimension(nk), intent(IN) :: levels                        !InTf!
+      integer(C_INT), intent(IN), value :: nk, ni, nj                            !InTf!
+      type(C_PTR) :: ztab                                                        !InTf!
+    end function vsearch_setup                                                   !InTf!
+  end interface                                                                  !InTf!
+#endif
 // allocate lookup table set and
 // return pointer to filled table set
 // targets are expected to be positive, and monotonically increasing
@@ -354,7 +364,7 @@ static inline void Tricublin_zyxf1_inline(float *d, float *f1, double *pxyz, int
 // n       : number of points
 #if defined(NEVER_TO_BE_TRUE)
   interface                                                                      !InTf!
-    subroutine tricublin_zyx1_n(d,f1,pxyy,lv,n) bind(C,name='Tricublin_zyx1_n')  !InTf!
+    subroutine tricublin_zyx1_n(d,f1,pxyz,lv,n) bind(C,name='Tricublin_zyx1_n')  !InTf!
       import :: C_PTR                                                            !InTf!
       real, dimension(n), intent(OUT)   :: d                                     !InTf!
       real, dimension(*), intent(IN)    :: f1                                    !InTf!
@@ -396,7 +406,7 @@ void Tricublin_zyx1_n(float *d, float *f1, pxpypz *pxyz,  ztab *lv, int n){
 // should both interpolations have to be done, planes 1 and 2 can be used for the z linear case,
 // and planes 0, 1, 2, 3 for the z cubic case
 // in that case another mechanism will have to be used to signal the z linear case
-static void Tricublin_zyx3f_beta(float *d, float *f, double *px, double *py, double *pz, int NI, int NINJ){
+static inline void Tricublin_zyx3f_beta(float *d, float *f, double *px, double *py, double *pz, int NI, int NINJ){
   int ni = 3*NI;
   int ninj = 3*NINJ;
   int ninjl;    // ninj (cubic along z) or 0 (linear along z)
