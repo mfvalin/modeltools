@@ -59,16 +59,35 @@ typedef struct{                // mimic Fortran derived type (wrapped pointer to
   void *p;
 } statep;
 
+#define GBUFMAX 1024
+#define GENERIC_STATE \
+  REFILLBUFFUN  refill; \
+  RANSETSEEDFUN seed; \
+  IRANFUN       iran; \
+  DRANFUN       dran; \
+  DRANSFUN      drans; \
+  IVECRANFUN    vec_iran; \
+  DVECRANFUN    vec_dran; \
+  DVECSRANFUN   vec_drans; \
+  uint32_t      *buf; \
+  int32_t       cur; \
+  int32_t       top; \
+  unsigned int *gauss; \
+  int ngauss;
+
 // REFILLBUFFUN to DVECSRANFUN are pointers to a specific function for a specific generator
 typedef struct{
-  REFILLBUFFUN  refill;       // buffer refill
-  RANSETSEEDFUN seed;         // set seed
-  IRANFUN       iran;         // generate a single 32 bit random integer value
-  DRANFUN       dran;         // generate a single 64 bit random float value ( 0.0 -> 1.0)
-  DRANSFUN      drans;        // generate a single 64 bit random float value (-1.0 -> 1.0)
-  IVECRANFUN    vec_iran;     // generate a vector of 32 bit random integer values
-  DVECRANFUN    vec_dran;     // generate a vector of 64 bit random float values ( 0.0 -> 1.0)
-  DVECSRANFUN   vec_drans;    // generate a vector of 64 bit random float values (-1.0 -> 1.0)
-  unsigned int *gauss;        // pointer to the buffer used by the gaussian generator
-  int ngauss;                 // used by the gaussian generator
+  GENERIC_STATE
+//   REFILLBUFFUN  refill;       // buffer refill
+//   RANSETSEEDFUN seed;         // set seed
+//   IRANFUN       iran;         // generate a single 32 bit random integer value
+//   DRANFUN       dran;         // generate a single 64 bit random float value ( 0.0 -> 1.0)
+//   DRANSFUN      drans;        // generate a single 64 bit random float value (-1.0 -> 1.0)
+//   IVECRANFUN    vec_iran;     // generate a vector of 32 bit random integer values
+//   DVECRANFUN    vec_dran;     // generate a vector of 64 bit random float values ( 0.0 -> 1.0)
+//   DVECSRANFUN   vec_drans;    // generate a vector of 64 bit random float values (-1.0 -> 1.0)
+//   uint32_t      *gbuf;        // generic token buffer (must be >= size of largest generator state
+//   int32_t      gcur;          // index into gbuf
+//   unsigned int *gauss;        // pointer to the buffer used by the gaussian generator
+//   int ngauss;                 // used by the gaussian generator
 } generic_state;              // generic part, IDENTICAL at start of ALL stream control structures

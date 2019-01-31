@@ -114,18 +114,9 @@
 // as defined in file randomgeneric.h
 // the extra elements are specific to THIS generator type
 typedef struct{
-  REFILLBUFFUN  refill;
-  RANSETSEEDFUN seed;
-  IRANFUN       iran;
-  DRANFUN       dran;
-  DRANSFUN      drans;
-  IVECRANFUN    vec_iran;
-  DVECRANFUN    vec_dran;
-  DVECSRANFUN   vec_drans;
-  unsigned int *gauss;
-  int ngauss;
-  int index;                   // index into internal state buffer
-  unsigned int buffer[251];    // internal state (250 32 bit integers + 1 pad)
+  GENERIC_STATE
+//   int index;                   // index into internal state buffer
+  uint32_t *buffer;            // internal state (250 32 bit integers + 1 pad)
 }r250_state ;                  // R250 generator stream control structure
 
 // void VecIRan_R250_stream(void *stream, unsigned int *ranbuf, int n);
@@ -136,10 +127,12 @@ typedef struct{
 static void FillBuffer_R250_stream(r250_state *R250){
   int i;
   unsigned int *r250_buffer = R250->buffer ;
-  int r250_index = R250->index;
+  int r250_index = R250->cur;
 
   while(r250_index > 249) r250_index -= 250;
-  R250->index = r250_index;
+  R250->cur = 0;
+  R250->cur = 0;
+  R250->top = 249;
 
   for (i=0 ; i< 144 ; i++) {
     r250_buffer[ i ] = r250_buffer[ i ] ^ r250_buffer[ i + 103 ];
@@ -170,6 +163,9 @@ void RanSetSeed_R250_stream(void *stream, unsigned int *piSeed, int cSeed)  // !
       r250_buffer[i++] = seed ;
     }
   }
+  R250->cur = 0;
+  R250->cur = 0;
+  R250->top = 249;
 }
 
 void F_RanSetSeed_R250_stream(statep *s, unsigned int *piSeed, int cSeed)  // Fortran interface using derived type
@@ -182,8 +178,8 @@ unsigned int IRan_R250_stream(void *stream)       // !InTc!     /* returns a sin
   register unsigned int new_rand;
   r250_state *R250 = stream ; //? (r250_state *) stream : &r250 ;   // use default stream if NULL stream pointer
 
-  if ( R250->index > 249 ) FillBuffer_R250_stream(R250);
-  new_rand = R250->buffer[R250->index++];
+  if ( R250->cur > 249 ) FillBuffer_R250_stream(R250);
+  new_rand = R250->buffer[R250->cur++];
   return new_rand;
 }
 unsigned int F_IRan_R250_stream(statep *s)  // Fortran interface using derived type
@@ -196,8 +192,8 @@ double DRan_R250_stream(void *stream)	  // !InTc!	/* returns a random double (0.
   register unsigned int new_rand;
   r250_state *R250 = stream ; //? (r250_state *) stream : &r250 ;   // use default stream if NULL stream pointer
 
-  if ( R250->index > 249 ) FillBuffer_R250_stream(R250);
-  new_rand = R250->buffer[R250->index++] ;
+  if ( R250->cur > 249 ) FillBuffer_R250_stream(R250);
+  new_rand = R250->buffer[R250->cur++] ;
   return CVTDBL_32(new_rand);   // convert from 32 bit int to (0.0 , 1.0)
 }
 unsigned int F_DRan_R250_stream(statep *s)  // Fortran interface using derived type
@@ -210,8 +206,8 @@ double DRanS_R250_stream(void *stream)	  // !InTc!	/* returns a random double (-
   register unsigned int new_rand;
   r250_state *R250 = stream ; //? (r250_state *) stream : &r250 ;   // use default stream if NULL stream pointer
 
-  if ( R250->index > 249 ) FillBuffer_R250_stream(R250);
-  new_rand = R250->buffer[R250->index++] ;
+  if ( R250->cur > 249 ) FillBuffer_R250_stream(R250);
+  new_rand = R250->buffer[R250->cur++] ;
   return CVTDBLS_32(new_rand);   // convert from 32 bit int to (0.0 , 1.0)
 }
 unsigned int F_DRanS_R250_stream(statep *s)  // Fortran interface using derived type
@@ -228,12 +224,12 @@ void VecIRan_R250_stream(void *stream, unsigned int *ranbuf, int n)  // !InTc!
   int r250_index;
 
   r250_buffer = R250->buffer ;
-  r250_index = R250->index;
+  r250_index = R250->cur;
   while( r250_index < 250 && n > 0 ){
     ranbuf[k++] = r250_buffer[r250_index++] ;
     n-- ;
   }
-  R250->index = r250_index;
+  R250->cur = r250_index;
   if ( n == 0 ) return;
   FillBuffer_R250_stream(R250);     // we get here if buffer is empty before n is satisfied
   while(n >= 250){        // chunks of 250 values
@@ -242,12 +238,12 @@ void VecIRan_R250_stream(void *stream, unsigned int *ranbuf, int n)  // !InTc!
     k += 250 ;
     FillBuffer_R250_stream(R250) ;
   }
-  r250_index = R250->index;
+  r250_index = R250->cur;
   while( n > 0 ){  // n < 250 at this point
     ranbuf[k++] = r250_buffer[r250_index++] ;
     n-- ;
   }
-  R250->index = r250_index;
+  R250->cur = r250_index;
 }
 void F_VecIRan_R250_stream(statep *s, unsigned int *ranbuf, int n)  // Fortran interface using derived type
 {
@@ -263,15 +259,15 @@ void VecDRan_R250_stream(void *stream, double *ranbuf, int n)  // !InTc!
   int r250_index;
 
   r250_buffer = R250->buffer ;
-  r250_index = R250->index;
+  r250_index = R250->cur;
   while( r250_index < 250 && n > 0 ){
     ranbuf[k++] = CVTDBL_32(r250_buffer[r250_index++]) ;   // convert from 32 bit int to (0.0 , 1.0)
     n-- ;
   }
-  R250->index = r250_index;
+  R250->cur = r250_index;
   if ( n == 0 ) return;
   FillBuffer_R250_stream(R250);     // we get here if buffer is empty
-  r250_index = R250->index;
+  r250_index = R250->cur;
   while(n >= 250){        // chunks of 250 values
     for(i=0 ; i<250 ; i++) ranbuf[k+i] = CVTDBL_32(r250_buffer[i]) ;   // convert from 32 bit int to (0.0 , 1.0)
     n -= 250 ;
@@ -282,7 +278,7 @@ void VecDRan_R250_stream(void *stream, double *ranbuf, int n)  // !InTc!
     ranbuf[k++] = CVTDBL_32(r250_buffer[r250_index++]) ;   // convert from 32 bit int to (0.0 , 1.0)
     n-- ;
   }
-  R250->index = r250_index;
+  R250->cur = r250_index;
 }
 void F_VecDRan_R250_stream(statep *s, double *ranbuf, int n)  // Fortran interface using derived type
 {
@@ -298,15 +294,15 @@ void VecDRanS_R250_stream(void *stream, double *ranbuf, int n)  // !InTc!
   int r250_index;
 
   r250_buffer = R250->buffer ;
-  r250_index = R250->index;
+  r250_index = R250->cur;
   while( r250_index < 250 && n > 0 ){
     ranbuf[k++] = CVTDBLS_32(r250_buffer[r250_index++]) ;   // convert from 32 bit int to (0.0 , 1.0)
     n-- ;
   }
-  R250->index = r250_index;
+  R250->cur = r250_index;
   if ( n == 0 ) return;
   FillBuffer_R250_stream(R250);     // we get here if buffer is empty
-  r250_index = R250->index;
+  r250_index = R250->cur;
   while(n >= 250){        // chunks of 250 values
     for(i=0 ; i<250 ; i++) ranbuf[k+i] = CVTDBLS_32(r250_buffer[i]) ;   // convert from 32 bit int to (0.0 , 1.0)
     n -= 250 ;
@@ -317,7 +313,7 @@ void VecDRanS_R250_stream(void *stream, double *ranbuf, int n)  // !InTc!
     ranbuf[k++] = CVTDBLS_32(r250_buffer[r250_index++]) ;   // convert from 32 bit int to (0.0 , 1.0)
     n-- ;
   }
-  R250->index = r250_index;
+  R250->cur = r250_index;
 }
 void F_VecDRanS_R250_stream(statep *s, double *ranbuf, int n)  // Fortran interface using derived type
 {
@@ -325,20 +321,7 @@ void F_VecDRanS_R250_stream(statep *s, double *ranbuf, int n)  // Fortran interf
 }
 
 // ======================= internal static state =============================
-
-static r250_state r250 = {
-  (REFILLBUFFUN) FillBuffer_R250_stream, 
-  (RANSETSEEDFUN) RanSetSeed_R250_stream, 
-  (IRANFUN) IRan_R250_stream, 
-  (DRANFUN) DRan_R250_stream, 
-  (DRANSFUN) DRanS_R250_stream, 
-  (IVECRANFUN) VecIRan_R250_stream, 
-  (DVECRANFUN) VecDRan_R250_stream, 
-  (DVECSRANFUN) VecDRanS_R250_stream, 
-  NULL, 
-  0,
-  0 , 
-//   250,
+static uint32_t sbuf[251] =
   {
     0x17617168 ,0x17a0d192 ,0x7cba449a ,0x86d91b38 ,0x7455bfb5 ,0x3bb194f2 ,0xd4cf89e2 ,0xee85f453 ,0x916c5ad3 ,0x8e5c32bb ,
     0x0d035201 ,0xc45d76fd ,0x04d799be ,0x409aa63c ,0x4c56a663 ,0xe0404838 ,0x88141c55 ,0xeb963899 ,0x83f34bc2 ,0xcf784dfe ,
@@ -365,7 +348,23 @@ static r250_state r250 = {
     0x373ea2e0 ,0x0cc5f5ce ,0x35a5cc68 ,0x93169549 ,0xea31a7b1 ,0x6a6569bc ,0xa776f509 ,0x5b0f310e ,0x96322244 ,0x64568c56 ,
     0x08aa6767 ,0x491799f1 ,0x17735c88 ,0x71c32f7e ,0xed0a2ec6 ,0xebd94777 ,0x9b1e1086 ,0xdc740f7a ,0x03c48151 ,0xafcb9f88 ,
     0xd835a40a ,0x21308fc2 ,0x0f459e5e ,0x0358b165 ,0x6422fa89 ,0xdd9cf11b ,0x03daccf5 ,0xec9e2bd9 ,0xe300013e ,0xa97d54e4 , 0
-  }
+  };
+  
+static r250_state r250 = {
+  (REFILLBUFFUN) FillBuffer_R250_stream, 
+  (RANSETSEEDFUN) RanSetSeed_R250_stream, 
+  (IRANFUN) IRan_R250_stream, 
+  (DRANFUN) DRan_R250_stream, 
+  (DRANSFUN) DRanS_R250_stream, 
+  (IVECRANFUN) VecIRan_R250_stream, 
+  (DVECRANFUN) VecDRan_R250_stream, 
+  (DVECSRANFUN) VecDRanS_R250_stream, 
+  NULL,
+  -1,
+  -1,
+  NULL, 
+  0,
+  &sbuf[0]
 };
 
 void *Ran_R250_new_stream(void *clone_in, unsigned int *piSeed, int cSeed)   // !InTc! // create and seed a new stream
@@ -378,7 +377,7 @@ void *Ran_R250_new_stream(void *clone_in, unsigned int *piSeed, int cSeed)   // 
 
   if(cSeed < 0 && piSeed==NULL){            // clone a stream (mostly used for testing)
     source = clone ? clone : &r250;         // clone == NULL means clone default internal static stream
-    new_state->index = source->index ;
+    new_state->cur = source->cur ;
     new_state->ngauss = source->ngauss ;
     new_state->gauss = source->gauss ;
     new_state->seed = source->seed ;
@@ -389,9 +388,13 @@ void *Ran_R250_new_stream(void *clone_in, unsigned int *piSeed, int cSeed)   // 
     new_state->vec_iran = source->vec_iran ;
     new_state->vec_dran = source->vec_dran ;
     new_state->vec_drans = source->vec_drans ;
-    for (i=0 ; i<250 ; i++) new_state->buffer[i] = source->buffer[i] ;
+    new_state->buf = malloc(sizeof(uint32_t) * 251) ;
+    new_state->cur = source->cur ;
+    new_state->top = source->top ;
+    new_state->buffer = new_state->buf ;
+    for (i=0 ; i<250 ; i++) new_state->buf[i] = source->buf[i] ;
   }else{
-    new_state->index = 0;
+    new_state->cur = 0;
     new_state->ngauss = 0;
     new_state->gauss = NULL;
     new_state->seed  = (RANSETSEEDFUN) RanSetSeed_R250_stream;
@@ -402,6 +405,10 @@ void *Ran_R250_new_stream(void *clone_in, unsigned int *piSeed, int cSeed)   // 
     new_state->vec_iran  = (IVECRANFUN) VecIRan_R250_stream;
     new_state->vec_dran  = (DVECRANFUN) VecDRan_R250_stream;
     new_state->vec_drans = (DVECSRANFUN) VecDRanS_R250_stream;
+    new_state->buf = malloc(sizeof(uint32_t) * 251) ;
+    new_state->cur = -1 ;
+    new_state->top = 249 ;
+    new_state->buffer = new_state->buf ;
     RanSetSeed_R250_stream(new_state, piSeed, cSeed);  // seed the new stream
   }
 
@@ -417,7 +424,7 @@ void F_Ran_R250_new_stream(statep *s, statep *c, unsigned int *piSeed, int cSeed
 static void FillBuffer_R250_static(){
   int i;
   unsigned int *r250_buffer = r250.buffer ;
-  int r250_index = r250.index;
+  int r250_index = r250.cur;
 
   while(r250_index > 249) r250_index -= 250;
   for (i=0 ; i< 147 ; i++) {
@@ -426,7 +433,7 @@ static void FillBuffer_R250_static(){
   for (i=147 ; i<250 ; i++) {
     r250_buffer[ i ] = r250_buffer[ i ] ^ r250_buffer[ i - 147 ];
   }
-  r250.index = r250_index;
+  r250.cur = r250_index;
 }
 
 void RanSetSeed_R250_static(unsigned int *piSeed, int cSeed)  // !InTc!
@@ -452,8 +459,8 @@ unsigned int IRan_R250_static()	  // !InTc!	/* returns a random unsigned integer
 {
   register unsigned int new_rand;
 
-  if ( r250.index > 249 ) FillBuffer_R250_static();
-  new_rand = r250.buffer[r250.index++];
+  if ( r250.cur > 249 ) FillBuffer_R250_static();
+  new_rand = r250.buffer[r250.cur++];
   return new_rand;
 }
 
@@ -465,12 +472,12 @@ void VecIRan_R250_static(unsigned int *ranbuf, int n)  // !InTc!
   int r250_index;
 
   r250_buffer = r250.buffer ;
-  r250_index = r250.index;
+  r250_index = r250.cur;
   while( r250_index < 250 && n > 0 ){
     ranbuf[k++] = r250_buffer[r250_index++] ;
     n-- ;
   }
-  r250.index = r250_index;
+  r250.cur = r250_index;
   if ( n == 0 ) return;
   FillBuffer_R250_static();     // we get here if buffer is empty before n is satisfied
   while(n >= 250){        // chunks of 250 values
@@ -479,12 +486,12 @@ void VecIRan_R250_static(unsigned int *ranbuf, int n)  // !InTc!
     k += 250 ;
     FillBuffer_R250_static() ;
   }
-  r250_index = r250.index;
+  r250_index = r250.cur;
   while( n > 0 ){  // n < 250 at this point
     ranbuf[k++] = r250_buffer[r250_index++] ;
     n-- ;
   }
-  r250.index = r250_index;
+  r250.cur = r250_index;
 }
 
 /*------------------------- end of R250 routines ---------------------------*/

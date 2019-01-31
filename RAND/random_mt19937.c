@@ -53,20 +53,11 @@
 #define MAGIC 0x9908b0df
 
 typedef struct{
-  REFILLBUFFUN  refill;
-  RANSETSEEDFUN seed;
-  IRANFUN       iran;
-  DRANFUN       dran;
-  DRANSFUN      drans;
-  IVECRANFUN    vec_iran;
-  DVECRANFUN    vec_dran;
-  DVECSRANFUN   vec_drans;
-  unsigned int *gauss;
-  int ngauss;
+  GENERIC_STATE
   int index;
   int bufsz;
-  unsigned int *mt;
-  unsigned int *mt2;
+  unsigned int *mt;     // state
+  unsigned int *mt2;    // tempered data ready for use
 }mt19937_state ;                  // MT19937 generator stream control structure
 
 // only one value is needed for seeding, cSeed only needs to be positive
@@ -278,6 +269,9 @@ static mt19937_state mt19937 = {
   (DVECRANFUN) VecDRan_MT19937_stream, 
   (DVECSRANFUN) VecDRanS_MT19937_stream, 
   NULL, 
+  -1,
+  -1,
+  NULL, 
   0,
   0 , 
   MT_SIZE,
@@ -312,10 +306,13 @@ generic_state *Ran_MT19937_new_stream(generic_state *clone_in, unsigned int *piS
     new_state->vec_iran = source->vec_iran ;
     new_state->vec_dran = source->vec_dran ;
     new_state->vec_drans = source->vec_drans ;
-    new_state->mt = malloc(2 * sizeof(uint32_t) * MT_SIZE);
-    new_state->mt2 = new_state->mt + MT_SIZE;
+    new_state->buf = malloc(sizeof(uint32_t) * MT_SIZE) ;
+    new_state->cur = source->cur ;
+    new_state->top = source->top ;
+    new_state->mt = malloc(sizeof(uint32_t) * MT_SIZE) ;
+    new_state->mt2 = new_state->buf ;
     for (i=0 ; i<MT_SIZE ; i++) new_state->mt[i] = source->mt[i] ;
-    for (i=0 ; i<MT_SIZE ; i++) new_state->mt2[i] = source->mt2[i] ;
+    for (i=0 ; i<MT_SIZE ; i++) new_state->buf[i] = source->buf[i] ;
   }else{
     new_state->index = 0;
     new_state->bufsz = MT_SIZE;
@@ -329,8 +326,11 @@ generic_state *Ran_MT19937_new_stream(generic_state *clone_in, unsigned int *piS
     new_state->vec_iran  = (IVECRANFUN) VecIRan_MT19937_stream;
     new_state->vec_dran  = (DVECRANFUN) VecDRan_MT19937_stream;
     new_state->vec_drans = (DVECSRANFUN) VecDRanS_MT19937_stream;
-    new_state->mt = malloc(2 * sizeof(uint32_t) * MT_SIZE);
-    new_state->mt2 = new_state->mt + MT_SIZE;
+    new_state->buf = malloc(sizeof(uint32_t) * MT_SIZE) ;
+    new_state->cur = -1 ;
+    new_state->top = MT_SIZE ;
+    new_state->mt = malloc(sizeof(uint32_t) * MT_SIZE) ;
+    new_state->mt2 = new_state->buf ;
     RanSetSeed_MT19937_stream((generic_state *) new_state, piSeed, cSeed);  // seed the new stream
     FillBuffer_MT19937_stream(new_state);                                   // fill state buffer
   }
