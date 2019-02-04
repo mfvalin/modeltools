@@ -1,7 +1,7 @@
 #include <randomgeneric.h>
 // generic interface to random functions using streams;
 void RanSetSeed_generic_stream(generic_state *stream, unsigned int *piSeed, int cSeed);
-unsigned int IRan_generic_stream(generic_state *stream);
+uint32_t IRan_generic_stream(generic_state *stream);
 double DRan_generic_stream(generic_state *stream);
 double DRanS_generic_stream(generic_state *stream);
 void VecIRan_generic_stream(generic_state *stream, unsigned int *ranbuf, int n);

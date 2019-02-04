@@ -54,8 +54,8 @@
 
 typedef struct{
   GENERIC_STATE
-  int index;
-  int bufsz;
+//   int index;
+//   int bufsz;
   unsigned int *mt;     // state
   unsigned int *mt2;    // tempered data ready for use
 }mt19937_state ;                  // MT19937 generator stream control structure
@@ -97,7 +97,7 @@ void RanSetSeed_MT19937_stream(generic_state *stream, unsigned int *piSeed, int 
    * Since we're using 32-bits data types for our MT array, we can skip the
    * masking with 0xFFFFFFFF below.
    */
-  mt19937->index = 0;
+  mt19937->cur = 0;
   if((piSeed != NULL) && (cSeed > 0)){
     mt[0] = *piSeed;
   }else{
@@ -142,45 +142,46 @@ static void FillBuffer_MT19937_stream(mt19937_state *stream)  // all for loops a
     y ^= y>>18;
     MT2[i] = y;
   }
-  MT19937->index = 0;
+  MT19937->cur = 0;
+  MT19937->cur = 0;
 }
 
 unsigned int IRan_MT19937_stream(generic_state *stream)       // !InTc!  returns a random unsigned integer
 {
   mt19937_state *MT19937 = (mt19937_state *) stream;
-  register uint32_t index = MT19937->index;
+  register uint32_t cur = MT19937->cur;
   register uint32_t y ;
 
-  if (index >= MT_SIZE) FillBuffer_MT19937_stream((mt19937_state *)MT19937);
+  if (cur >= MT_SIZE) FillBuffer_MT19937_stream((mt19937_state *)MT19937);
 
-  y = MT19937->mt2[MT19937->index];
-  MT19937->index = MT19937->index + 1 ;
+  y = MT19937->mt2[MT19937->cur];
+  MT19937->cur = MT19937->cur + 1 ;
   return y;
 }
 
 double DRan_MT19937_stream(generic_state *stream)       // !InTc!  returns a random double ( 0.0 , 1.0 )
 {
   mt19937_state *MT19937 = (mt19937_state *) stream;
-  register uint32_t index = MT19937->index;
+  register uint32_t cur = MT19937->cur;
   register uint32_t y ;
 
-  if (index >= MT_SIZE) FillBuffer_MT19937_stream((mt19937_state *)MT19937);
+  if (cur >= MT_SIZE) FillBuffer_MT19937_stream((mt19937_state *)MT19937);
 
-  y = MT19937->mt2[MT19937->index];
-  MT19937->index = MT19937->index + 1 ;
+  y = MT19937->mt2[MT19937->cur];
+  MT19937->cur = MT19937->cur + 1 ;
   return CVTDBL_32(y);
 }
 
 double DRanS_MT19937_stream(generic_state *stream)     // !InTc!   returns a random double (-1.0 , 1.0)
 {
   mt19937_state *MT19937 = (mt19937_state *) stream;
-  register uint32_t index = MT19937->index;
+  register uint32_t cur = MT19937->cur;
   register uint32_t y ;
 
-  if (index >= MT_SIZE) FillBuffer_MT19937_stream((mt19937_state *)MT19937);
+  if (cur >= MT_SIZE) FillBuffer_MT19937_stream((mt19937_state *)MT19937);
 
-  y = MT19937->mt2[MT19937->index];
-  MT19937->index = MT19937->index + 1 ;
+  y = MT19937->mt2[MT19937->cur];
+  MT19937->cur = MT19937->cur + 1 ;
   return CVTDBLS_32(y);
 }
 
@@ -188,21 +189,21 @@ void VecIRan_MT19937_stream(generic_state *stream, uint32_t *ranbuf, int n)  // 
 {
   mt19937_state *MT19937 = (mt19937_state *) stream ; //
   unsigned int *mt2 = MT19937->mt2 ;
-  int index = MT19937->index ;
+  int cur = MT19937->cur ;
   int i, navail, ndone;
 
   ndone = 0;
   while(n > 0) {
-    if (index >= MT_SIZE) FillBuffer_MT19937_stream((mt19937_state *)MT19937);
-    index = MT19937->index ;
-    navail = MT_SIZE - index;
+    if (cur >= MT_SIZE) FillBuffer_MT19937_stream((mt19937_state *)MT19937);
+    cur = MT19937->cur ;
+    navail = MT_SIZE - cur;
     if(navail >= n){
-      for(i=0 ; i<n ; i++) ranbuf[ndone+i] = mt2[index+i] ;
-      MT19937->index = index + n;
+      for(i=0 ; i<n ; i++) ranbuf[ndone+i] = mt2[cur+i] ;
+      MT19937->cur = cur + n;
       return;
     }else{
-      for(i=0 ; i<navail ; i++) ranbuf[ndone+i] = mt2[index+i] ;
-      index = MT_SIZE;
+      for(i=0 ; i<navail ; i++) ranbuf[ndone+i] = mt2[cur+i] ;
+      cur = MT_SIZE;
       n -= navail;
       ndone += navail;
     }
@@ -213,21 +214,21 @@ void VecDRan_MT19937_stream(generic_state *stream, double *ranbuf, int n)  // !I
 {
   mt19937_state *MT19937 = (mt19937_state *) stream ; //
   unsigned int *mt2 = MT19937->mt2 ;
-  int index = MT19937->index ;
+  int cur = MT19937->cur ;
   int i, navail, ndone;
 
   ndone = 0;
   while(n > 0) {
-    if (index >= MT_SIZE) FillBuffer_MT19937_stream((mt19937_state *)MT19937);
-    index = MT19937->index ;
-    navail = MT_SIZE - index;
+    if (cur >= MT_SIZE) FillBuffer_MT19937_stream((mt19937_state *)MT19937);
+    cur = MT19937->cur ;
+    navail = MT_SIZE - cur;
     if(navail >= n){
-      for(i=0 ; i<n ; i++) ranbuf[ndone+i] = CVTDBL_32(mt2[index+i]) ;
-      MT19937->index = index + n;
+      for(i=0 ; i<n ; i++) ranbuf[ndone+i] = CVTDBL_32(mt2[cur+i]) ;
+      MT19937->cur = cur + n;
       return;
     }else{
-      for(i=0 ; i<navail ; i++) ranbuf[ndone+i] = CVTDBL_32(mt2[index+i]) ;
-      index = MT_SIZE;
+      for(i=0 ; i<navail ; i++) ranbuf[ndone+i] = CVTDBL_32(mt2[cur+i]) ;
+      cur = MT_SIZE;
       n -= navail;
       ndone += navail;
     }
@@ -238,21 +239,21 @@ void VecDRanS_MT19937_stream(generic_state *stream, double *ranbuf, int n)  // !
 {
   mt19937_state *MT19937 = (mt19937_state *) stream ; //
   unsigned int *mt2 = MT19937->mt2 ;
-  int index = MT19937->index ;
+  int cur = MT19937->cur ;
   int i, navail, ndone;
 
   ndone = 0;
   while(n > 0) {
-    if (index >= MT_SIZE) FillBuffer_MT19937_stream((mt19937_state *)MT19937);
-    index = MT19937->index ;
-    navail = MT_SIZE - index;
+    if (cur >= MT_SIZE) FillBuffer_MT19937_stream((mt19937_state *)MT19937);
+    cur = MT19937->cur ;
+    navail = MT_SIZE - cur;
     if(navail >= n){
-      for(i=0 ; i<n ; i++) ranbuf[ndone+i] = CVTDBLS_32(mt2[index+i]) ;
-      MT19937->index = index + n;
+      for(i=0 ; i<n ; i++) ranbuf[ndone+i] = CVTDBLS_32(mt2[cur+i]) ;
+      MT19937->cur = cur + n;
       return;
     }else{
-      for(i=0 ; i<navail ; i++) ranbuf[ndone+i] = CVTDBLS_32(mt2[index+i]) ;
-      index = MT_SIZE;
+      for(i=0 ; i<navail ; i++) ranbuf[ndone+i] = CVTDBLS_32(mt2[cur+i]) ;
+      cur = MT_SIZE;
       n -= navail;
       ndone += navail;
     }
@@ -269,12 +270,12 @@ static mt19937_state mt19937 = {
   (DVECRANFUN) VecDRan_MT19937_stream, 
   (DVECSRANFUN) VecDRanS_MT19937_stream, 
   NULL, 
-  -1,
-  -1,
+  MT_SIZE,
+  MT_SIZE-1,
   NULL, 
   0,
-  0 , 
-  MT_SIZE,
+//   0 , 
+//   MT_SIZE,
   NULL,
   NULL };
 
@@ -294,8 +295,8 @@ generic_state *Ran_MT19937_new_stream(generic_state *clone_in, unsigned int *piS
       RanSetSeed_MT19937_stream((generic_state *) source, piSeed, cSeed);
        FillBuffer_MT19937_stream(source);
     }
-    new_state->index = source->index ;
-    new_state->bufsz = source->bufsz ;
+    new_state->cur = source->cur ;
+    new_state->top = source->top ;
     new_state->ngauss = source->ngauss ;
     new_state->gauss = source->gauss ;
     new_state->seed = source->seed ;
@@ -314,8 +315,8 @@ generic_state *Ran_MT19937_new_stream(generic_state *clone_in, unsigned int *piS
     for (i=0 ; i<MT_SIZE ; i++) new_state->mt[i] = source->mt[i] ;
     for (i=0 ; i<MT_SIZE ; i++) new_state->buf[i] = source->buf[i] ;
   }else{
-    new_state->index = 0;
-    new_state->bufsz = MT_SIZE;
+    new_state->cur = 0;
+    new_state->top = MT_SIZE-1;
     new_state->ngauss = 0;
     new_state->gauss = NULL;
     new_state->seed  = (RANSETSEEDFUN) RanSetSeed_MT19937_stream;
@@ -327,8 +328,8 @@ generic_state *Ran_MT19937_new_stream(generic_state *clone_in, unsigned int *piS
     new_state->vec_dran  = (DVECRANFUN) VecDRan_MT19937_stream;
     new_state->vec_drans = (DVECSRANFUN) VecDRanS_MT19937_stream;
     new_state->buf = malloc(sizeof(uint32_t) * MT_SIZE) ;
-    new_state->cur = -1 ;
-    new_state->top = MT_SIZE ;
+    new_state->cur = MT_SIZE ;
+    new_state->top = MT_SIZE-1 ;
     new_state->mt = malloc(sizeof(uint32_t) * MT_SIZE) ;
     new_state->mt2 = new_state->buf ;
     RanSetSeed_MT19937_stream((generic_state *) new_state, piSeed, cSeed);  // seed the new stream

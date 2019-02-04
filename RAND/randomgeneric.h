@@ -91,3 +91,7 @@ typedef struct{
 //   unsigned int *gauss;        // pointer to the buffer used by the gaussian generator
 //   int ngauss;                 // used by the gaussian generator
 } generic_state;              // generic part, IDENTICAL at start of ALL stream control structures
+
+// uint32_t IRan_generic_stream(generic_state *stream);
+// double DRan_generic_stream(generic_state *stream);
+// double DRanS_generic_stream(generic_state *stream);

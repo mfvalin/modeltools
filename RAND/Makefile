@@ -32,13 +32,13 @@ librandom.a: randomfunctions.h ${SOURCES}
 	ar rcv librandom.a *.o
 	rm -f *.o
 
-random_r250.Abs: random_r250.c
-	s.cc -mpi -O2 -ftree-vectorize -mfma -mavx2 -DSELF_TEST $< -L. -lrandom -o $@
+random_r250.Abs: librandom.a random_generic_test.c
+	s.cc -mpi -O2 -ftree-vectorize -mfma -mavx2 -DTEST_R250 random_generic_test.c -L. -lrandom -o $@
 	./$@
-	rm $@
+	rm -f $@
 
-random_mt19937.Abs: random_mt19937.c
-	s.cc -mpi -O2 -ftree-vectorize -mfma -mavx2 -DSELF_TEST $< -L. -lrandom -o $@
+random_mt19937.Abs: librandom.a random_generic_test.c
+	s.cc -mpi -O2 -ftree-vectorize -mfma -mavx2 -DTEST_MT19937 random_generic_test.c -L. -lrandom -o $@
 	./$@
 	rm $@
 

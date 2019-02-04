@@ -106,20 +106,30 @@ void F_RanSetSeed_generic_stream(statep *s, unsigned int *piSeed, int cSeed)  //
   RanSetSeed_generic_stream( s->p, piSeed, cSeed);
 }
 
-unsigned int IRan_generic_stream(generic_state *stream)       // !InTc!
+uint32_t IRan_generic_stream(generic_state *stream)       // !InTc!
 {
-  generic_state *state = stream ;
-  return state->iran(stream);
+//   generic_state *state = stream ;
+//   return state->iran(stream);
+  uint32_t value;
+  if(stream->cur > stream->top) stream->refill(stream);
+  value = stream->buf[stream->cur] ;
+  stream->cur = stream->cur + 1;
+  return value;
 }
-unsigned int F_IRan_generic_stream(statep *s)  // Fortran interface using derived type
+uint32_t F_IRan_generic_stream(statep *s)  // Fortran interface using derived type
 {
   return(IRan_generic_stream(s->p));
 }
 
 double DRan_generic_stream(generic_state *stream)       // !InTc!
 {
-  generic_state *state = stream ;
-  return state->dran(stream);
+//   generic_state *state = stream ;
+//   return state->dran(stream);
+  uint32_t value;
+  if(stream->cur > stream->top) stream->refill(stream);
+  value = stream->buf[stream->cur] ;
+  stream->cur = stream->cur + 1;
+  return CVTDBL_32(value);
 }
 double F_DRan_generic_stream(statep *s)  // Fortran interface using derived type
 {
@@ -128,8 +138,13 @@ double F_DRan_generic_stream(statep *s)  // Fortran interface using derived type
 
 double DRanS_generic_stream(generic_state *stream)       // !InTc!
 {
-  generic_state *state = stream ;
-  return state->drans(stream);
+//   generic_state *state = stream ;
+//   return state->drans(stream);
+  uint32_t value;
+  if(stream->cur > stream->top) stream->refill(stream);
+  value = stream->buf[stream->cur] ;
+  stream->cur = stream->cur + 1;
+  return CVTDBLS_32(value);
 }
 double F_DRanS_generic_stream(statep *s)  // Fortran interface using derived type
 {
@@ -138,8 +153,33 @@ double F_DRanS_generic_stream(statep *s)  // Fortran interface using derived typ
 
 void VecIRan_generic_stream(generic_state *stream, unsigned int *ranbuf, int n)       // !InTc!
 {
-  generic_state *state = stream ;
-  state->vec_iran(stream,ranbuf,n);
+//   generic_state *state = stream ;
+//   state->vec_iran(stream,ranbuf,n);
+  int top = stream->top + 1;
+  int cur = stream->cur;
+  int *buf = stream->buf;
+  int i;
+  while(n > 0 && cur < top){
+    *ranbuf = buf[cur] ; ranbuf++ ; cur++; n-- ;
+  }
+  if(cur < top) {
+    stream->cur = cur ;
+  }else{
+    stream->refill(stream);   // this will set stream->cur
+  }
+  if(n <= 0) return ;         // done
+  while(n > 0){
+    if(n >= top){             // full buffers
+      for(cur=0 ; cur<top ; cur++) {ranbuf[cur] = buf[cur] ; }
+      ranbuf += top;
+      stream->refill(stream);
+      n -= top;
+    }else{                    // less than 1 buffer, no need for refill
+      for(cur=0 ; cur<n ; cur++) {ranbuf[cur] = buf[cur] ; }
+      stream->cur = cur ;     // store current pointer
+      n = 0;
+    }
+  }
 }
 void F_VecIRan_generic_stream(statep *s, unsigned int *ranbuf, int n)  // Fortran interface using derived type
 {
@@ -148,8 +188,33 @@ void F_VecIRan_generic_stream(statep *s, unsigned int *ranbuf, int n)  // Fortra
 
 void VecDRan_generic_stream(generic_state *stream, double *ranbuf, int n)       // !InTc!
 {
-  generic_state *state = stream ;
-  state->vec_dran(stream,ranbuf,n);
+//   generic_state *state = stream ;
+//   state->vec_dran(stream,ranbuf,n);
+  int top = stream->top + 1;
+  int cur = stream->cur;
+  int *buf = stream->buf;
+  int i;
+  while(n > 0 && cur < top){
+    *ranbuf = CVTDBL_32(buf[cur]) ; ranbuf++ ; cur++; n-- ;
+  }
+  if(cur < top) {
+    stream->cur = cur ;
+  }else{
+    stream->refill(stream);   // this will set stream->cur
+  }
+  if(n <= 0) return ;         // done
+  while(n > 0){
+    if(n >= top){             // full buffers
+      for(cur=0 ; cur<top ; cur++) {ranbuf[cur] = CVTDBL_32(buf[cur]) ; }
+      ranbuf += top;
+      stream->refill(stream);
+      n -= top;
+    }else{                    // less than 1 buffer, no need for refill
+      for(cur=0 ; cur<n ; cur++) {ranbuf[cur] = CVTDBL_32(buf[cur]) ; }
+      stream->cur = cur ;     // store current pointer
+      n = 0;
+    }
+  }
 }
 void F_VecDRan_generic_stream(statep *s, double *ranbuf, int n)  // Fortran interface using derived type
 {
@@ -158,8 +223,33 @@ void F_VecDRan_generic_stream(statep *s, double *ranbuf, int n)  // Fortran inte
 
 void VecDRanS_generic_stream(generic_state *stream, double *ranbuf, int n)       // !InTc!
 {
-  generic_state *state = stream ;
-  state->vec_drans(stream,ranbuf,n);
+//   generic_state *state = stream ;
+//   state->vec_drans(stream,ranbuf,n);
+  int top = stream->top + 1;
+  int cur = stream->cur;
+  int *buf = stream->buf;
+  int i;
+  while(n > 0 && cur < top){
+    *ranbuf = CVTDBLS_32(buf[cur]) ; ranbuf++ ; cur++; n-- ;
+  }
+  if(cur < top) {
+    stream->cur = cur ;
+  }else{
+    stream->refill(stream);   // this will set stream->cur
+  }
+  if(n <= 0) return ;         // done
+  while(n > 0){
+    if(n >= top){             // full buffers
+      for(cur=0 ; cur<top ; cur++) {ranbuf[cur] = CVTDBLS_32(buf[cur]) ; }
+      ranbuf += top;
+      stream->refill(stream);
+      n -= top;
+    }else{                    // less than 1 buffer, no need for refill
+      for(cur=0 ; cur<n ; cur++) {ranbuf[cur] = CVTDBLS_32(buf[cur]) ; }
+      stream->cur = cur ;     // store current pointer
+      n = 0;
+    }
+  }
 }
 void F_VecDRanS_generic_stream(statep *s, double *ranbuf, int n)  // Fortran interface using derived type
 {
