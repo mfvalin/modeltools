@@ -156,28 +156,39 @@ static inline int Vcoef_pxyz4_inline(double *cxyz, int *offset, float px8, float
     px = px8 ;            // fractional index positions along x, y, z (float to double)
     py = py8 ;
     pz = pz8 ;
-
+// printf("px py pz = %f %f %f\n",px,py,pz);
     ix = px ;
     px = px - ix;                   // px is now deltax (fractional part of px)
     ix = ix + lv->offi;             // global to local grid remapping
     ijk = ix - 2;                   // x displacement (elements), ix assumed to always be >1 and < ni-1
+// printf("ix = %d, ijk = %d\n",ix,ijk);
+    cxyz[12] = 0.0;
+    cxyz[13] = 1.0 - px;             // linear interpolation coefficients along x
+    cxyz[14] = px;
+    cxyz[15] = 0.0;
 
     iy = py ;
     py = py - iy;                   // py is now deltay (fractional part of py)
     iy = iy + lv->offj;             // global to local grid remapping
     ijk = ijk + (iy - 2) * lv->ni;  // add y displacement (rows), ix assumed to always be >1 and < nj-1
+// printf("iy = %d, ijk = %d\n",iy,ijk);
+    cxyz[16] = 1.0 - py;             // linear interpolation coefficients along y
+    cxyz[17] = py;
 
     iz = pz ; 
     if(iz<1) iz = 1; 
     if(iz>lv->nk-1) iz = lv->nk-1;  // iz < 1 or iz > nk-1 will result in linear extrapolation
     dz = pz - iz;                   // dz is now "fractional" part of pz  (may be <0 or >1 if extrapolating)
     ijk = ijk + (iz -1) * lv->nij;  // add z displacement (2D planes)
+    cxyz[18] = 1.0 - dz;             // linear interpolation coefficients along z
+    cxyz[19] = dz;
 
     iz--;                           // iz needs to be in "origin 0" (C index from Fortran index)
     zlinear = (iz - 1) | (lv->nk - 3 - iz); 
     zlinear >>= 31;                  // nonzero only if iz < 1 or iz > nk -3 (top and bottom intervals)
     if(! zlinear) ijk = ijk - lv->nij;  // not the linear case, go down one 2D plane to get lower left corner of 4x4x4 cube
     *offset = ijk;
+// printf("iz = %d, ijk = %d\n",iz,ijk);
     // now we can compute the coefficients along z using iz and dz
     if(zlinear){
       cxyz[ 8] = 0.0;                    // coefficients for linear interpolation along z
@@ -404,7 +415,7 @@ static inline void Tricublin_zyxf1_inline(float *d, float *f1, double *pxyz, int
 // ( 2 <= px < "ni"-1 ) ( 2 <= py < "nj"-1 )
 // pz < 2 and pz >= nk - 1 will induce linear interpolation or extrapolation
 void Tricublin_zyx1_n(float *d, float *f1, pxpypz *pxyz,  ztab *lv, int n){
-  double cxyz[12];   // interpolation coefficients 4 for each dimension (x, y, z)
+  double cxyz[24];   // interpolation coefficients 4 for each dimension (x, y, z)
   int ixyz;          // unilinear index into array f1 (collapsed dimensions)
   int zlinear;       // non zero if linear interpolation
                      // all above computed in Vcoef_pxyz4, used in Tricublin_zyxf1
@@ -417,7 +428,7 @@ void Tricublin_zyx1_n(float *d, float *f1, pxpypz *pxyz,  ztab *lv, int n){
   }
 }
 
-void Tricublin_zyx_mm_d(float *d, float *lin, float *min, float *max, float *f1, double *cxyz, int NI, int NINJ, int zlinear){
+static inline void Tricublin_zyx_mm_d_inline(float *d, float *lin, float *min, float *max, float *f1, double *cxyz, int NI, int NINJ, int zlinear){
   int ni = NI;
   int ninj = NINJ;
   int ninjl;    // ninj (cubic along z) or 0 (linear along z)
@@ -476,7 +487,7 @@ void Tricublin_zyx_mm_d(float *d, float *lin, float *min, float *max, float *f1,
 
   s1 = f1 + ni;        // row 1, 4 planes (Z0, Z1, Z2, Z3)
   cy  = _mm256_broadcast_sd(py+1);
-  cyl = _mm256_broadcast_sd(py+5);
+  cyl = _mm256_broadcast_sd(cxyz+16);
 
   zt = _mm256_cvtps_pd(_mm_loadu_ps(s1));       // plane 0
   za  = _mm256_mul_pd(zt, cz0);
@@ -484,13 +495,13 @@ void Tricublin_zyx_mm_d(float *d, float *lin, float *min, float *max, float *f1,
   zt = _mm256_cvtps_pd(_mm_loadu_ps(s1));       // plane 1
   mi = _mm256_min_pd(mi, zt); ma = _mm256_max_pd(ma, zt); 
   za  = _mm256_fmadd_pd(zt, cz1, za);
-  cl  = _mm256_broadcast_sd(pz+5);
+  cl  = _mm256_broadcast_sd(cxyz+18);           // linear coefficient along z
   vzl = _mm256_mul_pd(zt, cl);
   s1 += ninj;
   zt = _mm256_cvtps_pd(_mm_loadu_ps(s1));       // plane 2
   mi = _mm256_min_pd(mi, zt); ma = _mm256_max_pd(ma, zt); 
   za  = _mm256_fmadd_pd(zt, cz2, za);
-  cl  = _mm256_broadcast_sd(pz+6);
+  cl  = _mm256_broadcast_sd(cxyz+19);           // linear coefficient along z
   vzl = _mm256_fmadd_pd(zt, cl, vzl);  // linear interpolation along z
   s1 += ninjl;
   zt = _mm256_cvtps_pd(_mm_loadu_ps(s1));       // plane 3
@@ -501,7 +512,7 @@ void Tricublin_zyx_mm_d(float *d, float *lin, float *min, float *max, float *f1,
 
   s1 = f1 + ni2;     // row 2, 4 planes (Z0, Z1, Z2, Z3)
   cy  = _mm256_broadcast_sd(py+2);
-  cyl = _mm256_broadcast_sd(py+6);
+  cyl = _mm256_broadcast_sd(cxyz+17);
 
   zt = _mm256_cvtps_pd(_mm_loadu_ps(s1));       // plane 0
   za  = _mm256_mul_pd(zt, cz0);
@@ -509,13 +520,13 @@ void Tricublin_zyx_mm_d(float *d, float *lin, float *min, float *max, float *f1,
   zt = _mm256_cvtps_pd(_mm_loadu_ps(s1));       // plane 1
   mi = _mm256_min_pd(mi, zt); ma = _mm256_max_pd(ma, zt); 
   za  = _mm256_fmadd_pd(zt, cz1, za);
-  cl  = _mm256_broadcast_sd(pz+5);
+  cl  = _mm256_broadcast_sd(cxyz+18);           // linear coefficient along z
   vzl = _mm256_mul_pd(zt, cl);
   s1 += ninj;
   zt = _mm256_cvtps_pd(_mm_loadu_ps(s1));       // plane 2
   mi = _mm256_min_pd(mi, zt); ma = _mm256_max_pd(ma, zt); 
   za  = _mm256_fmadd_pd(zt, cz2, za);
-  cl  = _mm256_broadcast_sd(pz+6);
+  cl  = _mm256_broadcast_sd(cxyz+19);           // linear coefficient along z
   vzl = _mm256_fmadd_pd(zt, cl, vzl);  // linear interpolation along z
   s1 += ninjl;
   zt = _mm256_cvtps_pd(_mm_loadu_ps(s1));       // plane 3
@@ -562,7 +573,7 @@ void Tricublin_zyx_mm_d(float *d, float *lin, float *min, float *max, float *f1,
   max[0] = _mm_cvtss_f32( _mm_cvtpd_ps(vma) );          // max ([1] [2]), convert to float and store
 
   // interpolation along x (linear)
-  cx = _mm256_loadu_pd(px+4);    // linear interpolation coefficients
+  cx = _mm256_loadu_pd(cxyz+12);    // linear interpolation coefficients
   vyl = _mm256_mul_pd(vyl,cx);
   va = _mm_add_pd( _mm256_extractf128_pd(vyl,0) , _mm256_extractf128_pd(vyl,1) );   // [0] [1] + [2] [3]
   va = _mm_hadd_pd(va,va);                                                          // [0]+[2] + [1]+[3]
@@ -591,12 +602,14 @@ void Tricublin_zyx_mm_d(float *d, float *lin, float *min, float *max, float *f1,
   }
   d[0] = dst[0]*px[0] + dst[1]*px[1] + dst[2]*px[2] + dst[3]*px[3];
   for (i=1 ; i<3 ; i++){   // linear interpolation
-    vb4[i] = f1[i+ni +ninjl]*pz[5] + f1[i+ni +ninj2]*pz[6];
-    vc4[i] = f1[i+ni2+ninjl]*pz[5] + f1[i+ni2+ninj2]*pz[6];
-    dsl[i] = vb4[i]*py[5] + vc4[i]*py[6];
+    vb4[i] = f1[i+ni +ninjl]*cxyz[18] + f1[i+ni +ninj2]*cxyz[19];
+    vc4[i] = f1[i+ni2+ninjl]*cxyz[18] + f1[i+ni2+ninj2]*cxyz[19];
+    dsl[i] = vb4[i]*cxyz[16] + vc4[i]*cxyz[17];
   }
-  lin[0] = dsl[1]*px[5] + dsl[2]*px[6];
-  ma = f1[1 + ni + nijl] ; mi = ma;   // point [1,1,1] of 2x2x2 inner box
+  lin[0] = dsl[1]*cxyz[13] + dsl[2]*cxyz[14];
+  ma = f1[1 + ni + ninjl] ; mi = ma;   // point [1,1,1] of 2x2x2 inner box
+#define MAX(a,b) ((a) > (b)) ? (a) : (b)
+#define MIN(a,b) ((a) < (b)) ? (a) : (b)
   for (i=1 ; i<3 ; i++){              // min max of 2x2x2 inner box
     ma = MAX(ma , f1[i + ni  + ninjl]); ma = MAX(ma , f1[i + ni  + ninj2]);
     mi = MIN(mi , f1[i + ni  + ninjl]); mi = MIN(mi , f1[i + ni  + ninj2]);
@@ -608,19 +621,19 @@ void Tricublin_zyx_mm_d(float *d, float *lin, float *min, float *max, float *f1,
 #endif
 }
 
-static inline void Tricublin_mono_zyx_inline(float *d, float *f1, double *pxyz, int NI, int NINJ, int zlinear){
-}
-
-void Tricublin_mono_zyx_n(float *d, float *f1, pxpypz *pxyz,  ztab *lv, int n){
-  double cxyz[12];   // interpolation coefficients 4 for each dimension (x, y, z)
+void Tricublin_mono_zyx_n(float *d, float *l, float *mi, float *ma, float *f, pxpypz *pxyz,  ztab *lv, int n){
+  int i;
+  double cxyz[24];   // interpolation coefficients 4 for each dimension (x, y, z)
   int ixyz;          // unilinear index into array f1 (collapsed dimensions)
   int zlinear;       // non zero if linear interpolation
                      // all above computed in Vcoef_pxyz4, used in Tricublin_zyxf1
-/*printf*/("%12.7f %12.7f %12.7f\n",pxyz->px, pxyz->py, pxyz->pz);
   while(n--){
     zlinear = Vcoef_pxyz4_inline(cxyz, &ixyz, pxyz->px, pxyz->py, pxyz->pz, lv);  // compute coefficients
-    Tricublin_mono_zyx_inline(d, f1 + ixyz, cxyz, lv->ni, lv->nij, zlinear);         // interpolate
+    Tricublin_zyx_mm_d_inline(d, l, mi, ma, f + ixyz, cxyz, lv->ni, lv->nij, zlinear);         // interpolate
     d++;         // next result
+    l++;
+    mi++;
+    ma++;
     pxyz += 1;   // next set of positions
   }
 }
@@ -809,7 +822,7 @@ static inline void Tricublin_zyxf3_inline(float *d, float *f, double *pxyz, int 
 // ( 2 <= px < "ni"-1 ) ( 2 <= py < "nj"-1 )
 // pz < 2 and pz >= nk - 1 will induce linear interpolation or extrapolation
 void Tricublin_zyx3_n(float *d, float *f3, pxpypz *pxyz,  ztab *lv, int n){
-  double cxyz[12];   // interpolation coefficients 4 for each dimension (x, y, z)
+  double cxyz[24];   // interpolation coefficients 4 for each dimension (x, y, z)
   int ixyz;          // unilinear index into array f1 (collapsed dimensions)
   int zlinear;       // non zero if linear interpolation
                      // all above computed in Vcoef_pxyz4, used in Tricublin_zyxf1
