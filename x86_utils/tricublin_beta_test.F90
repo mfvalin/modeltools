@@ -93,7 +93,10 @@ program tricublin_d_test
 
   print *,'======================== 1 variable ================================'
 
+  t0 = rdtscp()
   call tricublin_zyx1_n(d,f1(1,1,1),pxpypz,lv,NI*NJ*NK)
+  t1 = rdtscp()
+  print *,"cycles per point =",(t1-t0)/(NI*NJ*NK)
 
   exact = 0
   delta = 0.0
@@ -123,7 +126,10 @@ program tricublin_d_test
 111 continue
   print *,'======================== 3 variables ==============================='
 
+  t0 = rdtscp()
   call tricublin_zyx3_n(d3,f123(1,1,1,1),pxpypz,lv,NI*NJ*NK)
+  t1 = rdtscp()
+  print *,"cycles per point =",(t1-t0)/(NI*NJ*NK*3)
 
   exact = 0
   delta = 0.0
@@ -175,7 +181,10 @@ program tricublin_d_test
   dlin = 0
   dmin = 0
   dmax = 0
+  t0 = rdtscp()
   call tricublin_mono_zyx_n(d,dlin,dmin,dmax,f1(1,1,1),pxpypz,lv,NI*NJ*NK)
+  t1 = rdtscp()
+  print *,"cycles per point =",(t1-t0)/(NI*NJ*NK)
 
   exact = 0
   delta = 0.0

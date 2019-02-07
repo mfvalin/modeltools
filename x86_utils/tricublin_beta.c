@@ -21,7 +21,7 @@
 #include <stdint.h>
 
 #if defined(TIMING)
-static uint64_t rdtscp_(void) {   // version "in order" avec "serialization"
+uint64_t rdtscp_(void) {   // version "in order" avec "serialization"
   uint32_t lo, hi;
   __asm__ volatile ("rdtscp"
       : /* outputs */ "=a" (lo), "=d" (hi)
