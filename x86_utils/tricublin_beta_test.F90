@@ -13,7 +13,7 @@ program tricublin_d_test
   real*8, dimension(8) :: pxy
   real*8, dimension(2) :: xy
   real, dimension(-2:NI+3,-1:NJ+2,NK), target :: f1, f2, f3
-  real, dimension(3,NI,NJ,NK), target :: f123
+  real, dimension(3,-2:NI+3,-1:NJ+2,NK), target :: f123
   real*8, dimension(NK) :: zlev
   integer :: i, j, k, ii, jj, kk, rr
   real*8 fx, fy, fz, fxyz, x, y, z, ovni, ovnj, ovnk, xx, yy, zz
@@ -21,9 +21,10 @@ program tricublin_d_test
   type(C_PTR) :: lv
   real, dimension(3,NI,NJ,NK) :: pxpypz
   real, dimension(NI,NJ,NK) :: expected, d
+  real, dimension(3,NI,NJ,NK) :: d3
   real*8, dimension(NK) :: levels
-  real :: delta, error
-  real*8 :: avg
+  real :: delta, error, delta1, delta2, delta3
+  real*8 :: avg, avg1, avg2, avg3
   integer exact
 
   fx(x) = (x+1.0)*(x+1.1)*(x+1.2)*(x+1.3)
@@ -66,8 +67,10 @@ program tricublin_d_test
 	f123(1,i,j,k) = f1(i,j,k)
 	f123(2,i,j,k) = f2(i,j,k)
 	f123(3,i,j,k) = f3(i,j,k)
-	xx = min( max(i,2), ni - 2) + dx + 3         ! offset x de 3
-	yy = min( max(j,2), nj - 2) + dy + 2         ! offset y de 2
+! 	xx = min( max(i,2), ni - 2) + dx + 3         ! offset x de 3
+! 	yy = min( max(j,2), nj - 2) + dy + 2         ! offset y de 2
+	xx = min( max(i,2), ni - 2) + dx         ! offset x de 3
+	yy = min( max(j,2), nj - 2) + dy         ! offset y de 2
 	if(k > 1) then
 	  zz = zz + dz
 	else
@@ -76,14 +79,15 @@ program tricublin_d_test
 	pxpypz(1,i,j,k) = xx         ! offset x de 3
 	pxpypz(2,i,j,k) = yy         ! offset y de 2
 	pxpypz(3,i,j,k) = zz
-	expected(i,j,k) = real(fxyz(xx-3,yy-2,zz)) ! compensation d'offset
+! 	expected(i,j,k) = real(fxyz(xx-3,yy-2,zz)) ! compensation d'offset
+	expected(i,j,k) = real(fxyz(xx,yy,zz))
       enddo
     enddo
   enddo
 
   lv = vsearch_setup(levels, NK, NI+6, NJ+4)    ! "NI" = NI + 6, "NJ" = nj + 4
 
-  call tricublin_zyx1_n(d,f1,pxpypz,lv,NI*NJ*NK)
+  call tricublin_zyx1_n(d,f1(1,1,1),pxpypz,lv,NI*NJ*NK)
 
   exact = 0
   delta = 0.0
@@ -94,21 +98,68 @@ program tricublin_d_test
         error = abs(expected(i,j,k) - d(i,j,k))
         if(error == 0.0) exact = exact + 1
         delta = max(delta,error / expected(i,j,k))
-        avg = avg + delta
-        if(delta > .000001) then
+        avg = avg + (error / expected(i,j,k))
+        if(delta > .000001 .or. i+j+k == 3) then
           print *,'i,j,k',i,j,k
           print *,'pxpypz =',pxpypz(1,i,j,k),pxpypz(2,i,j,k),pxpypz(3,i,j,k)
           print *,'expected =',expected(i,j,k)
           print *,'result   =',d(i,j,k)
-          stop
+          if(delta > .000001) stop
         endif
       enddo
     enddo
   enddo
-  print *,'exact =',exact
+  print *,'exact =',exact,' out of',NI*NJ*NK
   print *,'%      ',real(exact)/real(NI*NJ*NK)*100
   print*,'maxerr =',delta
   print*,'avgerr =',real(avg/(NI*NJ*NK))
+
+  print *,'====================================================================='
+
+  call tricublin_zyx3_n(d3,f123(1,1,1,1),pxpypz,lv,NI*NJ*NK)
+
+  exact = 0
+  delta = 0.0
+  delta1 = 0.0
+  delta2 = 0.0
+  delta3 = 0.0
+  avg = 0.0
+  avg1 = 0.0
+  avg2 = 0.0
+  avg3 = 0.0
+  do k = 1, NK
+    do j = 1, NJ
+      do i = 1, NI
+        error = abs(expected(i,j,k)+00.0 - d3(1,i,j,k))
+        if(error == 0.0) exact = exact + 1
+        delta1 = max(delta1,error / expected(i,j,k))
+        avg1 = avg1 + (error / expected(i,j,k))
+
+        error = abs(expected(i,j,k)+10.0 - d3(2,i,j,k))
+        if(error == 0.0) exact = exact + 1
+        delta2 = max(delta2,error / (expected(i,j,k)+10.0))
+        avg2 = avg2 + error / (expected(i,j,k)+10.0)
+
+        error = abs(expected(i,j,k)+20.0 - d3(3,i,j,k))
+        if(error == 0.0) exact = exact + 1
+        delta3 = max(delta3,error / (expected(i,j,k)+20.0))
+        avg3 = avg3 + error / (expected(i,j,k)+20.0)
+
+        delta = max(delta1,delta2,delta3)
+        if(delta > .000001 .or. i+j+k == 3) then
+          print *,'i,j,k',i,j,k
+          print *,'pxpypz =',pxpypz(1,i,j,k),pxpypz(2,i,j,k),pxpypz(3,i,j,k)
+          print *,'expected =',expected(i,j,k) + [0.0, 10.0, 20.0]
+          print *,'result   =',d3(:,i,j,k)
+          if(delta > .000001) stop
+        endif
+      enddo
+    enddo
+  enddo
+  print *,'exact =',exact,' out of',NI*NJ*NK*3
+  print *,'%      ',real(exact)/real(NI*NJ*NK*3)*100
+  print*,'maxerr =',delta1, delta2, delta3
+  print*,'avgerr =',real([avg1,avg2,avg3] / (NI*NJ*NK))
 
 #if defined(OLD_TEST)
   ii = 2

@@ -395,22 +395,24 @@ void Tricublin_zyx1_n(float *d, float *f1, pxpypz *pxyz,  ztab *lv, int n){
   }
 }
 // Fortran dimensions: d(3) , f(3,NI,NJ,NK)
-// NI   : length of a line
-// NINJ : length of a plane
+// NI   : size of a 1D line
+// NINJ : size of a 2D plane
 // f : address of lower left corner of the 4 x 4 x 4 or 4 x 4 x 2 box
 // interpolation is done along z, then along y, then along x
 // 3 values are interpolated using the same cubic/linear polynomial coefficients
-// pz(1) and pz(4) both == 0.0 mean linear interpolation along z
-// pz(2) = 1.0 - dz, pz(3) = dz are expected (0.0 <= dz <= 1.0)
-// the above might get adjusted in the future
+// pz(2) = 1.0 - dz, pz(3) = dz are expected in the linear along z case (0.0 <= dz <= 1.0)
 // in the z linear case, planes 0 and 1 are the same as are planes 2 and 3
 // note for future expansion:
 // should both interpolations have to be done, planes 1 and 2 can be used for the z linear case,
 // and planes 0, 1, 2, 3 for the z cubic case
 // in that case another mechanism will have to be used to signal the z linear case
-static inline void Tricublin_zyx3f_beta(float *d, float *f, double *px, double *py, double *pz, int NI, int NINJ){
+static inline void Tricublin_zyxf3_inline(float *d, float *f, double *pxyz, int NI, int NINJ, int zlinear){
+// static inline void Tricublin_zyx3f_beta(float *d, float *f, double *px, double *py, double *pz, int NI, int NINJ){
   int ni = 3*NI;
   int ninj = 3*NINJ;
+  double *px = pxyz;
+  double *py = pxyz+4;
+  double *pz = pxyz+8;
   int ninjl;    // ninj (cubic along z) or 0 (linear along z)
   float *s = f;
   double dst[13];
@@ -433,7 +435,7 @@ static inline void Tricublin_zyx3f_beta(float *d, float *f, double *px, double *
   ni3 = ni2 + ni;
   dst[12] = 0;
   ninjl = ninj ; // assuming cubic case. in the linear case, ninjl will be set to 0
-  if(pz[0] == 0.0 && pz[3] == 0.0) ninjl = 0;
+  if(zlinear) ninjl = 0;
 
 #if defined(__AVX2__) && defined(__x86_64__)
   // ==== interpolation along Z, vector length is 12 (3 vectors of length 4 per plane) ====
@@ -569,6 +571,25 @@ static inline void Tricublin_zyx3f_beta(float *d, float *f, double *px, double *
   d[1] = dst[1]*px[0] + dst[4]*px[1] + dst[7]*px[2] + dst[10]*px[3];
   d[2] = dst[2]*px[0] + dst[5]*px[1] + dst[8]*px[2] + dst[11]*px[3];
 #endif
+}
+
+// process n triplets
+// for each triplet 1 value from ixyz, 3 values from pxyz are used (1 element)
+// it is ASSUMED that along X and Y interpolation will always be CUBIC 
+// ( 2 <= px < "ni"-1 ) ( 2 <= py < "nj"-1 )
+// pz < 2 and pz >= nk - 1 will induce linear interpolation or extrapolation
+void Tricublin_zyx3_n(float *d, float *f3, pxpypz *pxyz,  ztab *lv, int n){
+  double cxyz[12];   // interpolation coefficients 4 for each dimension (x, y, z)
+  int ixyz;          // unilinear index into array f1 (collapsed dimensions)
+  int zlinear;       // non zero if linear interpolation
+                     // all above computed in Vcoef_pxyz4, used in Tricublin_zyxf1
+/*printf*/("%12.7f %12.7f %12.7f\n",pxyz->px, pxyz->py, pxyz->pz);
+  while(n--){
+    zlinear = Vcoef_pxyz4_inline(cxyz, &ixyz, pxyz->px, pxyz->py, pxyz->pz, lv);  // compute coefficients
+    Tricublin_zyxf3_inline(d, f3 + ixyz*3, cxyz, lv->ni, lv->nij, zlinear);         // interpolate
+    d+=3;         // next result
+    pxyz += 1;   // next set of positions
+  }
 }
 
 #if defined(SELF_TEST)
