@@ -76,8 +76,8 @@ program tricublin_d_test
 	else
 	  zz = zz - dz
 	endif
-	pxpypz(1,i,j,k) = xx         ! offset x de 3
-	pxpypz(2,i,j,k) = yy         ! offset y de 2
+	pxpypz(1,i,j,k) = xx + 3        ! offset x de 3
+	pxpypz(2,i,j,k) = yy + 2        ! offset y de 2
 	pxpypz(3,i,j,k) = zz
 ! 	expected(i,j,k) = real(fxyz(xx-3,yy-2,zz)) ! compensation d'offset
 	expected(i,j,k) = real(fxyz(xx,yy,zz))
@@ -85,7 +85,7 @@ program tricublin_d_test
     enddo
   enddo
 
-  lv = vsearch_setup(levels, NK, NI+6, NJ+4)    ! "NI" = NI + 6, "NJ" = nj + 4
+  lv = vsearch_setup_plus(levels, NK, NI+6, NJ+4, -3, -2)    ! "NI" = NI + 6, "NJ" = nj + 4 offseti = -3, offsetj = -2
 
   call tricublin_zyx1_n(d,f1(1,1,1),pxpypz,lv,NI*NJ*NK)
 

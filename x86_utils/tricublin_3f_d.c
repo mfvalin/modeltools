@@ -740,6 +740,7 @@ void Cublin3D_zyx_clmm_d(float *d, float *f1, double dx, double dy, double *pz, 
 // px[4:7] is expected to contain ( 0 , 1-dx , dx , 0 )
 // py[4:7] is expected to contain ( 0 , 1-dy , dy , 0 )
 // pz[4:7] is expected to contain ( 0 , 1-dz , dz , 0 )
+// monotonic interpolator
 void Tricublin_zyxf_mm_d(float *d, float *lin, float *min, float *max, float *f1, double *px, double *py, double *pz, int NI, int NINJ){
   int ni = NI;
   int ninj = NINJ;
