@@ -25,7 +25,7 @@ program tricublin_d_test
   real*8, dimension(NK) :: levels
   real :: delta, error, delta1, delta2, delta3
   real*8 :: avg, avg1, avg2, avg3
-  integer exact
+  integer :: exact, minmaxerr
 
   fx(x) = (x+1.0)*(x+1.1)*(x+1.2)*(x+1.3)
   fy(y) = (y+1.05)*(y+1.15)*(y+1.25)*(y+1.35)
@@ -206,12 +206,14 @@ program tricublin_d_test
   print *,'======================== 1 mono linear ============================='
 
   exact = 0
+  minmaxerr = 0
   delta = 0.0
   avg = 0.0
   do k = 1, NK
     do j = 1, NJ
       do i = 1, NI
         error = abs(expected(i,j,k) - dlin(i,j,k))
+        if( dlin(i,j,k) < dmin(i,j,k) .or. dlin(i,j,k) > dmax(i,j,k) ) minmaxerr = minmaxerr + 1
         if(error == 0.0) exact = exact + 1
         delta = max(delta,error / expected(i,j,k))
         avg = avg + (error / expected(i,j,k))
@@ -228,6 +230,7 @@ program tricublin_d_test
   print *,'exact =',exact,' out of',NI*NJ*NK
   print *,'%      ',real(exact)/real(NI*NJ*NK)*100
   print*,'maxerr =',delta
+  print*,'points outside of min-max range =',minmaxerr
   print*,'avgerr =',real(avg/(NI*NJ*NK))
 
   print *,'====================================================================='
