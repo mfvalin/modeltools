@@ -1,12 +1,21 @@
 program tricublin_d_test
   use ISO_C_BINDING
   implicit none
-  include "tricublib_interface.inc"
+  include "tricublin_f90.inc"
+#if defined(USE_MPI)
+  include "mpif.h"
+#endif
+  interface
+    function nanocycles() result (nano) bind(C,name='Nanocycles')
+    import :: C_LONG_LONG
+    integer(C_LONG_LONG) :: nano
+    end function nanocycles
+  end interface
   integer, parameter :: NI = 300
   integer, parameter :: NJ = 200
   integer, parameter :: NK = 110
   integer, parameter :: NR = 10
-  integer*8, external :: rdtscp
+  integer :: my_proc = 0
   integer*8 :: t0, t1
   real*8 :: dx, dy, dz
   real*8, dimension(8) :: px, py, pz
@@ -25,7 +34,7 @@ program tricublin_d_test
   real*8, dimension(NK) :: levels
   real :: delta, error, delta1, delta2, delta3
   real*8 :: avg, avg1, avg2, avg3
-  integer :: exact, minmaxerr
+  integer :: exact, minmaxerr, ierr
 
   fx(x) = (x+1.0)*(x+1.1)*(x+1.2)*(x+1.3)
   fy(y) = (y+1.05)*(y+1.15)*(y+1.25)*(y+1.35)
@@ -34,7 +43,10 @@ program tricublin_d_test
 !   fxyz(x,y,z) = x * y * z
 !   fxyz(x,y,z) = fx(x*ovni) * fy(y*ovnj) * fz(z*ovnk)
   fxyz(x,y,z) = fx(x*ovni) + fy(y*ovnj) * fz(z*ovnk)
-
+#if defined(USE_MPI)
+  call mpi_init(ierr)
+  call mpi_comm_rank(MPI_COMM_WORLD,my_proc,ierr)
+#endif
   px = 0
   py = 0
   pz = 0
@@ -91,12 +103,16 @@ program tricublin_d_test
 
   lv = vsearch_setup_plus(levels, NK, NI+6, NJ+4, -3, -2)    ! "NI" = NI + 6, "NJ" = nj + 4 offseti = -3, offsetj = -2
 
-  print *,'======================== 1 variable ================================'
+  if(my_proc == 0) print *,'======================== 1 variable ================================'
 
-  t0 = rdtscp()
   call tricublin_zyx1_n(d,f1(1,1,1),pxpypz,lv,NI*NJ*NK)
-  t1 = rdtscp()
-  print *,"cycles per point =",(t1-t0)/(NI*NJ*NK)
+#if defined(USE_MPI)
+  call mpi_barrier(MPI_COMM_WORLD,ierr)
+#endif
+  t0 = nanocycles()
+  call tricublin_zyx1_n(d,f1(1,1,1),pxpypz,lv,NI*NJ*NK)
+  t1 = nanocycles()
+  if(my_proc == 0) print *,"nanoseconds per point =",(t1-t0)/(NI*NJ*NK)
 
   exact = 0
   delta = 0.0
@@ -108,7 +124,7 @@ program tricublin_d_test
         if(error == 0.0) exact = exact + 1
         delta = max(delta,error / expected(i,j,k))
         avg = avg + (error / expected(i,j,k))
-        if(delta > .000001 .or. i+j+k == 3) then
+        if((delta > .000001 .or. i+j+k == 3) .and. (my_proc == 0)) then
           print *,'i,j,k',i,j,k
           print *,'pxpypz =',pxpypz(1,i,j,k),pxpypz(2,i,j,k),pxpypz(3,i,j,k)
           print *,'expected =',expected(i,j,k)
@@ -119,17 +135,23 @@ program tricublin_d_test
       enddo
     enddo
   enddo
+  if(my_proc == 0) then
   print *,'exact =',exact,' out of',NI*NJ*NK
   print *,'%      ',real(exact)/real(NI*NJ*NK)*100
   print*,'maxerr =',delta
   print*,'avgerr =',real(avg/(NI*NJ*NK))
+  endif
 111 continue
-  print *,'======================== 3 variables ==============================='
+  if(my_proc == 0) print *,'======================== 3 variables ==============================='
 
-  t0 = rdtscp()
   call tricublin_zyx3_n(d3,f123(1,1,1,1),pxpypz,lv,NI*NJ*NK)
-  t1 = rdtscp()
-  print *,"cycles per point =",(t1-t0)/(NI*NJ*NK*3)
+#if defined(USE_MPI)
+  call mpi_barrier(MPI_COMM_WORLD,ierr)
+#endif
+  t0 = nanocycles()
+  call tricublin_zyx3_n(d3,f123(1,1,1,1),pxpypz,lv,NI*NJ*NK)
+  t1 = nanocycles()
+  if(my_proc == 0) print *,"nanoseconds per point =",(t1-t0)/(NI*NJ*NK*3)
 
   exact = 0
   delta = 0.0
@@ -159,7 +181,7 @@ program tricublin_d_test
         avg3 = avg3 + error / (expected(i,j,k)+20.0)
 
         delta = max(delta1,delta2,delta3)
-        if(delta > .000001 .or. i+j+k == 3) then
+        if((delta > .000001 .or. i+j+k == 3) .and. (my_proc == 0)) then
           print *,'i,j,k',i,j,k
           print *,'pxpypz =',pxpypz(1,i,j,k),pxpypz(2,i,j,k),pxpypz(3,i,j,k)
           print *,'expected =',expected(i,j,k) + [0.0, 10.0, 20.0]
@@ -170,21 +192,27 @@ program tricublin_d_test
       enddo
     enddo
   enddo
+  if(my_proc == 0) then
   print *,'exact =',exact,' out of',NI*NJ*NK*3
   print *,'%      ',real(exact)/real(NI*NJ*NK*3)*100
   print*,'maxerr =',delta1, delta2, delta3
   print*,'avgerr =',real([avg1,avg2,avg3] / (NI*NJ*NK))
+  endif
 222 continue
-  print *,'======================== 1 mono cubic =============================='
+  if(my_proc == 0) print *,'======================== 1 mono cubic =============================='
 
   d = 0
   dlin = 0
   dmin = 0
   dmax = 0
-  t0 = rdtscp()
   call tricublin_mono_zyx_n(d,dlin,dmin,dmax,f1(1,1,1),pxpypz,lv,NI*NJ*NK)
-  t1 = rdtscp()
-  print *,"cycles per point =",(t1-t0)/(NI*NJ*NK)
+#if defined(USE_MPI)
+  call mpi_barrier(MPI_COMM_WORLD,ierr)
+#endif
+  t0 = nanocycles()
+  call tricublin_mono_zyx_n(d,dlin,dmin,dmax,f1(1,1,1),pxpypz,lv,NI*NJ*NK)
+  t1 = nanocycles()
+  if(my_proc == 0) print *,"nanoseconds per point =",(t1-t0)/(NI*NJ*NK)
 
   exact = 0
   delta = 0.0
@@ -196,7 +224,7 @@ program tricublin_d_test
         if(error == 0.0) exact = exact + 1
         delta = max(delta,error / expected(i,j,k))
         avg = avg + (error / expected(i,j,k))
-        if(delta > .000001 .or. i+j+k == 3) then
+        if((delta > .000001 .or. i+j+k == 3) .and. (my_proc == 0)) then
           print *,'i,j,k',i,j,k
           print *,'pxpypz =',pxpypz(1,i,j,k),pxpypz(2,i,j,k),pxpypz(3,i,j,k)
           print *,'expected =',expected(i,j,k)
@@ -207,12 +235,14 @@ program tricublin_d_test
       enddo
     enddo
   enddo
+  if(my_proc == 0) then
   print *,'exact =',exact,' out of',NI*NJ*NK
   print *,'%      ',real(exact)/real(NI*NJ*NK)*100
   print*,'maxerr =',delta
   print*,'avgerr =',real(avg/(NI*NJ*NK))
+  endif
 333 continue
-  print *,'======================== 1 mono linear ============================='
+  if(my_proc == 0) print *,'======================== 1 mono linear ============================='
 
   exact = 0
   minmaxerr = 0
@@ -226,24 +256,27 @@ program tricublin_d_test
         if(error == 0.0) exact = exact + 1
         delta = max(delta,error / expected(i,j,k))
         avg = avg + (error / expected(i,j,k))
-!         if(delta > .000001 .or. i+j+k == 3) then
-!           print *,'i,j,k',i,j,k
-!           print *,'pxpypz =',pxpypz(1,i,j,k),pxpypz(2,i,j,k),pxpypz(3,i,j,k)
-!           print *,'expected =',expected(i,j,k)
-!           print *,'result   =',dlin(i,j,k)
-!           if(delta > .000001) stop
-!         endif
+                if((delta > .0001 .or. i+j+k == 3) .and. (my_proc == 0)) then  ! not expecting exact results in linear case
+          print *,'i,j,k',i,j,k
+          print *,'pxpypz =',pxpypz(1,i,j,k),pxpypz(2,i,j,k),pxpypz(3,i,j,k)
+          print *,'expected =',expected(i,j,k)
+          print *,'result   =',dlin(i,j,k)
+          if(delta > .0001) stop
+        endif
       enddo
     enddo
   enddo
+  if(my_proc == 0) then
   print *,'exact =',exact,' out of',NI*NJ*NK
   print *,'%      ',real(exact)/real(NI*NJ*NK)*100
   print*,'maxerr =',delta
   print*,'points outside of min-max range =',minmaxerr
   print*,'avgerr =',real(avg/(NI*NJ*NK))
-
   print *,'====================================================================='
-
+  endif
+#if defined(USE_MPI)
+  call mpi_finalize(ierr)
+#endif
 #if defined(OLD_TEST)
   ii = 2
   jj = 3
@@ -290,7 +323,7 @@ program tricublin_d_test
   kk = 4
   f2 = f1 + 10
   f3 = f2 + 10
-  t0 = rdtscp()
+  t0 = nanocycles()
   do rr = 1 , NR
   do KK = 1, NK - 3
     do JJ = 1, NJ - 3
@@ -303,9 +336,9 @@ program tricublin_d_test
     enddo
   enddo
   enddo
-  t1 = rdtscp() - t0
+  t1 = nanocycles() - t0
   
-  print *, 'tot cycles   = ',t1
+  print *, 'tot nanoseconds   = ',t1
   print *, 'per interp   = ',t1/((ni-3)*(nj-3)*(nk-3))/NR
   print *, 'FLOPS/interp = ',3*(32*4 + 32 + 8 + 64)  ! interpolation + float -> double conversions
 
@@ -313,7 +346,7 @@ program tricublin_d_test
   kk = 4
   f2 = f1 + 10
   f3 = f2 + 10
-  t0 = rdtscp()
+  t0 = nanocycles()
   do rr = 1 , NR
   do KK = 1, NK - 3
     do JJ = 1, NJ - 3
@@ -324,9 +357,9 @@ program tricublin_d_test
     enddo
   enddo
   enddo
-  t1 = rdtscp() - t0
+  t1 = nanocycles() - t0
   
-  print *, 'tot cycles   = ',t1
+  print *, 'tot nanoseconds   = ',t1
   print *, 'per interp   = ',t1/((ni-3)*(nj-3)*(nk-3))/NR
   print *, 'FLOPS/interp = ',3*(32*4 + 32 + 8 + 64)  ! interpolation + float -> double conversions
 

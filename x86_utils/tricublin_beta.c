@@ -21,14 +21,25 @@
 #include <stdint.h>
 
 #if defined(TIMING)
-uint64_t rdtscp_(void) {   // version "in order" avec "serialization"
-  uint32_t lo, hi;
-  __asm__ volatile ("rdtscp"
-      : /* outputs */ "=a" (lo), "=d" (hi)
-      : /* no inputs */
-      : /* clobbers */ "%rcx");
-//   __asm__ volatile ("mfence");
-  return (uint64_t)lo | (((uint64_t)hi) << 32);
+#include <sys/time.h>
+uint64_t Nanocycles(void) {
+// uint64_t rdtscp_(void) {   // version "in order" avec "serialization"
+//   uint32_t lo, hi;
+//   __asm__ volatile ("rdtscp"
+//       : /* outputs */ "=a" (lo), "=d" (hi)
+//       : /* no inputs */
+//       : /* clobbers */ "%rcx");
+// //   __asm__ volatile ("mfence");
+//   return (uint64_t)lo | (((uint64_t)hi) << 32);
+  struct timeval t;
+  uint64_t i;
+  int status;
+  status = gettimeofday(&t,NULL);
+  i = t.tv_sec;
+  i = i * 1000000;
+  i = i + t.tv_usec;
+  i = i * 1000;      // nanoseconds
+  return i;
 }
 #endif
 
