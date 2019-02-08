@@ -16,9 +16,12 @@
  * Free Software Foundation, Inc., 59 Temple Place - Suite 330,
  * Boston, MA 02111-1307, USA.
  */
-
+#if defined(__AVX2__) && defined(__x86_64__)
 #include <immintrin.h>
+#endif
+
 #include <stdint.h>
+#include <stdlib.h>
 
 #if defined(TIMING)
 #include <sys/time.h>
