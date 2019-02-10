@@ -1,6 +1,9 @@
 #include <stdio.h>
 #include <stdint.h>
-#undef __SSExx__
+#if defined(NO_SSE)
+#undef __SSE__
+#undef __AVX2__
+#endif
 #if defined(__SSE__)
 #include <x86intrin.h>
 #endif
@@ -20,24 +23,28 @@
 // build immediate operand for shuffle control, 2 bits per selector (0-3)
 #define SELECT(a,b,c,d) ( a + (b<<2) + (c<<4) + (d<<6) )
 
+#if defined(__AVX2__)
 // endian swap of bytes in 32 bit tokens (s -> d)
 static uint8_t swapindex_8_32[] = {  3,  2,  1,  0,  7,  6,  5,  4, 11, 10,  9,  8, 15, 14, 13, 12};
+#endif
+
 void swap_8_in_32(void *s, void *d, int n){
 #if defined(__AVX2__)
   __m256i ix, vs0, vs1;
+  uint32_t n2;
 #endif
-  uint32_t i, n2;
+  uint32_t i;
   uint32_t t;
   uint32_t *s0, *s1;
   uint32_t *d0, *d1;
 
-  n2 = (n >> 4);        // number of 16 token chunks
   s0 = (uint32_t *) s;
   s1 = s0;
   d0 = (uint32_t *) d;
   d1 = d0;
   i = 0;
 #if defined(__AVX2__)
+  n2 = (n >> 4);        // number of 16 token chunks
   s1 = s0 + (n2 << 3);  // "halfway" point
   d1 = d0 + (n2 << 3);  // "halfway" point
   ix = _mm256_loadu_si256((__m256i const *) swapindex_8_32);
@@ -66,19 +73,20 @@ void swap_8_in_32(void *s, void *d, int n){
 void swap_32_in_64(void *s, void *d, int n){
 #if defined(__AVX2__)
   __m256i vs0, vs1;
+  uint32_t n2;
 #endif
-  uint32_t i, n2;
+  uint32_t i ;
   uint64_t t;
   uint64_t *s0, *s1;
   uint64_t *d0, *d1;
 
-  n2 = (n >> 3);        // number of 8 token chunks
   s0 = (uint64_t *) s;
   s1 = s0;
   d0 = (uint64_t *) d;
   d1 = d0;
   i = 0;
 #if defined(__AVX2__)
+  n2 = (n >> 3);        // number of 8 token chunks
   s1 = s0 + (n2 << 2);  // "halfway" point
   d1 = d0 + (n2 << 2);  // "halfway" point
   for( ; i < n - 7 ; i +=8){                           // endian swap of 8 64 bit tokens
@@ -106,12 +114,17 @@ void swap_32_in_64(void *s, void *d, int n){
 // otherwise some points are added twice (we sum 2* np2 points)
 void FloatFastQuantizeLinear(float *z_in, short *quant, int n, int nbits, float *Max, float *Min, float *Avg, float *Rescl)
 {
-  int i, j, np, np2, offset, maxexp, mask, imax, imin;
-  long long izero;
+#if defined(__AVX2__) && defined(__FMA__)
+  int mask;
+#else
+  int j;
+#endif
+  int i, np, np2, offset, maxexp, imax, imin;
+  int izero;
   float scale, fzero, fmin, quantum;
   float *z_in0 = z_in;
 #if defined(__SSE__)
-  __m128  x0, x1, x2, xxmin, xxmax, xxsum, xxrng, xxsca;
+  __m128  x0, x1, x2, xxmin, xxmax, xxsum;
   __m256  y0, yymin, yysca, point5;
   __m128i ix0, ix1;
   __m256i iy0, yymsk;
@@ -121,11 +134,12 @@ void FloatFastQuantizeLinear(float *z_in, short *quant, int n, int nbits, float 
   union {
     unsigned int i;
     float f;
-  } xmax, xmin, xrng, xscl;
+  } xmax, xmin, xrng, xscl, q;
 // initialize min, max, sum
 #if defined(__SSE__)
   xxmin  = _mm_loadu_ps(&z_in[ 0]) ;  // min = max = 8 first elements of array
   xxmax  = xxmin;
+  xxsum  = xxmin;
   xxsum  = _mm_xor_ps(xxsum,xxsum) ;  // xxsum = 0
 #else
   for(j=0 ; j<VLEN ; j++){
@@ -199,7 +213,6 @@ void FloatFastQuantizeLinear(float *z_in, short *quant, int n, int nbits, float 
   *Avg  = tsum / np ;
 #endif
 // code to quantize floating poing into 16 bit tokens (nbits significant bits)
-  mask = ~ (-1 << nbits) ;
   xmax.f = *Max;
   xmin.f = *Min;
   xrng.f = xmax.f - xmin.f;
@@ -224,7 +237,8 @@ printf("old scale = %f, quantum = %f\n",xscl.f,quantum);
   }else{
     izero = (0 - *Min) * scale + .5 ;
   }
-printf("new scale = %f, quantum = %f, min = %f, izero = %ld\n",scale, quantum,*Min,izero);
+  q.f = quantum;
+printf("new scale = %f, quantum = %f %8x, min = %f, izero = %d\n",scale, quantum, q.i, *Min,izero);
   fmin = -(izero * quantum);
   if( (*Min - fmin) > (.5 * quantum) ) fmin += quantum ;
   imax = (*Max - fmin) * scale + .5;
@@ -233,7 +247,7 @@ printf("new min = %f, deltamin = %g, qint = %g, coded max,min = %x %x\n",fmin,fm
   *Min = fmin;
   izero = (0 - fmin) * scale;
   fzero = *Min + izero * quantum;
-  printf("rescaled fzero = %f, izero = %ld, new min = %f\n",fzero,izero,*Min);
+  printf("rescaled fzero = %f, izero = %d, new min = %f\n",fzero,izero,*Min);
 //   if(IEEE32_SGN(xmin.i) == 0 ) {   // min < 0 and max >0
 //     izero = (0 - *Min) * scale - .5;
 //     fzero = *Min + izero * scale;
@@ -248,11 +262,13 @@ printf("new min = %f, deltamin = %g, qint = %g, coded max,min = %x %x\n",fmin,fm
 //   }
 //   printf("max min range maxexp scale mask is %f %f %f %i %f %8.8x\n",xmax.f,xmin.f,xrng.f,maxexp-127,scale,mask);
 #if defined(__AVX2__) && defined(__FMA__)
+  mask = ~ (-1 << nbits) ;
   // uses AVX2, SSE4, FMA instructions
   yysca = _mm256_set1_ps(scale) ;
   point5 = _mm256_set1_ps(0.5) ;
   yymin = _mm256_set1_ps(xmin.f) ;
   ix0 = (__m128i) _mm_broadcast_ss( (void *) &mask ) ;
+  yymsk = (__m256i) yymin;   // useless action to silence warning
   yymsk = _mm256_inserti128_si256(yymsk,ix0,0) ;
   yymsk = _mm256_inserti128_si256(yymsk,ix0,1) ;
   for (i=0 ; i<np2 ; i+=VLEN){
@@ -284,7 +300,9 @@ printf("new min = %f, deltamin = %g, qint = %g, coded max,min = %x %x\n",fmin,fm
 #define NBITS 16
 // inverse of linear quantizer, short to float with bias restoration
 void Short2Float(uint16_t *restrict q, float *restrict s, int n, float bias, float scale){
+#if ! defined(__AVX2__)
   uint32_t i;
+#endif
 
 #if defined(__AVX2__) && defined(__FMA__)
   __m256  y0, y1, y2, y3, yscal, ybias;
@@ -362,10 +380,10 @@ void Short2Float(uint16_t *restrict q, float *restrict s, int n, float bias, flo
 // linear quantizer, float to short with bias removal
 void Float2Short(uint16_t *restrict q0, float *restrict s0, unsigned int n, float *bias, float *rscl){
   int n1, i, maxexp, izero;
+#if defined(__AVX2__) && defined(__FMA__)
   float *restrict s1;
   uint16_t *restrict q1;
-#if defined(__AVX2__) && defined(__FMA__)
-  __m128  x0, x1, x2, x3, xxmin, xxmax, xxrng, xxsca;
+  __m128  x0, x1, x2, x3, xxmin, xxmax;
   __m256  y0, y1, yymin, yymax, yysca, point5;
   __m128i ix0, ix1, ix2, ix3;
   __m256i iy0, iy1;
@@ -374,15 +392,16 @@ void Float2Short(uint16_t *restrict q0, float *restrict s0, unsigned int n, floa
     unsigned int i;
     float f;
   } xmin, xmax, xrng, xscl;
-  float rscale, fzero, scale;
+  float fzero, scale;
 
   n1 = (n + 15) & 0xFFFFFFF0 ; // multiple of 16
   n1 = n1 >> 1 ;               // multiple of 8
+#if defined(__AVX2__) && defined(__FMA__)
   s1 = s0 + n - n1 ;           // "midpoint" with possible small overlap
   q1 = q0 + n - n1 ;           // "midpoint" with possible small overlap
-#if defined(__AVX2__) && defined(__FMA__)
   xxmin = _mm_loadu_ps(s0) ;
   xxmax = xxmin;
+  yymin = _mm256_loadu_ps(&s0[0]);     // useless code to suppress warning
   yymin = _mm256_insertf128_ps(yymin,xxmin,0) ;
   yymin = _mm256_insertf128_ps(yymin,xxmin,1) ;
   yymax = yymin ;
@@ -502,10 +521,10 @@ int main()
     unsigned int i;
     float f;
   } m;
-  int p2m16 = 0x37800000 ;  // 2.0 ** -16
-  int p2p16 = 0x47800000 ;  // 2.0 ** +16
-  int one   = 0x3f800000 ;  // 1.0
-  int onep  = 0x3f80000f ;  // 1.0 + epsilon
+//   int p2m16 = 0x37800000 ;  // 2.0 ** -16
+//   int p2p16 = 0x47800000 ;  // 2.0 ** +16
+//   int one   = 0x3f800000 ;  // 1.0
+//   int onep  = 0x3f80000f ;  // 1.0 + epsilon
   int round = 0x000080;
   int mask  = 0x00FFFF00 ;
 
@@ -585,7 +604,7 @@ int main()
     a[i] = a[i-1]+1.01;
   }
   minval = 8.3 ;
-  a[4] = minval ; a[7] = 65530.99 + a[4] ;
+  a[4] = minval ; a[7] = 6553000.99 + a[4] ;
   printf("a[1,4,7,ASIZE-1] %8f %8f %8f %8f\n",a[1],a[4],a[7],a[ASIZE-2]);
   FloatFastQuantizeLinear(&a[1],&ia[1],ASIZE-2,nbits,&ma,&mi,&av,&rescl);
   printf("mi=%f, av=%f, ma=%f, rescl=%f\n",mi,av,ma,rescl);
@@ -596,7 +615,7 @@ int main()
   printf("a[1,4,7,ASIZE-2] %8f %8f %8f %8f\n",a[1],a[4],a[7],a[ASIZE-2]);
   printf("ia[1,4,7,ASIZE-2] %8hu %8hu %8hu %8hu\n\n\n\n",ia[1],ia[4],ia[7],ia[ASIZE-2]);
 
-  for (i=1 ; i<ASIZE-1 ; i++) {a[i] = a[i] - 10000000000.0;}
+  for (i=1 ; i<ASIZE-1 ; i++) {a[i] = a[i] - 10000000000000.0;}
   minval = a[4];
   printf("a[1,4,7,ASIZE-1] %8f %8f %8f %8f\n",a[1],a[4],a[7],a[ASIZE-2]);
   FloatFastQuantizeLinear(&a[1],&ia[1],ASIZE-2,nbits,&ma,&mi,&av,&rescl);
