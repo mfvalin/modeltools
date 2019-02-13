@@ -442,7 +442,6 @@ void Tricublin_zyx1_n(float *d, float *f1, pxpypz *pxyz,  ztab *lv, int n){
 }
 
 void Tricublin_zyx1_n_m(float *d, float **fs, pxpypz *pxyz,  ztab *lv, int n, int m){  // multiple field version
-  float *f1;
   double cxyz[24];   // interpolation coefficients 4 for each dimension (x, y, z)
   int ixyz;          // unilinear index into array f1 (collapsed dimensions)
   int i;
@@ -451,8 +450,7 @@ void Tricublin_zyx1_n_m(float *d, float **fs, pxpypz *pxyz,  ztab *lv, int n, in
   while(n--){
     zlinear = Vcoef_pxyz4_inline(cxyz, &ixyz, pxyz->px, pxyz->py, pxyz->pz, lv);  // compute coefficients
     for(i=0 ; i< m ; i++){
-      f1 = fs[i]; 
-      Tricublin_zyxf1_inline(d, f1 + ixyz, cxyz, lv->ni, lv->nij, zlinear);       // interpolate
+      Tricublin_zyxf1_inline(d, fs[i] + ixyz, cxyz, lv->ni, lv->nij, zlinear);       // interpolate
       d++;   // next result
     }
     pxyz += 1;   // next set of positions
@@ -653,7 +651,6 @@ static inline void Tricublin_zyx_mm_d_inline(float *d, float *lin, float *min, f
 }
 
 void Tricublin_mono_zyx_n(float *d, float *l, float *mi, float *ma, float *f, pxpypz *pxyz,  ztab *lv, int n){
-  int i;
   double cxyz[24];   // interpolation coefficients 4 for each dimension (x, y, z)
   int ixyz;          // unilinear index into array f1 (collapsed dimensions)
   int zlinear;       // non zero if linear interpolation
@@ -665,6 +662,25 @@ void Tricublin_mono_zyx_n(float *d, float *l, float *mi, float *ma, float *f, px
     l++;
     mi++;
     ma++;
+    pxyz += 1;   // next set of positions
+  }
+}
+
+void Tricublin_mono_zyx_n_m(float *d, float *l, float *mi, float *ma, float **fs, pxpypz *pxyz,  ztab *lv, int n, int m){
+  int i;
+  double cxyz[24];   // interpolation coefficients 4 for each dimension (x, y, z)
+  int ixyz;          // unilinear index into array f1 (collapsed dimensions)
+  int zlinear;       // non zero if linear interpolation
+                     // all above computed in Vcoef_pxyz4, used in Tricublin_zyxf1
+  while(n--){
+    zlinear = Vcoef_pxyz4_inline(cxyz, &ixyz, pxyz->px, pxyz->py, pxyz->pz, lv);  // compute coefficients
+    for(i=0 ; i<m ; i++){
+      Tricublin_zyx_mm_d_inline(d, l, mi, ma, fs[i] + ixyz, cxyz, lv->ni, lv->nij, zlinear);         // interpolate
+      d++;         // next result
+      l++;
+      mi++;
+      ma++;
+    }
     pxyz += 1;   // next set of positions
   }
 }

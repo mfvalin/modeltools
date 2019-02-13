@@ -31,7 +31,7 @@ program tricublin_d_test
   type(C_PTR), dimension(3) :: f123p
   real, dimension(3,NI,NJ,NK) :: pxpypz
   real, dimension(NI,NJ,NK) :: expected, d, dmin, dmax, dlin
-  real, dimension(3,NI,NJ,NK) :: d3
+  real, dimension(3,NI,NJ,NK) :: d3, dmin3, dmax3, dlin3
   real*8, dimension(NK) :: levels
   real :: delta, error, delta1, delta2, delta3
   real*8 :: avg, avg1, avg2, avg3
@@ -310,7 +310,7 @@ program tricublin_d_test
   print*,'avgerr =',real(avg/(NI*NJ*NK))
   endif
 333 continue
-  if(my_proc == 0) print *,'======================== 1 mono linear ============================='
+  if(my_proc == 0) print *,'======================== 1 mono linear check ======================='
 
   exact = 0
   minmaxerr = 0
@@ -329,7 +329,7 @@ program tricublin_d_test
           print *,'pxpypz =',pxpypz(1,i,j,k),pxpypz(2,i,j,k),pxpypz(3,i,j,k)
           print *,'expected =',expected(i,j,k)
           print *,'result   =',dlin(i,j,k)
-          if(delta > .0001) stop
+          if(delta > .0001) goto 444
         endif
       enddo
     enddo
@@ -340,103 +340,184 @@ program tricublin_d_test
   print*,'maxerr =',delta
   print*,'points outside of min-max range =',minmaxerr
   print*,'avgerr =',real(avg/(NI*NJ*NK))
-  print *,'====================================================================='
   endif
+444 continue
+  if(my_proc == 0) print *,'======================== 3 mono cubic =============================='
+
+  d = 0
+  dlin = 0
+  dmin = 0
+  dmax = 0
+  call tricublin_mono_zyx_n_m(d3,dlin3,dmin3,dmax3, &
+                              [c_loc(f1(1,1,1)),c_loc(f2(1,1,1)),c_loc(f3(1,1,1))],&
+                              pxpypz,lv,NI*NJ*NK,3)
+  d = 0
+  dlin = 0
+#if defined(USE_MPI)
+  call mpi_barrier(MPI_COMM_WORLD,ierr)
+#endif
+  t0 = nanocycles()
+  call tricublin_mono_zyx_n_m(d3,dlin3,dmin3,dmax3, &
+                              [c_loc(f1(1,1,1)),c_loc(f2(1,1,1)),c_loc(f3(1,1,1))],&
+                              pxpypz,lv,NI*NJ*NK,3)
+  t1 = nanocycles()
+  if(my_proc == 0) print *,"nanoseconds per point =",(t1-t0)/(NI*NJ*NK*3)
+
+  exact = 0
+  delta = 0.0
+  avg = 0.0
+  do k = 1, NK
+    do j = 1, NJ
+      do i = 1, NI
+        error = abs(expected(i,j,k)+20.0 - d3(3,i,j,k))
+        if(error == 0.0) exact = exact + 1
+        delta = max(delta,error / (expected(i,j,k)+20.0))
+        avg = avg + (error / (expected(i,j,k)+20.0))
+        if((delta > .000001 .or. i+j+k == 3) .and. (my_proc == 0)) then
+          print *,'i,j,k',i,j,k
+          print *,'pxpypz =',pxpypz(1,i,j,k),pxpypz(2,i,j,k),pxpypz(3,i,j,k)
+          print *,'expected =',expected(i,j,k)+20.0
+          print *,'result   =',d3(3,i,j,k),dlin3(3,i,j,k),dmin3(3,i,j,k),dmax3(3,i,j,k)
+!           if(delta > .000001) stop
+          if(delta > .000001) goto 555
+        endif
+      enddo
+    enddo
+  enddo
+  if(my_proc == 0) then
+  print *,'exact =',exact,' out of',NI*NJ*NK
+  print *,'%      ',real(exact)/real(NI*NJ*NK)*100
+  print*,'maxerr =',delta
+  print*,'avgerr =',real(avg/(NI*NJ*NK))
+  endif
+555 continue
+  if(my_proc == 0) print *,'======================== 3 mono linear check ======================='
+
+  exact = 0
+  minmaxerr = 0
+  delta = 0.0
+  avg = 0.0
+  do k = 1, NK
+    do j = 1, NJ
+      do i = 1, NI
+        error = abs(expected(i,j,k)+10.0 - dlin3(2,i,j,k))
+        if( dlin3(2,i,j,k) < dmin3(2,i,j,k) .or. dlin3(2,i,j,k) > dmax3(2,i,j,k) ) minmaxerr = minmaxerr + 1
+        if(error == 0.0) exact = exact + 1
+        delta = max(delta,error / (expected(i,j,k)+10.0))
+        avg = avg + (error / (expected(i,j,k)+10.0))
+                if((delta > .0001 .or. i+j+k == 3) .and. (my_proc == 0)) then  ! not expecting exact results in linear case
+          print *,'i,j,k',i,j,k
+          print *,'pxpypz =',pxpypz(1,i,j,k),pxpypz(2,i,j,k),pxpypz(3,i,j,k)
+          print *,'expected =',expected(i,j,k)+10.0
+          print *,'result   =',dlin3(2,i,j,k)
+          if(delta > .0001) goto 666
+        endif
+      enddo
+    enddo
+  enddo
+  if(my_proc == 0) then
+  print *,'exact =',exact,' out of',NI*NJ*NK
+  print *,'%      ',real(exact)/real(NI*NJ*NK)*100
+  print*,'maxerr =',delta
+  print*,'points outside of min-max range =',minmaxerr
+  print*,'avgerr =',real(avg/(NI*NJ*NK))
+  endif
+666 continue
 #if defined(USE_MPI)
   call mpi_finalize(ierr)
 #endif
-#if defined(OLD_TEST)
-  ii = 2
-  jj = 3
-  kk = 4
-  xx = ii + 1 + dx
-  yy = jj + 1 + dy
-  zz = kk + 1 + dz
-!   print 101,'target = ',xx,yy,zz
-
-  print *,'===== tricublin_zyxf_beta test (cubic) ====='
-  call tricublin_zyxf_beta(r3(1),f1(ii,jj,kk),px,py,pz,ni,ni*nj)
-  call tricublin_zyxf_beta(r3(2),f2(ii,jj,kk),px,py,pz,ni,ni*nj)
-  call tricublin_zyxf_beta(r3(3),f3(ii,jj,kk),px,py,pz,ni,ni*nj)
-  e(1) = real(fxyz(xx,yy,zz))
-  e(2) = e(1) + 10.0
-  e(3) = e(1) + 20.0
-  print 101,'expected :',e,' , got :',r3
-  print 102,'rel error :',(e-r3)/r3
-  print *, 'FLOPS/interp = ',3*(32*4 + 32 + 8 + 64)  ! interpolation + float -> double conversions
-
-  print *,'===== tricublin_zyx3f_beta test (cubic) ====='
-  call tricublin_zyx3f_beta(r3,f123(1,ii,jj,kk),px,py,pz,ni,ni*nj)
-  e(1) = real(fxyz(xx,yy,zz))
-  e(2) = e(1) + 10.0
-  e(3) = e(1) + 20.0
-  print 101,'expected :',e,' , got :',r3
-  print 102,'rel error :',(e-r3)/r3
-  print *, 'FLOPS/interp = ',3*(32*4 + 32 + 8 + 64)  ! interpolation + float -> double conversions
-
-  print *,'===== tricublin_zyxf_beta test (linear) ====='
-  kk = 1
-  zz = kk + 0 + dz
-  call tricublin_zyxf_beta(r3(1),f1(ii,jj,kk),px,py,pz(5),ni,ni*nj)
-  call tricublin_zyxf_beta(r3(2),f2(ii,jj,kk),px,py,pz(5),ni,ni*nj)
-  call tricublin_zyxf_beta(r3(3),f3(ii,jj,kk),px,py,pz(5),ni,ni*nj)
-  e(1) = real(fxyz(xx,yy,zz))
-  e(2) = e(1) + 10.0
-  e(3) = e(1) + 20.0
-  print 101,'expected :',e,' , got :',r3
-  print 102,'rel error :',(e-r3)/r3
-  print *, 'FLOPS/interp = ',3*(32*4 + 32 + 8 + 64)  ! interpolation + float -> double conversions
-
-  print *,'===== tricublin_zyxf_beta timing (cubic) ====='
-  kk = 4
-  f2 = f1 + 10
-  f3 = f2 + 10
-  t0 = nanocycles()
-  do rr = 1 , NR
-  do KK = 1, NK - 3
-    do JJ = 1, NJ - 3
-      do II = 1, NI - 3
-        call tricubic_coeffs_d(px,py,pz,dx,dy,dz)
-        call tricublin_zyxf_beta(r1(1),f1(ii,jj,kk),px,py,pz,ni,ni*nj)
-        call tricublin_zyxf_beta(r2(1),f2(ii,jj,kk),px,py,pz,ni,ni*nj)
-        call tricublin_zyxf_beta(r3(1),f3(ii,jj,kk),px,py,pz,ni,ni*nj)
-      enddo
-    enddo
-  enddo
-  enddo
-  t1 = nanocycles() - t0
-  
-  print *, 'tot nanoseconds   = ',t1
-  print *, 'per interp   = ',t1/((ni-3)*(nj-3)*(nk-3))/NR
-  print *, 'FLOPS/interp = ',3*(32*4 + 32 + 8 + 64)  ! interpolation + float -> double conversions
-
-  print *,'===== tricublin_zyx3f_beta timing (cubic) ====='
-  kk = 4
-  f2 = f1 + 10
-  f3 = f2 + 10
-  t0 = nanocycles()
-  do rr = 1 , NR
-  do KK = 1, NK - 3
-    do JJ = 1, NJ - 3
-      do II = 1, NI - 3
-        call tricubic_coeffs_d(px,py,pz,dx,dy,dz)
-        call tricublin_zyx3f_beta(r3,f123(1,ii,jj,kk),px,py,pz,ni,ni*nj)
-      enddo
-    enddo
-  enddo
-  enddo
-  t1 = nanocycles() - t0
-  
-  print *, 'tot nanoseconds   = ',t1
-  print *, 'per interp   = ',t1/((ni-3)*(nj-3)*(nk-3))/NR
-  print *, 'FLOPS/interp = ',3*(32*4 + 32 + 8 + 64)  ! interpolation + float -> double conversions
-
-  if(t1 .eq. 12) then
-    call tricublin_zyx1_n(r1,f1,pxpypz,lv,ni)
-  endif
-#endif
-
-101 format(A,3F20.10,A,3F20.10,A,3F20.10)
-103 format(A,4F20.10,/A,4F20.10,/A,4F20.10)
-102 format(A,3E12.5,A,3E12.5)
+! #if defined(OLD_TEST)
+!   ii = 2
+!   jj = 3
+!   kk = 4
+!   xx = ii + 1 + dx
+!   yy = jj + 1 + dy
+!   zz = kk + 1 + dz
+! !   print 101,'target = ',xx,yy,zz
+! 
+!   print *,'===== tricublin_zyxf_beta test (cubic) ====='
+!   call tricublin_zyxf_beta(r3(1),f1(ii,jj,kk),px,py,pz,ni,ni*nj)
+!   call tricublin_zyxf_beta(r3(2),f2(ii,jj,kk),px,py,pz,ni,ni*nj)
+!   call tricublin_zyxf_beta(r3(3),f3(ii,jj,kk),px,py,pz,ni,ni*nj)
+!   e(1) = real(fxyz(xx,yy,zz))
+!   e(2) = e(1) + 10.0
+!   e(3) = e(1) + 20.0
+!   print 101,'expected :',e,' , got :',r3
+!   print 102,'rel error :',(e-r3)/r3
+!   print *, 'FLOPS/interp = ',3*(32*4 + 32 + 8 + 64)  ! interpolation + float -> double conversions
+! 
+!   print *,'===== tricublin_zyx3f_beta test (cubic) ====='
+!   call tricublin_zyx3f_beta(r3,f123(1,ii,jj,kk),px,py,pz,ni,ni*nj)
+!   e(1) = real(fxyz(xx,yy,zz))
+!   e(2) = e(1) + 10.0
+!   e(3) = e(1) + 20.0
+!   print 101,'expected :',e,' , got :',r3
+!   print 102,'rel error :',(e-r3)/r3
+!   print *, 'FLOPS/interp = ',3*(32*4 + 32 + 8 + 64)  ! interpolation + float -> double conversions
+! 
+!   print *,'===== tricublin_zyxf_beta test (linear) ====='
+!   kk = 1
+!   zz = kk + 0 + dz
+!   call tricublin_zyxf_beta(r3(1),f1(ii,jj,kk),px,py,pz(5),ni,ni*nj)
+!   call tricublin_zyxf_beta(r3(2),f2(ii,jj,kk),px,py,pz(5),ni,ni*nj)
+!   call tricublin_zyxf_beta(r3(3),f3(ii,jj,kk),px,py,pz(5),ni,ni*nj)
+!   e(1) = real(fxyz(xx,yy,zz))
+!   e(2) = e(1) + 10.0
+!   e(3) = e(1) + 20.0
+!   print 101,'expected :',e,' , got :',r3
+!   print 102,'rel error :',(e-r3)/r3
+!   print *, 'FLOPS/interp = ',3*(32*4 + 32 + 8 + 64)  ! interpolation + float -> double conversions
+! 
+!   print *,'===== tricublin_zyxf_beta timing (cubic) ====='
+!   kk = 4
+!   f2 = f1 + 10
+!   f3 = f2 + 10
+!   t0 = nanocycles()
+!   do rr = 1 , NR
+!   do KK = 1, NK - 3
+!     do JJ = 1, NJ - 3
+!       do II = 1, NI - 3
+!         call tricubic_coeffs_d(px,py,pz,dx,dy,dz)
+!         call tricublin_zyxf_beta(r1(1),f1(ii,jj,kk),px,py,pz,ni,ni*nj)
+!         call tricublin_zyxf_beta(r2(1),f2(ii,jj,kk),px,py,pz,ni,ni*nj)
+!         call tricublin_zyxf_beta(r3(1),f3(ii,jj,kk),px,py,pz,ni,ni*nj)
+!       enddo
+!     enddo
+!   enddo
+!   enddo
+!   t1 = nanocycles() - t0
+!   
+!   print *, 'tot nanoseconds   = ',t1
+!   print *, 'per interp   = ',t1/((ni-3)*(nj-3)*(nk-3))/NR
+!   print *, 'FLOPS/interp = ',3*(32*4 + 32 + 8 + 64)  ! interpolation + float -> double conversions
+! 
+!   print *,'===== tricublin_zyx3f_beta timing (cubic) ====='
+!   kk = 4
+!   f2 = f1 + 10
+!   f3 = f2 + 10
+!   t0 = nanocycles()
+!   do rr = 1 , NR
+!   do KK = 1, NK - 3
+!     do JJ = 1, NJ - 3
+!       do II = 1, NI - 3
+!         call tricubic_coeffs_d(px,py,pz,dx,dy,dz)
+!         call tricublin_zyx3f_beta(r3,f123(1,ii,jj,kk),px,py,pz,ni,ni*nj)
+!       enddo
+!     enddo
+!   enddo
+!   enddo
+!   t1 = nanocycles() - t0
+!   
+!   print *, 'tot nanoseconds   = ',t1
+!   print *, 'per interp   = ',t1/((ni-3)*(nj-3)*(nk-3))/NR
+!   print *, 'FLOPS/interp = ',3*(32*4 + 32 + 8 + 64)  ! interpolation + float -> double conversions
+! 
+!   if(t1 .eq. 12) then
+!     call tricublin_zyx1_n(r1,f1,pxpypz,lv,ni)
+!   endif
+! #endif
+! 
+! 101 format(A,3F20.10,A,3F20.10,A,3F20.10)
+! 103 format(A,4F20.10,/A,4F20.10,/A,4F20.10)
+! 102 format(A,3E12.5,A,3E12.5)
 end program tricublin_d_test

@@ -34,7 +34,15 @@
       real, dimension(*), intent(IN)  :: pxyz                                    !InTf!
       type(C_PTR), intent(IN), value    :: lv                                    !InTf!
       integer, intent(IN), value        :: n                                     !InTf!
-    end subroutine tricublin_mono_zyx_n                                              !InTf!
+    end subroutine tricublin_mono_zyx_n                                          !InTf!
+    subroutine tricublin_mono_zyx_n_m(d,l,mi,ma,f,pxyz,lv,n,m) bind(C,name='Tricublin_mono_zyx_n_m')   !InTf!
+      import :: C_PTR                                                            !InTf!
+      real, dimension(*), intent(OUT)   :: d, l, mi, ma                          !InTf!
+      type(C_PTR), dimension(*), intent(IN)    :: f                              !InTf!
+      real, dimension(*), intent(IN)  :: pxyz                                    !InTf!
+      type(C_PTR), intent(IN), value    :: lv                                    !InTf!
+      integer, intent(IN), value        :: n, m                                  !InTf!
+    end subroutine tricublin_mono_zyx_n_m                                        !InTf!
     subroutine tricublin_zyx3_n(d,f,pxyz,lv,n) bind(C,name='Tricublin_zyx3_n')   !InTf!
       import :: C_PTR                                                            !InTf!
       real, dimension(*), intent(OUT)   :: d                                     !InTf!
