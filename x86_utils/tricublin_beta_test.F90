@@ -54,6 +54,9 @@ program tricublin_d_test
   ovni = 1.0_8 / (NI - 1)
   ovnj = 1.0_8 / (NJ - 1)
   ovnk = 1.0_8 / (NK - 1)
+  dx = 0.0
+  dy = 0.0
+  dz = 0.0
   
 !   dx = .375
 !   dy = .25
@@ -83,8 +86,8 @@ program tricublin_d_test
 	f123(3,i,j,k) = f3(i,j,k)
 ! 	xx = min( max(i,2), ni - 2) + dx + 3         ! offset x de 3
 ! 	yy = min( max(j,2), nj - 2) + dy + 2         ! offset y de 2
-	xx = min( max(i,2), ni - 2) + dx         ! offset x de 3
-	yy = min( max(j,2), nj - 2) + dy         ! offset y de 2
+	xx = min( max(i,2), ni - 2) + dx
+	yy = min( max(j,2), nj - 2) + dy
 	if(k > 1) then
 	  zz = zz + dz
 	else
