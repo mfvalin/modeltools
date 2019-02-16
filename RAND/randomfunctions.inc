@@ -186,7 +186,7 @@
    integer(c_INT), dimension(cSeed), intent(IN) :: piSeed
    end subroutine Ran_XSR128_new_stream
  end interface
-! void F_Ran_XSR128R_new_stream(XSR128R_state *clone, int *piSeed, int cSeed)
+! void F_Ran_XSR128R_new_stream(xsr128r_state *clone, int *piSeed, int cSeed)
  interface
    subroutine Ran_XSR128R_new_stream(stream, clone, piSeed, cSeed) bind(C,name='F_Ran_XSR128R_new_stream')
    import :: RANDOM_STREAM,C_INT
