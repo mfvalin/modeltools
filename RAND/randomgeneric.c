@@ -111,6 +111,7 @@ uint32_t IRan_generic_stream(generic_state *stream)       // !InTc!
 //   generic_state *state = stream ;
 //   return state->iran(stream);
   uint32_t value;
+// fprintf(stderr,"IRan_generic_stream\n");
   if(stream->cur > stream->top) stream->refill(stream);
   value = stream->buf[stream->cur] ;
   stream->cur = stream->cur + 1;

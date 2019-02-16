@@ -97,7 +97,7 @@ void RanSetSeed_MT19937_stream(generic_state *stream, unsigned int *piSeed, int 
    * Since we're using 32-bits data types for our MT array, we can skip the
    * masking with 0xFFFFFFFF below.
    */
-  mt19937->cur = 0;
+  mt19937->cur = mt19937->top+1;
   if((piSeed != NULL) && (cSeed > 0)){
     mt[0] = *piSeed;
   }else{
@@ -142,7 +142,6 @@ static void FillBuffer_MT19937_stream(mt19937_state *stream)  // all for loops a
     y ^= y>>18;
     MT2[i] = y;
   }
-  MT19937->cur = 0;
   MT19937->cur = 0;
 }
 

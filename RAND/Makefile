@@ -42,18 +42,18 @@ random_mt19937.Abs: librandom.a random_generic_test.c
 	./$@
 	rm $@
 
-random_shr3.Abs: random_shr3.c
-	s.cc -mpi -O2 -ftree-vectorize -mfma -mavx2 -DSELF_TEST $< -L. -lrandom -o $@
+random_shr3.Abs: librandom.a random_generic_test.c
+	s.cc -mpi -O2 -ftree-vectorize -mfma -mavx2 -DTEST_SHR3 random_generic_test.c -L. -lrandom -o $@
 	./$@
 	rm $@
 
-random_xsr128.Abs: random_xsr128.c
-	s.cc -mpi -O2 -ftree-vectorize -mfma -mavx2 -DSELF_TEST $< -L. -lrandom -o $@
+random_xsr128.Abs: librandom.a random_generic_test.c
+	s.cc -mpi -O2 -ftree-vectorize -mfma -mavx2 -DTEST_XSR128 random_generic_test.c -L. -lrandom -o $@
 	./$@
 	rm $@
 
-random_xsr128r.Abs: random_xsr128r.c
-	s.cc -mpi -O2 -ftree-vectorize -mfma -mavx2 -DSELF_TEST $< -L. -lrandom -o $@
+random_xsr128r.Abs: librandom.a random_generic_test.c
+	s.cc -mpi -O2 -ftree-vectorize -mfma -mavx2 -DTEST_XSR128R random_generic_test.c -L. -lrandom -o $@
 	./$@
 	rm $@
 

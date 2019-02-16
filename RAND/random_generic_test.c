@@ -21,7 +21,7 @@ int main(int argc, char **argv){
   generic_state *gen = NULL;
   int gaussdist[10];
   int index;
-  int mySeed;
+  int mySeed = 0;
 
   MPI_Init(&argc,&argv);
   for(i=0 ; i<1200000 ; i++) ranbuf[i] = 0;
@@ -44,6 +44,16 @@ int main(int argc, char **argv){
 #if defined(TEST_MT19937)
   gen = (generic_state *)  Ran_MT19937_new_stream(NULL, &mySeed, 1);
 #endif
+#if defined(TEST_XSR128)
+  gen = (generic_state *)  Ran_XSR128_new_stream(NULL, &mySeed, 1);
+#endif
+#if defined(TEST_XSR128R)
+  gen = (generic_state *)  Ran_XSR128R_new_stream(NULL, &mySeed, 1);
+#endif
+#if defined(TEST_SHR3)
+  mySeed = 123456;
+  gen = (generic_state *)  Ran_SHR3_new_stream(NULL, &mySeed, 1);
+#endif
 #if defined(CYCLIC_TEST)
   ran = IRan_generic_stream(gen);
   counts = 0;
@@ -60,6 +70,7 @@ exit(0);
 
   for( i=0 ; i < 1000000 ; i++) lr = IRan_generic_stream(gen);  // prime the pump
 
+  printf("random stream will be reseeded with defaults before each timing test\n");
   MPI_Barrier(MPI_COMM_WORLD);
   RanSetSeed_generic_stream(gen,NULL,0);
   t0 = MPI_Wtime();
