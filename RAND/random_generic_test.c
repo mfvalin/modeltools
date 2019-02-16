@@ -36,7 +36,7 @@ int main(int argc, char **argv){
   dmax = CVTDBLS_32(maxpos) ;
   dmin = CVTDBLS_32(maxneg) ;
   printf("maxpos, maxneg transformed with CVTDBLS_32 : %22.18f %22.18f , %16.16Lx, %16.16Lx\n",dmax,dmin,*idmax,*idmin);
-
+  printf("time per value (nanoseconds)\n");
 #if defined(TEST_R250)
   mySeed = 123456;
   gen = (generic_state *)  Ran_R250_new_stream(NULL, &mySeed, 1);
@@ -65,7 +65,7 @@ exit(0);
   t0 = MPI_Wtime();
   for( i=0 ; i < NSAMPLES ; i++) lr = IRan_generic_stream(gen);
   t1 = MPI_Wtime();
-  printf("time for 1E+9 x 1 random generic integer value = %6.3f , last = %d\n",t1-t0, lr);
+  printf("time for 1E+9 x 1    random generic scalar        integer value = %6.3f , last = %12d\n",t1-t0, lr);
 
   for( i=0 ; i < 1000000 ; i++) rval = DRan_generic_stream(gen);
   MPI_Barrier(MPI_COMM_WORLD);
@@ -73,7 +73,7 @@ exit(0);
   t0 = MPI_Wtime();
   for( i=0 ; i < NSAMPLES ; i++) rval = DRan_generic_stream(gen);
   t1 = MPI_Wtime();
-  printf("time for 1E+9 x 1 random generic  double value = %6.3f , last = %g\n",t1-t0,rval);
+  printf("time for 1E+9 x 1    random generic scalar         double value = %6.3f , last = %12g\n",t1-t0,rval);
 
   for( i=0 ; i < 1000000 ; i++) rval = DRanS_generic_stream(gen);
   MPI_Barrier(MPI_COMM_WORLD);
@@ -81,7 +81,7 @@ exit(0);
   t0 = MPI_Wtime();
   for( i=0 ; i < NSAMPLES ; i++) rval = DRanS_generic_stream(gen);
   t1 = MPI_Wtime();
-  printf("time for 1E+9 x 1 random generic  signed value = %6.3f , last = %g\n",t1-t0,rval);
+  printf("time for 1E+9 x 1    random generic scalar  signed double value = %6.3f , last = %12g\n",t1-t0,rval);
 
   for( i=0 ; i < 10 ; i++) VecIRan_generic_stream(gen,ranbuf, 1000000) ;
   MPI_Barrier(MPI_COMM_WORLD);
@@ -91,7 +91,7 @@ exit(0);
     VecIRan_generic_stream(gen, ranbuf, 1000000) ;
   }
   t1 = MPI_Wtime();
-  printf("time for 1E+3 x 1E+6 random generic integer values = %6.3f , last = %d ",t1-t0,ranbuf[1000000-1]);
+  printf("time for 1E+3 x 1E+6 random generic Vector       integer values = %6.3f , last = %12d ",t1-t0,ranbuf[1000000-1]);
 
   postot = 0 ; negtot = 0;
   RanSetSeed_generic_stream(gen,NULL,0);
@@ -115,7 +115,7 @@ exit(0);
     VecDRan_generic_stream(gen, ranbuf2, 1000000) ;
   }
   t1 = MPI_Wtime();
-  printf("time for 1E+3 x 1E+6 random generic  double values = %6.3f,  last = %g\n",t1-t0,ranbuf2[1000000-1]);
+  printf("time for 1E+3 x 1E+6 random generic Vector        double values = %6.3f,  last = %12g\n",t1-t0,ranbuf2[1000000-1]);
 
   for( i=0 ; i < 10 ; i++) VecDRanS_generic_stream(gen, ranbuf2, 1000000) ;
   MPI_Barrier(MPI_COMM_WORLD);
@@ -125,7 +125,7 @@ exit(0);
     VecDRanS_generic_stream(gen, ranbuf2, 1000000) ;
   }
   t1 = MPI_Wtime();
-  printf("time for 1E+3 x 1E+6 random generic  signed values = %6.3f,  last = %g\n",t1-t0,ranbuf2[1000000-1]);
+  printf("time for 1E+3 x 1E+6 random generic Vector signed double values = %6.3f,  last = %12g\n",t1-t0,ranbuf2[1000000-1]);
 
   for( i=0 ; i < 1000 ; i++) VecIRan_generic_stream(gen, &ranbuf[i], 1000) ;
   MPI_Barrier(MPI_COMM_WORLD);
@@ -135,7 +135,7 @@ exit(0);
     VecIRan_generic_stream(gen, &ranbuf[i], 1000) ;
   }
   t1 = MPI_Wtime();
-  printf("time for 1E+6 x 1E+3 random generic integer values = %6.3f , last = %d\n",t1-t0,ranbuf[i+1000-2]);
+  printf("time for 1E+6 x 1E+3 random generic Vector       integer values = %6.3f , last = %12d\n",t1-t0,ranbuf[i+1000-2]);
 
   for( i=0 ; i < 1000 ; i++) VecDRan_generic_stream(gen, &ranbuf2[i], 1000) ;
   MPI_Barrier(MPI_COMM_WORLD);
@@ -145,7 +145,7 @@ exit(0);
     VecDRan_generic_stream(gen, &ranbuf2[i], 1000) ;
   }
   t1 = MPI_Wtime();
-  printf("time for 1E+6 x 1E+3 random generic  double values = %6.3f,  last = %g\n",t1-t0,ranbuf2[i+1000-2]);
+  printf("time for 1E+6 x 1E+3 random generic Vector        double values = %6.3f,  last = %12g\n",t1-t0,ranbuf2[i+1000-2]);
 
   for( i=0 ; i < 1000 ; i++) VecDRanS_generic_stream(gen, &ranbuf2[i], 1000) ;
   MPI_Barrier(MPI_COMM_WORLD);
@@ -155,7 +155,7 @@ exit(0);
     VecDRanS_generic_stream(gen, &ranbuf2[i], 1000) ;
   }
   t1 = MPI_Wtime();
-  printf("time for 1E+6 x 1E+3 random generic  signed values = %6.3f,  last = %g\n",t1-t0,ranbuf2[i+1000-2]);
+  printf("time for 1E+6 x 1E+3 random generic Vector signed double values = %6.3f,  last = %12g\n",t1-t0,ranbuf2[i+1000-2]);
 
   MPI_Finalize();
   return(0);

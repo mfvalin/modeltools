@@ -23,7 +23,7 @@
 #include <malloc.h>
 #include <string.h>
 #include <limits.h>
-// #include <unistd.h>
+#include <unistd.h>
 #include <math.h>
 
 /*------------------------ multiplier constants --------------------------*/
@@ -86,12 +86,9 @@ typedef struct{
 //   IVECRANFUN    vec_iran;     // generate a vector of 32 bit random integer values
 //   DVECRANFUN    vec_dran;     // generate a vector of 64 bit random float values ( 0.0 -> 1.0)
 //   DVECSRANFUN   vec_drans;    // generate a vector of 64 bit random float values (-1.0 -> 1.0)
-//   uint32_t      *gbuf;        // generic token buffer (must be >= size of largest generator state
-//   int32_t      gcur;          // index into gbuf
+//   uint32_t      *buf;         // generic token buffer (must be >= size of largest generator state
+//   int32_t       cur;          // index into buf ( 0 <= cur <= top for valid entries)
+//   int32_t       top;          // index pointing to top of buf (last valid entry)
 //   unsigned int *gauss;        // pointer to the buffer used by the gaussian generator
 //   int ngauss;                 // used by the gaussian generator
-} generic_state;              // generic part, IDENTICAL at start of ALL stream control structures
-
-// uint32_t IRan_generic_stream(generic_state *stream);
-// double DRan_generic_stream(generic_state *stream);
-// double DRanS_generic_stream(generic_state *stream);
+} generic_state;                 // generic part, IDENTICAL at start of ALL stream control structures

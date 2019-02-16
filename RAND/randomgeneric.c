@@ -155,25 +155,25 @@ void VecIRan_generic_stream(generic_state *stream, unsigned int *ranbuf, int n) 
 {
 //   generic_state *state = stream ;
 //   state->vec_iran(stream,ranbuf,n);
-  int top = stream->top + 1;
+  int topp1 = stream->top + 1;
   int cur = stream->cur;
   int *buf = stream->buf;
   int i;
-  while(n > 0 && cur < top){
+  while(n > 0 && cur < topp1){
     *ranbuf = buf[cur] ; ranbuf++ ; cur++; n-- ;
   }
-  if(cur < top) {
+  if(cur < topp1) {
     stream->cur = cur ;
   }else{
     stream->refill(stream);   // this will set stream->cur
   }
   if(n <= 0) return ;         // done
   while(n > 0){
-    if(n >= top){             // full buffers
-      for(cur=0 ; cur<top ; cur++) {ranbuf[cur] = buf[cur] ; }
-      ranbuf += top;
+    if(n >= topp1){             // full buffers
+      for(cur=0 ; cur<topp1 ; cur++) {ranbuf[cur] = buf[cur] ; }
+      ranbuf += topp1;
       stream->refill(stream);
-      n -= top;
+      n -= topp1;
     }else{                    // less than 1 buffer, no need for refill
       for(cur=0 ; cur<n ; cur++) {ranbuf[cur] = buf[cur] ; }
       stream->cur = cur ;     // store current pointer
@@ -190,25 +190,25 @@ void VecDRan_generic_stream(generic_state *stream, double *ranbuf, int n)       
 {
 //   generic_state *state = stream ;
 //   state->vec_dran(stream,ranbuf,n);
-  int top = stream->top + 1;
+  int topp1 = stream->top + 1;
   int cur = stream->cur;
   int *buf = stream->buf;
   int i;
-  while(n > 0 && cur < top){
+  while(n > 0 && cur < topp1){
     *ranbuf = CVTDBL_32(buf[cur]) ; ranbuf++ ; cur++; n-- ;
   }
-  if(cur < top) {
+  if(cur < topp1) {
     stream->cur = cur ;
   }else{
     stream->refill(stream);   // this will set stream->cur
   }
   if(n <= 0) return ;         // done
   while(n > 0){
-    if(n >= top){             // full buffers
-      for(cur=0 ; cur<top ; cur++) {ranbuf[cur] = CVTDBL_32(buf[cur]) ; }
-      ranbuf += top;
+    if(n >= topp1){             // full buffers
+      for(cur=0 ; cur<topp1 ; cur++) {ranbuf[cur] = CVTDBL_32(buf[cur]) ; }
+      ranbuf += topp1;
       stream->refill(stream);
-      n -= top;
+      n -= topp1;
     }else{                    // less than 1 buffer, no need for refill
       for(cur=0 ; cur<n ; cur++) {ranbuf[cur] = CVTDBL_32(buf[cur]) ; }
       stream->cur = cur ;     // store current pointer
@@ -225,25 +225,25 @@ void VecDRanS_generic_stream(generic_state *stream, double *ranbuf, int n)      
 {
 //   generic_state *state = stream ;
 //   state->vec_drans(stream,ranbuf,n);
-  int top = stream->top + 1;
+  int topp1 = stream->top + 1;
   int cur = stream->cur;
   int *buf = stream->buf;
   int i;
-  while(n > 0 && cur < top){
+  while(n > 0 && cur < topp1){
     *ranbuf = CVTDBLS_32(buf[cur]) ; ranbuf++ ; cur++; n-- ;
   }
-  if(cur < top) {
+  if(cur < topp1) {
     stream->cur = cur ;
   }else{
     stream->refill(stream);   // this will set stream->cur
   }
   if(n <= 0) return ;         // done
   while(n > 0){
-    if(n >= top){             // full buffers
-      for(cur=0 ; cur<top ; cur++) {ranbuf[cur] = CVTDBLS_32(buf[cur]) ; }
-      ranbuf += top;
+    if(n >= topp1){             // full buffers
+      for(cur=0 ; cur<topp1 ; cur++) {ranbuf[cur] = CVTDBLS_32(buf[cur]) ; }
+      ranbuf += topp1;
       stream->refill(stream);
-      n -= top;
+      n -= topp1;
     }else{                    // less than 1 buffer, no need for refill
       for(cur=0 ; cur<n ; cur++) {ranbuf[cur] = CVTDBLS_32(buf[cur]) ; }
       stream->cur = cur ;     // store current pointer
