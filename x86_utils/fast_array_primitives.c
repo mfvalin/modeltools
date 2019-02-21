@@ -112,7 +112,7 @@ void swap_32_in_64(void *s, void *d, int n){
 // get min value, max value, very rough average of 32 bit float array
 // the average is only ~OK if n is a multiple of 2 * VLEN
 // otherwise some points are added twice (we sum 2* np2 points)
-void FloatFastQuantizeLinear(float *z_in, short *quant, int n, int nbits, float *Max, float *Min, float *Avg, float *Rescl)
+void FloatFastQuantizeLinear(float *z_in, unsigned short *quant, int n, int nbits, float *Max, float *Min, float *Avg, float *Rescl)
 {
 #if defined(__AVX2__) && defined(__FMA__)
   int mask;
@@ -121,7 +121,7 @@ void FloatFastQuantizeLinear(float *z_in, short *quant, int n, int nbits, float 
 #endif
   int i, np, np2, offset, maxexp, imax, imin;
   int izero;
-  float scale, fzero, fmin, quantum;
+  float scale, fzero, fmin, quantum, sign, temp;
   float *z_in0 = z_in;
 #if defined(__SSE__)
   __m128  x0, x1, x2, xxmin, xxmax, xxsum;
@@ -212,55 +212,53 @@ void FloatFastQuantizeLinear(float *z_in, short *quant, int n, int nbits, float 
   *Min  = tmin;
   *Avg  = tsum / np ;
 #endif
+  if(*Max < 0) {  // both min and max are negative, we switch to absolute values, and swap min/max
+      temp = *Min;
+      *Min = - (*Max);
+      *Max = - temp;
+      sign = -1.0;
+  }else{
+      sign = +1.0;
+  }
 // code to quantize floating poing into 16 bit tokens (nbits significant bits)
   xmax.f = *Max;
   xmin.f = *Min;
   xrng.f = xmax.f - xmin.f;
 printf("range = %f, min = %f, max = %f\n",xrng.f,xmin.f,xmax.f);
-  maxexp = MAX( IEEE32_EXP(xmax.i) , IEEE32_EXP(xmin.i) );
-  maxexp = MAX( IEEE32_EXP(xrng.i) , maxexp);
+//   maxexp = MAX( IEEE32_EXP(xmax.i) , IEEE32_EXP(xmin.i) );
+//   maxexp = MAX( IEEE32_EXP(xrng.i) , maxexp);
   maxexp = IEEE32_EXP(xrng.i);
 printf("maxexp = %d\n",maxexp);
   xscl.i = IEEE32(0,(nbits-1) - (maxexp-127),0);
   scale = xscl.f;   // TO BE FIXED, used to convert floats to range  0 <= X < 2**nbits -1 
   quantum = 1.0/scale;
-printf("old scale = %f, quantum = %f\n",xscl.f,quantum);
+printf("old scale = %f, old quantum = %f\n",xscl.f,quantum);
   xscl.i = IEEE32(0,(maxexp-127) - (nbits-1),0); // inverse scaling factor
   while ((quantum + xmax.f == xmax.f) && (quantum + xmin.f == xmin.f)) { quantum = quantum * 2.0 ; scale = scale / 2.0 ; }
-  *Rescl = scale;
-  // eventually, add code to force xmin to be an integral multiple of the discretization interval
-  // modulo = mod(min,interval) (Fortran)      modulo = fmodf(min,interval) (C)
-  // min = min - modulo (min>0) , min = min - (interval+modulo) (min < 0)
-//   izero = (*Min > 0) ? (0 - *Min) * scale - .5 : (0 - *Min) * scale + .5 ;
-  if (*Min > 0) {
+
+  if (*Min > 0) {                        // all numbers positive or all numbers negative
     izero = (0 - *Min) * scale - .5 ;
-  }else{
+  }else{                                 // max > 0, min < 0
     izero = (0 - *Min) * scale + .5 ;
   }
   q.f = quantum;
 printf("new scale = %f, quantum = %f %8x, min = %f, izero = %d\n",scale, quantum, q.i, *Min,izero);
-  fmin = -(izero * quantum);
-  if( (*Min - fmin) > (.5 * quantum) ) fmin += quantum ;
-  imax = (*Max - fmin) * scale + .5;
-  imin = (*Min - fmin) * scale + .5;
-printf("new min = %f, deltamin = %g, qint = %g, coded max,min = %x %x\n",fmin,fmin-(*Min),quantum,imax,imin);
-  *Min = fmin;
-  izero = (0 - fmin) * scale;
-  fzero = *Min + izero * quantum;
-  printf("rescaled fzero = %f, izero = %d, new min = %f\n",fzero,izero,*Min);
-//   if(IEEE32_SGN(xmin.i) == 0 ) {   // min < 0 and max >0
-//     izero = (0 - *Min) * scale - .5;
-//     fzero = *Min + izero * scale;
-//     *Min -= fzero ;
-//   }
-//   if(IEEE32_SGN(xmax.i) + IEEE32_SGN(xmin.i) == 1 ) {   // min < 0 and max >0
-//     izero = (0 - *Min) * scale + .5;
-//     fzero = *Min + izero * scale;
-//     *Min -= fzero ;
-// //     izero = (0 - *Min) * scale + .5;
-// //     printf("rescaled fzero = %f, from %f, new min = %f\n",*Min + izero / scale,fzero,*Min);
-//   }
-//   printf("max min range maxexp scale mask is %f %f %f %i %f %8.8x\n",xmax.f,xmin.f,xrng.f,maxexp-127,scale,mask);
+  if((*Min < 0)  || (*Min < xrng.f * 128.0)){
+    fmin = -(izero * quantum);                                  // quantized minimum
+    if( (*Min - fmin) > (.5 * quantum) ) fmin += quantum ;      // bring to closest quantum
+    imax = (*Max - fmin) * scale + .5;                          // quantized max
+    imin = (*Min - fmin) * scale + .5;                          // quantized min
+    printf("new min = %f, deltamin = %g, quantum = %g, coded max,min = %x %x\n",fmin,fmin-(*Min),quantum,imax,imin);
+    *Min = fmin;
+    izero = (0 - fmin) * scale;
+    fzero = *Min + izero * quantum;
+    printf("rescaled fzero = %f, izero = %d, new min = %f\n",fzero,izero,*Min);
+  }
+  scale = scale * sign;
+  *Rescl = quantum * sign;
+  quantum = quantum * sign;
+  *Min = *Min * sign;      // if sign is negative, Rescl is negative, restored = min + Rescl * quantized
+  *Max = *Max * sign;
 #if defined(__AVX2__) && defined(__FMA__)
   mask = ~ (-1 << nbits) ;
   // uses AVX2, SSE4, FMA instructions
@@ -271,7 +269,9 @@ printf("new min = %f, deltamin = %g, qint = %g, coded max,min = %x %x\n",fmin,fm
   yymsk = (__m256i) yymin;   // useless action to silence warning
   yymsk = _mm256_inserti128_si256(yymsk,ix0,0) ;
   yymsk = _mm256_inserti128_si256(yymsk,ix0,1) ;
+#endif
   for (i=0 ; i<np2 ; i+=VLEN){
+#if defined(__AVX2__) && defined(__FMA__)
     x0    = _mm_loadu_ps(&z_in0[i]) ;          // stream from beginning
     x1    = _mm_loadu_ps(&z_in0[i+offset]) ;   // stream from "midpoint"
     y0    = _mm256_insertf128_ps(y0,x0,0) ;
@@ -286,7 +286,6 @@ printf("new min = %f, deltamin = %g, qint = %g, coded max,min = %x %x\n",fmin,fm
     _mm_storel_epi64((void *)&quant[i],ix0) ;              // store lower 64 bits
     _mm_storeh_pi((void *)&quant[i+offset],(__m128)ix0) ;  // store upper 64 bits
 #else
-  for (i=0 ; i<np2 ; i+=VLEN){
     for(j=0 ; j<VLEN ; j++){
       quant[j] = (z_in0[j] - *Min) * scale;
       quant[j+offset] = (z_in0[j+offset] - *Min) * scale + .5;
@@ -294,7 +293,7 @@ printf("new min = %f, deltamin = %g, qint = %g, coded max,min = %x %x\n",fmin,fm
     z_in0 += VLEN;
     quant += VLEN;
 #endif
-  }  // for (i=0 ; i<np2 ; i+=VLEN)
+  }  // for (i=0 ; i<np2 ; i+=VLEN)  (both for AVX2 and normal code)
 }
 
 #define NBITS 16
@@ -512,8 +511,8 @@ void Float2Short(uint16_t *restrict q0, float *restrict s0, unsigned int n, floa
 int main()
 {
   int i;
-  float a[ASIZE+10];
-  short int ia[ASIZE+10];
+  float a[ASIZE+10], A[ASIZE+10], b[ASIZE+10];
+  short unsigned int ia[ASIZE+10];
   int nbits = 16;
   float mi, ma, av, range, scal, mi0, fac, rescl, minval;
   int ima, imi, exp;
@@ -586,17 +585,21 @@ int main()
   a[0] = 1.0;
   for (i=1 ; i<ASIZE ; i++){
     a[i] = a[i-1]*1.01;
+    b[i] = a[i];
   }
   minval = -8.3 ;
-  a[4] = minval ; a[7] = 65534.99 + a[4] ;
+  a[4] = minval ; a[7] = 65537.99 + a[4] ;
   printf("a[1,4,7,ASIZE-1] %8f %8f %8f %8f\n",a[1],a[4],a[7],a[ASIZE-2]);
   FloatFastQuantizeLinear(&a[1],&ia[1],ASIZE-2,nbits,&ma,&mi,&av,&rescl);
-  printf("mi=%f, av=%f, ma=%f, rescl=%f\n",mi,av,ma,rescl);
+  for(i=1 ; i<ASIZE-1 ; i++) { A[i] = mi + ia[i] * rescl ; }
+  printf("mi=%f, av=%f, ma=%f, quantum=%f\n",mi,av,ma,rescl);
   av = 0;
   for (i=1 ; i<ASIZE-1 ; i++) { av = av + a[i] ; } ;
   av = av / (ASIZE-2) ;
   printf("expected mi=%f, expected av=%f, expected ma=%f\n",minval,av,a[7]);
   printf("a[1,4,7,ASIZE-2] %8f %8f %8f %8f\n",a[1],a[4],a[7],a[ASIZE-2]);
+  printf("A[1,4,7,ASIZE-2] %8f %8f %8f %8f\n",A[1],A[4],A[7],A[ASIZE-2]);
+  printf("-[1,4,7,ASIZE-2] %8f %8f %8f %8f\n",A[1]-a[1],A[4]-a[4],A[7]-a[7],A[ASIZE-2]-a[ASIZE-2]);
   printf("ia[1,4,7,ASIZE-2] %8hu %8hu %8hu %8hu\n\n\n\n",ia[1],ia[4],ia[7],ia[ASIZE-2]);
   
   a[0] = 10.5;
@@ -607,24 +610,35 @@ int main()
   a[4] = minval ; a[7] = 6553000.99 + a[4] ;
   printf("a[1,4,7,ASIZE-1] %8f %8f %8f %8f\n",a[1],a[4],a[7],a[ASIZE-2]);
   FloatFastQuantizeLinear(&a[1],&ia[1],ASIZE-2,nbits,&ma,&mi,&av,&rescl);
-  printf("mi=%f, av=%f, ma=%f, rescl=%f\n",mi,av,ma,rescl);
+  for(i=1 ; i<ASIZE-1 ; i++) { A[i] = mi + ia[i] * rescl ; }
+  printf("mi=%f, av=%f, ma=%f, quantum=%f\n",mi,av,ma,rescl);
   av = 0;
   for (i=1 ; i<ASIZE-1 ; i++) { av = av + a[i] ; } ;
   av = av / (ASIZE-2) ;
   printf("expected mi=%f, expected av=%f, expected ma=%f\n",minval,av,a[7]);
   printf("a[1,4,7,ASIZE-2] %8f %8f %8f %8f\n",a[1],a[4],a[7],a[ASIZE-2]);
+  printf("A[1,4,7,ASIZE-2] %8f %8f %8f %8f\n",A[1],A[4],A[7],A[ASIZE-2]);
+  printf("-[1,4,7,ASIZE-2] %8f %8f %8f %8f\n",A[1]-a[1],A[4]-a[4],A[7]-a[7],A[ASIZE-2]-a[ASIZE-2]);
   printf("ia[1,4,7,ASIZE-2] %8hu %8hu %8hu %8hu\n\n\n\n",ia[1],ia[4],ia[7],ia[ASIZE-2]);
 
-  for (i=1 ; i<ASIZE-1 ; i++) {a[i] = a[i] - 10000000000000.0;}
+  a[0] = 10.5;
+  for (i=1 ; i<ASIZE ; i++){
+    a[i] = a[i-1]+1.0123;
+  }
+  a[4] = 5.12345;
+  for (i=1 ; i<ASIZE-1 ; i++) {a[i] = a[i] - 20000.0;}
   minval = a[4];
   printf("a[1,4,7,ASIZE-1] %8f %8f %8f %8f\n",a[1],a[4],a[7],a[ASIZE-2]);
   FloatFastQuantizeLinear(&a[1],&ia[1],ASIZE-2,nbits,&ma,&mi,&av,&rescl);
-  printf("mi=%f, av=%f, ma=%f, rescl=%f\n",mi,av,ma,rescl);
+  for(i=1 ; i<ASIZE-1 ; i++) { A[i] = mi + ia[i] * rescl ; }
+  printf("mi=%f, av=%f, ma=%f, quantum=%f\n",mi,av,ma,rescl);
   av = 0;
   for (i=1 ; i<ASIZE-1 ; i++) { av = av + a[i] ; } ;
   av = av / (ASIZE-2) ;
   printf("expected mi=%f, expected av=%f, expected ma=%f\n",minval,av,a[7]);
   printf("a[1,4,7,ASIZE-2] %8f %8f %8f %8f\n",a[1],a[4],a[7],a[ASIZE-2]);
+  printf("A[1,4,7,ASIZE-2] %8f %8f %8f %8f\n",A[1],A[4],A[7],A[ASIZE-2]);
+  printf("-[1,4,7,ASIZE-2] %8f %8f %8f %8f\n",A[1]-a[1],A[4]-a[4],A[7]-a[7],A[ASIZE-2]-a[ASIZE-2]);
   printf("ia[1,4,7,ASIZE-2] %8hu %8hu %8hu %8hu\n\n\n\n",ia[1],ia[4],ia[7],ia[ASIZE-2]);
 
   m.f = ma;
