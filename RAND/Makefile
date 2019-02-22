@@ -3,8 +3,9 @@ CCOMP = s.cc
 CFLAGS = -mpi -O2 -ftree-vectorize -mfma -mavx2
 
 SOURCES = randomgeneric.c random_gaussian.c   random_mt19937.c  random_r250.c  \
-          random_shr3.c random_xorshiftrotate.c  random_xsr128.c  random_xsr128r.c \
-          randomgeneric.h
+          random_shr3.c random_xorshiftrotate.c  random_xsr128.c  random_xsr128r.c
+
+INCLUDES = randomgeneric.h
 
 all: ftest ctest
 
@@ -30,8 +31,8 @@ ctest: librandom.a random_test.c
 	$(CCOMP) $(CFLAGS) random_test.c -L. -lrandom -o ctest
 	rm -f *.o
 
-librandom.a: randomfunctions.h ${SOURCES}
-	rm -f *.o
+librandom.a: randomfunctions.h ${SOURCES} ${INCLUDES}
+	rm -f *.o *.a
 	$(CCOMP) $(CFLAGS) -c ${SOURCES}
 	ar rcv librandom.a *.o
 	rm -f *.o
@@ -72,5 +73,5 @@ random_gaussian_profile.Abs: librandom.a random_generic_test.c random_gaussian.c
 	rm $@
 
 clean:
-	rm -f ctest ftest *.o *.a
+	rm -f ctest ftest *.o *.a *.Abs
 
