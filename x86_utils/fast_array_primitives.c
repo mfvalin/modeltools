@@ -24,10 +24,11 @@
 #define SELECT(a,b,c,d) ( a + (b<<2) + (c<<4) + (d<<6) )
 
 #if defined(__AVX2__)
-// endian swap of bytes in 32 bit tokens (s -> d)
+// endian swap of bytes in 32 bit tokens (s -> d), index list for 256 bit SIMD shuffle operation
 static uint8_t swapindex_8_32[] = {  3,  2,  1,  0,  7,  6,  5,  4, 11, 10,  9,  8, 15, 14, 13, 12};
 #endif
 
+// endian swap of 8 bit tokens in 32 bit tokens (s -> d)
 void swap_8_in_32(void *s, void *d, int n){
 #if defined(__AVX2__)
   __m256i ix, vs0, vs1;
@@ -64,7 +65,6 @@ void swap_8_in_32(void *s, void *d, int n){
   for( ; i < n ; i++){    // loop over remainder
     t = *s1++;
     t = (t >> 24) | (t << 24) | ((t >> 8) & 0xFF00) | ((t << 8) & 0xFF0000);    // bswap
-//     t = (t >> 24) | (t << 24) | ((t >> 8) & 0xFF00) | ((t & 0xFF00) << 8);    // bswap
     *d1++ = t;
   }
 }
@@ -111,10 +111,14 @@ void swap_32_in_64(void *s, void *d, int n){
 
 // get min value, max value, very rough average of 32 bit float array
 // the average is only ~OK if n is a multiple of 2 * VLEN
-// otherwise some points are added twice (we sum 2* np2 points)
-void FloatFastQuantizeLinear(float *z_in, unsigned short *quant, int n, int nbits, float *Max, float *Min, float *Avg, float *Rescl)
+// otherwise some points are processed (added) twice (we sum 2* np2 points)
+// then quantize z_in into quant (16 bit unsigned tokens)
+void FloatFastQuantizeLinear(float *z_in, uint16_t *quant, int n, int nbits, float *Max, float *Min, float *Avg, float *Rescl)
 {
 #if defined(__AVX2__) && defined(__FMA__)
+  __m256  y0, yymin, yysca, point5;
+  __m256i iy0, yymsk;
+  __m128i ix0, ix1;
   int mask;
 #else
   int j;
@@ -125,9 +129,6 @@ void FloatFastQuantizeLinear(float *z_in, unsigned short *quant, int n, int nbit
   float *z_in0 = z_in;
 #if defined(__SSE__)
   __m128  x0, x1, x2, xxmin, xxmax, xxsum;
-  __m256  y0, yymin, yysca, point5;
-  __m128i ix0, ix1;
-  __m256i iy0, yymsk;
 #else
   float tmax, tmin, tsum, vsum[VLEN], vmax[VLEN], vmin[VLEN];
 #endif
@@ -135,6 +136,7 @@ void FloatFastQuantizeLinear(float *z_in, unsigned short *quant, int n, int nbit
     unsigned int i;
     float f;
   } xmax, xmin, xrng, xscl, q;
+  float half = 0.5;
 // initialize min, max, sum
 #if defined(__SSE__)
   xxmin  = _mm_loadu_ps(&z_in[ 0]) ;  // min = max = 8 first elements of array
@@ -151,10 +153,10 @@ void FloatFastQuantizeLinear(float *z_in, unsigned short *quant, int n, int nbit
   np     = ((n+VMASK) >> VSHIFT ) << VSHIFT ; // next higher multiple of 2 * VLEN
   np2    = np >> 1;                           // np/2
   offset =  n - np2 ;                         // offset to "upper" part with length a multiple of VLEN
-  
+  z_in0 = z_in;
   for (i=0 ; i<np2 ; i+=VLEN){
 #if defined(__SSE__)
-    // SIMD code (only needs SSE instruction set 
+    // SIMD code (only needs SSE instruction set)
     x0    = _mm_loadu_ps(&z_in[i]) ;          // stream from beginning
     x1    = _mm_loadu_ps(&z_in[i+offset]) ;   // stream from "midpoint"
     xxsum = _mm_add_ps(xxsum,x0);
@@ -165,19 +167,19 @@ void FloatFastQuantizeLinear(float *z_in, unsigned short *quant, int n, int nbit
     xxmin = _mm_min_ps(xxmin,x1);
 #else
     // straight C code
-    for(j=0 ; j<VLEN ; j++){
-      vmax[j] = (vmax[j] > z_in[j]) ? vmax[j] : z_in[j] ;
-      vmin[j] = (vmin[j] < z_in[j]) ? vmin[j] : z_in[j] ;
-      vsum[j] = vsum[j] + z_in[j] ;
-      vmax[j] = (vmax[j] > z_in[j+offset]) ? vmax[j] : z_in[j+offset] ;
-      vmin[j] = (vmin[j] < z_in[j+offset]) ? vmin[j] : z_in[j+offset] ;
-      vsum[j] = vsum[j] + z_in[j+offset] ;
+    for(j=0 ; j<VLEN ; j++){                //    MAX(a,b) ( (a > b) ? (a) : (b) )
+      vmax[j] = MAX(vmax[j],z_in0[j]) ;
+      vmin[j] = MIN(vmin[j],z_in0[j]) ;
+      vsum[j] = vsum[j] + z_in0[j] ;
+      vmax[j] = MAX(vmax[j],z_in0[j+offset]) ;
+      vmin[j] = MIN(vmin[j],z_in0[j+offset]) ;
+      vsum[j] = vsum[j] + z_in0[j+offset] ;
     }
-    z_in += VLEN;
+    z_in0 += VLEN;
 #endif
   }
 #if defined(__SSE__)
-// reduction operation on last 4 elements using vector instructions 
+// final reduction operations on last 4 elements using vector instructions 
   x0 = _mm_shuffle_ps(xxmin,xxmin,SELECT(2,3,2,3)) ;  //  put elements 2 and 3 on top of 0 and 1
   x1 = _mm_shuffle_ps(xxmax,xxmax,SELECT(2,3,2,3)) ;
   x2 = _mm_shuffle_ps(xxsum,xxsum,SELECT(2,3,2,3)) ;
@@ -190,10 +192,6 @@ void FloatFastQuantizeLinear(float *z_in, unsigned short *quant, int n, int nbit
   xxmin = _mm_min_ps(xxmin,x0);   // f( f(0,2) , f(1,3) ) , ?? , ?? , ?? ( f = min/max/add)
   xxmax = _mm_max_ps(xxmax,x1);
   xxsum = _mm_add_ps(xxsum,x2);
-//   xxmin = _mm_shuffle_ps(xxmin,xxmin,SELECT(0,0,0,0)) ;  // broadcast to all elements of vector
-//   xxmax = _mm_shuffle_ps(xxmax,xxmax,SELECT(0,0,0,0)) ;
-//   xxrng = _mm_sub_ps(xxmax,xxmin) ;                      // max - min
-//   xxsum = _mm_shuffle_ps(xxsum,xxsum,SELECT(0,0,0,0)) ;
   _mm_store_ss(Min,xxmin);
   _mm_store_ss(Max,xxmax);
   _mm_store_ss(Avg,xxsum);
@@ -204,19 +202,21 @@ void FloatFastQuantizeLinear(float *z_in, unsigned short *quant, int n, int nbit
   tmin = vmin[0] ;
   tsum = vsum[0] ;
   for(j=1 ; j<VLEN ; j++){
-    tmax = (tmax > vmax[j]) ? tmax : vmax[j] ;
-    tmin = (tmin < vmin[j]) ? tmin : vmin[j] ;
+    tmax = MAX(tmax , vmax[j]) ;
+    tmin = MIN(tmin , vmin[j]) ;
     tsum = tsum + vsum[j] ;    
   }
+//   for(j=0;j<2;j++) {vsum[j] += vsum[j+2]; }   // force same summation order as SSE version (VLEN = 4)
+//   tsum = vsum[0] + vsum[1];
   *Max  = tmax;
   *Min  = tmin;
   *Avg  = tsum / np ;
 #endif
-  if(*Max < 0) {  // both min and max are negative, we switch to absolute values, and swap min/max
+  if(*Max < 0) {       // both min and max are negative, we switch to absolute values, and swap min/max
       temp = *Min;
       *Min = - (*Max);
       *Max = - temp;
-      sign = -1.0;
+      sign = -1.0;     // everything is negative
   }else{
       sign = +1.0;
   }
@@ -228,12 +228,12 @@ printf("range = %f, min = %f, max = %f\n",xrng.f,xmin.f,xmax.f);
 //   maxexp = MAX( IEEE32_EXP(xmax.i) , IEEE32_EXP(xmin.i) );
 //   maxexp = MAX( IEEE32_EXP(xrng.i) , maxexp);
   maxexp = IEEE32_EXP(xrng.i);
-printf("maxexp = %d\n",maxexp);
   xscl.i = IEEE32(0,(nbits-1) - (maxexp-127),0);
-  scale = xscl.f;   // TO BE FIXED, used to convert floats to range  0 <= X < 2**nbits -1 
-  quantum = 1.0/scale;
-printf("old scale = %f, old quantum = %f\n",xscl.f,quantum);
+  scale = xscl.f;        // scale factor, used to convert floats to range  0 <= X < 2**nbits -1 
   xscl.i = IEEE32(0,(maxexp-127) - (nbits-1),0); // inverse scaling factor
+  quantum = xscl.f ;   // quantization interval = 1.0/scale
+printf("old scale = %f, old quantum = %f\n",scale,quantum);
+  // make sure that quantum is not considered zero when added to min or max
   while ((quantum + xmax.f == xmax.f) && (quantum + xmin.f == xmin.f)) { quantum = quantum * 2.0 ; scale = scale / 2.0 ; }
 
   if (*Min > 0) {                        // all numbers positive or all numbers negative
@@ -242,34 +242,35 @@ printf("old scale = %f, old quantum = %f\n",xscl.f,quantum);
     izero = (0 - *Min) * scale + .5 ;
   }
   q.f = quantum;
-printf("new scale = %f, quantum = %f %8x, min = %f, izero = %d\n",scale, quantum, q.i, *Min,izero);
+printf("new scale = %f, new quantum = %f %8x, new min = %f, izero = %d\n",scale, quantum, q.i, *Min,izero);
   if((*Min < 0)  || (*Min < xrng.f * 128.0)){
     fmin = -(izero * quantum);                                  // quantized minimum
     if( (*Min - fmin) > (.5 * quantum) ) fmin += quantum ;      // bring to closest quantum
     imax = (*Max - fmin) * scale + .5;                          // quantized max
     imin = (*Min - fmin) * scale + .5;                          // quantized min
-    printf("new min = %f, deltamin = %g, quantum = %g, coded max,min = %x %x\n",fmin,fmin-(*Min),quantum,imax,imin);
+    printf("final min = %f, deltamin = %g, coded max,min = %x %x\n",fmin,fmin-(*Min),imax,imin);
     *Min = fmin;
     izero = (0 - fmin) * scale;
     fzero = *Min + izero * quantum;
     printf("rescaled fzero = %f, izero = %d, new min = %f\n",fzero,izero,*Min);
   }
-  scale = scale * sign;
-  *Rescl = quantum * sign;
+  scale   = scale * sign;      // if sign is negative, everything is negated, restored = min + Rescl * quantized
+  *Rescl  = quantum * sign;
   quantum = quantum * sign;
-  *Min = *Min * sign;      // if sign is negative, Rescl is negative, restored = min + Rescl * quantized
-  *Max = *Max * sign;
+  *Min    = *Min * sign;
+  *Max    = *Max * sign;
 #if defined(__AVX2__) && defined(__FMA__)
   mask = ~ (-1 << nbits) ;
   // uses AVX2, SSE4, FMA instructions
-  yysca = _mm256_set1_ps(scale) ;
-  point5 = _mm256_set1_ps(0.5) ;
-  yymin = _mm256_set1_ps(xmin.f) ;
-  ix0 = (__m128i) _mm_broadcast_ss( (void *) &mask ) ;
-  yymsk = (__m256i) yymin;   // useless action to silence warning
-  yymsk = _mm256_inserti128_si256(yymsk,ix0,0) ;
-  yymsk = _mm256_inserti128_si256(yymsk,ix0,1) ;
+  yysca  = _mm256_set1_ps(scale) ;
+  point5 = _mm256_set1_ps(half) ;
+  yymin  = _mm256_set1_ps(*Min) ;
+  ix0    = (__m128i) _mm_broadcast_ss( (void *) &mask ) ;
+  yymsk  = (__m256i) yymin;   // useless action to silence compile time warning
+  yymsk  = _mm256_inserti128_si256(yymsk,ix0,0) ;
+  yymsk  = _mm256_inserti128_si256(yymsk,ix0,1) ;
 #endif
+  z_in0 = z_in;
   for (i=0 ; i<np2 ; i+=VLEN){
 #if defined(__AVX2__) && defined(__FMA__)
     x0    = _mm_loadu_ps(&z_in0[i]) ;          // stream from beginning
@@ -287,8 +288,8 @@ printf("new scale = %f, quantum = %f %8x, min = %f, izero = %d\n",scale, quantum
     _mm_storeh_pi((void *)&quant[i+offset],(__m128)ix0) ;  // store upper 64 bits
 #else
     for(j=0 ; j<VLEN ; j++){
-      quant[j] = (z_in0[j] - *Min) * scale;
-      quant[j+offset] = (z_in0[j+offset] - *Min) * scale + .5;
+      quant[j] = (z_in0[j] - *Min) * scale + half;
+      quant[j+offset] = (z_in0[j+offset] - *Min) * scale + half;
     }
     z_in0 += VLEN;
     quant += VLEN;
@@ -511,7 +512,7 @@ void Float2Short(uint16_t *restrict q0, float *restrict s0, unsigned int n, floa
 int main()
 {
   int i;
-  float a[ASIZE+10], A[ASIZE+10], b[ASIZE+10];
+  float a[ASIZE+10], A[ASIZE+10];
   short unsigned int ia[ASIZE+10];
   int nbits = 16;
   float mi, ma, av, range, scal, mi0, fac, rescl, minval;
@@ -585,7 +586,7 @@ int main()
   a[0] = 1.0;
   for (i=1 ; i<ASIZE ; i++){
     a[i] = a[i-1]*1.01;
-    b[i] = a[i];
+//     b[i] = a[i];
   }
   minval = -8.3 ;
   a[4] = minval ; a[7] = 65537.99 + a[4] ;
@@ -626,7 +627,7 @@ int main()
     a[i] = a[i-1]+1.0123;
   }
   a[4] = 5.12345;
-  for (i=1 ; i<ASIZE-1 ; i++) {a[i] = a[i] - 20000.0;}
+  for (i=1 ; i<ASIZE-1 ; i++) {a[i] = a[i] - 2000000.0;}
   minval = a[4];
   printf("a[1,4,7,ASIZE-1] %8f %8f %8f %8f\n",a[1],a[4],a[7],a[ASIZE-2]);
   FloatFastQuantizeLinear(&a[1],&ia[1],ASIZE-2,nbits,&ma,&mi,&av,&rescl);
