@@ -8,8 +8,11 @@
 #include <x86intrin.h>
 #endif
 
+// useful vector length in 32 bit units (SSE size for now, 128 bits)
 #define VLEN 4
+// shift count for 2 x VLEN
 #define VSHIFT 3
+// (2 x VLEN) - 1, used to compute modulo 2 x VLEN
 #define VMASK 7
 
 // IEEE 754 components (float)
@@ -109,35 +112,16 @@ void swap_32_in_64(void *s, void *d, int n){
   }
 }
 
-// get min value, max value, very rough average of 32 bit float array
-// the average is only ~OK if n is a multiple of 2 * VLEN
-// otherwise some points are processed (added) twice (we sum 2* np2 points)
-// then quantize z_in into quant (16 bit unsigned tokens)
-void FloatFastQuantizeLinear(float *z_in, uint16_t *quant, int n, int nbits, float *Max, float *Min, float *Avg, float *Rescl)
-{
-#if defined(__AVX2__) && defined(__FMA__)
-  __m256  y0, yymin, yysca, point5;
-  __m256i iy0, yymsk;
-  __m128i ix0, ix1;
-  int mask;
-#else
-  int j;
-#endif
-  int i, np, np2, offset, maxexp, imax, imin;
-  int izero;
-  float scale, fzero, fmin, quantum, sign, temp;
-  float *z_in0 = z_in;
+
+static inline void FastFloatMinMaxAvg_inline(float *z_in, int n, float *Max, float *Min, float *Avg){
+  int i, np, np2, offset;
 #if defined(__SSE__)
   __m128  x0, x1, x2, xxmin, xxmax, xxsum;
 #else
+  int j;
+  float *z_in0 = z_in;
   float tmax, tmin, tsum, vsum[VLEN], vmax[VLEN], vmin[VLEN];
 #endif
-  union {
-    unsigned int i;
-    float f;
-  } xmax, xmin, xrng, xscl, q;
-  float half = 0.5;
-// initialize min, max, sum
 #if defined(__SSE__)
   xxmin  = _mm_loadu_ps(&z_in[ 0]) ;  // min = max = 8 first elements of array
   xxmax  = xxmin;
@@ -153,7 +137,7 @@ void FloatFastQuantizeLinear(float *z_in, uint16_t *quant, int n, int nbits, flo
   np     = ((n+VMASK) >> VSHIFT ) << VSHIFT ; // next higher multiple of 2 * VLEN
   np2    = np >> 1;                           // np/2
   offset =  n - np2 ;                         // offset to "upper" part with length a multiple of VLEN
-  z_in0 = z_in;
+// PASS 1, vector min, max, sum
   for (i=0 ; i<np2 ; i+=VLEN){
 #if defined(__SSE__)
     // SIMD code (only needs SSE instruction set)
@@ -178,8 +162,9 @@ void FloatFastQuantizeLinear(float *z_in, uint16_t *quant, int n, int nbits, flo
     z_in0 += VLEN;
 #endif
   }
+// PASS 2, final reduction to 1 value from 4 values vector 
 #if defined(__SSE__)
-// final reduction operations on last 4 elements using vector instructions 
+// using SIMD instructions 
   x0 = _mm_shuffle_ps(xxmin,xxmin,SELECT(2,3,2,3)) ;  //  put elements 2 and 3 on top of 0 and 1
   x1 = _mm_shuffle_ps(xxmax,xxmax,SELECT(2,3,2,3)) ;
   x2 = _mm_shuffle_ps(xxsum,xxsum,SELECT(2,3,2,3)) ;
@@ -197,7 +182,7 @@ void FloatFastQuantizeLinear(float *z_in, uint16_t *quant, int n, int nbits, flo
   _mm_store_ss(Avg,xxsum);
   *Avg /= np;
 #else
-// final wrapup, scalar loop over VLEN terms, only in non SSE case
+// scalar reduction over VLEN terms, only in non SIMD case
   tmax = vmax[0] ;
   tmin = vmin[0] ;
   tsum = vsum[0] ;
@@ -212,6 +197,23 @@ void FloatFastQuantizeLinear(float *z_in, uint16_t *quant, int n, int nbits, flo
   *Min  = tmin;
   *Avg  = tsum / np ;
 #endif
+}
+int FastFloatMinMaxAvg(float *z_in, int n, float *Max, float *Min, float *Avg){
+  if(n < 2 * VLEN) return -1;  // OOPS, n is too small
+  FastFloatMinMaxAvg_inline(z_in, n, Max, Min, Avg);
+  return 0;
+}
+
+// for nbits quantization
+// return updated values for Max and Min, return quantum and scaling factor
+static void inline FastQuantizeScale_inline(float *Max, float *Min, float *Quant, float *Scale, int nbits){
+  float scale, fzero, fmin, quantum, sign, temp;
+  int maxexp, izero, imax, imin;
+  union {
+    unsigned int i;
+    float f;
+  } xmax, xmin, xrng, xscl, q;
+  // now we must adjust the reference point ("minimum" and the rescaling and quantizing factors)
   if(*Max < 0) {       // both min and max are negative, we switch to absolute values, and swap min/max
       temp = *Min;
       *Min = - (*Max);
@@ -220,7 +222,7 @@ void FloatFastQuantizeLinear(float *z_in, uint16_t *quant, int n, int nbits, flo
   }else{
       sign = +1.0;
   }
-// code to quantize floating poing into 16 bit tokens (nbits significant bits)
+// code to quantize floating poing into 16 bit tokens (nbits significant bits) (nbits <= 16)
   xmax.f = *Max;
   xmin.f = *Min;
   xrng.f = xmax.f - xmin.f;
@@ -254,11 +256,48 @@ printf("new scale = %f, new quantum = %f %8x, new min = %f, izero = %d\n",scale,
     fzero = *Min + izero * quantum;
     printf("rescaled fzero = %f, izero = %d, new min = %f\n",fzero,izero,*Min);
   }
-  scale   = scale * sign;      // if sign is negative, everything is negated, restored = min + Rescl * quantized
-  *Rescl  = quantum * sign;
-  quantum = quantum * sign;
+  *Scale   = scale * sign;      // if sign is negative, everything is negated, restored = min + Quant * quantized
+  *Quant  = quantum * sign;
   *Min    = *Min * sign;
   *Max    = *Max * sign;
+}
+int FastQuantizeScale(float *Max, float *Min, float *Quant, float *Scale, int nbits){
+  if(nbits > 16) return -1;  // OOPS, nbits is too large
+  FastQuantizeScale_inline(Max, Min, Quant, Scale, nbits);
+  return 0;
+}
+
+// get min value, max value, very rough average of 32 bit float array
+// the average is only ~OK if n is a multiple of 2 * VLEN
+// otherwise some points are processed (added) twice (we sum 2* np2 points)
+// then quantize z_in into quant (16 bit unsigned tokens)
+int FloatFastQuantizeLinear(float *z_in, uint16_t *quant, int n, int nbits, float *Max, float *Min, float *Avg, float *Quant)
+{
+#if defined(__SSE__)
+  __m128  x0, x1;
+#endif
+#if defined(__AVX2__) && defined(__FMA__)
+  __m256  y0, yymin, yysca, point5;
+  __m256i iy0, yymsk;
+  __m128i ix0, ix1;
+  int mask;
+#else
+  int j;
+#endif
+  int i, np, np2, offset;
+  float scale;
+  float *z_in0;
+  float half = 0.5;
+
+  if(nbits > 16) return -1;  // OOPS, nbits is too large
+  if(n < 2 * VLEN) return -1;  // OOPS, n is too small
+
+  FastFloatMinMaxAvg_inline(z_in, n, Max, Min, Avg);           // get max, min, rough average
+  FastQuantizeScale_inline(Max, Min, Quant, &scale, nbits);    // update max, min, get scaling factors
+
+  np     = ((n+VMASK) >> VSHIFT ) << VSHIFT ; // next higher multiple of 2 * VLEN
+  np2    = np >> 1;                           // np/2
+  offset =  n - np2 ;                         // offset to "upper" part with length a multiple of VLEN
 #if defined(__AVX2__) && defined(__FMA__)
   mask = ~ (-1 << nbits) ;
   // uses AVX2, SSE4, FMA instructions
@@ -295,11 +334,11 @@ printf("new scale = %f, new quantum = %f %8x, new min = %f, izero = %d\n",scale,
     quant += VLEN;
 #endif
   }  // for (i=0 ; i<np2 ; i+=VLEN)  (both for AVX2 and normal code)
+  return 0; // O.K.
 }
 
-#define NBITS 16
 // inverse of linear quantizer, short to float with bias restoration
-void Short2Float(uint16_t *restrict q, float *restrict s, int n, float bias, float scale){
+void FloatFastUnquantizeLinear(uint16_t *restrict q, float *restrict s, int n, float bias, float scale){
 #if ! defined(__AVX2__)
   uint32_t i;
 #endif
@@ -313,22 +352,25 @@ void Short2Float(uint16_t *restrict q, float *restrict s, int n, float bias, flo
   int n1;
   yscal  = _mm256_set1_ps(scale) ;
   ybias  = _mm256_set1_ps(bias) ;
-  n1 = (n + 31) & 0xFFFFFFE0;      // multiple 0f 32 
+  n1 = (n + 31) & 0xFFFFFFE0;      // multiple of 32 
   n1 >>= 1;                        // multiple of 16
   q1 = q + n - n1;                 // "beginning"
   s1 = s + n - n1;                 // "mid point" (may overlap tail end of "beginning")
 #endif
 
 #if defined(__AVX2__) && defined(__FMA__)
-  while(n1 > 0){   // 16 elements per iteration, 16 at "beginning", 16 at "mid point"
+  while(n1 > 0){   // 32 elements per iteration, 16 at "beginning", 16 at "mid point"
+    n1 -= 16;
     ix0   = _mm_loadu_si128((const __m128i *) &q[0] ) ; // "beginning"
     iy0   = _mm256_cvtepu16_epi32(ix0) ;                // unpack 16 to 32 bits
     ix1   = _mm_loadu_si128((const __m128i *) &q[8] ) ; // "beginning" + 8
     iy1   = _mm256_cvtepu16_epi32(ix1) ;                // unpack 16 to 32 bits
+    q  += 16;
     ix2   = _mm_loadu_si128((const __m128i *) &q1[0]) ; // "mid point"
     iy2   = _mm256_cvtepu16_epi32(ix2) ;                // unpack 16 to 32 bits
     ix3   = _mm_loadu_si128((const __m128i *) &q1[8]) ; // "mid point" + 8
     iy3   = _mm256_cvtepu16_epi32(ix3) ;                // unpack 16 to 32 bits
+    q1 += 16;
 
     y0    = _mm256_cvtepi32_ps(iy0) ;                   // convert to float
     y1    = _mm256_cvtepi32_ps(iy1) ;
@@ -342,41 +384,41 @@ void Short2Float(uint16_t *restrict q, float *restrict s, int n, float bias, flo
 
     _mm256_storeu_ps(s   ,y0);                          // store at "beginning"
     _mm256_storeu_ps(s+ 8,y1);                          // store at "beginning" + 8
+    s  += 16;
     _mm256_storeu_ps(s1  ,y2);                          // store at "mid point"
     _mm256_storeu_ps(s1+8,y3);                          // store at "mid point" + 8
-    
-    q  += 16;
-    s  += 16;
-    q1 += 16;
     s1 += 16;
-    n1 -= 16;
   }
 #else
-  while(n >= 32){     // 32 elements per iteration
-    for(i=0 ; i<8 ; i++){
-      s[i]    = (q[i]    * scale) + bias;
-      s[i+8]  = (q[i+8]  * scale) + bias;
-      s[i+16] = (q[i+16] * scale) + bias;
-      s[i+24] = (q[i+24] * scale) + bias;
-    }
-    q += 32;
-    s += 32;
-    n = n - 32;
+  for(i=0 ; i<n ; i++){
+    s[i]    = (q[i]    * scale) + bias;
   }
-  while(n >= 8){     // 8 elements per iteration
-    for(i=0 ; i<8 ; i++){
-      s[i]    = (q[i]    * scale) + bias;
-    }
-    q += 8;
-    s += 8;
-    n = n - 8;
-  }
-  while(n-->0) {     // leftovers, one by one
-    *s++ = (*q++ * scale) + bias;
-  }
+//   while(n >= 32){     // 32 elements per iteration
+//     for(i=0 ; i<8 ; i++){
+//       s[i]    = (q[i]    * scale) + bias;
+//       s[i+8]  = (q[i+8]  * scale) + bias;
+//       s[i+16] = (q[i+16] * scale) + bias;
+//       s[i+24] = (q[i+24] * scale) + bias;
+//     }
+//     q += 32;
+//     s += 32;
+//     n = n - 32;
+//   }
+//   while(n >= 8){     // 8 elements per iteration
+//     for(i=0 ; i<8 ; i++){
+//       s[i]    = (q[i]    * scale) + bias;
+//     }
+//     q += 8;
+//     s += 8;
+//     n = n - 8;
+//   }
+//   while(n-->0) {     // leftovers, one by one
+//     *s++ = (*q++ * scale) + bias;
+//   }
 #endif
 }
 
+#define NBITS 16
 // linear quantizer, float to short with bias removal
 void Float2Short(uint16_t *restrict q0, float *restrict s0, unsigned int n, float *bias, float *rscl){
   int n1, i, maxexp, izero;
@@ -515,7 +557,7 @@ int main()
   float a[ASIZE+10], A[ASIZE+10];
   short unsigned int ia[ASIZE+10];
   int nbits = 16;
-  float mi, ma, av, range, scal, mi0, fac, rescl, minval;
+  float mi, ma, av, range, scal, mi0, fac, quant, minval;
   int ima, imi, exp;
   union {
     unsigned int i;
@@ -591,9 +633,9 @@ int main()
   minval = -8.3 ;
   a[4] = minval ; a[7] = 65537.99 + a[4] ;
   printf("a[1,4,7,ASIZE-1] %8f %8f %8f %8f\n",a[1],a[4],a[7],a[ASIZE-2]);
-  FloatFastQuantizeLinear(&a[1],&ia[1],ASIZE-2,nbits,&ma,&mi,&av,&rescl);
-  for(i=1 ; i<ASIZE-1 ; i++) { A[i] = mi + ia[i] * rescl ; }
-  printf("mi=%f, av=%f, ma=%f, quantum=%f\n",mi,av,ma,rescl);
+  FloatFastQuantizeLinear(&a[1],&ia[1],ASIZE-2,nbits,&ma,&mi,&av,&quant);
+  for(i=1 ; i<ASIZE-1 ; i++) { A[i] = mi + ia[i] * quant ; }
+  printf("mi=%f, av=%f, ma=%f, quantum=%f\n",mi,av,ma,quant);
   av = 0;
   for (i=1 ; i<ASIZE-1 ; i++) { av = av + a[i] ; } ;
   av = av / (ASIZE-2) ;
@@ -610,9 +652,9 @@ int main()
   minval = 8.3 ;
   a[4] = minval ; a[7] = 6553000.99 + a[4] ;
   printf("a[1,4,7,ASIZE-1] %8f %8f %8f %8f\n",a[1],a[4],a[7],a[ASIZE-2]);
-  FloatFastQuantizeLinear(&a[1],&ia[1],ASIZE-2,nbits,&ma,&mi,&av,&rescl);
-  for(i=1 ; i<ASIZE-1 ; i++) { A[i] = mi + ia[i] * rescl ; }
-  printf("mi=%f, av=%f, ma=%f, quantum=%f\n",mi,av,ma,rescl);
+  FloatFastQuantizeLinear(&a[1],&ia[1],ASIZE-2,nbits,&ma,&mi,&av,&quant);
+  for(i=1 ; i<ASIZE-1 ; i++) { A[i] = mi + ia[i] * quant ; }
+  printf("mi=%f, av=%f, ma=%f, quantum=%f\n",mi,av,ma,quant);
   av = 0;
   for (i=1 ; i<ASIZE-1 ; i++) { av = av + a[i] ; } ;
   av = av / (ASIZE-2) ;
@@ -630,9 +672,9 @@ int main()
   for (i=1 ; i<ASIZE-1 ; i++) {a[i] = a[i] - 2000000.0;}
   minval = a[4];
   printf("a[1,4,7,ASIZE-1] %8f %8f %8f %8f\n",a[1],a[4],a[7],a[ASIZE-2]);
-  FloatFastQuantizeLinear(&a[1],&ia[1],ASIZE-2,nbits,&ma,&mi,&av,&rescl);
-  for(i=1 ; i<ASIZE-1 ; i++) { A[i] = mi + ia[i] * rescl ; }
-  printf("mi=%f, av=%f, ma=%f, quantum=%f\n",mi,av,ma,rescl);
+  FloatFastQuantizeLinear(&a[1],&ia[1],ASIZE-2,nbits,&ma,&mi,&av,&quant);
+  for(i=1 ; i<ASIZE-1 ; i++) { A[i] = mi + ia[i] * quant ; }
+  printf("mi=%f, av=%f, ma=%f, quantum=%f\n",mi,av,ma,quant);
   av = 0;
   for (i=1 ; i<ASIZE-1 ; i++) { av = av + a[i] ; } ;
   av = av / (ASIZE-2) ;
