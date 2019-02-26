@@ -29,18 +29,6 @@
 #include <mpi.h>
 #endif
 
-#if defined __INTEL_COMPILER
-static inline int32_t __sync_fetch_and_add(int32_t* ptr, int32_t value) {
-        int32_t previous;
-        asm volatile ("lock;\n"
-                "\txaddl %1, %2;"
-                : "=r"(previous)
-                : "0"(value), "m"(*ptr)
-                : "memory");
-        return previous;
-}
-#endif
-
 // static int volatile __attribute__ ((aligned (64))) spins[64];
 // static int volatile __attribute__ ((aligned (64))) barrs[64];
 // static int volatile __attribute__ ((aligned (64))) locks[64];
