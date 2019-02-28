@@ -1,5 +1,5 @@
-/* RMNLIB - Library of useful routines for C and FORTRAN programming
- * Copyright (C) 2018  Environnement Canada
+/* RKL - RPN kernel Library for C and FORTRAN programming
+ * Copyright (C) 2019  Recherche en Prevision Numerique
  *
  * This library is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public
@@ -16,6 +16,42 @@
  * Free Software Foundation, Inc., 59 Temple Place - Suite 330,
  * Boston, MA 02111-1307, USA.
  */
+
+//****P* librkl/RPN kernel library interpolators
+// Synopsis
+//
+// this is a set of 3D interpolators, C and Fortran callable,
+// the C name and the Fortran name are the same
+//
+// usually cubic in the horizontal , cubic or linear in the vertical
+// with a monotonic option.
+// there are also setup routines for these interpolators
+//
+//     Name                        Purpose
+//
+// Vsearch_setup             : simple setup
+// Vsearch_setup_plus        : Vsearch_setup + x and y direction offsets
+// Tricublin_zyx1_n          : simple interpolator, source is a single variable in a 3D array
+// Tricublin_zyx1_n_m        : source is a group of m  3D arrays
+// Tricublin_zyx3_n          : source is a 3 variable ( dimension(3, ....) ) 3D array
+// Tricublin_mono_zyx_n      : monotonic version of Tricublin_zyx1_n
+// Tricublin_mono_zyx_n_m    : monotonic version of Tricublin_zyx1_n_m
+//
+// Tricublin_zyx1_n_m, Tricublin_zyx3_n, Tricublin_mono_zyx_n_m save computing cycles by 
+// reusing the computed interpolation coefficients for multiple arrays
+//
+// the horizontal interpolation is normally bicubic
+//
+// the vertical interpolation is normally cubic, except when the target lies 
+// between the first 2 or the last 2 levels, in which case it is linear
+//
+// the monotonic interpolators provides 
+// - the result of a tri-linear interpolation
+// - the result of the tri-cubic or bi-cubic+linear interpolation
+// - the minimum of the 2x2x2 sub-cube used for linear 
+// 
+//****
+
 #if defined(__AVX2__) && defined(__x86_64__)
 #include <immintrin.h>
 #endif
@@ -87,25 +123,66 @@ static inline void denominators(double *r, double a, double b, double c, double 
 
 #if defined(NEVER_TO_BE_TRUE)
   interface                                                                      !InTf!
+//****f* librkl/vsearch_setup  (Fortran version)
+// Synopsis
+//    the function returns an opaque object of type C_PTR, to be passed to  the interpolators
+//
+//    levels      : real*8 array of levels, dimension(nk)
+//    nk          : number of levels
+//    ni, nj      : used to compute indexing into source array(s) for interpolators
+//
+//    ni is used to compute the distance between 2 array elements for which index j differs by 1
+//    ni*nj is used to compute the distance between 2 array elements for which index k differs by 1
+//
+//    when vsearch_setup is used, positions will be assumed to be in local index space
+//    (equivalent to offseti = 0 and offsetj = 0 in vsearch_setup_plus)
+//
+//    see interpolators for more information
+//
+// ARGUMENTS
     function vsearch_setup(levels, nk, ni, nj) result (ztab) bind(C,name='Vsearch_setup')     !InTf!
       import :: C_PTR, C_DOUBLE, C_INT                                           !InTf!
       real(C_DOUBLE), dimension(nk), intent(IN) :: levels                        !InTf!
       integer(C_INT), intent(IN), value :: nk, ni, nj                            !InTf!
       type(C_PTR) :: ztab                                                        !InTf!
+//****
     end function vsearch_setup                                                   !InTf!
+//****f* librkl/vsearch_setup_plus  (Fortran version)
+// Synopsis
+//    the function returns an opaque object of type C_PTR, to be passed to  the interpolators
+//
+//    levels      : real*8 array of levels, dimension(nk)
+//    nk          : number of levels
+//    ni, nj      : used to compute indexing into source array(s) for interpolators
+//    offseti     : used to convert global position along i into local array position
+//    offsetj     : used to convert global position along j into local array position
+//
+//    ni is used to compute the distance between 2 array elements for which index j differs by 1
+//    ni*nj is used to compute the distance between 2 array elements for which index k differs by 1
+//
+//    see interpolators for more information
+//
+// ARGUMENTS
     function vsearch_setup_plus(levels, nk, ni, nj, offseti, offsetj) result (ztab) bind(C,name='Vsearch_setup_plus')     !InTf!
       import :: C_PTR, C_DOUBLE, C_INT                                           !InTf!
       real(C_DOUBLE), dimension(nk), intent(IN) :: levels                        !InTf!
       integer(C_INT), intent(IN), value :: nk, ni, nj                            !InTf!
       integer(C_INT), intent(IN), value :: offseti, offsetj                      !InTf!
       type(C_PTR) :: ztab                                                        !InTf!
+//****
     end function vsearch_setup                                                   !InTf!
   end interface                                                                  !InTf!
 #endif
 // allocate lookup table set and
 // return pointer to filled table set
 // targets are expected to be positive, and monotonically increasing
-ztab *Vsearch_setup(double *targets, int nk, int ni, int nj){
+//****f* librkl/Vsearch_setup
+// Synopsis
+//
+// ARGUMENTS
+ztab *Vsearch_setup(double *targets, int nk, int ni, int nj)
+//****
+{
   int i;
   ztab *lv;
   double pad;
@@ -144,7 +221,13 @@ ztab *Vsearch_setup(double *targets, int nk, int ni, int nj){
   lv->offj = 0;
   return lv;             // return pointer to filled table
 }
-ztab *Vsearch_setup_plus(double *targets, int nk, int ni, int nj, int offseti, int offsetj){
+//****f* librkl/Vsearch_setup_plus
+// Synopsis
+//
+// ARGUMENTS
+ztab *Vsearch_setup_plus(double *targets, int nk, int ni, int nj, int offseti, int offsetj)
+//****
+{
   ztab *lv;
   lv = Vsearch_setup(targets, nk, ni, nj);
   if(lv != NULL) {
@@ -412,14 +495,73 @@ static inline void Tricublin_zyxf1_inline(float *d, float *f1, double *pxyz, int
 // n       : number of points
 #if defined(NEVER_TO_BE_TRUE)
   interface                                                                      !InTf!
-    subroutine tricublin_zyx1_n(d,f1,pxyz,lv,n) bind(C,name='Tricublin_zyx1_n')  !InTf!
+//****f* librkl/tricublin_zyx1_n  (Fortran version)
+// Synopsis
+//    f         real input array of dimension(xmin:xmax,ymin,ymax,nk)
+//              f(1,1,1) MUST be passed to this function
+//              xmax MUST be xmin+ni-1, ymax MUST be ymin+nj-1  (see setup routines)
+//    pxyz      real array, dimension(3,n), contains the target interpolation positions
+//              positions are in global index space
+//              pxyz(1,i) is the position along x of point i (i = 1..n)
+//              pxyz(2,i) is the position along y of point i
+//              pxyz(3,i) is the position along z of point i
+//    d         real array, dimension(n), d(i) is the interpolated value at point i
+//    lv        opaque object obtained from the setup routines
+//    n         number of points to interpolate
+// ARGUMENTS
+    subroutine tricublin_zyx1_n(d,f,pxyz,lv,n) bind(C,name='Tricublin_zyx1_n')   !InTf!
       import :: C_PTR                                                            !InTf!
       real, dimension(n), intent(OUT)   :: d                                     !InTf!
-      real, dimension(*), intent(IN)    :: f1                                    !InTf!
+      real, dimension(*), intent(IN)    :: f                                     !InTf!
       real, dimension(3,n), intent(IN)  :: pxyz                                  !InTf!
       type(C_PTR), intent(IN), value    :: lv                                    !InTf!
       integer, intent(IN), value        :: n                                     !InTf!
+//****
     end subroutine tricublin_zyx1_n                                              !InTf!
+//****f* librkl/tricublin_zyx1_n_m  (Fortran version)
+// ARGUMENTS
+    subroutine tricublin_zyx1_n_m(d,f,pxyz,lv,n,m) bind(C,name='Tricublin_zyx1_n_m')   !InTf!
+      import :: C_PTR                                                            !InTf!
+      real, dimension(*), intent(OUT)   :: d                                     !InTf!
+      type(C_PTR), dimension(*), intent(IN)    :: f                              !InTf!
+      real, dimension(*), intent(IN)  :: pxyz                                    !InTf!
+      type(C_PTR), intent(IN), value    :: lv                                    !InTf!
+      integer, intent(IN), value        :: n, m                                  !InTf!
+//****
+    end subroutine tricublin_zyx1_n_m                                            !InTf!
+//****f* librkl/tricublin_mono_zyx_n  (Fortran version)
+// ARGUMENTS
+    subroutine tricublin_mono_zyx_n(d,l,mi,ma,f,pxyz,lv,n) bind(C,name='Tricublin_mono_zyx_n')   !InTf!
+      import :: C_PTR                                                            !InTf!
+      real, dimension(*), intent(OUT)   :: d, l, mi, ma                          !InTf!
+      real, dimension(*), intent(IN)    :: f                                     !InTf!
+      real, dimension(*), intent(IN)  :: pxyz                                    !InTf!
+      type(C_PTR), intent(IN), value    :: lv                                    !InTf!
+      integer, intent(IN), value        :: n                                     !InTf!
+//****
+    end subroutine tricublin_mono_zyx_n                                          !InTf!
+//****f* librkl/tricublin_mono_zyx_n_m  (Fortran version)
+// ARGUMENTS
+    subroutine tricublin_mono_zyx_n_m(d,l,mi,ma,f,pxyz,lv,n,m) bind(C,name='Tricublin_mono_zyx_n_m')   !InTf!
+      import :: C_PTR                                                            !InTf!
+      real, dimension(*), intent(OUT)   :: d, l, mi, ma                          !InTf!
+      type(C_PTR), dimension(*), intent(IN)    :: f                              !InTf!
+      real, dimension(*), intent(IN)  :: pxyz                                    !InTf!
+      type(C_PTR), intent(IN), value    :: lv                                    !InTf!
+      integer, intent(IN), value        :: n, m                                  !InTf!
+//****
+    end subroutine tricublin_mono_zyx_n_m                                        !InTf!
+//****f* librkl/tricublin_zyx3_n  (Fortran version)
+// ARGUMENTS
+    subroutine tricublin_zyx3_n(d,f,pxyz,lv,n) bind(C,name='Tricublin_zyx3_n')   !InTf!
+      import :: C_PTR                                                            !InTf!
+      real, dimension(*), intent(OUT)   :: d                                     !InTf!
+      real, dimension(*), intent(IN)    :: f                                     !InTf!
+      real, dimension(*), intent(IN)  :: pxyz                                    !InTf!
+      type(C_PTR), intent(IN), value    :: lv                                    !InTf!
+      integer, intent(IN), value        :: n                                     !InTf!
+//****
+    end subroutine tricublin_zyx3_n                                              !InTf!
   end interface                                                                  !InTf!
 #endif
 
@@ -428,7 +570,13 @@ static inline void Tricublin_zyxf1_inline(float *d, float *f1, double *pxyz, int
 // it is ASSUMED that along X and Y interpolation will always be CUBIC 
 // ( 2 <= px < "ni"-1 ) ( 2 <= py < "nj"-1 )
 // pz < 2 and pz >= nk - 1 will induce linear interpolation or extrapolation
-void Tricublin_zyx1_n(float *d, float *f1, pxpypz *pxyz,  ztab *lv, int n){
+//****f* librkl/Tricublin_zyx1_n
+// Synopsis
+//
+// ARGUMENTS
+void Tricublin_zyx1_n(float *d, float *f1, pxpypz *pxyz,  ztab *lv, int n)
+//****
+{
   double cxyz[24];   // interpolation coefficients 4 for each dimension (x, y, z)
   int ixyz;          // unilinear index into array f1 (collapsed dimensions)
   int zlinear;       // non zero if linear interpolation
@@ -441,7 +589,13 @@ void Tricublin_zyx1_n(float *d, float *f1, pxpypz *pxyz,  ztab *lv, int n){
   }
 }
 
-void Tricublin_zyx1_n_m(float *d, float **fs, pxpypz *pxyz,  ztab *lv, int n, int m){  // multiple field version
+//****f* librkl/Tricublin_zyx1_n_m
+// Synopsis
+//
+// ARGUMENTS
+void Tricublin_zyx1_n_m(float *d, float **fs, pxpypz *pxyz,  ztab *lv, int n, int m)
+//****
+{  // multiple field version
   double cxyz[24];   // interpolation coefficients 4 for each dimension (x, y, z)
   int ixyz;          // unilinear index into array f1 (collapsed dimensions)
   int i;
@@ -650,7 +804,13 @@ static inline void Tricublin_zyx_mm_d_inline(float *d, float *lin, float *min, f
 #endif
 }
 
-void Tricublin_mono_zyx_n(float *d, float *l, float *mi, float *ma, float *f, pxpypz *pxyz,  ztab *lv, int n){
+//****f* librkl/Tricublin_mono_zyx_n
+// Synopsis
+//
+// ARGUMENTS
+void Tricublin_mono_zyx_n(float *d, float *l, float *mi, float *ma, float *f, pxpypz *pxyz,  ztab *lv, int n)
+//****
+{
   double cxyz[24];   // interpolation coefficients 4 for each dimension (x, y, z)
   int ixyz;          // unilinear index into array f1 (collapsed dimensions)
   int zlinear;       // non zero if linear interpolation
@@ -666,7 +826,13 @@ void Tricublin_mono_zyx_n(float *d, float *l, float *mi, float *ma, float *f, px
   }
 }
 
-void Tricublin_mono_zyx_n_m(float *d, float *l, float *mi, float *ma, float **fs, pxpypz *pxyz,  ztab *lv, int n, int m){
+//****f* librkl/Tricublin_mono_zyx_n_m
+// Synopsis
+//
+// ARGUMENTS
+void Tricublin_mono_zyx_n_m(float *d, float *l, float *mi, float *ma, float **fs, pxpypz *pxyz,  ztab *lv, int n, int m)
+//****
+{
   int i;
   double cxyz[24];   // interpolation coefficients 4 for each dimension (x, y, z)
   int ixyz;          // unilinear index into array f1 (collapsed dimensions)
@@ -868,7 +1034,13 @@ static inline void Tricublin_zyxf3_inline(float *d, float *f, double *pxyz, int 
 // it is ASSUMED that along X and Y interpolation will always be CUBIC 
 // ( 2 <= px < "ni"-1 ) ( 2 <= py < "nj"-1 )
 // pz < 2 and pz >= nk - 1 will induce linear interpolation or extrapolation
-void Tricublin_zyx3_n(float *d, float *f3, pxpypz *pxyz,  ztab *lv, int n){
+//****f* librkl/Tricublin_zyx3_n
+// Synopsis
+//
+// ARGUMENTS
+void Tricublin_zyx3_n(float *d, float *f3, pxpypz *pxyz,  ztab *lv, int n)
+//****
+{
   double cxyz[24];   // interpolation coefficients 4 for each dimension (x, y, z)
   int ixyz;          // unilinear index into array f1 (collapsed dimensions)
   int zlinear;       // non zero if linear interpolation

@@ -1,6 +1,6 @@
 !
 ! RMNLIB 
-! Copyright (C) 2019 Environment Canada
+! Copyright (C) 2019 Recherche en Prevision Numerique
 !
 ! This library is free software; you can redistribute it and/or
 ! modify it under the terms of the GNU Library General Public
@@ -17,7 +17,11 @@
 ! Free Software Foundation, Inc., 59 Temple Place - Suite 330,
 ! Boston, MA 02111-1307, USA.
 !
+!!****P* rmnlib/window clipper
+!! Synopsis
 !-------------------------------------------------------------------------
+!
+! soit un groupe de 3 points P0(x0,y0), P1(x1,y1), P2(x2,y2)
 !
 ! un peu de geometrie basee sur les relations entre "triangles semblables"
 !
@@ -42,7 +46,7 @@
 !             ymin  +---------------------------------------+
 !                   xmin                                 xmax
 !
-!  pour le segment de droite (x0,y0) ---> (x1,y1)
+!  pour le segment de droite (x0,y0) ---> (x1,y1)   P0 ----> P1
 !
 !  point d'intersection (x2,y2): (intersection avec y = constante)
 !
@@ -75,10 +79,12 @@
 !
 ! si x2 est a l'exterieur de l'intervalle xmin --- xmax
 !   on passe au cas "est" ou "ouest"
-!   on calcule l'intersection (X2,Y2)  (X2 = xmin ou xmax)
+!   on calcule l'intersection (x2,x2)  (x2 = xmin ou xmax)
 !
-! et dans ce cas, on est sur que Y2 sera dans l'intervalle (ymin --- ymax)
+! et dans ce cas, on est sur que y2 sera dans l'intervalle (ymin --- ymax)
 !
+!!****
+#if defined(SELF_TEST)
 function boundary_clip_point(p0,p1,p2,l) result(clipped)
   use ISO_C_BINDING
   implicit none
@@ -127,17 +133,37 @@ function boundary_clip_point(p0,p1,p2,l) result(clipped)
   endif
   clipped = north .or. south .or. east .or. west  ! has clipping occurred
 end function boundary_clip_point
-
+#endif
 ! for p0, p1, p2 index 1 is x, index 2 is y
 ! l : [xmin, xmax, ymin, ymax]
-function boundary_clip_coord_1(p0,p1,p2,l) result(clipped)
+!!****f* rmnlib/boundary_clip_coord_1
+!! Synopsis
+!!   clip boundaries, one point, using coordinates and a window
+!!   point p0 is assumed to be within the clipping window
+!!   point p1 may be inside or outside of the clipping window
+!!   point p2 will be
+!!   - the intersection of the P0->P1 segment with the clipping window
+!!   - the same as P1 if P1 is inside the clipping window
+!!
+!!   p0, p1, p2 are real arrays of dimension 2. 
+!!   the first element is the x coordinate
+!!   the second element is the y coordinate
+!!
+!!   l is a real array of dimension 4
+!!   [ xmin, xmax, ymin, ymax]
+!!
+!!   the functions returns .true. if clipping was necessary, .false. otherwise
+!!
+!! ARGUMENTS
+function boundary_clip_coord_1(p0,p1,p2,l) result(clipped) BIND(C,name='BoundaryClipCoord1') !InTf!
   use ISO_C_BINDING
   implicit none
-  real, dimension(2), intent(IN)  :: p0   ! ASSUMED to be inside the window defined by l
-  real, dimension(2), intent(IN)  :: p1   ! point to check
-  real, dimension(2), intent(OUT) :: p2   ! 
-  real, dimension(4), intent(IN) :: l     ! window used to clip p0 -> p1 segment
-  logical :: clipped                      ! .true. if clipping occurred
+  real, dimension(2), intent(IN)  :: p0   ! ASSUMED to be inside the window defined by l     !InTf!
+  real, dimension(2), intent(IN)  :: p1   ! point to check                                   !InTf!
+  real, dimension(2), intent(OUT) :: p2   ! clipped output                                   !InTf!
+  real, dimension(4), intent(IN) :: l     ! window used to clip p0 -> p1 segment             !InTf!
+  logical :: clipped                      ! .true. if clipping occurred                      !InTf!
+!!****
 
   logical :: north, south, east, west
 
@@ -165,19 +191,40 @@ function boundary_clip_coord_1(p0,p1,p2,l) result(clipped)
     endif
   endif
   clipped = north .or. south .or. east .or. west  ! has clipping occurred
-end function boundary_clip_coord_1
+end function boundary_clip_coord_1                                                           !InTf!
 
 ! for p0, p1, p2 index 1 is x, index 2 is y
 ! l : [xmin, xmax, ymin, ymax]
-subroutine boundary_clip_coord_2n(p0,p1,p2,l,clipped,n)
+!!****f* rmnlib/boundary_clip_coord_2n
+!! Synopsis
+!!   clip boundaries, multiple points, using coordinates and a window
+!!   point p0 is assumed to be within the clipping window
+!!   point p1 may be inside or outside of the clipping window
+!!   point p2 will be
+!!   - the intersection of the P0->P1 segment with the clipping window
+!!   - the same as P1 if P1 is inside the clipping window
+!!
+!!   p0, p1, p2 are real arrays of dimension (2,n). 
+!!   element (1,i) is the x coordinate of point i
+!!   element (2,i) is the y coordinate of point i
+!!
+!!   clipped is an array of dimension (n)
+!!   clipped(i) is .true. if p0(i)->p1(i) needed to be clipped
+!!
+!!   l is a real array of dimension 4
+!!   [ xmin, xmax, ymin, ymax]
+!!
+!! ARGUMENTS
+subroutine boundary_clip_coord_2n(p0,p1,p2,l,clipped,n) BIND(C,name='BoundaryClipCoord2n')   !InTf!
   use ISO_C_BINDING
   implicit none
-  real, dimension(2,n), intent(IN)  :: p0   ! ASSUMED to be inside the window defined by l
-  real, dimension(2,n), intent(IN)  :: p1   ! point to check
-  real, dimension(2,n), intent(OUT) :: p2   ! 
-  real, dimension(4), intent(IN) :: l     ! window used to clip p0 -> p1 segment
-  integer, intent(IN) :: n
-  logical, dimension(N) :: clipped                      ! .true. if clipping occurred
+  real, dimension(2,n), intent(IN)  :: p0   ! ASSUMED to be inside the window defined by l   !InTf!
+  real, dimension(2,n), intent(IN)  :: p1   ! point to check                                 !InTf!
+  real, dimension(2,n), intent(OUT) :: p2   ! intersection with clipping window              !InTf!
+  real, dimension(4), intent(IN) :: l       ! window used to clip p0 -> p1 segment           !InTf!
+  integer, intent(IN) :: n                  ! number of points                               !InTf!
+  logical, dimension(N) :: clipped          ! .true. if clipping occurred                    !InTf!
+!!****
 
   logical :: north, south, east, west
   integer :: i
@@ -208,19 +255,40 @@ subroutine boundary_clip_coord_2n(p0,p1,p2,l,clipped,n)
     endif
     clipped(i) = north .or. south .or. east .or. west  ! has clipping occurred
   enddo
-end subroutine boundary_clip_coord_2n
+end subroutine boundary_clip_coord_2n                                                        !InTf!
 
 ! for p0, p1, p2 index 1 is x, index 2 is y
 ! l : [xmin, xmax, ymin, ymax]
-subroutine boundary_clip_coord_n2(p0,p1,p2,l,clipped,n)
+!!****f* rmnlib/boundary_clip_coord_n2
+!! Synopsis
+!!   clip boundaries, multiple points, using coordinates and a window
+!!   point p0 is assumed to be within the clipping window
+!!   point p1 may be inside or outside of the clipping window
+!!   point p2 will be
+!!   - the intersection of the P0->P1 segment with the clipping window
+!!   - the same as P1 if P1 is inside the clipping window
+!!
+!!   p0, p1, p2 are real arrays of dimension (n,2). 
+!!   element (i,1) is the x coordinate of point i
+!!   element (i,2) is the y coordinate of point i
+!!
+!!   clipped is an array of dimension (n)
+!!   clipped(i) is .true. if p0(i)->p1(i) needed to be clipped
+!!
+!!   l is a real array of dimension 4
+!!   [ xmin, xmax, ymin, ymax]
+!!
+!! ARGUMENTS
+subroutine boundary_clip_coord_n2(p0,p1,p2,l,clipped,n) BIND(C,name='BoundaryClipCoordn2')   !InTf!
   use ISO_C_BINDING
   implicit none
-  real, dimension(n,2), intent(IN)  :: p0   ! ASSUMED to be inside the window defined by l
-  real, dimension(n,2), intent(IN)  :: p1   ! point to check
-  real, dimension(n,2), intent(OUT) :: p2   ! 
-  real, dimension(4), intent(IN) :: l     ! window used to clip p0 -> p1 segment
-  integer, intent(IN) :: n
-  logical, dimension(N) :: clipped                      ! .true. if clipping occurred
+  real, dimension(n,2), intent(IN)  :: p0   ! ASSUMED to be inside the window defined by l   !InTf!
+  real, dimension(n,2), intent(IN)  :: p1   ! point to check                                 !InTf!
+  real, dimension(n,2), intent(OUT) :: p2   ! intersection with clipping window              !InTf!
+  real, dimension(4), intent(IN) :: l       ! window used to clip p0 -> p1 segment           !InTf!
+  integer, intent(IN) :: n                  ! number of points                               !InTf!
+  logical, dimension(N) :: clipped          ! .true. if clipping occurred                    !InTf!
+!!****
 
   logical :: north, south, east, west
   integer :: i
@@ -251,7 +319,7 @@ subroutine boundary_clip_coord_n2(p0,p1,p2,l,clipped,n)
     endif
     clipped(i) = north .or. south .or. east .or. west  ! has clipping occurred
   enddo
-end subroutine boundary_clip_coord_n2
+end subroutine boundary_clip_coord_n2                                                        !InTf!
 
 #if defined(SELF_TEST)
 program test
