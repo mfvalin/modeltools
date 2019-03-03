@@ -18,14 +18,41 @@
  */
 
 //****P* librkl/RPN kernel library interpolators
-// Synopsis
+// DESCRIPTION
 //
-// this is a set of 3D interpolators, C and Fortran callable,
-// the C name and the Fortran name are the same
+// Set of 3D interpolators, 
+// C and Fortran callable (C name and Fortran name are the same)
+// 
+// interpolate the value at point (px, py, pz) fron a 3 Dimensional real(float) array
+// Fortran : real, dimension(dimi,dimj,dimk) :: array
+// C       : float array[dimk][dimj][dimi]
+// (Fortran storage order is expected)
 //
-// usually cubic in the horizontal , cubic or linear in the vertical
-// with a monotonic option.
-// there are also setup routines for these interpolators
+// the interpolation routines expect to receive the address of point
+// array(i[+offseti],1[+offsetj],1)
+// and will interpolate to get the value at point (px,py,pz)
+// px, py, pz are expressed in "index" space, i.e. 
+// array(1.5,  1,  1) is halfway between array(1,1,1) and array(2,1,1)
+// array(1  ,1.5,  1) is halfway between array(1,1,1) and array(1,2,1)
+// array(1  ,1  ,2.5) is halfway between array(1,1,2) and array(1,1,3)
+// array(2.5,3.5,4.5) is halfway between array(2,3,4) and array(3,4,5)
+//
+// constant spacing between array points is assumed for the first 2 dimensions.
+//
+// along the third dimension, non constant spacing is assumed, the positions along
+// said third dimension are supplied via an opaque descriptor created with a call 
+// to the Vsearch_setup family of routines (returning a C pointer to said descriptor)
+//
+// 4 point lagrange polynomials are used for cubic interpolations. interpolation is always
+// cubic along the first 2 dimensions, while along the third dimension linear interpolation
+// is used in the first 2 (pz <= 2)  and the last 2 (pz >= nk-1) intervals, and cubic
+// interpolation is used in the other intervals (2.0 < pz < nk - 1)
+// 
+// there is a also monotonic interpolation option.
+// in that case, 4 results are returned
+// - normal interpolation result
+// - tri-linear interpolation result
+// - min and max values for the inner 2x2x2 set of values used for tri-linear interpolation
 //
 //     Name                        Purpose
 //
@@ -38,18 +65,50 @@
 // Tricublin_mono_zyx_n_m    : monotonic version of Tricublin_zyx1_n_m
 //
 // Tricublin_zyx1_n_m, Tricublin_zyx3_n, Tricublin_mono_zyx_n_m save computing cycles by 
-// reusing the computed interpolation coefficients for multiple arrays
+// reusing the computed interpolation coefficients for multiple arrays. The interpolation
+// coefficients are dependent upon px, py, pz.
 //
-// the horizontal interpolation is normally bicubic
+// the horizontal (first 2 dimensions) interpolation is bicubic.
+// (an extra linear interpolation is performed in the monotonic case)
 //
-// the vertical interpolation is normally cubic, except when the target lies 
-// between the first 2 or the last 2 levels, in which case it is linear
+// the vertical (3rd dimension) interpolation is normally cubic, except when the target
+// lies between the first 2 or the last 2 levels, in which case it is linear.
 //
-// the monotonic interpolators provides 
-// - the result of a tri-linear interpolation
-// - the result of the tri-cubic or bi-cubic+linear interpolation
-// - the minimum of the 2x2x2 sub-cube used for linear 
-// 
+// the monotonic interpolators provides 4 outputs
+// - the result of the centered tri-cubic or bi-cubic+linear interpolation (4x4x4 or 4x4x2)
+// - the result of a  centered tri-linear interpolation (2x2x2)
+// - the minimum of the 2x2x2 sub-cube used for tri-linear interpolation
+// - the maximum of the 2x2x2 sub-cube used for tri-linear interpolation
+//
+// the interpolation routines assume that the address of the source array is the point
+// px = 1.0, py = 1.0, pz = 1.0 which is why f(1,1,1) is normally passed to these routines.
+// if this is not the case, offseti and offsetj are used to compensate
+//
+// EXAMPLES
+//
+//  use ISO_C_BINDING
+//  include "tricublin_f90.inc"
+//  type(C_PTR) :: lv, mv                            ! C pointer opaque descriptor object
+//  real*8, dimension(NK) :: levels                  ! list of positions for the third dimension
+//  real, dimension(-2:NI+4,-1:NJ+3,NK), target   :: f, f1, f2, f3   ! single valued source arrays
+//  real, dimension(3,-2:NI+4,-1:NJ+3,NK), target :: f3              ! triple valued source array
+//  type(C_PTR), dimension(3) :: f123
+//  real, dimension(NPOINTS) :: d, l, mi, ma         ! normal, linear, min, max
+//  real, dimension(3,NPOINTS) :: d3, l3, mi3, ma3   ! normal, linear, min, max
+//  real, dimension(3,NPOINTS) :: pxpypz             ! (px,py,pz) triplets
+//  ......                                           ! levels(1:NK) = ....
+//  lv = vsearch_setup(levels, NK, NI+7, NJ+5)       ! NI+7, NJ+5 to account for halos
+//  mv = vsearch_setup_plus(levels, NK, NI+7, NJ+5, 3, 2) ! passing f instead of f(1,1,1)
+//  ......                                           ! pxpypz(1:3,1:NPOINTS) = ...., [1.0,1.0,1.0] points to  to f(1,1,1)
+//  call tricublin_zyx1_n(d ,f(1,1,1)   ,pxpypz,lv,NPOINTS)      ! single interpolation
+//  call tricublin_zyx1_n(d ,f          ,pxpypz,mv,NPOINTS)      ! with offset compensation (halos)
+//  call tricublin_zyx3_n(d3,f3(1,1,1,1),pxpypz,lv,NPOINTS)      ! triple interpolation
+//  f123(1) = C_LOC(f1(1,1,1))
+//  f123(2) = C_LOC(f2(1,1,1))
+//  f123(3) = C_LOC(f3(1,1,1))
+//  call tricublin_zyx1_n_m(d3,f123,pxpypz,lv,NPOINTS,3)         ! 3 single interpolations
+//  call tricublin_mono_zyx_n(d,l,mi,ma,f(1,1,1),pxpypz,lv,NPOINTS)      ! monotonic interpolation, 1 array
+//  call tricublin_mono_zyx_n_m(d3,l3,mi3,ma3,f123,pxpypz,lv,NPOINTS,3)  ! monotonic interpolation, 3 arrays
 //****
 
 #if defined(__AVX2__) && defined(__x86_64__)
@@ -159,6 +218,8 @@ static inline void denominators(double *r, double a, double b, double c, double 
 //
 //    ni is used to compute the distance between 2 array elements for which index j differs by 1
 //    ni*nj is used to compute the distance between 2 array elements for which index k differs by 1
+//    effective px = px + offseti
+//    effective py = py + offsetj
 //
 //    see interpolators for more information
 //
