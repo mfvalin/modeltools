@@ -231,7 +231,7 @@ static inline void denominators(double *r, double a, double b, double c, double 
       integer(C_INT), intent(IN), value :: offseti, offsetj                      !InTf!
       type(C_PTR) :: ztab                                                        !InTf!
 //****
-    end function vsearch_setup                                                   !InTf!
+    end function vsearch_setup_plus                                              !InTf!
   end interface                                                                  !InTf!
 #endif
 // allocate lookup table set and
@@ -698,24 +698,27 @@ void Tricublin_zyx1_n_m(float *d, float **fs, pxpypz *pxyz,  ztab *lv, int n, in
 // Synopsis
 //
 // ARGUMENTS
-void Tricublin_zyx1_m_n(float *d, float **fs, pxpypz *pxyz,  ztab *lv, int n, int m)
+void Tricublin_zyx1_m_n(float *dm, float **fs, pxpypz *pxyz,  ztab *lv, int n, int m)
 //****
 {  // multiple field version
   double cxyz[24];   // interpolation coefficients 4 for each dimension (x, y, z)
   int ixyz;          // unilinear index into array f1 (collapsed dimensions)
   int i;
+  int n0 = n;
   float *d0;
   int zlinear;       // non zero if linear interpolation
                      // all above computed in Vcoef_pxyz4, used in Tricublin_zyxf1
   while(n--){
     zlinear = Vcoef_pxyz4_inline(cxyz, &ixyz, pxyz->px, pxyz->py, pxyz->pz, lv);  // compute coefficients
-    d0 = d;
+    d0 = dm;
     for(i=0 ; i< m ; i++){
       Tricublin_zyxf1_inline(d0, fs[i] + ixyz, cxyz, lv->ni, lv->nij, zlinear);       // interpolate
-      d0 = d0 + n;   // next result
+//       printf("DEBUG: i = %d, n= %d, offset = %d, value = %f \n",i,n,d0-dm,*d0);
+      d0 = d0 + n0;   // next result
     }
-    d++;         // next set of results
+    dm++;         // next set of results
     pxyz += 1;   // next set of positions
+//     return;
   }
 }
 
@@ -963,32 +966,33 @@ void Tricublin_mono_zyx_n_m(float *d, float *l, float *mi, float *ma, float **fs
 // Synopsis
 //
 // ARGUMENTS
-void Tricublin_mono_zyx_m_n(float *d, float *l, float *mi, float *ma, float **fs, pxpypz *pxyz,  ztab *lv, int n, int m)
+void Tricublin_mono_zyx_m_n(float *dm, float *lm, float *mim, float *mam, float **fs, pxpypz *pxyz,  ztab *lv, int n, int m)
 //****
 {
   int i;
   float *d0, *l0, *mi0, *ma0;
   double cxyz[24];   // interpolation coefficients 4 for each dimension (x, y, z)
   int ixyz;          // unilinear index into array f1 (collapsed dimensions)
+  int n0 = n;
   int zlinear;       // non zero if linear interpolation
                      // all above computed in Vcoef_pxyz4, used in Tricublin_zyxf1
   while(n--){
     zlinear = Vcoef_pxyz4_inline(cxyz, &ixyz, pxyz->px, pxyz->py, pxyz->pz, lv);  // compute coefficients
-    d0 = d;
-    l0 = l;
-    mi0 = mi;
-    ma0 = ma;
+    d0 = dm;
+    l0 = lm;
+    mi0 = mim;
+    ma0 = mam;
     for(i=0 ; i<m ; i++){
       Tricublin_zyx_mm_d_inline(d0, l0, mi0, ma0, fs[i] + ixyz, cxyz, lv->ni, lv->nij, zlinear);         // interpolate
-      d0  += n;         // next result
-      l0  += n;
-      mi0 += n;
-      ma0 += n;
+      d0  += n0;         // next result
+      l0  += n0;
+      mi0 += n0;
+      ma0 += n0;
     }
-    d++;         // next set of results
-    l++;
-    mi++;
-    ma++;
+    dm++;         // next set of results
+    lm++;
+    mim++;
+    mam++;
     pxyz += 1;   // next set of positions
   }
 }

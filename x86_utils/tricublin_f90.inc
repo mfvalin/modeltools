@@ -11,7 +11,7 @@
       integer(C_INT), intent(IN), value :: nk, ni, nj
       integer(C_INT), intent(IN), value :: offseti, offsetj
       type(C_PTR) :: ztab
-    end function vsearch_setup
+    end function vsearch_setup_plus
   end interface
   interface
     subroutine tricublin_zyx1_n(d,f,pxyz,lv,n) bind(C,name='Tricublin_zyx1_n')
