@@ -77,6 +77,9 @@ test_search_list: search_list.c test_search_list.c
 	$(COMPILER) -O3 ${EXTRA_C} test_search_list.c search_list.o -o test_search_list
 	rm -f search_list.o
 
+tricublin_f90.inc: tricublin_beta.c
+	grep InTf tricublin_beta.c | sed 's/[ ]*!InTf![ ]*//' > tricublin_f90.inc
+
 clean:
 	rm -f intrp_bicub_yx0 intrp_bicub_yx intrp_bicub_yx.o intrp_bicub_yx.s a.out fp_x87_xmm_control.o intrp_bicub_yx.inc
 	rm -f test_search_list search_list.o 
