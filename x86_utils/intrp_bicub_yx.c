@@ -1,6 +1,6 @@
 #if ! defined(F_TEST)
 /* RMNLIB - Library of useful routines for C and FORTRAN programming
- * Copyright (C) 1975-2017  Division de Recherche en Prevision Numerique
+ * Copyright (C) 1975-2019  Division de Recherche en Prevision Numerique
  *                          Environnement Canada
  *
  * This library is free software; you can redistribute it and/or
@@ -193,8 +193,35 @@ void set_intrp_bicub_quv(int qxmin, int qxmax, int qymin, int qymax,
 
  */
 
+static inline int bicub_coeffs(double xx, double yy, int ni, double *wx, double *wy,
+                                  int qminx, int qmaxx, int qminy, int qmaxy){
+  double x, y;
+  int ix, iy;
+  x = xx - 1.0 ; y = yy - 1.0;                      // xx and yy are in "ORIGIN 1"
+  ix = xx ; if(ix > xx) ix = ix -1 ; ix = ix - 2;
+  iy = yy ; if(iy > yy) iy = iy -1 ; iy = iy - 2;
+  ix = (ix < qminx) ? qminx : ix;       // apply boundary limits (set by set_intrp_bicub_quv or set_intrp_bicub_yx)
+  ix = (ix > qmaxx) ? qmaxx : ix;
+  iy = (iy < qminy) ? qminy : iy;
+  iy = (iy > qmaxy) ? qmaxy : iy;
+  x  = x - 1 - ix;
+  y  = y - 1 - iy;
+//   f = f + ix + iy * ni;                  // point to lower left corner of 4 x 4 subarray
 
-// scalar version
+  wx[0] = cm133*x*(x-one)*(x-two);       // polynomial coefficients along i
+  wx[1] = cp5*(x+one)*(x-one)*(x-two);
+  wx[2] = cm5*x*(x+one)*(x-two);
+  wx[3] = cp133*x*(x+one)*(x-one);
+
+  wy[0] = cm133*y*(y-one)*(y-two);       // polynomial coefficients along j
+  wy[1] = cp5*(y+one)*(y-one)*(y-two);
+  wy[2] = cm5*y*(y+one)*(y-two);
+  wy[3] = cp133*y*(y+one)*(y-one);
+
+  return ix + iy * ni;               // point to lower left corner of 4 x 4 subarray
+}
+
+// version for scalar variables
 void intrp_bicub_yx_s(float *f, float *r, int ni, int ninj, int nk, double xx, double yy){
 #if defined(__AVX__) && defined(__x86_64__)
   __m256d fd0, fd1, fd2, fd3, fwx, fwy0, fwy1, fwy2, fwy3, fdt ;
@@ -209,7 +236,7 @@ void intrp_bicub_yx_s(float *f, float *r, int ni, int ninj, int nk, double xx, d
   int i, k;
   double x, y;
   int ix, iy;
-
+#if defined(NO_INLINE)
   x = xx - 1.0 ; y = yy - 1.0;                      // xx and yy are in "ORIGIN 1"
   ix = xx ; if(ix > xx) ix = ix -1 ; ix = ix - 2;
   iy = yy ; if(iy > yy) iy = iy -1 ; iy = iy - 2;
@@ -230,7 +257,9 @@ void intrp_bicub_yx_s(float *f, float *r, int ni, int ninj, int nk, double xx, d
   wy[1] = cp5*(y+one)*(y-one)*(y-two);
   wy[2] = cm5*y*(y+one)*(y-two);
   wy[3] = cp133*y*(y+one)*(y-one);
-
+#else
+  f += bicub_coeffs(xx, yy, ni, wx, wy, qminx, qmaxx, qminy, qmaxy);  // use inline function
+#endif
 #if defined(__AVX__) && defined(__x86_64__)
   fwx = _mm256_loadu_pd(wx) ;             // vector of coefficients along i
   fwy0 = _mm256_set1_pd(wy[0]) ;          // scalar * vector not available, promote scalar to vector
@@ -316,7 +345,7 @@ void intrp_bicub_yx_vec(float *u, float *v, float *ru, float *rv, int ni, int ni
   int ni3 = ni2 + ni;   // + 3 rows
   int i, k;
   int ixu, iyu, ixv, iyv;
-
+#if defined(NO_INLINE)
   xu = xxu - 1.0 ; yu = yyu - 1.0; // xxu and yyu are in "ORIGIN 1"
   ixu = xxu ; if(ixu > xxu) ixu = ixu -1 ; ixu = ixu - 2;
   iyu = yyu ; if(iyu > yyu) iyu = iyu -1 ; iyu = iyu - 2;
@@ -358,7 +387,10 @@ void intrp_bicub_yx_vec(float *u, float *v, float *ru, float *rv, int ni, int ni
   wyv[1] = cp5*(yv+one)*(yv-one)*(yv-two);
   wyv[2] = cm5*yv*(yv+one)*(yv-two);
   wyv[3] = cp133*yv*(yv+one)*(yv-one);
-
+#else
+  u += bicub_coeffs(xxu, yyu, ni, wxu, wyu, uminx, umaxx, uminy, umaxy);  // use inline function
+  v += bicub_coeffs(xxv, yyv, ni, wxv, wyv, vminx, vmaxx, vminy, vmaxy);  // use inline function
+#endif
 #if defined(__AVX__) && defined(__x86_64__)
   fwyu0 = _mm256_set1_pd(wyu[0]) ;           // scalar * vector not available, promote scalar to vector
   fwyu1 = _mm256_set1_pd(wyu[1]) ;
@@ -451,7 +483,7 @@ void intrp_bicub_yx_uv(float *u, float *v, float *ru, float *rv, int ni, int nin
   int i, k;
   int ix, iy;
   double tu, tv;
-
+#if defined(NO_INLINE)
   x = xx - 1.0 ; y = yy - 1.0;                      // xx and yy are in "ORIGIN 1"
   ix = xx ; if(ix > xx) ix = ix -1 ; ix = ix - 2;
   iy = yy ; if(iy > yy) iy = iy -1 ; iy = iy - 2;
@@ -473,7 +505,10 @@ void intrp_bicub_yx_uv(float *u, float *v, float *ru, float *rv, int ni, int nin
   wy[1] = cp5*(y+one)*(y-one)*(y-two);
   wy[2] = cm5*y*(y+one)*(y-two);
   wy[3] = cp133*y*(y+one)*(y-one);
-
+#else
+  i = bicub_coeffs(xx, yy, ni, wx, wy, qminx, qmaxx, qminy, qmaxy);  // use inline function
+  u += i; v+= i;
+#endif
 #if defined(__AVX__) && defined(__x86_64__)
   fwx = _mm256_loadu_pd(wx) ;              // vector of coefficients along i
   fwy0 = _mm256_set1_pd(wy[0]) ;           // scalar * vector not available, promote scalar to vector
@@ -579,6 +614,7 @@ void intrp_bicub_yx_uv(float *u, float *v, float *ru, float *rv, int ni, int nin
 }
 
 // "monotonic" version, the result must be between the max and min values of the 4x4 subarray used to interpolate
+// CHECK THAT REVISED SIMD VERSION NOW CONSISTENT WITH NON_SIMD IS CORRECT
 void intrp_bicub_yx_s_mono(float *f, float *r, int ni, int ninj, int nk, double xx, double yy){
 #if defined(__AVX__) && defined(__x86_64__)
   __m256d fd0, fd1, fd2, fd3, fwx, fwy0, fwy1, fwy2, fwy3, fdt, fmi, fma ; 
@@ -595,7 +631,7 @@ void intrp_bicub_yx_s_mono(float *f, float *r, int ni, int ninj, int nk, double 
   int ni3 = ni2 + ni;   // + 3 rows
   int i, k;
   int ix, iy;
-
+#if defined(NO_INLINE)
   x = xx - 1.0 ; y = yy - 1.0;                      // xx and yy are in "ORIGIN 1"
   ix = xx ; if(ix > xx) ix = ix -1 ; ix = ix - 2;
   iy = yy ; if(iy > yy) iy = iy -1 ; iy = iy - 2;
@@ -616,7 +652,9 @@ void intrp_bicub_yx_s_mono(float *f, float *r, int ni, int ninj, int nk, double 
   wy[1] = cp5*(y+one)*(y-one)*(y-two);
   wy[2] = cm5*y*(y+one)*(y-two);
   wy[3] = cp133*y*(y+one)*(y-one);
-
+#else
+  f += bicub_coeffs(xx, yy, ni, wx, wy, qminx, qmaxx, qminy, qmaxy);  // use inline function
+#endif
 #if defined(__AVX__) && defined(__x86_64__)
   fwx  = _mm256_loadu_pd(wx) ;            // vector of coefficients along i
   fwy0 = _mm256_set1_pd(wy[0]) ;          // scalar * vector not available,
@@ -638,29 +676,36 @@ void intrp_bicub_yx_s_mono(float *f, float *r, int ni, int ninj, int nk, double 
     f+= ninj;
     // interpolation along J, level k,
     // prefetch and promote to double 4 rows, level k+1
-    fma = _mm256_max_pd(fd1,fd0);
-    fmi = _mm256_min_pd(fd1,fd0);
+//     fma = _mm256_max_pd(fd1,fd0);
+//     fmi = _mm256_min_pd(fd1,fd0);
     fdt = _mm256_mul_pd(fd0,fwy0) ;          // sum of row[j] * coefficient[j]
     fd0 = _mm256_cvtps_pd( _mm_loadu_ps(f    )) ;    // row 0 : f[i:i+3 , j   ,k+1]
 
     fdt = _mm256_fmadd_pd(fd1,fwy1,fdt) ;
     fd1 = _mm256_cvtps_pd(_mm_loadu_ps(f+ni )) ;     // row 2 : f[i:i+3 , j+1 ,k+1]
 
-    fma = _mm256_max_pd(fd2,fma);
-    fmi = _mm256_min_pd(fd2,fmi);
+//     fma = _mm256_max_pd(fd2,fma);
+//     fmi = _mm256_min_pd(fd2,fmi);
+    fma = _mm256_max_pd(fd2,fd1);                    // max of rows 1 and 2
+    fmi = _mm256_min_pd(fd2,fd1);                    // min of rows 1 and 2
     fdt = _mm256_fmadd_pd(fd2,fwy2,fdt) ;
     fd2 = _mm256_cvtps_pd(_mm_loadu_ps(f+ni2)) ;     // row 3 : f[i:i+3 , j+2 ,k+1]
 
-    fma = _mm256_max_pd(fd3,fma);
-    fmi = _mm256_min_pd(fd3,fmi);
+//     fma = _mm256_max_pd(fd3,fma);
+//     fmi = _mm256_min_pd(fd3,fmi);
     fdt = _mm256_fmadd_pd(fd3,fwy3,fdt) ;
     fd3 = _mm256_cvtps_pd(_mm_loadu_ps(f+ni3)) ;     // row 4 : f[i:i+3 , j+3 ,k]
 
     // get maximum of fma vector elements and minimum of fmi vector elements
-    rma = _mm_max_pd(_mm256_extractf128_pd(fma,0),_mm256_extractf128_pd(fma,1)) ;
-    rmi = _mm_min_pd(_mm256_extractf128_pd(fmi,0),_mm256_extractf128_pd(fmi,1)) ;
-    rma = _mm_max_sd(rma,_mm_permute_pd(rma,0x3)) ;
-    rmi = _mm_min_sd(rmi,_mm_permute_pd(rmi,0x3)) ;
+    // elements 0 and 3 ignored, max/min of elements 1 and 2
+//     rma = _mm_max_pd(_mm256_extractf128_pd(fma,0),_mm256_extractf128_pd(fma,1)) ;
+//     rmi = _mm_min_pd(_mm256_extractf128_pd(fmi,0),_mm256_extractf128_pd(fmi,1)) ;
+    rma = _mm_permute_pd( _mm256_extractf128_pd(fma,0), 0x3); // duplicate element 1 of low part
+    rmi = _mm_permute_pd( _mm256_extractf128_pd(fmi,0), 0x3); // duplicate element 1 of low part
+//   rma = _mm_max_sd(rma,_mm_permute_pd(rma,0x3)) ;
+//   rmi = _mm_min_sd(rmi,_mm_permute_pd(rmi,0x3)) ;
+    rma = _mm_max_sd(rma,_mm_permute_pd(_mm256_extractf128_pd(fma,1),0x0)) ;  // max with low element of high part
+    rmi = _mm_min_sd(rmi,_mm_permute_pd(_mm256_extractf128_pd(fmi,1),0x0)) ;  // min with low element of high part
     
     // interpolation along i: multiply by coefficients along x , then sum elements (using vector folding)
     fdt = _mm256_mul_pd(fdt,fwx) ;
@@ -677,21 +722,28 @@ void intrp_bicub_yx_s_mono(float *f, float *r, int ni, int ninj, int nk, double 
     r ++;
   }
   // interpolation along j , level nk
-  fma = _mm256_max_pd(fd1,fd0);
-  fmi = _mm256_min_pd(fd1,fd0);
+//   fma = _mm256_max_pd(fd1,fd0);
+//   fmi = _mm256_min_pd(fd1,fd0);
   fdt = _mm256_mul_pd(fd0,fwy0) ;            // sum of row[j] * coefficient[j]
   fdt = _mm256_fmadd_pd(fd1,fwy1,fdt) ;
-  fma = _mm256_max_pd(fd2,fma);
-  fmi = _mm256_min_pd(fd2,fmi);
+//   fma = _mm256_max_pd(fd2,fma);
+//   fmi = _mm256_min_pd(fd2,fmi);
+  fma = _mm256_max_pd(fd2,fd1);
+  fmi = _mm256_min_pd(fd2,fd1);
   fdt = _mm256_fmadd_pd(fd2,fwy2,fdt) ;
-  fma = _mm256_max_pd(fd3,fma);
-  fmi = _mm256_min_pd(fd3,fmi);
+//   fma = _mm256_max_pd(fd3,fma);
+//   fmi = _mm256_min_pd(fd3,fmi);
   fdt = _mm256_fmadd_pd(fd3,fwy3,fdt) ;
   // get maximum of fma vector elements and minimum of fmi vector elements
-  rma = _mm_max_pd(_mm256_extractf128_pd(fma,0),_mm256_extractf128_pd(fma,1)) ;
-  rmi = _mm_min_pd(_mm256_extractf128_pd(fmi,0),_mm256_extractf128_pd(fmi,1)) ;
-  rma = _mm_max_sd(rma,_mm_permute_pd(rma,0x3)) ;
-  rmi = _mm_min_sd(rmi,_mm_permute_pd(rmi,0x3)) ;
+  // elements 0 and 3 ignored, max/min of elements 1 and 2
+//   rma = _mm_max_pd(_mm256_extractf128_pd(fma,0),_mm256_extractf128_pd(fma,1)) ;
+//   rmi = _mm_min_pd(_mm256_extractf128_pd(fmi,0),_mm256_extractf128_pd(fmi,1)) ;
+    rma = _mm_permute_pd( _mm256_extractf128_pd(fma,0), 0x3); // duplicate element 1 of low part
+    rmi = _mm_permute_pd( _mm256_extractf128_pd(fmi,0), 0x3); // duplicate element 1 of low part
+//   rma = _mm_max_sd(rma,_mm_permute_pd(rma,0x3)) ;
+//   rmi = _mm_min_sd(rmi,_mm_permute_pd(rmi,0x3)) ;
+    rma = _mm_max_sd(rma,_mm_permute_pd(_mm256_extractf128_pd(fma,1),0x0)) ;  // max with low element of high part
+    rmi = _mm_min_sd(rmi,_mm_permute_pd(_mm256_extractf128_pd(fmi,1),0x0)) ;  // min with low element of high part
 
   // interpolation along i: multiply by coefficients along x , then sum elements (using vector folding)
   fdt = _mm256_mul_pd(fdt,fwx) ;
