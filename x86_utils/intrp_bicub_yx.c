@@ -38,12 +38,12 @@
  ./intrp_bicub_yx0
 #endif
 
-static float cp133 =  0.166666666666666667E0;
-static float cm133 = -0.166666666666666667E0;
-static float cp5 =  .5;
-static float cm5 = -.5;
-static float one = 1.0;
-static float two = 2.0;
+static double cp167 =  0.166666666666666667E0;
+static double cm167 = -0.166666666666666667E0;
+static double cp5 =  .5;
+static double cm5 = -.5;
+static double one = 1.0;
+static double two = 2.0;
 
 #if defined(TIMING)
 #include <stdio.h>
@@ -59,6 +59,7 @@ uint64_t rdtsc(void) {   // version rapide "out of order"
       : /* clobbers */ "%rcx");
   return (uint64_t)lo | (((uint64_t)hi) << 32);
 #else
+  static uint64_t time0;
   return time0++;
 #endif
 }
@@ -193,8 +194,8 @@ void set_intrp_bicub_quv(int qxmin, int qxmax, int qymin, int qymax,
 
  */
 
-static inline int bicub_coeffs(double xx, double yy, int ni, double *wx, double *wy,
-                                  int qminx, int qmaxx, int qminy, int qmaxy){
+static inline int bicub_coeffs_inline0(double xx, double yy, int ni, double *wx, double *wy,
+                                  int qminx, int qmaxx, int qminy, int qmaxy, int offsetx, int offsety){
   double x, y;
   int ix, iy;
   x = xx - 1.0 ; y = yy - 1.0;                      // xx and yy are in "ORIGIN 1"
@@ -208,15 +209,15 @@ static inline int bicub_coeffs(double xx, double yy, int ni, double *wx, double 
   y  = y - 1 - iy;
 //   f = f + ix + iy * ni;                  // point to lower left corner of 4 x 4 subarray
 
-  wx[0] = cm133*x*(x-one)*(x-two);       // polynomial coefficients along i
+  wx[0] = cm167*x*(x-one)*(x-two);       // polynomial coefficients along i
   wx[1] = cp5*(x+one)*(x-one)*(x-two);
   wx[2] = cm5*x*(x+one)*(x-two);
-  wx[3] = cp133*x*(x+one)*(x-one);
+  wx[3] = cp167*x*(x+one)*(x-one);
 
-  wy[0] = cm133*y*(y-one)*(y-two);       // polynomial coefficients along j
+  wy[0] = cm167*y*(y-one)*(y-two);       // polynomial coefficients along j
   wy[1] = cp5*(y+one)*(y-one)*(y-two);
   wy[2] = cm5*y*(y+one)*(y-two);
-  wy[3] = cp133*y*(y+one)*(y-one);
+  wy[3] = cp167*y*(y+one)*(y-one);
 
   return ix + iy * ni;               // point to lower left corner of 4 x 4 subarray
 }
@@ -248,17 +249,17 @@ void intrp_bicub_yx_s(float *f, float *r, int ni, int ninj, int nk, double xx, d
   y  = y - 1 - iy;
   f = f + ix + iy * ni;                  // point to lower left corner of 4 x 4 subarray
 
-  wx[0] = cm133*x*(x-one)*(x-two);       // polynomial coefficients along i
+  wx[0] = cm167*x*(x-one)*(x-two);       // polynomial coefficients along i
   wx[1] = cp5*(x+one)*(x-one)*(x-two);
   wx[2] = cm5*x*(x+one)*(x-two);
-  wx[3] = cp133*x*(x+one)*(x-one);
+  wx[3] = cp167*x*(x+one)*(x-one);
 
-  wy[0] = cm133*y*(y-one)*(y-two);       // polynomial coefficients along j
+  wy[0] = cm167*y*(y-one)*(y-two);       // polynomial coefficients along j
   wy[1] = cp5*(y+one)*(y-one)*(y-two);
   wy[2] = cm5*y*(y+one)*(y-two);
-  wy[3] = cp133*y*(y+one)*(y-one);
+  wy[3] = cp167*y*(y+one)*(y-one);
 #else
-  f += bicub_coeffs(xx, yy, ni, wx, wy, qminx, qmaxx, qminy, qmaxy);  // use inline function
+  f += bicub_coeffs_inline0(xx, yy, ni, wx, wy, qminx, qmaxx, qminy, qmaxy, 0, 0);  // use inline function
 #endif
 #if defined(__AVX__) && defined(__x86_64__)
   fwx = _mm256_loadu_pd(wx) ;             // vector of coefficients along i
@@ -368,28 +369,28 @@ void intrp_bicub_yx_vec(float *u, float *v, float *ru, float *rv, int ni, int ni
   yv  = yv - 1 - iyv;
   v = v + ixv + iyv * ni;
 
-  wxu[0] = cm133*xu*(xu-one)*(xu-two);       // polynomial coefficients along i
+  wxu[0] = cm167*xu*(xu-one)*(xu-two);       // polynomial coefficients along i
   wxu[1] = cp5*(xu+one)*(xu-one)*(xu-two);
   wxu[2] = cm5*xu*(xu+one)*(xu-two);
-  wxu[3] = cp133*xu*(xu+one)*(xu-one);
+  wxu[3] = cp167*xu*(xu+one)*(xu-one);
 
-  wxv[0] = cm133*xv*(xv-one)*(xv-two);       // polynomial coefficients along i
+  wxv[0] = cm167*xv*(xv-one)*(xv-two);       // polynomial coefficients along i
   wxv[1] = cp5*(xv+one)*(xv-one)*(xv-two);
   wxv[2] = cm5*xv*(xv+one)*(xv-two);
-  wxv[3] = cp133*xv*(xv+one)*(xv-one);
+  wxv[3] = cp167*xv*(xv+one)*(xv-one);
 
-  wyu[0] = cm133*yu*(yu-one)*(yu-two);       // polynomial coefficients along j
+  wyu[0] = cm167*yu*(yu-one)*(yu-two);       // polynomial coefficients along j
   wyu[1] = cp5*(yu+one)*(yu-one)*(yu-two);
   wyu[2] = cm5*yu*(yu+one)*(yu-two);
-  wyu[3] = cp133*yu*(yu+one)*(yu-one);
+  wyu[3] = cp167*yu*(yu+one)*(yu-one);
 
-  wyv[0] = cm133*yv*(yv-one)*(yv-two);       // polynomial coefficients along j
+  wyv[0] = cm167*yv*(yv-one)*(yv-two);       // polynomial coefficients along j
   wyv[1] = cp5*(yv+one)*(yv-one)*(yv-two);
   wyv[2] = cm5*yv*(yv+one)*(yv-two);
-  wyv[3] = cp133*yv*(yv+one)*(yv-one);
+  wyv[3] = cp167*yv*(yv+one)*(yv-one);
 #else
-  u += bicub_coeffs(xxu, yyu, ni, wxu, wyu, uminx, umaxx, uminy, umaxy);  // use inline function
-  v += bicub_coeffs(xxv, yyv, ni, wxv, wyv, vminx, vmaxx, vminy, vmaxy);  // use inline function
+  u += bicub_coeffs_inline0(xxu, yyu, ni, wxu, wyu, uminx, umaxx, uminy, umaxy, 0, 0);  // use inline function
+  v += bicub_coeffs_inline0(xxv, yyv, ni, wxv, wyv, vminx, vmaxx, vminy, vmaxy, 0, 0);  // use inline function
 #endif
 #if defined(__AVX__) && defined(__x86_64__)
   fwyu0 = _mm256_set1_pd(wyu[0]) ;           // scalar * vector not available, promote scalar to vector
@@ -496,17 +497,17 @@ void intrp_bicub_yx_uv(float *u, float *v, float *ru, float *rv, int ni, int nin
   u = u + ix + iy * ni;                  // point to lower left corner of 4 x 4 subarray
   v = v + ix + iy * ni;
 
-  wx[0] = cm133*x*(x-one)*(x-two);       // polynomial coefficients along i
+  wx[0] = cm167*x*(x-one)*(x-two);       // polynomial coefficients along i
   wx[1] = cp5*(x+one)*(x-one)*(x-two);
   wx[2] = cm5*x*(x+one)*(x-two);
-  wx[3] = cp133*x*(x+one)*(x-one);
+  wx[3] = cp167*x*(x+one)*(x-one);
 
-  wy[0] = cm133*y*(y-one)*(y-two);       // polynomial coefficients along j
+  wy[0] = cm167*y*(y-one)*(y-two);       // polynomial coefficients along j
   wy[1] = cp5*(y+one)*(y-one)*(y-two);
   wy[2] = cm5*y*(y+one)*(y-two);
-  wy[3] = cp133*y*(y+one)*(y-one);
+  wy[3] = cp167*y*(y+one)*(y-one);
 #else
-  i = bicub_coeffs(xx, yy, ni, wx, wy, qminx, qmaxx, qminy, qmaxy);  // use inline function
+  i = bicub_coeffs_inline0(xx, yy, ni, wx, wy, qminx, qmaxx, qminy, qmaxy, 0, 0);  // use inline function
   u += i; v+= i;
 #endif
 #if defined(__AVX__) && defined(__x86_64__)
@@ -643,17 +644,17 @@ void intrp_bicub_yx_s_mono(float *f, float *r, int ni, int ninj, int nk, double 
   y  = y - 1 - iy;
   f = f + ix + iy * ni;                  // lower left corner of 4 x 4 subarray used for (un)centered interpolation
 
-  wx[0] = cm133*x*(x-one)*(x-two);       // polynomial coefficients along i (x)
+  wx[0] = cm167*x*(x-one)*(x-two);       // polynomial coefficients along i (x)
   wx[1] = cp5*(x+one)*(x-one)*(x-two);
   wx[2] = cm5*x*(x+one)*(x-two);
-  wx[3] = cp133*x*(x+one)*(x-one);
+  wx[3] = cp167*x*(x+one)*(x-one);
 
-  wy[0] = cm133*y*(y-one)*(y-two);       // polynomial coefficients along j (y)
+  wy[0] = cm167*y*(y-one)*(y-two);       // polynomial coefficients along j (y)
   wy[1] = cp5*(y+one)*(y-one)*(y-two);
   wy[2] = cm5*y*(y+one)*(y-two);
-  wy[3] = cp133*y*(y+one)*(y-one);
+  wy[3] = cp167*y*(y+one)*(y-one);
 #else
-  f += bicub_coeffs(xx, yy, ni, wx, wy, qminx, qmaxx, qminy, qmaxy);  // use inline function
+  f += bicub_coeffs_inline0(xx, yy, ni, wx, wy, qminx, qmaxx, qminy, qmaxy, 0, 0);  // use inline function
 #endif
 #if defined(__AVX__) && defined(__x86_64__)
   fwx  = _mm256_loadu_pd(wx) ;            // vector of coefficients along i
