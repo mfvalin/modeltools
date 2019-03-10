@@ -61,8 +61,13 @@ intrp_bicub_yx.inc: intrp_bicub_yx.c
 intrp_bicub_yx_f.F90:
 	ln -sf  intrp_bicub_yx.c intrp_bicub_yx_f.F90
 
-intrp_bicub_yx.o: intrp_bicub_yx.c
-	$(COMPILER) -O2 -DTIMING -c ${EXTRA_C} intrp_bicub_yx.c
+intrp_bicub_yx.o: intrp_bicub_yx.c fast_interp.h
+	$(COMPILER) -O3 -c ${EXTRA_C} intrp_bicub_yx.c
+
+test_bicub: intrp_bicub_yx.c intrp_bicub_yx_f.F90 fast_interp.h
+	rm -f test_bicub
+	$(COMPILER) -O3 -DTIMING -c ${EXTRA_C} intrp_bicub_yx.c
+	$(FCOMPILER) -DF_TEST intrp_bicub_yx_f.F90  intrp_bicub_yx.o -o test_bicub
 
 intrp_bicub_yx: intrp_bicub_yx.c intrp_bicub_yx_f.F90 intrp_bicub_yx.inc
 	$(COMPILER) -O2 -DTIMING -c ${EXTRA_C} intrp_bicub_yx.c
@@ -82,4 +87,4 @@ tricublin_f90.inc: tricublin_beta.c
 
 clean:
 	rm -f intrp_bicub_yx0 intrp_bicub_yx intrp_bicub_yx.o intrp_bicub_yx.s a.out fp_x87_xmm_control.o intrp_bicub_yx.inc
-	rm -f test_search_list search_list.o 
+	rm -f test_search_list search_list.o test_bicub

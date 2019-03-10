@@ -1,4 +1,3 @@
-#if ! defined(F_TEST)
 /* RMNLIB - Library of useful routines for C and FORTRAN programming
  * Copyright (C) 1975-2019  Division de Recherche en Prevision Numerique
  *                          Environnement Canada
@@ -18,6 +17,8 @@
  * Free Software Foundation, Inc., 59 Temple Place - Suite 330,
  * Boston, MA 02111-1307, USA.
  */
+#if ! defined(F_TEST)
+
 #if defined(NEVER_TRUE)
  rm -f intrp_bicub_yx intrp_bicub_yx.o intrp_bicub_yx_f.F90
  ln -sf intrp_bicub_yx.c intrp_bicub_yx_f.F90
@@ -193,21 +194,23 @@ void set_intrp_bicub_quv(int qxmin, int qxmax, int qymin, int qymax,
    end interface                                                                                   !InTf!
 
  */
-
+// compute 2D X Y cubic interpolation coefficients (Origin 0)
+// assuming CONSTANT spacing along x, CONSTANT spacing along y
+// function value is displacement to lower left corner of 4 x 4 subarray from point(1,1) in array
+// use limits along x (qminx, qmaxx) and along y(qminy, qmaxy) as box corner constraints
 static inline int bicub_coeffs_inline0(double xx, double yy, int ni, double *wx, double *wy,
                                   int qminx, int qmaxx, int qminy, int qmaxy, int offsetx, int offsety){
   double x, y;
   int ix, iy;
-  x = xx - 1.0 ; y = yy - 1.0;                      // xx and yy are in "ORIGIN 1"
-  ix = xx ; if(ix > xx) ix = ix -1 ; ix = ix - 2;
-  iy = yy ; if(iy > yy) iy = iy -1 ; iy = iy - 2;
-  ix = (ix < qminx) ? qminx : ix;       // apply boundary limits (set by set_intrp_bicub_quv or set_intrp_bicub_yx)
+//   x = xx - 1.0 ; y = yy - 1.0;                      // xx and yy are in "ORIGIN 1"
+  ix = xx ; if(ix > xx) ix = ix -1 ; ix = ix - 2;      // ix > xx if xx is negative
+  iy = yy ; if(iy > yy) iy = iy -1 ; iy = iy - 2;      // iy > yy if yy is negative
+  ix = (ix < qminx) ? qminx : ix;        // apply boundary limits
   ix = (ix > qmaxx) ? qmaxx : ix;
   iy = (iy < qminy) ? qminy : iy;
   iy = (iy > qmaxy) ? qmaxy : iy;
-  x  = x - 1 - ix;
-  y  = y - 1 - iy;
-//   f = f + ix + iy * ni;                  // point to lower left corner of 4 x 4 subarray
+  x  = xx - 2 - ix;                      // xx and yy are in "ORIGIN 1"
+  y  = yy - 2 - iy;
 
   wx[0] = cm167*x*(x-one)*(x-two);       // polynomial coefficients along i
   wx[1] = cp5*(x+one)*(x-one)*(x-two);
@@ -614,8 +617,9 @@ void intrp_bicub_yx_uv(float *u, float *v, float *ru, float *rv, int ni, int nin
 #endif
 }
 
-// "monotonic" version, the result must be between the max and min values of the 4x4 subarray used to interpolate
-// CHECK THAT REVISED SIMD VERSION NOW CONSISTENT WITH NON_SIMD IS CORRECT
+// "monotonic" version, the result must be between the max and min values of the 2x2 center
+// of the 4x4 subarray used to interpolate 
+// SIMD version now consistent with  non SIMD version
 void intrp_bicub_yx_s_mono(float *f, float *r, int ni, int ninj, int nk, double xx, double yy){
 #if defined(__AVX__) && defined(__x86_64__)
   __m256d fd0, fd1, fd2, fd3, fwx, fwy0, fwy1, fwy2, fwy3, fdt, fmi, fma ; 
@@ -626,7 +630,7 @@ void intrp_bicub_yx_s_mono(float *f, float *r, int ni, int ninj, int nk, double 
   double fd0[4], fd1[4], fd2[4], fd3[4] ;
 #endif
   double  wx[4], wy[4] ;
-  double  x, y;
+  double  x, y, tm1, tm2;
   float minval, maxval;
   int ni2 = ni + ni;    // + 2 rows
   int ni3 = ni2 + ni;   // + 3 rows
@@ -664,49 +668,37 @@ void intrp_bicub_yx_s_mono(float *f, float *r, int ni, int ninj, int nk, double 
   fwy3 = _mm256_set1_pd(wy[3]) ;
   frt  = _mm_xor_ps(frt,frt) ;            // set frt to zero
   // prefetch and promote to double 4 rows, level 1
-  fr0 = _mm_loadu_ps(f) ;                 // row 1 : f[i:i+3 , j   ,k]
-  fd0 = _mm256_cvtps_pd(fr0) ;            // promote row 1 to double
-  fr1 = _mm_loadu_ps(f+ni) ;              // row 2 : f[i:i+3 , j+1 ,k]
-  fd1 = _mm256_cvtps_pd(fr1) ;            // promote row 2 to double
-  fr2 = _mm_loadu_ps(f+ni2) ;             // row 3 : f[i:i+3 , j+2 ,k]
-  fd2 = _mm256_cvtps_pd(fr2) ;            // promote row 3 to double
-  fr3 = _mm_loadu_ps(f+ni3) ;             // row 4 : f[i:i+3 , j+3 ,k]
-  fd3 = _mm256_cvtps_pd(fr3) ;            // promote row 4 to double
+  fd0 = _mm256_cvtps_pd(_mm_loadu_ps(f)) ;           // row 1 : f[i:i+3 , j   ,k]
+  fd1 = _mm256_cvtps_pd(_mm_loadu_ps(f+ni)) ;        // row 2 : f[i:i+3 , j+1 ,k]
+  fd2 = _mm256_cvtps_pd(_mm_loadu_ps(f+ni2)) ;       // row 3 : f[i:i+3 , j+2 ,k]
+  fd3 = _mm256_cvtps_pd(_mm_loadu_ps(f+ni3)) ;       // row 4 : f[i:i+3 , j+3 ,k]
 
   for(k=0 ; k<nk-1 ; k++){
     f+= ninj;
     // interpolation along J, level k,
     // prefetch and promote to double 4 rows, level k+1
-//     fma = _mm256_max_pd(fd1,fd0);
-//     fmi = _mm256_min_pd(fd1,fd0);
-    fdt = _mm256_mul_pd(fd0,fwy0) ;          // sum of row[j] * coefficient[j]
+    fma = _mm256_max_pd(fd2,fd1);                    // max of rows 1 and 2
+    fmi = _mm256_min_pd(fd2,fd1);                    // min of rows 1 and 2
+
+    fdt = _mm256_mul_pd(fd0,fwy0) ;                  // sum of row[j] * coefficient[j]
     fd0 = _mm256_cvtps_pd( _mm_loadu_ps(f    )) ;    // row 0 : f[i:i+3 , j   ,k+1]
 
     fdt = _mm256_fmadd_pd(fd1,fwy1,fdt) ;
     fd1 = _mm256_cvtps_pd(_mm_loadu_ps(f+ni )) ;     // row 2 : f[i:i+3 , j+1 ,k+1]
 
-//     fma = _mm256_max_pd(fd2,fma);
-//     fmi = _mm256_min_pd(fd2,fmi);
-    fma = _mm256_max_pd(fd2,fd1);                    // max of rows 1 and 2
-    fmi = _mm256_min_pd(fd2,fd1);                    // min of rows 1 and 2
     fdt = _mm256_fmadd_pd(fd2,fwy2,fdt) ;
     fd2 = _mm256_cvtps_pd(_mm_loadu_ps(f+ni2)) ;     // row 3 : f[i:i+3 , j+2 ,k+1]
 
-//     fma = _mm256_max_pd(fd3,fma);
-//     fmi = _mm256_min_pd(fd3,fmi);
     fdt = _mm256_fmadd_pd(fd3,fwy3,fdt) ;
     fd3 = _mm256_cvtps_pd(_mm_loadu_ps(f+ni3)) ;     // row 4 : f[i:i+3 , j+3 ,k]
 
-    // get maximum of fma vector elements and minimum of fmi vector elements
+    // get maximum of some fma vector elements and minimum of some fmi vector elements
     // elements 0 and 3 ignored, max/min of elements 1 and 2
-//     rma = _mm_max_pd(_mm256_extractf128_pd(fma,0),_mm256_extractf128_pd(fma,1)) ;
-//     rmi = _mm_min_pd(_mm256_extractf128_pd(fmi,0),_mm256_extractf128_pd(fmi,1)) ;
-    rma = _mm_permute_pd( _mm256_extractf128_pd(fma,0), 0x3); // duplicate element 1 of low part
-    rmi = _mm_permute_pd( _mm256_extractf128_pd(fmi,0), 0x3); // duplicate element 1 of low part
-//   rma = _mm_max_sd(rma,_mm_permute_pd(rma,0x3)) ;
-//   rmi = _mm_min_sd(rmi,_mm_permute_pd(rmi,0x3)) ;
-    rma = _mm_max_sd(rma,_mm_permute_pd(_mm256_extractf128_pd(fma,1),0x0)) ;  // max with low element of high part
-    rmi = _mm_min_sd(rmi,_mm_permute_pd(_mm256_extractf128_pd(fmi,1),0x0)) ;  // min with low element of high part
+    rma = _mm_permute_pd( _mm256_extractf128_pd(fma,0), 0x3); // duplicate element 1 of low part [1, 1]
+    rmi = _mm_permute_pd( _mm256_extractf128_pd(fmi,0), 0x3); // duplicate element 1 of low part [1, 1]
+    rma = _mm_max_sd(rma,_mm_permute_pd(_mm256_extractf128_pd(fma,1),0x0)) ;  // max with low element of high part [1, 1] [2, 3]
+    rmi = _mm_min_sd(rmi,_mm_permute_pd(_mm256_extractf128_pd(fmi,1),0x0)) ;  // min with low element of high part [1, 1] [2, 3]
+    // rma/rmi[0] = max/min( fma[1], fma [2]),   rma/rmi[1] will be ognored
     
     // interpolation along i: multiply by coefficients along x , then sum elements (using vector folding)
     fdt = _mm256_mul_pd(fdt,fwx) ;
@@ -715,6 +707,7 @@ void intrp_bicub_yx_s_mono(float *f, float *r, int ni, int ninj, int nk, double 
     ft0 = _mm_add_pd(ft0,ft1) ;             // fdt[0]+fdt[2]               fdt[1]+fdt[3]
     ft1 = _mm_permute_pd(ft0,0x3) ;         // fdt[1]+fdt[3]               fdt[1]+fdt[3]
     ft0 = _mm_add_sd(ft0,ft1) ;             // fdt[0]+fdt[2]+fdt[1]+fdt[3]
+
     ft0 = _mm_max_sd(ft0,rmi);              // apply monotonic limits
     ft0 = _mm_min_sd(ft0,rma);
     frt = _mm_cvtsd_ss(frt,ft0) ;           // convert result to float
@@ -723,28 +716,19 @@ void intrp_bicub_yx_s_mono(float *f, float *r, int ni, int ninj, int nk, double 
     r ++;
   }
   // interpolation along j , level nk
-//   fma = _mm256_max_pd(fd1,fd0);
-//   fmi = _mm256_min_pd(fd1,fd0);
-  fdt = _mm256_mul_pd(fd0,fwy0) ;            // sum of row[j] * coefficient[j]
-  fdt = _mm256_fmadd_pd(fd1,fwy1,fdt) ;
-//   fma = _mm256_max_pd(fd2,fma);
-//   fmi = _mm256_min_pd(fd2,fmi);
   fma = _mm256_max_pd(fd2,fd1);
   fmi = _mm256_min_pd(fd2,fd1);
+  fdt = _mm256_mul_pd(fd0,fwy0) ;            // sum of row[j] * coefficient[j]
+  fdt = _mm256_fmadd_pd(fd1,fwy1,fdt) ;
   fdt = _mm256_fmadd_pd(fd2,fwy2,fdt) ;
-//   fma = _mm256_max_pd(fd3,fma);
-//   fmi = _mm256_min_pd(fd3,fmi);
   fdt = _mm256_fmadd_pd(fd3,fwy3,fdt) ;
-  // get maximum of fma vector elements and minimum of fmi vector elements
+  // get maximum of some fma vector elements and minimum of some fmi vector elements
   // elements 0 and 3 ignored, max/min of elements 1 and 2
-//   rma = _mm_max_pd(_mm256_extractf128_pd(fma,0),_mm256_extractf128_pd(fma,1)) ;
-//   rmi = _mm_min_pd(_mm256_extractf128_pd(fmi,0),_mm256_extractf128_pd(fmi,1)) ;
-    rma = _mm_permute_pd( _mm256_extractf128_pd(fma,0), 0x3); // duplicate element 1 of low part
-    rmi = _mm_permute_pd( _mm256_extractf128_pd(fmi,0), 0x3); // duplicate element 1 of low part
-//   rma = _mm_max_sd(rma,_mm_permute_pd(rma,0x3)) ;
-//   rmi = _mm_min_sd(rmi,_mm_permute_pd(rmi,0x3)) ;
-    rma = _mm_max_sd(rma,_mm_permute_pd(_mm256_extractf128_pd(fma,1),0x0)) ;  // max with low element of high part
-    rmi = _mm_min_sd(rmi,_mm_permute_pd(_mm256_extractf128_pd(fmi,1),0x0)) ;  // min with low element of high part
+  rma = _mm_permute_pd( _mm256_extractf128_pd(fma,0), 0x3); // duplicate element 1 of low part
+  rmi = _mm_permute_pd( _mm256_extractf128_pd(fmi,0), 0x3); // duplicate element 1 of low part
+  rma = _mm_max_sd(rma,_mm_permute_pd(_mm256_extractf128_pd(fma,1),0x0)) ;  // max with low element of high part
+  rmi = _mm_min_sd(rmi,_mm_permute_pd(_mm256_extractf128_pd(fmi,1),0x0)) ;  // min with low element of high part
+  // rma/rmi[0] = max/min( fma[1], fma [2]),   rma/rmi[1] will be ognored
 
   // interpolation along i: multiply by coefficients along x , then sum elements (using vector folding)
   fdt = _mm256_mul_pd(fdt,fwx) ;
@@ -786,8 +770,12 @@ void intrp_bicub_yx_s_mono(float *f, float *r, int ni, int ninj, int nk, double 
   }
 #endif
 }
+#endif
 
 #if defined(C_TEST)
+
+// this test is no longer functional, it will need to be seriously revised
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdint.h>
@@ -834,9 +822,8 @@ int main(int argc,char **argv){
 }
 #endif
 
-#else
-
-program test_interp
+#if defined(F_TEST)
+program test_interp   !! embedded Fortran test program
   use ISO_C_BINDING
   implicit none
   integer, parameter :: NI=65
@@ -846,6 +833,9 @@ program test_interp
   integer, parameter :: HX=2
   integer, parameter :: HY=2
   integer, parameter :: NR=10
+  integer, parameter :: FLOPS1=NP*NK*35+40   ! scalars, 1 position
+  integer, parameter :: FLOPS2=NP*NK*70+80   ! vectors, 2 positions
+  integer, parameter :: FLOPS3=NP*NK*70+40   ! vectors, 1 position
   real(C_FLOAT), dimension(1-HX:NI+HX , 1-HY:NJ+HY , NK) :: f, f2
   real(C_FLOAT), dimension(NK,NP*2) :: r, r2, r1
   real(C_DOUBLE), dimension(NP) :: x, y, xmin, xmax, xmin2, xmax2
@@ -875,11 +865,11 @@ program test_interp
   enddo
   f2 = f + 1
   do i = 1 , NP
-    x(i) = i - .999 + 1.0
-    y(i) = i - .999 + 1.0
+    x(i) = i + 1.0 !- .999
+    y(i) = i + 1.0 !- .999
   enddo
-  x(NP) = ni - .01
-  y(NP) = nj - .01
+  x(NP) = ni - 1!.01
+  y(NP) = nj - 1!.01
   nidim = NI + 2*HX
   ninjdim = nidim * (NJ + HY*2)
 !  print *,'nidim=',nidim,' , ninjdim=',ninjdim
@@ -888,18 +878,24 @@ program test_interp
 !  print 101,loc(f(1,1,1)), loc(r(1,1))
 101 format(2Z17)
 !  print *,f(1,1,1), r(1,1)
+  r  = 0.0
+  r2 = 0.0
+  do i = 1 , NP
+    call intrp_bicub_yx_s(f(1,1,1), r(1,i), nidim, ninjdim, NK, x(i), y(i))  ! prime the timinng pump !
+  enddo
   do j = 1, NR
     t1 = rdtsc()
     do i = 1 , NP
-      ix = x(i)
-      ix = max(1,ix-1)
-      ix = min(ix,NI-3)
-      xi = x(i) - (ix + 1)
-      iy = y(i)
-      iy = max(1,iy-1)
-      iy = min(iy,NJ-3)
-      yi = y(i) - (iy - 1)
-      call intrp_bicub_yx_s(f(ix,iy,1), r(i,1), nidim, ninjdim, NK, xi, yi)
+!       ix = x(i)
+!       ix = max(1,ix-1)
+!       ix = min(ix,NI-3)
+!       xi = x(i) - (ix + 1)
+!       iy = y(i)
+!       iy = max(1,iy-1)
+!       iy = min(iy,NJ-3)
+!       yi = y(i) - (iy - 1)
+!       call intrp_bicub_yx_s(f(ix,iy,1), r(i,1), nidim, ninjdim, NK, xi, yi)
+      call intrp_bicub_yx_s(f(1,1,1), r(1,i), nidim, ninjdim, NK, x(i), y(i))
     enddo
     t2 = rdtsc()
     tmg1(j) = t2 - t1
@@ -927,13 +923,16 @@ program test_interp
     tmg2(j) = t2 - t1
 !    print *,'time=',t2-t1,' cycles for',NP*NK*35,' values'
   enddo
-  print 100,'direct   =',tmg1
-  print 100,'mono     =',tmg2
-  print 100,'vec 2pos =',tmg3
-  print 100,'vec 1pos =',tmg4
-  print 100,'flops    =',NP*NK*35+40,NP*NK*70+80
-  print 100,'Bytes    =',NP*NK*16*4
-100 format(A,40I6)
+  print *,"Gflops (@ 3.7 GHz TSC)"
+  print 100,'direct   =',FLOPS1*3.7/tmg1
+  print 100,'mono     =',FLOPS1*3.7/tmg2
+  print 100,'vec 2pos =',FLOPS2*3.7/tmg3
+  print 100,'vec 1pos =',FLOPS3*3.7/tmg4
+  print 1000,'flops    =',FLOPS1,FLOPS1,FLOPS2,FLOPS3
+  print 1000,'Bytes    =',NP*NK*16*4
+  print 100,'GBytes/s =',NP*NK*16*4*3.7/tmg1
+100 format(A,40F6.3)
+1000 format(A,40I6)
 !  print 102,f(nint(x(1)),nint(y(1)),1),f(nint(x(2)),nint(y(2)),1),f(nint(x(1)),nint(y(1)),NK),f(nint(x(2)),nint(y(2)),NK)
 !  print 102,x(1)+y(1)+1,x(2)+y(2)+1,x(1)+y(1)+NK,x(2)+y(2)+NK
   print *,"X coordinates, X dimension :",NI
@@ -948,17 +947,23 @@ program test_interp
   do j = 6, 1-hy, -1
     print 102,f(1-hx:6,j,NK)
   enddo
+  r = -1.0
   print *,"MONO: limit (min, max)"
   do i = 1 , NP
     i0 = x(i)
     i0 = max(1,min(ni-3,i0-1))
     j0 = y(i)
     j0 = max(1,min(nj-3,j0-1))
-!    print *, i0, j0, x(i), y(i)
-    xmin(i)  = minval(f(i0:i0+3,j0:j0+3,1))
-    xmax(i)  = maxval(f(i0:i0+3,j0:j0+3,1))
-    xmin2(i) = minval(f(i0:i0+3,j0:j0+3,NK))
-    xmax2(i) = maxval(f(i0:i0+3,j0:j0+3,NK))
+    call intrp_bicub_yx_s(f(1,1,1), r(1,i), nidim, ninjdim, NK, x(i), y(i))
+!   print *,'DBG', i0, j0
+!   print 102, x(i), y(i), r(1,i), r(NK,i)
+    call intrp_bicub_yx_s_mono( f(1,1,1), r(1,i), nidim, ninjdim, NK, x(i), y(i) )
+!   print 102,r(1,i),f(i0+1:i0+2,j0+1:j0+2,1)
+!   print 102,r(NK,i),f(i0+1:i0+2,j0+1:j0+2,NK)
+    xmin(i)  = minval(f(i0+1:i0+2,j0+1:j0+2,1))
+    xmax(i)  = maxval(f(i0+1:i0+2,j0+1:j0+2,1))
+    xmin2(i) = minval(f(i0+1:i0+2,j0+1:j0+2,NK))
+    xmax2(i) = maxval(f(i0+1:i0+2,j0+1:j0+2,NK))
   enddo
   print 102,xmin(:) , xmin2(:)
   print 102,xmax(:) , xmax2(:)
@@ -1011,4 +1016,5 @@ program test_interp
 102 format(16F15.6)
 103 format(16E15.2)
 end
+
 #endif
