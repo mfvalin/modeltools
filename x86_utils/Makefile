@@ -85,6 +85,9 @@ test_search_list: search_list.c test_search_list.c
 tricublin_f90.inc: tricublin_beta.c
 	grep InTf tricublin_beta.c | sed 's/[ ]*!InTf![ ]*//' > tricublin_f90.inc
 
+boundary_clip.inc: boundary_clip.F90
+	build_f90_interface.sh boundary_clip.F90 >boundary_clip.inc
+
 clean:
 	rm -f intrp_bicub_yx0 intrp_bicub_yx intrp_bicub_yx.o intrp_bicub_yx.s a.out fp_x87_xmm_control.o intrp_bicub_yx.inc
 	rm -f test_search_list search_list.o test_bicub
