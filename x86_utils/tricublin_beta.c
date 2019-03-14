@@ -169,6 +169,76 @@ typedef struct{
   uint32_t offj;   // offset to add to j position (e.g. global to local grid remapping)
 }ztab;
 
+static void cubic_coeff_denom(double *t, double *f, int n){
+#if defined(WITH_SIMD)
+  __m256d cp1, cm1;
+  double onep[4] = { 1.0,  1.0,  1.0,  1.0};
+  double onem[4] = {-1.0, -1.0, -1.0, -1.0};
+  cp1 = _mm256_loadu_pd(onep);
+  cm1 = _mm256_loadu_pd(onem);
+#endif
+  int j;
+  t += 4;
+  for(j=0 ; j<n-6 ; j+=4){
+//     t1++; t2++; t3++; t4++;
+#if defined(WITH_SIMD)
+    __m256d a, b, c, d, ab, ac, ad, bc, bd, cd, v1, v2, v3, v4, t1, t2, t3, t4;
+    a  = _mm256_loadu_pd(f+0);
+    b  = _mm256_loadu_pd(f+1);
+    c  = _mm256_loadu_pd(f+2);
+    d  = _mm256_loadu_pd(f+3);
+    ab = _mm256_sub_pd(a,b);
+    ac = _mm256_sub_pd(a,c);
+    ad = _mm256_sub_pd(a,d);
+    bc = _mm256_sub_pd(b,c);
+    bd = _mm256_sub_pd(b,d);
+    cd = _mm256_sub_pd(c,d);
+    v1 = _mm256_mul_pd( ab ,  _mm256_mul_pd( ac , ad) );
+    v2 = _mm256_mul_pd( ab ,  _mm256_mul_pd( bc , bd) );
+    v3 = _mm256_mul_pd( ac ,  _mm256_mul_pd( bc , cd) );
+    v4 = _mm256_mul_pd( ad ,  _mm256_mul_pd( bd , cd) );
+    v1 = _mm256_div_pd(cp1 , v1);     // a1 a2 a3 a4   coefficient a for points 1 2 3 4
+    v2 = _mm256_div_pd(cm1 , v2);     // b1 b2 b3 b4   coefficient b for points 1 2 3 4
+    v3 = _mm256_div_pd(cp1 , v3);     // c1 c2 c3 c4   coefficient c for points 1 2 3 4
+    v4 = _mm256_div_pd(cm1 , v4);     // d1 d2 d3 d4   coefficient d for points 1 2 3 4
+    t1 = _mm256_unpacklo_pd(v1,v2);   // a1 b1 a3 b3
+    t2 = _mm256_unpackhi_pd(v1,v2);   // a2 b2 a4 b4
+    t3 = _mm256_unpacklo_pd(v3,v4);   // c1 d1 c3 d3
+    t4 = _mm256_unpackhi_pd(v3,v4);   // c2 d2 c4 d4
+    _mm_storeu_pd(t+ 0, _mm256_extractf128_pd(t1,0));   // a1 b1  coefficients a b c d for point 1
+    _mm_storeu_pd(t+ 2, _mm256_extractf128_pd(t3,0));   // c1 d1
+    _mm_storeu_pd(t+ 4, _mm256_extractf128_pd(t2,0));   // a2 b2  coefficients a b c d for point 2
+    _mm_storeu_pd(t+ 6, _mm256_extractf128_pd(t4,0));   // c2 d2
+    _mm_storeu_pd(t+ 8, _mm256_extractf128_pd(t1,1));   // a3 b3  coefficients a b c d for point 3
+    _mm_storeu_pd(t+10, _mm256_extractf128_pd(t3,1));   // c3 d3
+    _mm_storeu_pd(t+12, _mm256_extractf128_pd(t2,1));   // a4 b4  coefficients a b c d for point 4
+    _mm_storeu_pd(t+14, _mm256_extractf128_pd(t4,1));   // c4 d4
+    f++;
+    t += 16;
+#else
+    double a[4], b[4], c[4], d[4], ab[4], ac[4], ad[4], bc[4], bd[4], cd[4];
+    int i;
+    for(i=0 ; i<4 ; i++){
+      a[i] = f[i+0];
+      b[i] = f[i+1];
+      c[i] = f[i+2];
+      d[i] = f[i+3];
+      ab[i] = a[i] - b[i];
+      ac[i] = a[i] - c[i];
+      ad[i] = a[i] - d[i];
+      bc[i] = b[i] - c[i];
+      bd[i] = b[i] - d[i];
+      cd[i] = c[i] - d[i];
+      t[0]  =  1.0/(ab[i]*ac[i]*ad[i]);   // coefficients a b c d for point i
+      t[1]  = -1.0/(ab[i]*bc[i]*bd[i]);
+      t[2]  =  1.0/(ac[i]*bc[i]*cd[i]);
+      t[3]  = -1.0/(ad[i]*bd[i]*cd[i]);
+      t += 4;
+    }
+#endif
+  }
+}
+
 // triple product used for Lagrange cubic polynomials coefficients in the non constant case
 #define TRIPRD(x,a,b,c) ((x-a)*(x-b)*(x-c))
 
