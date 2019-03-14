@@ -1,6 +1,5 @@
 /* RMNLIB - Library of useful routines for C and FORTRAN programming
- * Copyright (C) 1975-2019  Division de Recherche en Prevision Numerique
- *                          Environnement Canada
+ * Copyright (C) 2019  Division de Recherche en Prevision Numerique
  *
  * This library is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public
@@ -52,7 +51,7 @@ static double two = 2.0;
 #pragma weak rdtsc_=rdtsc
 uint64_t rdtsc_(void);
 uint64_t rdtsc(void) {   // version rapide "out of order"
-#if defined(__x86_64__) || defined( __i386__ )
+#if defined(__x86_64__)
   uint32_t lo, hi;
   __asm__ volatile ("rdtscp"
       : /* outputs */ "=a" (lo), "=d" (hi)
@@ -65,10 +64,11 @@ uint64_t rdtsc(void) {   // version rapide "out of order"
 #endif
 }
 #endif
-#include <immintrin.h>
 
+#if defined(__x86_64__)
+#include <immintrin.h>
 // use separate multiply and add instructions if fused multiply-add not available
-#if defined(__AVX__) && defined(__x86_64__)
+#if defined(__AVX__)
 #if ! defined(__FMA__)
 #define _mm256_fmadd_ps(a,b,c) _mm256_add_ps(_mm256_mul_ps(a,b),c)
 #define _mm256_fmadd_pd(a,b,c) _mm256_add_pd(_mm256_mul_pd(a,b),c)
@@ -76,6 +76,8 @@ uint64_t rdtsc(void) {   // version rapide "out of order"
 #define _mm_fmadd_pd(a,b,c) _mm_add_pd(_mm_mul_pd(a,b),c)
 #endif
 #endif
+#endif
+
 
 // default values mean practically "no limit"
 static int qminx = -999999999;  // limits for the 'q' grid, in "origin 0"
@@ -194,15 +196,27 @@ void set_intrp_bicub_quv(int qxmin, int qxmax, int qymin, int qymax,
    end interface                                                                                   !InTf!
 
  */
-// compute 2D X Y cubic interpolation coefficients (Origin 0)
+// compute 2D X Y cubic interpolation coefficients (Origin 0 internally)
 // assuming CONSTANT spacing along x, CONSTANT spacing along y
-// function value is displacement to lower left corner of 4 x 4 subarray from point(1,1) in array
-// use limits along x (qminx, qmaxx) and along y(qminy, qmaxy) as box corner constraints
-static inline int bicub_coeffs_inline0(double xx, double yy, int ni, double *wx, double *wy,
+//
+// xx    : position along x in index space of the interpolation target, input (origin 1)
+// yy    : position along x in index space of the interpolation target, input (origin 1)
+// wx    : output array, 4 elements, coefficients for cubic interpolation along x
+// wy    : output array, 4 elements, coefficients for cubic interpolation along y
+// qminx, qmaxx : limits along x used as box corner constraints
+// qminy, qmaxy : limits along y used as box corner constraints
+// offsetx  : offset applied to xx (global to local optional mapping) (usually 0)
+// offsety  : offset applied to yy (global to local optional mapping) (usually 0)
+//
+// function result : displacement from point(1,1) in array to lower left corner of 4 x 4 subarray
+//                   used for the bicubic interpolation
+//
+// inline version, used by multiple routines, the optimizer will perform the appropriate inlining
+//
+static inline int bicub_coeffs_inline(double xx, double yy, int ni, double *wx, double *wy,
                                   int qminx, int qmaxx, int qminy, int qmaxy, int offsetx, int offsety){
   double x, y;
   int ix, iy;
-//   x = xx - 1.0 ; y = yy - 1.0;                      // xx and yy are in "ORIGIN 1"
   ix = xx ; if(ix > xx) ix = ix -1 ; ix = ix - 2;      // ix > xx if xx is negative
   iy = yy ; if(iy > yy) iy = iy -1 ; iy = iy - 2;      // iy > yy if yy is negative
   ix = (ix < qminx) ? qminx : ix;        // apply boundary limits
@@ -227,7 +241,7 @@ static inline int bicub_coeffs_inline0(double xx, double yy, int ni, double *wx,
 
 // version for scalar variables
 void intrp_bicub_yx_s(float *f, float *r, int ni, int ninj, int nk, double xx, double yy){
-#if defined(__AVX__) && defined(__x86_64__)
+#if defined(__AVX__) && defined(__x86_64__) && !defined(NO_SIMD)
   __m256d fd0, fd1, fd2, fd3, fwx, fwy0, fwy1, fwy2, fwy3, fdt ;
   __m128  frt ;
   __m128d ft0, ft1;
@@ -262,9 +276,9 @@ void intrp_bicub_yx_s(float *f, float *r, int ni, int ninj, int nk, double xx, d
   wy[2] = cm5*y*(y+one)*(y-two);
   wy[3] = cp167*y*(y+one)*(y-one);
 #else
-  f += bicub_coeffs_inline0(xx, yy, ni, wx, wy, qminx, qmaxx, qminy, qmaxy, 0, 0);  // use inline function
+  f += bicub_coeffs_inline(xx, yy, ni, wx, wy, qminx, qmaxx, qminy, qmaxy, 0, 0);  // use inline function
 #endif
-#if defined(__AVX__) && defined(__x86_64__)
+#if defined(__AVX__) && defined(__x86_64__) && !defined(NO_SIMD)
   fwx = _mm256_loadu_pd(wx) ;             // vector of coefficients along i
   fwy0 = _mm256_set1_pd(wy[0]) ;          // scalar * vector not available, promote scalar to vector
   fwy1 = _mm256_set1_pd(wy[1]) ;
@@ -334,7 +348,7 @@ void intrp_bicub_yx_s(float *f, float *r, int ni, int ninj, int nk, double xx, d
 // for rotation matrix s, see the GEM model
 void intrp_bicub_yx_vec(float *u, float *v, float *ru, float *rv, int ni, int ninj, int nk,
                         double xxu, double yyu, double xxv, double yyv, double s[4]){
-#if defined(__AVX__) && defined(__x86_64__)
+#if defined(__AVX__) && defined(__x86_64__) && !defined(NO_SIMD)
   __m256d fwyu0, fwyu1, fwyu2, fwyu3, fwyv0, fwyv1, fwyv2, fwyv3, fdtu, fdtv, fwxu, fwxv;
   __m256d fd0, fd1, fd2, fd3;
   __m128d ft0, ft1;
@@ -392,10 +406,10 @@ void intrp_bicub_yx_vec(float *u, float *v, float *ru, float *rv, int ni, int ni
   wyv[2] = cm5*yv*(yv+one)*(yv-two);
   wyv[3] = cp167*yv*(yv+one)*(yv-one);
 #else
-  u += bicub_coeffs_inline0(xxu, yyu, ni, wxu, wyu, uminx, umaxx, uminy, umaxy, 0, 0);  // use inline function
-  v += bicub_coeffs_inline0(xxv, yyv, ni, wxv, wyv, vminx, vmaxx, vminy, vmaxy, 0, 0);  // use inline function
+  u += bicub_coeffs_inline(xxu, yyu, ni, wxu, wyu, uminx, umaxx, uminy, umaxy, 0, 0);  // use inline function
+  v += bicub_coeffs_inline(xxv, yyv, ni, wxv, wyv, vminx, vmaxx, vminy, vmaxy, 0, 0);  // use inline function
 #endif
-#if defined(__AVX__) && defined(__x86_64__)
+#if defined(__AVX__) && defined(__x86_64__) && !defined(NO_SIMD)
   fwyu0 = _mm256_set1_pd(wyu[0]) ;           // scalar * vector not available, promote scalar to vector
   fwyu1 = _mm256_set1_pd(wyu[1]) ;
   fwyu2 = _mm256_set1_pd(wyu[2]) ;
@@ -472,7 +486,7 @@ void intrp_bicub_yx_vec(float *u, float *v, float *ru, float *rv, int ni, int ni
 // ru, rv : rotated U and V components of the wind at the desired point
 // for rotation matrix s, see the GEM model
 void intrp_bicub_yx_uv(float *u, float *v, float *ru, float *rv, int ni, int ninj, int nk, double xx, double yy, double s[4]){
-#if defined(__AVX__) && defined(__x86_64__)
+#if defined(__AVX__) && defined(__x86_64__) && !defined(NO_SIMD)
   __m256d ud0, ud1, ud2, ud3, vd0, vd1, vd2, vd3, fwx, fwy0, fwy1, fwy2, fwy3, udt, vdt ;
   __m128d ft0, ft1;
   __m128  frt;
@@ -510,10 +524,10 @@ void intrp_bicub_yx_uv(float *u, float *v, float *ru, float *rv, int ni, int nin
   wy[2] = cm5*y*(y+one)*(y-two);
   wy[3] = cp167*y*(y+one)*(y-one);
 #else
-  i = bicub_coeffs_inline0(xx, yy, ni, wx, wy, qminx, qmaxx, qminy, qmaxy, 0, 0);  // use inline function
+  i = bicub_coeffs_inline(xx, yy, ni, wx, wy, qminx, qmaxx, qminy, qmaxy, 0, 0);  // use inline function
   u += i; v+= i;
 #endif
-#if defined(__AVX__) && defined(__x86_64__)
+#if defined(__AVX__) && defined(__x86_64__) && !defined(NO_SIMD)
   fwx = _mm256_loadu_pd(wx) ;              // vector of coefficients along i
   fwy0 = _mm256_set1_pd(wy[0]) ;           // scalar * vector not available, promote scalar to vector
   fwy1 = _mm256_set1_pd(wy[1]) ;
@@ -621,7 +635,7 @@ void intrp_bicub_yx_uv(float *u, float *v, float *ru, float *rv, int ni, int nin
 // of the 4x4 subarray used to interpolate 
 // SIMD version now consistent with  non SIMD version
 void intrp_bicub_yx_s_mono(float *f, float *r, int ni, int ninj, int nk, double xx, double yy){
-#if defined(__AVX__) && defined(__x86_64__)
+#if defined(__AVX__) && defined(__x86_64__) && !defined(NO_SIMD)
   __m256d fd0, fd1, fd2, fd3, fwx, fwy0, fwy1, fwy2, fwy3, fdt, fmi, fma ; 
   __m128  fr0, fr1, fr2, fr3, frt ; ;       // frt is used as a scalar, fr0->fr3 are 128 bit aliases for fd0->fd3
   __m128d ft0, ft1, rmi, rma ;
@@ -658,9 +672,9 @@ void intrp_bicub_yx_s_mono(float *f, float *r, int ni, int ninj, int nk, double 
   wy[2] = cm5*y*(y+one)*(y-two);
   wy[3] = cp167*y*(y+one)*(y-one);
 #else
-  f += bicub_coeffs_inline0(xx, yy, ni, wx, wy, qminx, qmaxx, qminy, qmaxy, 0, 0);  // use inline function
+  f += bicub_coeffs_inline(xx, yy, ni, wx, wy, qminx, qmaxx, qminy, qmaxy, 0, 0);  // use inline function
 #endif
-#if defined(__AVX__) && defined(__x86_64__)
+#if defined(__AVX__) && defined(__x86_64__) && !defined(NO_SIMD)
   fwx  = _mm256_loadu_pd(wx) ;            // vector of coefficients along i
   fwy0 = _mm256_set1_pd(wy[0]) ;          // scalar * vector not available,
   fwy1 = _mm256_set1_pd(wy[1]) ;          // promote scalars to vectors
@@ -745,19 +759,13 @@ void intrp_bicub_yx_s_mono(float *f, float *r, int ni, int ninj, int nk, double 
   _mm_store_ss(r,frt) ;                   // store float
 #else
   for(k=0 ; k<nk ; k++){
-//     minval = f[0];
     minval = f[1];
     maxval = minval;
-//     for(i=0 ; i<4 ; i++){   // compute monotonic limits
     for(i=1 ; i<3 ; i++){   // compute monotonic limits, center 2x2 points
-//       minval = (f[i    ] < minval) ? f[i    ] : minval;
       minval = (f[i+ni ] < minval) ? f[i+ni ] : minval;
       minval = (f[i+ni2] < minval) ? f[i+ni2] : minval;
-//       minval = (f[i+ni3] < minval) ? f[i+ni3] : minval;
-//       maxval = (f[i    ] > maxval) ? f[i    ] : maxval;
       maxval = (f[i+ni ] > maxval) ? f[i+ni ] : maxval;
       maxval = (f[i+ni2] > maxval) ? f[i+ni2] : maxval;
-//       maxval = (f[i+ni3] > maxval) ? f[i+ni3] : maxval;
     }
     for(i=0 ; i<4 ; i++){                   // easily vectorizable form
       fd0[i] = ( f[i]*wy[0] + f[i+ni]*wy[1] + f[i+ni2]*wy[2] + f[i+ni3]*wy[3] ) * wx[i];
@@ -931,7 +939,7 @@ program test_interp   !! embedded Fortran test program
   print 1000,'flops    =',FLOPS1,FLOPS1,FLOPS2,FLOPS3
   print 1000,'Bytes    =',NP*NK*16*4
   print 100,'GBytes/s =',NP*NK*16*4*3.7/tmg1
-100 format(A,40F6.3)
+100 format(A,40F8.3)
 1000 format(A,40I6)
 !  print 102,f(nint(x(1)),nint(y(1)),1),f(nint(x(2)),nint(y(2)),1),f(nint(x(1)),nint(y(1)),NK),f(nint(x(2)),nint(y(2)),NK)
 !  print 102,x(1)+y(1)+1,x(2)+y(2)+1,x(1)+y(1)+NK,x(2)+y(2)+NK

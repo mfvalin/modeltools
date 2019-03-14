@@ -1,3 +1,4 @@
+NO_SIMD = NOTHING_USEFUL
 
 ifeq "$(BASE_ARCH)" "$(EC_ARCH)"
 $(error FATAL: EC_ARCH is equal to BASE_ARCH, no compiler architecture is defined, ABORTING)
@@ -7,7 +8,7 @@ ifneq (,$(findstring intel,$(EC_ARCH)))
 # $(error FATAL: intel compiler  detected)
 EXTRA_FTN := -no-wrap-margin
 EXTRA_C   := -march=core-avx2
-COMPILER = s.cc
+CCOMPILER = s.cc
 FCOMPILER = s.f90
 endif
 
@@ -15,7 +16,7 @@ ifneq (,$(findstring gfortran,$(EC_ARCH)))
 # $(error FATAL: intel compiler  detected)
 EXTRA_FTN := 
 EXTRA_C   := -mavx2 -mfma
-COMPILER = s.cc
+CCOMPILER = s.cc
 FCOMPILER = s.f90
 endif
 
@@ -23,7 +24,7 @@ ifneq (,$(findstring gnu,$(EC_ARCH)))
 # $(error FATAL: intel compiler  detected)
 EXTRA_FTN := 
 EXTRA_C   := -mavx2 -mfma
-COMPILER = gcc
+CCOMPILER = gcc
 FCOMPILER = gfortran
 endif
 
@@ -31,7 +32,7 @@ ifneq (,$(findstring llvm,$(EC_ARCH)))
 # $(error FATAL: intel compiler  detected)
 EXTRA_FTN := 
 EXTRA_C   := -mavx2 -mfma
-COMPILER = clang
+CCOMPILER = clang
 FCOMPILER = flang
 endif
 
@@ -62,24 +63,24 @@ intrp_bicub_yx_f.F90:
 	ln -sf  intrp_bicub_yx.c intrp_bicub_yx_f.F90
 
 intrp_bicub_yx.o: intrp_bicub_yx.c fast_interp.h
-	$(COMPILER) -O3 -c ${EXTRA_C} intrp_bicub_yx.c
+	$(CCOMPILER) -O3 -c ${EXTRA_C} intrp_bicub_yx.c
 
 test_bicub: intrp_bicub_yx.c intrp_bicub_yx_f.F90 fast_interp.h
 	rm -f test_bicub
-	$(COMPILER) -O3 -DTIMING -c ${EXTRA_C} intrp_bicub_yx.c
+	$(CCOMPILER) -O3 -DTIMING -c ${EXTRA_C} intrp_bicub_yx.c
 	$(FCOMPILER) -DF_TEST intrp_bicub_yx_f.F90  intrp_bicub_yx.o -o test_bicub
 
 intrp_bicub_yx: intrp_bicub_yx.c intrp_bicub_yx_f.F90 intrp_bicub_yx.inc
-	$(COMPILER) -O2 -DTIMING -c ${EXTRA_C} intrp_bicub_yx.c
+	$(CCOMPILER) -O2 -DTIMING -c ${EXTRA_C} intrp_bicub_yx.c
 	$(FCOMPILER) ${EXTRA_FTN} -DF_TEST -o intrp_bicub_yx intrp_bicub_yx_f.F90 intrp_bicub_yx.o
 	rm -f intrp_bicub_yx.o
-	$(COMPILER) -O3 -DTIMING -c intrp_bicub_yx.c
-	$(FCOMPILER) ${EXTRA_FTN} -DF_TEST -o intrp_bicub_yx0 intrp_bicub_yx_f.F90 intrp_bicub_yx.o
+	$(CCOMPILER) -O3 -DTIMING -DNO_SIMD -c intrp_bicub_yx.c
+	$(FCOMPILER) ${EXTRA_FTN} -DF_TEST -o intrp_bicub_yx_nosimd intrp_bicub_yx_f.F90 intrp_bicub_yx.o
 	rm -f intrp_bicub_yx.o
 
 test_search_list: search_list.c test_search_list.c
-	$(COMPILER) -O3 -DSELF_TEST -c ${EXTRA_C} search_list.c
-	$(COMPILER) -O3 ${EXTRA_C} test_search_list.c search_list.o -o test_search_list
+	$(CCOMPILER) -O3 -DSELF_TEST -c ${EXTRA_C} search_list.c
+	$(CCOMPILER) -O3 ${EXTRA_C} test_search_list.c search_list.o -o test_search_list
 	rm -f search_list.o
 
 tricublin_f90.inc: tricublin_beta.c

@@ -37,16 +37,28 @@ static double two = 2.0;
 #endif
 #endif
 
-// compute 2D X Y cubic interpolation coefficients (Origin 0)
+// compute 2D X Y cubic interpolation coefficients (Origin 0 internally)
 // assuming CONSTANT spacing along x, CONSTANT spacing along y
-// function value is displacement to lower left corner of 4 x 4 subarray from point(1,1) in array
-// use limits along x (qminx, qmaxx) and along y(qminy, qmaxy) 
+//
+// xx    : position along x in index space of the interpolation target, input (origin 1)
+// yy    : position along x in index space of the interpolation target, input (origin 1)
+// wx    : output array, 4 elements, coefficients for cubic interpolation along x
+// wy    : output array, 4 elements, coefficients for cubic interpolation along y
+// qminx, qmaxx : limits along x used as box corner constraints
+// qminy, qmaxy : limits along y used as box corner constraints
+// offsetx  : offset applied to xx (global to local optional mapping) (usually 0)
+// offsety  : offset applied to yy (global to local optional mapping) (usually 0)
+//
+// function result : displacement from point(1,1) in array to lower left corner of 4 x 4 subarray
+//                   used for the bicubic interpolation
+//
+// inline version, used by multiple routines, the optimizer will perform the appropriate inlining
+//
 static inline int bicub_coeffs_inline0(double xx, double yy, int ni, double *wx, double *wy,
                                   int qminx, int qmaxx, int qminy, int qmaxy, int offsetx, int offsety){
   double x, y;
   int ix, iy;
 
-//   x = xx - 1.0 ;                        //  "ORIGIN 1" to "ORIGIN 0"
   ix = xx ; 
   if(ix > xx) ix = ix -1 ;              // ix > xx if xx is negative
   ix = ix - 2;
@@ -54,7 +66,6 @@ static inline int bicub_coeffs_inline0(double xx, double yy, int ni, double *wx,
   ix = (ix > qmaxx) ? qmaxx : ix;
   x  = xx - 2 - ix;
 
-  y = /*y*/y - 1.0;                         //  "ORIGIN 1" to "ORIGIN 0"
   iy = yy ; 
   if(iy > yy) iy = iy -1 ;              // iy > yy if yy is negative
   iy = iy - 2;
@@ -75,11 +86,24 @@ static inline int bicub_coeffs_inline0(double xx, double yy, int ni, double *wx,
   return ix + iy * ni;   // displacement to lower left corner of 4 x 4 subarray from point(1,1)
 }
 
-// compute 2D X Y cubic interpolation coefficients (Origin 1)
+// compute 2D X Y cubic interpolation coefficients (Origin 1 intenally)
 // assuming CONSTANT spacing along x, CONSTANT spacing along y
-// xx and yy should be >= 0.0
-// function value is displacement to lower left corner of 4 x 4 subarray from point(1,1) in array
-static inline int bicub_coeffs_inline(double xx, double yy, int ni, double *wx, double *wy,
+//
+// xx    : position along x in index space of the interpolation target, input (origin 1)
+// yy    : position along x in index space of the interpolation target, input (origin 1)
+// wx    : output array, 4 elements, coefficients for cubic interpolation along x
+// wy    : output array, 4 elements, coefficients for cubic interpolation along y
+// qminx, qmaxx : limits along x used as box corner constraints
+// qminy, qmaxy : limits along y used as box corner constraints
+// offsetx  : offset applied to xx (global to local optional mapping) (usually 0)
+// offsety  : offset applied to yy (global to local optional mapping) (usually 0)
+//
+// function result : displacement from point(1,1) in array to lower left corner of 4 x 4 subarray
+//                   used for the bicubic interpolation
+//
+// inline version, used by multiple routines, the optimizer will perform the appropriate inlining
+//
+static inline int bicub_coeffs_inline1(double xx, double yy, int ni, double *wx, double *wy,
                                   int qminx, int qmaxx, int qminy, int qmaxy, int offsetx, int offsety){
   double x, y;
   int ix, iy;
