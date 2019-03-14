@@ -1,4 +1,5 @@
-NO_SIMD = NOTHING_USEFUL
+
+SHELL = /bin/bash
 
 ifeq "$(BASE_ARCH)" "$(EC_ARCH)"
 $(error FATAL: EC_ARCH is equal to BASE_ARCH, no compiler architecture is defined, ABORTING)
@@ -77,6 +78,8 @@ intrp_bicub_yx: intrp_bicub_yx.c intrp_bicub_yx_f.F90 intrp_bicub_yx.inc
 	$(CCOMPILER) -O3 -DTIMING -DNO_SIMD -c intrp_bicub_yx.c
 	$(FCOMPILER) ${EXTRA_FTN} -DF_TEST -o intrp_bicub_yx_nosimd intrp_bicub_yx_f.F90 intrp_bicub_yx.o
 	rm -f intrp_bicub_yx.o
+	if [[ -n $(RUN_TESTS) ]] ; then ./intrp_bicub_yx_nosimd | head -8 ; echo === ; ./intrp_bicub_yx | head -8 ; echo === ; fi
+	if [[ -n $(RUN_TESTS) ]] ; then ./intrp_bicub_yx_nosimd | grep E- ; echo === ; ./intrp_bicub_yx | grep E- ; echo === ; fi
 
 test_search_list: search_list.c test_search_list.c
 	$(CCOMPILER) -O3 -DSELF_TEST -c ${EXTRA_C} search_list.c
