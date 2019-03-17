@@ -28,46 +28,98 @@ typedef union{
 
 static float two_m_23 = 1.1920928955078125e-07f;  // 2 ** -23
 static float two_p_23 = 8388608.0f;               // 2 ** +23
-static float c127 = -127.0f;                      // compensation for exponent bias
-// static float c127 = -126.96f;
+static float cm127 = -127.0f;                      // compensation for exponent bias
+// static float cm127 = -126.96f;
 
-static inline __m256 simd_inline_fake_log2(float *src, __m256 vm23, __m256 v127){
+static inline __m256 simd_inline_pseudo_log2(float *src, __m256 vm23, __m256 v127){
   return _mm256_fmadd_ps( _mm256_cvtepi32_ps( (__m256i) _mm256_loadu_ps(src) ), vm23, v127);
 }
 
-void simd_v_fake_log2(float *rz, float *vz, int n){  // inverse function is simd_v_fake_exp2
+void simd_v_pseudo_log2(float *rz, float *vz, int n){  // inverse function is simd_v_pseudo_exp2
   int i;
   __m256  vf, vm23, v127;
 
   vm23 = _mm256_broadcast_ss(&two_m_23);
-  v127 = _mm256_broadcast_ss(&c127);
+  v127 = _mm256_broadcast_ss(&cm127);
   for(i=0; i<n-7;i++){ // blocks of 8 elements
-    _mm256_storeu_ps(rz + i, simd_inline_fake_log2(vz + i , vm23, v127));
+    _mm256_storeu_ps(rz + i, simd_inline_pseudo_log2(vz + i , vm23, v127));
   }
   if(i < n){            // last 8 elements (may endup redoing work already done)
-    _mm256_storeu_ps(rz + n - 8, simd_inline_fake_log2(vz + n - 8 , vm23, v127));
+    _mm256_storeu_ps(rz + n - 8, simd_inline_pseudo_log2(vz + n - 8 , vm23, v127));
   }
 }
 
-static inline __m256i simd_inline_fake_exp2(float *src, __m256 vp23, __m256 v127){
+float pseudo_log2(float z){
+  fi xfi;
+  float x;
+
+  xfi.f = z;
+  x = xfi.i;
+  return (x * two_m_23) - 127.0f;
+}
+
+void v_pseudo_log2(float *rz, float *vz, int n){  // inverse function is v_pseudo_exp2
+  int i;
+  fi xfi;
+  float x;
+
+  for(i=0; i<n ; i++){
+    xfi.f = vz[i];
+    x = xfi.i;
+    rz[i] = (x * two_m_23) - 127.0f;
+  }
+}
+
+static inline __m256i simd_inline_pseudo_exp2(float *src, __m256 vp23, __m256 v127){
   return _mm256_cvtps_epi32( _mm256_mul_ps( _mm256_sub_ps(  _mm256_loadu_ps(src), v127), vp23) ); // (src _ 127.0) * 2**23
 }
 
-void simd_v_fake_exp2(float *rz, float *vz, int n){    // undo what simd_v_fake_exp2 did
+void simd_v_pseudo_exp2(float *rz, float *vz, int n){    // undo what simd_v_pseudo_exp2 did
   int i;
   __m256  vf, vp23, v127;
 
   vp23 = _mm256_broadcast_ss(&two_p_23);
-  v127 = _mm256_broadcast_ss(&c127);
+  v127 = _mm256_broadcast_ss(&cm127);
   for(i=0; i<n-7;i++){ // blocks of 8 elements
-    _mm256_storeu_ps(rz + i, (__m256) simd_inline_fake_exp2(vz + i , vp23, v127));
+    _mm256_storeu_ps(rz + i, (__m256) simd_inline_pseudo_exp2(vz + i , vp23, v127));
   }
   if(i < n){            // last 8 elements (may endup redoing work already done)
-    _mm256_storeu_ps(rz + n - 8, (__m256) simd_inline_fake_exp2(vz + n - 8 , vp23, v127));
+    _mm256_storeu_ps(rz + n - 8, (__m256) simd_inline_pseudo_exp2(vz + n - 8 , vp23, v127));
   }
 }
 
-float fake_log(float z) {  /* |x.f| must be  >= 1.0 (inverse function of fake_exp) */
+float pseudo_exp2(float z){
+  fi xfi;
+
+  xfi.f = z;
+  xfi.i = (xfi.f + 127.0f) * two_p_23;
+  return xfi.f;
+}
+
+void v_pseudo_exp2(float *rz, float *vz, int n){    // undo what simd_v_pseudo_exp2 did
+  int i;
+  fi xfi;
+
+  for(i=0; i<n ; i++){
+    xfi.f = vz[i];
+    xfi.i = (xfi.f + 127.0f) * two_p_23;
+    rz[i] = xfi.f;
+  }
+}
+
+#if defined(NEVER_TRUE)
+
+float pseudo_log2a(float z){
+  fi xfi;
+  float x;
+
+  xfi.f = z;
+  x = xfi.i;
+//   return (x * two_m_23.f) - 126.9569643f;
+  return (x * two_m_23) - 126.96f;  // seems to give the lowest max error
+}
+
+float pseudo_log(float z) {  /* |x.f| must be  >= 1.0 (inverse function of pseudo_exp) */
   int exp;
   int sign;
   fi x;
@@ -82,7 +134,7 @@ float fake_log(float z) {  /* |x.f| must be  >= 1.0 (inverse function of fake_ex
   return (x.f);
 }
 
-float fake_exp(float f){   /* |result| will be >= 1.0 (inverse function of fake_log) */
+float pseudo_exp(float f){   /* |result| will be >= 1.0 (inverse function of pseudo_log) */
   fi x;
   int exp;
   int sign;
@@ -97,33 +149,6 @@ float fake_exp(float f){   /* |result| will be >= 1.0 (inverse function of fake_
   return (x.f);
 }
 
-float fake_log2(float z){
-  fi xfi;
-  float x;
-
-  xfi.f = z;
-  x = xfi.i;
-  return (x * two_m_23) - 127.0f;
-}
-
-float fake_exp2(float z){
-  fi xfi;
-
-  xfi.f = z;
-  xfi.i = (xfi.f + 127.0f) * two_p_23;
-  return xfi.f;
-}
-
-float fake_log2a(float z){
-  fi xfi;
-  float x;
-
-  xfi.f = z;
-  x = xfi.i;
-//   return (x * two_m_23.f) - 126.9569643f;
-  return (x * two_m_23) - 126.96f;  // seems to give the lowest max error
-}
-
 static inline float  fasterlog2 (float x)
 {
   union { float f; unsigned int i; } vx = { x };
@@ -133,7 +158,7 @@ static inline float  fasterlog2 (float x)
   return y - 126.96f;
 }
 
-float fake_exp2a(float z){
+float pseudo_exp2a(float z){
   fi xfi;
 
   xfi.i = (z + 126.96f) * two_p_23;
@@ -207,6 +232,7 @@ float entropyfaster_(int *val, int *N, int *Mask)
   for(i=0;i<65536;i++) { float temp=k*tab[i] ; sum -= temp * fasterlog2(temp); } ;
   return sum;
 }
+#endif
 
 #else
 
@@ -230,11 +256,11 @@ uint64_t Nanocycles(void) {
 #define NINTRV 1005
 #define NREP 100
 
-float fake_log2(float x);
-float fake_exp2(float x);
-float fake_log2a(float x);
-void simd_v_fake_log2(float *r, float *f, int n);
-void simd_v_fake_exp2(float *r, float *f, int n);
+float pseudo_log2(float x);
+float pseudo_exp2(float x);
+float pseudo_log2a(float x);
+void simd_v_pseudo_log2(float *r, float *f, int n);
+void simd_v_pseudo_exp2(float *r, float *f, int n);
 
 int main(){
   float x = 0.000045;
@@ -283,7 +309,7 @@ int main(){
   best = 999999;
   for(j=0 ; j<NREP ; j++){
     t0 = Nanocycles();
-    for(i=0 ; i<NINTRV ; i++) r[i] = fake_log2(f[i]);
+    for(i=0 ; i<NINTRV ; i++) r[i] = pseudo_log2(f[i]);
     t1 =  Nanocycles();
     t[j] = t1 - t0;
     best = MIN(best,t[j]);
@@ -297,7 +323,7 @@ int main(){
   best = 999999;
   for(j=0 ; j<NREP ; j++){
     t0 = Nanocycles();
-    simd_v_fake_log2(r, f, NINTRV);
+    simd_v_pseudo_log2(r, f, NINTRV);
     t1 =  Nanocycles();
     t[j] = t1 - t0;
     best = MIN(best,t[j]);
@@ -311,7 +337,7 @@ int main(){
   best = 999999;
   for(j=0 ; j<NREP ; j++){
     t0 = Nanocycles();
-    simd_v_fake_exp2(e, r, NINTRV);
+    simd_v_pseudo_exp2(e, r, NINTRV);
     t1 =  Nanocycles();
     t[j] = t1 - t0;
     best = MIN(best,t[j]);
@@ -321,25 +347,27 @@ int main(){
   }  
   printf(" best = %5d\n\n",best);
 
-  simd_v_fake_log2(r, f, NINTRV);
-  simd_v_fake_exp2(e, r, NINTRV);  // e should be close to f
+  simd_v_pseudo_log2(r, f, NINTRV);
+  simd_v_pseudo_exp2(e, r, NINTRV);  // e should be close to f
 
-  simd_v_fake_log2(g, e, NINTRV);  // reversibility test
-  simd_v_fake_exp2(h, g, NINTRV);  // h should be equal to e
-  simd_v_fake_log2(g, h, NINTRV);
-  simd_v_fake_exp2(h, g, NINTRV);
-  simd_v_fake_log2(g, h, NINTRV);
-  simd_v_fake_exp2(h, g, NINTRV);
-  simd_v_fake_log2(g, h, NINTRV);
-  simd_v_fake_exp2(h, g, NINTRV);
-  simd_v_fake_log2(g, h, NINTRV);
-  simd_v_fake_exp2(h, g, NINTRV);  // final h should be equal to e
-  printf("        f       h=e(log(f))      f-h      1-h/e(log(h))  errScal        err2        errVec      log10(f)\n");
+  simd_v_pseudo_log2(g, e, NINTRV);  // reversibility test
+  simd_v_pseudo_exp2(h, g, NINTRV);  // h should be equal to e
+  simd_v_pseudo_log2(g, h, NINTRV);
+  simd_v_pseudo_exp2(h, g, NINTRV);
+  simd_v_pseudo_log2(g, h, NINTRV);
+  simd_v_pseudo_exp2(h, g, NINTRV);
+  simd_v_pseudo_log2(g, h, NINTRV);
+  simd_v_pseudo_exp2(h, g, NINTRV);
+  simd_v_pseudo_log2(g, h, NINTRV);
+  simd_v_pseudo_exp2(h, g, NINTRV);  // final h should be equal to e
+//   printf("        f       h=e(log(f))      f-h      1-h/e(log(h))  errScal        err2        errVec      log10(f)\n");
+  printf("        f       h=e(log(f))      f-h      1-h/e(log(h))  errScal       errVec      log10(f)\n");
   for(i=0 ; i<NINTRV; i++){
-    z1 = fake_log2(f[i]) * log_10_2;    // scalar version, straight
-    z2 = fake_log2a(f[i]) * log_10_2;   // scalar version, compensated
+    z1 = pseudo_log2(f[i]) * log_10_2;    // scalar version, straight
+    z2 = z1;
+//     z2 = pseudo_log2a(f[i]) * log_10_2;   // scalar version, compensated
 //     z3 = fasterlog2(y) * log_10_2;
-//     z3 = fake_log(y) * log_10_2;
+//     z3 = pseudo_log(y) * log_10_2;
     z3 = r[i] * log_10_2;               // vector version, compensated
     z0 = log10f(f[i]);
     err1 += ABS(1.0-z1/z0);
@@ -352,11 +380,12 @@ int main(){
     errmin3 = MIN( ABS(1.0-z3/z0),errmin3);
     errmax3 = MAX( ABS(1.0-z3/z0),errmax3);
     if(i<5 || i >NINTRV-5) 
-      printf(" %12.6f %12.6f %12.6f %12.6g %12.6f %12.6f %12.6f %12.6f \n",f[i],e[i],f[i]-e[i],1.0-h[i]/e[i],ABS(1.0-z1/z0),ABS(1.0-z2/z0),ABS(1.0-z3/z0),z0);
+//       printf(" %12.6f %12.6f %12.6f %12.6g %12.6f %12.6f %12.6f %12.6f \n",f[i],e[i],f[i]-e[i],1.0-h[i]/e[i],ABS(1.0-z1/z0),ABS(1.0-z2/z0),ABS(1.0-z3/z0),z0);
+      printf(" %12.6f %12.6f %12.6f %12.6g %12.6f %12.6f %12.6f \n",f[i],e[i],f[i]-e[i],1.0-h[i]/e[i],ABS(1.0-z1/z0),ABS(1.0-z3/z0),z0);
   }
   printf("MIN MAX AVG Scal = %12.5f %12.5f %12.5f\n",errmin1,errmax1,err1/NINTRV);
   printf("MIN MAX AVG Vect = %12.5f %12.5f %12.5f\n",errmin3,errmax3,err3/NINTRV);
-  printf("MIN MAX AVG Scl2 = %12.5f %12.5f %12.5f\n",errmin2,errmax2,err2/NINTRV);
+//   printf("MIN MAX AVG Scl2 = %12.5f %12.5f %12.5f\n",errmin2,errmax2,err2/NINTRV);
 //   for (i = 1 ; i < 50000 ; i++ ){
 //     y = fasterlog2(x);
 //     j = (y*4096) + .5;
