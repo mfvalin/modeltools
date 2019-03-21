@@ -751,7 +751,7 @@ void Tricublin_zyx1_n(float *d, float *f1, pxpypz *pxyz,  ztab *lv, int n)
 // ARGUMENTS
 void Tricublin_zyx1_n_m(float *d, float **fs, pxpypz *pxyz,  ztab *lv, int n, int m)
 //****
-{  // multiple field version
+{  // multiple field version with sources pointer lists, d[n][m]  ( Fortran dimension(m,n))
   double cxyz[24];   // interpolation coefficients 4 for each dimension (x, y, z)
   int ixyz;          // unilinear index into array f1 (collapsed dimensions)
   int i;
@@ -773,25 +773,46 @@ void Tricublin_zyx1_n_m(float *d, float **fs, pxpypz *pxyz,  ztab *lv, int n, in
 // ARGUMENTS
 void Tricublin_zyx1_m_n(float *dm, float **fs, pxpypz *pxyz,  ztab *lv, int n, int m)
 //****
-{  // multiple field version
+{  // multiple field version with sources pointer lists, d[m][n]  ( Fortran dimension(n,m))
   double cxyz[24];   // interpolation coefficients 4 for each dimension (x, y, z)
   int ixyz;          // unilinear index into array f1 (collapsed dimensions)
-  int i;
+  int i, j;
   int n0 = n;
   float *d0;
   int zlinear;       // non zero if linear interpolation
                      // all above computed in Vcoef_pxyz4, used in Tricublin_zyxf1
-  while(n--){
+  for(j=0 ; j<n ; j++){                                                           // loop over n points
     zlinear = Vcoef_pxyz4_inline(cxyz, &ixyz, pxyz->px, pxyz->py, pxyz->pz, lv);  // compute coefficients
-    d0 = dm;
+    d0 = dm;                                                                      // base address for results
     for(i=0 ; i< m ; i++){
       Tricublin_zyxf1_inline(d0, fs[i] + ixyz, cxyz, lv->ni, lv->nij, zlinear);       // interpolate
 //       printf("DEBUG: i = %d, n= %d, offset = %d, value = %f \n",i,n,d0-dm,*d0);
-      d0 = d0 + n0;   // next result
+      d0 = d0 + n0;                                                                   // next result
     }
-    dm++;         // next set of results
+    dm++;        // next set of results
     pxyz += 1;   // next set of positions
 //     return;
+  }
+}
+
+//****f* librkl/Tricublin_zyx1_p
+// Synopsis
+//
+// ARGUMENTS
+void Tricublin_zyx1_p(float **dp, float **fs, pxpypz *pxyz,  ztab *lv, int n, int m)
+//****
+{  // multiple field version with results and sources pointer lists
+  double cxyz[24];   // interpolation coefficients 4 for each dimension (x, y, z)
+  int ixyz;          // unilinear index into array f1 (collapsed dimensions)
+  int i, j;
+  int zlinear;       // non zero if linear interpolation
+                     // all above computed in Vcoef_pxyz4, used in Tricublin_zyxf1
+  for(j=0 ; j<n ; j++){                                                                  // loop over n points
+    zlinear = Vcoef_pxyz4_inline(cxyz, &ixyz, pxyz->px, pxyz->py, pxyz->pz, lv);         // compute coefficients
+    for(i=0 ; i< m ; i++){                                                               // loop over m variables
+      Tricublin_zyxf1_inline(dp[i] + j, fs[i] + ixyz, cxyz, lv->ni, lv->nij, zlinear);   // interpolate
+    }
+    pxyz += 1;   // next set of positions
   }
 }
 
