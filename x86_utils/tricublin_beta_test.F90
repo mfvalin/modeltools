@@ -28,7 +28,7 @@ program tricublin_d_test
   real*8 fx, fy, fz, fxyz, x, y, z, ovni, ovnj, ovnk, xx, yy, zz
   real*4, dimension(3) :: r1, r2, r3, e
   type(C_PTR) :: lv
-  type(C_PTR), dimension(3) :: f123p
+  type(C_PTR), dimension(3) :: f123p, d123p
   real, dimension(3,NI,NJ,NK) :: pxpypz
   real, dimension(NI,NJ,NK) :: expected, d, dmin, dmax, dlin
   real, dimension(3,NI,NJ,NK) :: d3, dmin3, dmax3, dlin3
@@ -274,15 +274,19 @@ program tricublin_d_test
   f123p(1) = C_LOC(f1(1,1,1))
   f123p(2) = C_LOC(f2(1,1,1))
   f123p(3) = C_LOC(f3(1,1,1))
+  d123p(1) = C_LOC(d3b(1,1,1,1))
+  d123p(2) = C_LOC(d3b(1,1,1,2))
+  d123p(3) = C_LOC(d3b(1,1,1,3))
 ! print 999, loc(f1(1,1,1)), loc(f2(1,1,1)), loc(f3(1,1,1))
 ! 999 format(3(Z16.16,3X))
-  call tricublin_zyx1_n_m(d3,f123p,pxpypz,lv,NI*NJ*NK,3)
+  call tricublin_zyx1_m_n(d3b,f123p,pxpypz,lv,NI*NJ*NK,3)
   d3b = 0
 #if defined(USE_MPI)
   call mpi_barrier(MPI_COMM_WORLD,ierr)
 #endif
   t0 = nanocycles()
-  call tricublin_zyx1_m_n(d3b,f123p,pxpypz,lv,NI*NJ*NK,3)
+!   call tricublin_zyx1_m_n(d3b,f123p,pxpypz,lv,NI*NJ*NK,3)
+  call tricublin_zyx1_p(d123p,f123p,pxpypz,lv,NI*NJ*NK,3)
   t1 = nanocycles()
   if(my_proc == 0) print *,"nanoseconds per point =",(t1-t0)/(NI*NJ*NK*3)
 
@@ -548,3 +552,4 @@ program tricublin_d_test
 #if defined(USE_MPI)
   call mpi_finalize(ierr)
 #endif
+end

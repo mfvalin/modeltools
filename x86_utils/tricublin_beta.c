@@ -674,6 +674,17 @@ static inline void Tricublin_zyxf1_inline(float *d, float *f1, double *pxyz, int
       integer, intent(IN), value        :: n, m                                  !InTf!
 //****
     end subroutine tricublin_zyx1_m_n                                            !InTf!
+void Tricublin_zyx1_p(float **dp, float **fs, pxpypz *pxyz,  ztab *lv, int n, int m)
+//****f* librkl/tricublin_zyx1_p  (Fortran version)
+// ARGUMENTS
+    subroutine tricublin_zyx1_p(d,f,pxyz,lv,n,m) bind(C,name='Tricublin_zyx1_p')   !InTf!
+      import :: C_PTR                                                            !InTf!
+      type(C_PTR), dimension(*), intent(IN)    :: f, d                           !InTf!
+      real, dimension(*), intent(IN)  :: pxyz                                    !InTf!
+      type(C_PTR), intent(IN), value    :: lv                                    !InTf!
+      integer, intent(IN), value        :: n, m                                  !InTf!
+//****
+    end subroutine tricublin_zyx1_p                                            !InTf!
 //****f* librkl/tricublin_mono_zyx_n  (Fortran version)
 // ARGUMENTS
     subroutine tricublin_mono_zyx_n(d,l,mi,ma,f,pxyz,lv,n) bind(C,name='Tricublin_mono_zyx_n')   !InTf!
