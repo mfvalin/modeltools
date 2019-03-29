@@ -17,11 +17,16 @@
  * Boston, MA 02111-1307, USA.
  */
 #include <stdint.h>
+#include <string.h>
 #include <circular_buffer.h>
 
 #define SPACE_AVAILABLE(in,out,limit)  ((in < out) ? out-in-1 : limit-in+out-1)
 
 #define DATA_AVAILABLE(in,out,limit)  ((in > out) ? in-out : limit-out+in-1)
+
+static inline void move_integers(int *dst, int*src, int n){
+  memcpy(dst, src, sizeof(int)*n);
+}
 
 // returns the current number of empty slots available
 int circular_buffer_space_available(circular_buffer *p){
@@ -92,7 +97,7 @@ int circular_buffer_atomic_get(circular_buffer *p, int *dst, int n){
   int volatile *inp = &(p->in);
   int volatile *outp = &(p->out);
   int *buf = p->data;
-  int in, out, limit, navail;
+  int in, out, limit, navail, ni;
 
   // wait until enough data is available
   limit = p->limit;
@@ -106,26 +111,17 @@ int circular_buffer_atomic_get(circular_buffer *p, int *dst, int n){
   }
 
   if(out < in){         // 1 segment
-    while(n > 0){
-      *dst = buf[out];
-      dst++;
-      out++;
-      n--;
-    }
+    move_integers(dst, buf+out, n);
+    out += n;
   }else{                // 1 or 2 segments
-    while(n>0 && out<limit){
-      *dst = buf[out];
-      dst++;
-      out++;
-      n--;
-    }
+    ni = n > (limit-out) ? (limit-out) : n;
+    move_integers(dst, buf+out, ni);
+    n -= ni;
+    out += ni;
+    dst += ni;
     if(out >= limit) out = 0;
-    while(n>0){
-      *dst = buf[out];
-      dst++;
-      out++;
-      n--;
-    }
+    move_integers(dst, buf+out, n);
+    out += n;
   }
   *outp = out;
   in = *inp;
@@ -139,7 +135,7 @@ int circular_buffer_atomic_put(circular_buffer *p, int *src, int n){
   int volatile *inp = &(p->in);
   int volatile *outp = &(p->out);
   int *buf = p->data;
-  int in, out, limit, navail;
+  int in, out, limit, navail, ni;
 
   // wait until there is enough room to insert data
   limit = p->limit;
@@ -153,26 +149,17 @@ int circular_buffer_atomic_put(circular_buffer *p, int *src, int n){
   }
 
   if(in < out){         // 1 segment
-    while(n>0) {
-      buf[in] = *src;
-      in++;
-      src++;
-      n--;
-    }
+    move_integers(buf+in, src, n);
+    in += n;
   }else{                // 1 or 2 segments
-    while(n>0 && in<limit){
-      buf[in] = *src;
-      in++;
-      src++;
-      n--;
-    }
+    ni = n > (limit-in) ? (limit-in) : n;
+    move_integers(buf+in, src, ni);
+    n -= ni;
+    in += ni;
+    src += ni;
     if(in >= limit) in = 0;
-    while(n>0){
-      buf[in] = *src;
-      in++;
-      src++;
-      n--;
-    }
+    move_integers(buf+in, src, n);
+    in += n;
   }
   *inp = in;
   in = *inp;
