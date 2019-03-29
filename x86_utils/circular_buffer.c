@@ -48,9 +48,7 @@ int circular_buffer_wait_space_available(circular_buffer *p, int n){
   int in, out, limit, navail;
 
   limit = p->limit;
-  in = *inp;
-  out = *outp;
-  navail = SPACE_AVAILABLE(in,out,limit);
+  navail = 0;
   while(navail <n){
     in = *inp;
     out = *outp;
@@ -79,9 +77,7 @@ int circular_buffer_wait_data_available(circular_buffer *p, int n){
   int in, out, limit, navail;
 
   limit = p->limit;
-  in = *inp;
-  out = *outp;
-  navail = DATA_AVAILABLE(in,out,limit);
+  navail = 0;
   while(navail <n){
     in = *inp;
     out = *outp;
@@ -101,9 +97,7 @@ int circular_buffer_atomic_get(circular_buffer *p, int *dst, int n){
 
   // wait until enough data is available
   limit = p->limit;
-  in = *inp;
-  out = *outp;
-  navail = DATA_AVAILABLE(in,out,limit);
+  navail = 0; in = 0 ; out = 0;
   while(navail <n){
     in = *inp;
     out = *outp;
@@ -139,9 +133,7 @@ int circular_buffer_atomic_put(circular_buffer *p, int *src, int n){
 
   // wait until there is enough room to insert data
   limit = p->limit;
-  in = *inp;
-  out = *outp;
-  navail = SPACE_AVAILABLE(in,out,limit);
+  navail = 0; in = 0 ; out = 0;
   while(navail <n){
     in = *inp;
     out = *outp;
