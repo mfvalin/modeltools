@@ -28,6 +28,18 @@ static inline void move_integers(int *dst, int*src, int n){
   memcpy(dst, src, sizeof(int)*n);
 }
 
+// initialize a circular buffer
+// nbytes is the size in bytes of the memory area
+// returns the  maximum number of tokens that can fit in the circular buffer
+int circular_buffer_init(circular_buffer *p, int32_t nbytes){
+  if(nbytes < 4096) return -1;   // area is too small
+  p->first = 0;
+  p->in    = 0;
+  p->out   = 0;
+  p->limit = (nbytes - sizeof(circular_buffer)) / sizeof(int);
+  return p->limit - 1;   // maximum number of tokens that the circular buffer may contain
+}
+
 // returns the current number of empty slots available
 int circular_buffer_space_available(circular_buffer *p){
   int  *inp = &(p->in);
