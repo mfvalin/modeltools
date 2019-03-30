@@ -81,6 +81,32 @@ int circular_buffer_data_available(circular_buffer_p p){
   return DATA_AVAILABLE(in,out,limit);
 }
 
+// returns a pointer to the  start of the data buffer
+// useful in conjunction with circular_buffer_data_snoop
+int32_t *circular_buffer_data_buffer(circular_buffer_p p){
+  return  p->data;
+}
+
+// returns a pointer to the "out" position, assumes that the caller knows the start of data buffer
+// n1 tokens available at "out", n2 tokens available at "start"
+int32_t *circular_buffer_data_snoop(circular_buffer_p p, int32_t *n1, int32_t *n2){
+  int  *inp = &(p->m.in);
+  int  *outp = &(p->m.out);
+  int in, out, limit;
+
+  limit = p->m.limit;
+  in = *inp;
+  out = *outp;
+  if(in < out) {
+    *n1 = limit - out;  // available after "out"
+    *n2 = in;           // available at beginning of buffer
+  }else{
+    *n1 = in - out;     // "out" -> "in"
+    *n2 = 0;            // nothing at beginning of buffer
+  }
+  return p->data+out;
+}
+
 // wait until at least n data tokens are available for extracting data
 // returns the actual number of data tokens available
 int circular_buffer_wait_data_available(circular_buffer_p p, int n){
