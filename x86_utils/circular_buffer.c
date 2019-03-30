@@ -31,22 +31,22 @@ static inline void move_integers(int *dst, int*src, int n){
 // initialize a circular buffer
 // nbytes is the size in bytes of the memory area
 // returns the  maximum number of tokens that can fit in the circular buffer
-int circular_buffer_init(circular_buffer *p, int32_t nbytes){
+int circular_buffer_init(circular_buffer_p p, int32_t nbytes){
   if(nbytes < 4096) return -1;   // area is too small
-  p->first = 0;
-  p->in    = 0;
-  p->out   = 0;
-  p->limit = (nbytes - sizeof(circular_buffer)) / sizeof(int);
-  return p->limit - 1;   // maximum number of tokens that the circular buffer may contain
+  p->m.first = 0;
+  p->m.in    = 0;
+  p->m.out   = 0;
+  p->m.limit = (nbytes - sizeof(fiol_management)) / sizeof(int);
+  return p->m.limit - 1;   // maximum number of tokens that the circular buffer may contain
 }
 
 // returns the current number of empty slots available
-int circular_buffer_space_available(circular_buffer *p){
-  int  *inp = &(p->in);
-  int  *outp = &(p->out);
+int circular_buffer_space_available(circular_buffer_p p){
+  int  *inp = &(p->m.in);
+  int  *outp = &(p->m.out);
   int in, out, limit;
 
-  limit = p->limit;
+  limit = p->m.limit;
   in = *inp;
   out = *outp;
   return SPACE_AVAILABLE(in,out,limit);
@@ -54,12 +54,12 @@ int circular_buffer_space_available(circular_buffer *p){
 
 // wait until at least n empty slots are available for inserting data
 // returns the actual number of empty slots available
-int circular_buffer_wait_space_available(circular_buffer *p, int n){
-  int volatile *inp = &(p->in);
-  int volatile *outp = &(p->out);
+int circular_buffer_wait_space_available(circular_buffer_p p, int n){
+  int volatile *inp = &(p->m.in);
+  int volatile *outp = &(p->m.out);
   int in, out, limit, navail;
 
-  limit = p->limit;
+  limit = p->m.limit;
   navail = 0;
   while(navail <n){
     in = *inp;
@@ -70,12 +70,12 @@ int circular_buffer_wait_space_available(circular_buffer *p, int n){
 }
 
 // returns the current number of data tokens available
-int circular_buffer_data_available(circular_buffer *p){
-  int  *inp = &(p->in);
-  int  *outp = &(p->out);
+int circular_buffer_data_available(circular_buffer_p p){
+  int  *inp = &(p->m.in);
+  int  *outp = &(p->m.out);
   int in, out, limit;
 
-  limit = p->limit;
+  limit = p->m.limit;
   in = *inp;
   out = *outp;
   return DATA_AVAILABLE(in,out,limit);
@@ -83,12 +83,12 @@ int circular_buffer_data_available(circular_buffer *p){
 
 // wait until at least n data tokens are available for extracting data
 // returns the actual number of data tokens available
-int circular_buffer_wait_data_available(circular_buffer *p, int n){
-  int volatile *inp = &(p->in);
-  int volatile *outp = &(p->out);
+int circular_buffer_wait_data_available(circular_buffer_p p, int n){
+  int volatile *inp = &(p->m.in);
+  int volatile *outp = &(p->m.out);
   int in, out, limit, navail;
 
-  limit = p->limit;
+  limit = p->m.limit;
   navail = 0;
   while(navail <n){
     in = *inp;
@@ -101,14 +101,14 @@ int circular_buffer_wait_data_available(circular_buffer *p, int n){
 
 // atomic extraction of n tokens into the dst array
 // returns the number of data tokens available after this operation
-int circular_buffer_atomic_get(circular_buffer *p, int *dst, int n){
-  int volatile *inp = &(p->in);
-  int volatile *outp = &(p->out);
+int circular_buffer_atomic_get(circular_buffer_p p, int *dst, int n){
+  int volatile *inp = &(p->m.in);
+  int volatile *outp = &(p->m.out);
   int *buf = p->data;
   int in, out, limit, navail, ni;
 
   // wait until enough data is available
-  limit = p->limit;
+  limit = p->m.limit;
   navail = 0; in = 0 ; out = 0;
   while(navail <n){
     in = *inp;
@@ -137,14 +137,14 @@ int circular_buffer_atomic_get(circular_buffer *p, int *dst, int n){
 
 // atomic insertion of n tokens from the src array
 // returns the number of empty slots available after this operation
-int circular_buffer_atomic_put(circular_buffer *p, int *src, int n){
-  int volatile *inp = &(p->in);
-  int volatile *outp = &(p->out);
+int circular_buffer_atomic_put(circular_buffer_p p, int *src, int n){
+  int volatile *inp = &(p->m.in);
+  int volatile *outp = &(p->m.out);
   int *buf = p->data;
   int in, out, limit, navail, ni;
 
   // wait until there is enough room to insert data
-  limit = p->limit;
+  limit = p->m.limit;
   navail = 0; in = 0 ; out = 0;
   while(navail <n){
     in = *inp;
