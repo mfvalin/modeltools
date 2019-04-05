@@ -24,6 +24,13 @@
 
 #define DATA_AVAILABLE(in,out,limit)  ((in > out) ? in-out : limit-out+in-1)
 
+// the Fortran interfaces
+#if defined(THIS_BETTER_NEVER_BE_TRUE)
+interface
+  
+end interface
+#endif
+
 static inline void move_integers(int *dst, int*src, int n){
   memcpy(dst, src, sizeof(int)*n);
 }
@@ -87,9 +94,34 @@ int32_t *circular_buffer_data_buffer(circular_buffer_p p){
   return  p->data;
 }
 
+// get the address of the first position in the circular data buffer
+int32_t *circular_buffer_start(circular_buffer_p p){
+  return p->data;  // start of data buffer
+}
+
+// returns a pointer to the "in" position, assumes that the caller knows the start of data buffer
+// n1 slots available at "in", n2 slots available at "start"
+int32_t *circular_buffer_advance_in(circular_buffer_p p, int32_t *n1, int32_t *n2){
+  int  *inp = &(p->m.in);
+  int  *outp = &(p->m.out);
+  int in, out, limit;
+
+  limit = p->m.limit;
+  in = *inp;
+  out = *outp;
+  if(in < out) {
+    *n1 = out - in - 1; // available at "in"
+    *n2 = 0;            // nothing available at beginning of buffer
+  }else{                // in >= out
+    *n1 = limit - in;   // "in" -> "limit"
+    *n2 = out;          // available at beginning of buffer (technically out - first)
+  }
+  return p->data+in;
+}
+
 // returns a pointer to the "out" position, assumes that the caller knows the start of data buffer
 // n1 tokens available at "out", n2 tokens available at "start"
-int32_t *circular_buffer_data_snoop(circular_buffer_p p, int32_t *n1, int32_t *n2){
+int32_t *circular_buffer_advance_out(circular_buffer_p p, int32_t *n1, int32_t *n2){
   int  *inp = &(p->m.in);
   int  *outp = &(p->m.out);
   int in, out, limit;
@@ -99,7 +131,7 @@ int32_t *circular_buffer_data_snoop(circular_buffer_p p, int32_t *n1, int32_t *n
   out = *outp;
   if(in < out) {
     *n1 = limit - out;  // available after "out"
-    *n2 = in;           // available at beginning of buffer
+    *n2 = in;           // available at beginning of buffer (technically in - first)
   }else{
     *n1 = in - out;     // "out" -> "in"
     *n2 = 0;            // nothing at beginning of buffer
