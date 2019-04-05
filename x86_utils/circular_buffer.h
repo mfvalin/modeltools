@@ -16,10 +16,11 @@
  * Free Software Foundation, Inc., 59 Temple Place - Suite 330,
  * Boston, MA 02111-1307, USA.
  */
-
+#define FIOL_VERSION 0x1BAD
 // in == out means buffer is empty
 // in == out-1 (or in=limit-1 && out==0) means buffer is full
 typedef struct{        // circular buffer management variables
+  int32_t version;     // version marker
   int32_t first;       // should be 0 (assumed to be 0 in circular_buffer.c)
   int32_t in;          // start inserting data at data[in]
   int32_t out;         // start extracting data at data[out]

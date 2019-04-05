@@ -47,7 +47,9 @@ static inline void move_integers(int *dst, int*src, int n){
 // nbytes is the size in bytes of the memory area
 // return 0 upon success, -1 otherwise
 int circular_buffer_init(circular_buffer_p p, int32_t nbytes){
-  if(nbytes < 4096 || p == NULL) return -1;   // area is too small
+  if(p == NULL) return -1;
+  if(nbytes < 4096) return -1;   // area is too small
+  p->m.version = FIOL_VERSION;
   p->m.first = 0;
   p->m.in    = 0;
   p->m.out   = 0;
@@ -80,6 +82,7 @@ circular_buffer_p circular_buffer_create_shared(int32_t *shmid, int32_t nbytes){
 // detach from a "shared memory segment" circular buffer 
 // return 0 upon success, -1 otherwise
 int circular_buffer_dertach_shared(circular_buffer_p p){
+  if(p == NULL) return -1;
   return shmdt(p) ;   // detach from "shared memory segment" creeated by circular_buffer_create_shared
 }
 
@@ -94,12 +97,13 @@ circular_buffer_p circular_buffer_create(int32_t nbytes){
   return (circular_buffer_init(t, nbytes) != 0) ? NULL : t;
 }
 
-// returns the current number of empty slots available
+// returns the current number of empty slots available, -1 on error
 int circular_buffer_space_available(circular_buffer_p p){
   int  *inp = &(p->m.in);
   int  *outp = &(p->m.out);
   int in, out, limit;
 
+  if(p == NULL) return -1;
   limit = p->m.limit;
   in = *inp;
   out = *outp;
@@ -107,12 +111,14 @@ int circular_buffer_space_available(circular_buffer_p p){
 }
 
 // wait until at least n empty slots are available for inserting data
-// returns the actual number of empty slots available
+// returns the actual number of empty slots available, -1 on error
 int circular_buffer_wait_space_available(circular_buffer_p p, int n){
   int volatile *inp = &(p->m.in);
   int volatile *outp = &(p->m.out);
   int in, out, limit, navail;
 
+  if(p == NULL) return -1;
+  if(n < 0 || p->m.version != FIOL_VERSION) return -1;
   limit = p->m.limit;
   navail = 0;
   while(navail <n){
@@ -123,12 +129,14 @@ int circular_buffer_wait_space_available(circular_buffer_p p, int n){
   return navail;
 }
 
-// returns the current number of data tokens available
+// returns the current number of data tokens available, -1 on error
 int circular_buffer_data_available(circular_buffer_p p){
   int  *inp = &(p->m.in);
   int  *outp = &(p->m.out);
   int in, out, limit;
 
+  if(p == NULL) return -1;
+  if(p->m.version != FIOL_VERSION) return -1;
   limit = p->m.limit;
   in = *inp;
   out = *outp;
@@ -138,21 +146,30 @@ int circular_buffer_data_available(circular_buffer_p p){
 // returns a pointer to the  start of the data buffer
 // useful in conjunction with circular_buffer_data_snoop
 int32_t *circular_buffer_data_buffer(circular_buffer_p p){
+  if(p == NULL) return NULL;
+  if(p->m.version != FIOL_VERSION) return NULL;
   return  p->data;
 }
 
 // get the address of the first position in the circular data buffer
 int32_t *circular_buffer_start(circular_buffer_p p){
+  if(p == NULL) return NULL;
+  if(p->m.version != FIOL_VERSION) return NULL;
   return p->data;  // start of data buffer
 }
 
 // returns a pointer to the "in" position, assumes that the caller knows the start of data buffer
 // n1 slots available at "in", n2 slots available at "start"
+// upon error, NULL is returned, and n1 and n2 are set to -1
 int32_t *circular_buffer_advance_in(circular_buffer_p p, int32_t *n1, int32_t *n2){
   int  *inp = &(p->m.in);
   int  *outp = &(p->m.out);
   int in, out, limit;
 
+  *n1 = -1;
+  *n2 = -1;
+  if(p == NULL) return NULL;
+  if(p->m.version != FIOL_VERSION) return NULL;
   limit = p->m.limit;
   in = *inp;
   out = *outp;
@@ -168,11 +185,16 @@ int32_t *circular_buffer_advance_in(circular_buffer_p p, int32_t *n1, int32_t *n
 
 // returns a pointer to the "out" position, assumes that the caller knows the start of data buffer
 // n1 tokens available at "out", n2 tokens available at "start"
+// upon error, NULL is returned, and n1 and n2 are set to -1
 int32_t *circular_buffer_advance_out(circular_buffer_p p, int32_t *n1, int32_t *n2){
   int  *inp = &(p->m.in);
   int  *outp = &(p->m.out);
   int in, out, limit;
 
+  *n1 = -1;
+  *n2 = -1;
+  if(p == NULL) return NULL;
+  if(p->m.version != FIOL_VERSION) return NULL;
   limit = p->m.limit;
   in = *inp;
   out = *outp;
@@ -188,11 +210,14 @@ int32_t *circular_buffer_advance_out(circular_buffer_p p, int32_t *n1, int32_t *
 
 // wait until at least n data tokens are available for extracting data
 // returns the actual number of data tokens available
+// returns -1 upon error
 int circular_buffer_wait_data_available(circular_buffer_p p, int n){
   int volatile *inp = &(p->m.in);
   int volatile *outp = &(p->m.out);
   int in, out, limit, navail;
 
+  if(p == NULL) return -1;
+  if(p->m.version != FIOL_VERSION || n < 0) return -1;
   limit = p->m.limit;
   navail = 0;
   while(navail <n){
@@ -206,12 +231,15 @@ int circular_buffer_wait_data_available(circular_buffer_p p, int n){
 
 // atomic extraction of n tokens into the dst array
 // returns the number of data tokens available after this operation
+// returns -1 upon error
 int circular_buffer_atomic_get(circular_buffer_p p, int *dst, int n){
   int volatile *inp = &(p->m.in);
   int volatile *outp = &(p->m.out);
   int *buf = p->data;
   int in, out, limit, navail, ni;
 
+  if(p == NULL || dst == NULL) return -1;
+  if(p->m.version != FIOL_VERSION || n < 0) return -1;
   // wait until enough data is available
   limit = p->m.limit;
   navail = 0; in = 0 ; out = 0;
@@ -242,12 +270,15 @@ int circular_buffer_atomic_get(circular_buffer_p p, int *dst, int n){
 
 // atomic insertion of n tokens from the src array
 // returns the number of empty slots available after this operation
+// returns -1 upon error
 int circular_buffer_atomic_put(circular_buffer_p p, int *src, int n){
   int volatile *inp = &(p->m.in);
   int volatile *outp = &(p->m.out);
   int *buf = p->data;
   int in, out, limit, navail, ni;
 
+  if(p == NULL || src == NULL) return -1;
+  if(p->m.version != FIOL_VERSION || n < 0) return -1;
   // wait until there is enough room to insert data
   limit = p->m.limit;
   navail = 0; in = 0 ; out = 0;
