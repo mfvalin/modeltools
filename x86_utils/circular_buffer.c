@@ -17,7 +17,11 @@
  * Boston, MA 02111-1307, USA.
  */
 #include <stdint.h>
+#include <stdlib.h>
 #include <string.h>
+#include <sys/ipc.h>
+#include <sys/types.h>
+#include <sys/shm.h>
 #include <circular_buffer.h>
 
 #define SPACE_AVAILABLE(in,out,limit)  ((in < out) ? out-in-1 : limit-in+out-1)
@@ -27,7 +31,11 @@
 // the Fortran interfaces
 #if defined(THIS_BETTER_NEVER_BE_TRUE)
 interface
-  
+  function circular_buffer_init(p, nbytes) result(limit) bind(C,name='circular_buffer_init')
+    import :: C_PTR, C_INT
+    type(C_PTR), intent(IN) :: p
+    type(C_INT), intent(IN) :: nbytes
+  end function circular_buffer_init
 end interface
 #endif
 
@@ -37,14 +45,53 @@ static inline void move_integers(int *dst, int*src, int n){
 
 // initialize a circular buffer
 // nbytes is the size in bytes of the memory area
-// returns the  maximum number of tokens that can fit in the circular buffer
+// return 0 upon success, -1 otherwise
 int circular_buffer_init(circular_buffer_p p, int32_t nbytes){
-  if(nbytes < 4096) return -1;   // area is too small
+  if(nbytes < 4096 || p == NULL) return -1;   // area is too small
   p->m.first = 0;
   p->m.in    = 0;
   p->m.out   = 0;
   p->m.limit = (nbytes - sizeof(fiol_management)) / sizeof(int);
-  return p->m.limit - 1;   // maximum number of tokens that the circular buffer may contain
+  return 0;
+}
+
+// create and initialize a circular buffer of size nbytes in "shared memory"
+// return the "shared memory segment" address of the circular buffer upon success, NULL otherwise
+// shmid will be set to the shared memory id of the "shared memory segment upon success, -1 otherwise
+circular_buffer_p circular_buffer_create_shared(int32_t *shmid, int32_t nbytes){
+  void *t;
+  size_t sz = nbytes;
+  int id;
+  struct shmid_ds ds;
+  int status;
+
+  *shmid = -1;
+  if(nbytes < 64*1024) return NULL;
+  id = shmget(IPC_PRIVATE, sz, IPC_CREAT);   // create shared memory segment
+  if(id == -1) return NULL;                  // error occurred
+  t = shmat(id, NULL, 0);                    // attach shared memory segment
+  if( t == (void *) -1) return NULL;         // error occurred
+  status = shmctl(id, IPC_RMID, &ds);        // mark segment for deletion (ONLY SAFE ON LINUX)
+  if(status != 0) return NULL;               // this should not fail
+  *shmid = id;
+  return (circular_buffer_init((circular_buffer_p)t, nbytes) != 0) ?NULL : (circular_buffer_p)t;
+}
+
+// detach from a "shared memory segment" circular buffer 
+// return 0 upon success, -1 otherwise
+int circular_buffer_dertach_shared(circular_buffer_p p){
+  return shmdt(p) ;   // detach from "shared memory segment" creeated by circular_buffer_create_shared
+}
+
+// create and initialize a circular buffer of size nbytes
+// return the address of the circular buffer upon success, NULL otherwise
+circular_buffer_p circular_buffer_create(int32_t nbytes){
+  circular_buffer_p t;
+  size_t sz = nbytes;
+
+  if(nbytes < 4096) return NULL;
+  t = (circular_buffer_p ) malloc(sz);
+  return (circular_buffer_init(t, nbytes) != 0) ? NULL : t;
 }
 
 // returns the current number of empty slots available
