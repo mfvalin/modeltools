@@ -92,6 +92,14 @@ tricublin_f90.inc: tricublin_beta.c
 boundary_clip.inc: boundary_clip.F90
 	build_f90_interface.sh boundary_clip.F90 >boundary_clip.inc
 
+memory_arena.inc: memory_arena.c
+	grep InTf memory_arena.c | sed -e 's:^// ::' -e 's/[ ]*!InTf.*//' >memory_arena.inc
+
+test_arena.Abs: test_memory_arena.F90 memory_arena.c memory_arena.inc
+	rm -f test_arena.Abs
+	s.cc -c memory_arena.c
+	s.f90 -mpi test_memory_arena.F90 memory_arena.o -o test_arena.Abs
+
 clean:
 	rm -f intrp_bicub_yx0 intrp_bicub_yx intrp_bicub_yx.o intrp_bicub_yx.s a.out fp_x87_xmm_control.o intrp_bicub_yx.inc
-	rm -f test_search_list search_list.o test_bicub
+	rm -f test_search_list search_list.o test_bicub test_arena.Abs memory_arena.o
