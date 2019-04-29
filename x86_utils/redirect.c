@@ -26,11 +26,17 @@
 static int new_stdout, new_stderr, save_stderr, save_stdout;
 static int saved = 0;
 
-// redirect stdout to file newstdout and stderr to file newstderr
+// redirect stdout to file newout and stderr to file newerr
 // if flush is nonzero, flush stdout and stderr before redirecting
-int redirect_stdout_stderr(char *newstdout, char *newstderr, int flush, int append){
+// providing the same name for newstdout and stderr is O.K.
+// override environment variables REDIRECT_STDOUT and REDIRECT_STDERR have precendence over newout and newerr
+int redirect_stdout_stderr(char *newout, char *newerr, int flush, int append){
+    char *newstdout = getenv("REDIRECT_STDOUT");
+    char *newstderr = getenv("REDIRECT_STDERR");
     int mode = O_RDWR|O_CREAT;
 
+    if(newstdout == NULL) newstdout = newout;
+    if(newstderr == NULL) newstderr = newerr;
     if(append) mode |= O_APPEND;
 
     new_stdout = open(newstdout, mode, 0600);        // new descriptor for stdout
@@ -51,33 +57,38 @@ int redirect_stdout_stderr(char *newstdout, char *newstderr, int flush, int appe
     return 0;
 }
 
+// copy contents of fd onto stream, prefixing each text line with prefix string
 static void prefix_lines(int fd, FILE *stream, char *prefix){
     off_t offset = 0;
     char line[4097];
     int nc, start, end, lastc;
 
-    lseek(fd, offset, SEEK_SET);
-    nc = read(fd, line, sizeof(line)-1) ;
+    lseek(fd, offset, SEEK_SET);            // rewind text source
+    nc = read(fd, line, sizeof(line)-1) ;   // read first buffer
     line[nc] = '\0';
     lastc = '\n';
-    while(nc > 0){
+    while(nc > 0){                          // while not end of file
       start = 0; end = 0;
-      while(end < nc){
+      while(end < nc){                      // do not go beyond end of buffer
 	while(end < nc && line[end] != '\n') end++;
-	if(lastc == '\n') fprintf(stream,"\n%s",prefix);
-	lastc = line[end];
+	if(lastc == '\n') fprintf(stream,"\n%s",prefix);  // last character seen was newline, print prefix
+	lastc = line[end];                  // null of lf (lf if end points ot end of line)
 	line[end] = '\0';
-	fprintf(stream,"%s",line+start);
-	end++;
+	fprintf(stream,"%s",line+start);    // write line or portion of line
+	end++;                              // next 
 	start = end;
       }
-      nc = read(fd, line, sizeof(line)) ;
+      nc = read(fd, line, sizeof(line)) ;   // next buffer
     }
     fprintf(stream,"\n\n");
 }
 
 // restore stdout and stderr to their original destination
-// print error message if not stdout/stderr was saved
+// print error message if no stdout/stderr was saved
+// if prefixo is not NULL, copy captured stdout onto original stdout with prefixo at start of lines
+// if prefixe is not NULL, copy captured stderr onto original stderr with prefixe at start of lines
+// formato end formate are used for the title line when copying stdout/stderr onto original
+// in an MPI context, formato/formate would be expected to contain info such as host name, MPI rank, ...
 void restore_stdout_stderr(char *prefixo, char *formato, char *prefixe, char *formate){
 
     if(! saved) {
@@ -94,12 +105,12 @@ void restore_stdout_stderr(char *prefixo, char *formato, char *prefixe, char *fo
     close(save_stderr);
 
     if(prefixo != NULL){
-      fprintf(stdout, "%s%s", prefixo, formato);
-      prefix_lines(new_stdout, stdout, prefixo);
+      fprintf(stdout, "%s%s", prefixo, formato);  // put out header line
+      prefix_lines(new_stdout, stdout, prefixo);  // copy captured onto original
     }
     if(prefixe != NULL){
-      fprintf(stderr, "%s%s", prefixe, formate);
-      prefix_lines(new_stderr, stderr, prefixe);
+      fprintf(stderr, "%s%s", prefixe, formate);  // put out header line
+      prefix_lines(new_stderr, stderr, prefixe);  // copy captured onto original
     }
 
     close(new_stdout);
