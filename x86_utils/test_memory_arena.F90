@@ -28,7 +28,7 @@ program test_memory_arena
       integer(C_LONG) :: id
     end function gethostid
   end interface
-  integer :: err, rank, isiz, id, myhost, myhost0, myhost1, tempcomm, MY_World
+  integer :: err, rank, isiz, id, MY_World
   type(C_PTR) :: shmaddr, p
   integer(C_INT) :: shmsz, shmid
   character(len=128) :: command, myblock
@@ -36,16 +36,7 @@ program test_memory_arena
   integer, dimension(:), pointer :: fp
 
   call mpi_init(err)
-  call mpi_comm_rank(MPI_COMM_WORLD,rank,err)
-  call mpi_comm_size(MPI_COMM_WORLD,isiz,err)
-
-  myhost  = gethostid()                    ! host id
-  myhost0 = iand(myhost , Z'7FFFFFFF')     ! lower 31 bits
-  myhost1 = iand( ishft(myhost, -31) , 1 ) ! upper bit
-  call MPI_Comm_split(MPI_COMM_WORLD,myhost0,rank,tempcomm,err)   ! split WORLD using the lower 31 bits of host id , weight=rank in base
-  call MPI_Comm_split(tempcomm      ,myhost1,rank,MY_World,err)   ! re split using the upper bit of host id , weight=rank in base
-  call MPI_Comm_rank(MY_World,rank,err);                          ! rank of this PE on this SMP node
-  call MPI_Comm_size(MY_World,isiz,err);                          ! number of PEs on this SMP node
+  call mpi_split_by_node(MPI_COMM_WORLD, MY_World, rank, isiz, err)
 
   id = memory_arena_set_id(rank) ! send my rank as id
   if(rank == 0) then             ! PE0 creates arena and some blocks
@@ -98,3 +89,57 @@ program test_memory_arena
   write(0, *)'I am process',rank+1,' of',isiz,' on node'
   call mpi_finalize(err)
 end program
+subroutine mpi_split_by_node(oldcomm, newcomm, rank, isiz, err)
+  use ISO_C_BINDING
+  implicit none
+  integer, intent(IN)  :: oldcomm   ! MPI communicator to split on a host basis
+  integer, intent(OUT) :: newcomm   ! newcommunicator to be used py PEs on same host
+  integer, intent(OUT) :: rank      ! rank in new communicator
+  integer, intent(OUT) :: isiz      ! size of new communicator
+  integer, intent(OUT) :: err       ! error code
+  include 'mpif.h'
+  interface
+    function gethostid() result(id) BIND(C,name='gethostid')
+      import :: C_LONG
+      integer(C_LONG) :: id
+    end function gethostid
+  end interface
+  include 'RPN_COMM_constants.inc'
+
+  integer, parameter :: MAX_CACHE=16
+  integer :: myhost, myhost0, myhost1, tmpcomm, i
+  integer, save :: ncached = 0
+  integer, dimension(MAX_CACHE) :: cold, cnew
+
+  err = RPN_COMM_ERROR      ! precondition for failure
+  rank = -1
+  isiz = 0
+  newcomm = MPI_COMM_NULL
+
+  do i = 1, ncached
+    if(cold(i) == oldcomm) newcomm = cnew(i)  ! cached entry found
+  enddo
+
+  if(newcomm == MPI_COMM_NULL) then          ! nothing useful found in cache
+    call mpi_comm_rank(oldcomm, rank, err)
+    myhost  = gethostid()                    ! host id
+    myhost0 = iand(myhost , Z'7FFFFFFF')     ! lower 31 bits
+    myhost1 = iand( ishft(myhost, -31) , 1 ) ! upper bit
+
+    call MPI_Comm_split(oldcomm , myhost0, rank, tmpcomm, err)     ! split oldcomm using the lower 31 bits of host id , weight=rank in base
+    if(err .ne. MPI_SUCCESS) return
+    call MPI_Comm_split(tmpcomm ,myhost1, rank, newcomm, err)     ! re split using the upper bit of host id , weight=rank in base
+    if(err .ne. MPI_SUCCESS) return
+  endif
+  if(ncached < MAX_CACHE) then                ! add to cache if cache is not full
+    ncached = ncached + 1
+    cold(ncached) = oldcomm
+    cnew(ncached) = newcomm
+  endif
+
+  call MPI_Comm_rank(newcomm, rank,err);                         ! rank of this PE on this SMP node
+  if(err .ne. MPI_SUCCESS) return
+  call MPI_Comm_size(newcomm, isiz, err);                        ! number of PEs on this SMP node
+  if(err .ne. MPI_SUCCESS) return
+  
+end subroutine mpi_split_by_node
