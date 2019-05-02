@@ -34,9 +34,18 @@ typedef struct{        // skeleton for circular buffer
 } circular_buffer;
 typedef circular_buffer *circular_buffer_p;
 
-int circular_buffer_space_available(circular_buffer_p p);
-int circular_buffer_wait_space_available(circular_buffer_p p, int n);
-int circular_buffer_data_available(circular_buffer_p p);
-int circular_buffer_wait_data_available(circular_buffer_p p, int n);
-int circular_buffer_atomic_get(circular_buffer_p p, int *dst, int n);
-int circular_buffer_atomic_put(circular_buffer_p p, int *src, int n);
+int circular_buffer_init(circular_buffer_p p, int32_t nbytes);   // InTc
+circular_buffer_p circular_buffer_create_shared(int32_t *shmid, int32_t nbytes);   // InTc
+int circular_buffer_detach_shared(circular_buffer_p p);   // InTc
+circular_buffer_p circular_buffer_create(int32_t nbytes);   // InTc
+int circular_buffer_space_available(circular_buffer_p p);   // InTc
+int circular_buffer_wait_space_available(circular_buffer_p p, int n);   // InTc
+int circular_buffer_data_available(circular_buffer_p p);   // InTc
+int circular_buffer_wait_data_available(circular_buffer_p p, int n);   // InTc
+int32_t *circular_buffer_start(circular_buffer_p p);   // InTc
+int32_t *circular_buffer_data_in(circular_buffer_p p);   // InTc
+int32_t *circular_buffer_data_out(circular_buffer_p p);   // InTc
+int32_t *circular_buffer_advance_in(circular_buffer_p p, int32_t *n1, int32_t *n2);   // InTc
+int32_t *circular_buffer_advance_out(circular_buffer_p p, int32_t *n1, int32_t *n2);   // InTc
+int circular_buffer_atomic_get(circular_buffer_p p, int *dst, int n);   // InTc
+int circular_buffer_atomic_put(circular_buffer_p p, int *src, int n);   // InTc

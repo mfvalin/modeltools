@@ -44,7 +44,8 @@
 // FWD of last allocated block will point to a non existent block with FWD = 0
 // 
 // FWD and BWD are indices into a 64 bit unsigned integer array starting at the beginning of the memory arena
-// 
+// FWD, IX, NWD, SIGNL, SIGNH, BWD are 32 bit integers
+//
 //          memory arena layout
 // +--------------------+---------------------+-------------------->
 // | arena header       | symbol table        | data blocks
@@ -130,6 +131,7 @@ uint32_t memory_arena_init(void *mem, uint32_t nsym, uint32_t size){
   ap->flags = 0;           // initialize arena header
   ap->max_entries = nsym;
   ap->first_free = ArenaHeaderSize64 + nsym * SymtabEntrySize64;
+fprintf(stderr,"ArenaHeaderSize64 = %d, SymtabEntrySize64 = %d, nsym = %d, base = %d\n",ArenaHeaderSize64,SymtabEntrySize64,nsym,ap->first_free);
   ap->n_entries = 0;
   ap->arena_size = size64;
 
@@ -276,7 +278,6 @@ void *memory_block_create(void *mem, uint32_t size, unsigned char *name){
   if(fail){
     dataptr = NULL;
   }else{
-    ap->first_free = ap->first_free + block64;  // bump index of next free position
     i = ap->n_entries;
 
     sym[i].lock  = 0;                     // keep lock as unlocked
@@ -299,6 +300,7 @@ void *memory_block_create(void *mem, uint32_t size, unsigned char *name){
     bt->sign = 0xDEADBEEF;                // marker above data
     bt->bwd = sym[i].data_index;          // back pointer, index of start of current block
 
+    ap->first_free = ap->first_free + block64;  // bump index of next free position
     ap->n_entries++;                      // bump number of valid entries
   }
 

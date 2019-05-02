@@ -17,9 +17,10 @@
 program test_memory_arena
   use ISO_C_BINDING
   implicit none
-#define NSYM 128
-#define DBLK 20
+  integer, parameter :: NSYM=128
+  integer, parameter :: DBLK=20
   include 'memory_arena.inc'
+  include 'circular_buffer.inc'
   include 'mpif.h'
   interface
     function gethostid() result(id) BIND(C,name='gethostid')
@@ -48,12 +49,12 @@ program test_memory_arena
   if(rank == 0) then             ! PE0 creates arena and some blocks
     shmsz = 1024 * 1024 * 4
     shmaddr = memory_arena_create_shared(shmid, NSYM, shmsz)
+    do id = 1, isiz
+      write(command,100)'BLOCK',id-1
+100   format(A5,I3.3)
+      p = memory_block_create(shmaddr, DBLK*id, trim(command)); p = memory_block_mark_init(shmaddr, trim(command))
+    enddo
     write(command,*)'ipcs -m -u -i ',shmid
-    p = memory_block_create(shmaddr, DBLK*1, "BLOCK000"); p = memory_block_mark_init(shmaddr, "BLOCK000")
-    p = memory_block_create(shmaddr, DBLK*2, "BLOCK001"); p = memory_block_mark_init(shmaddr, "BLOCK001")
-    p = memory_block_create(shmaddr, DBLK*3, "BLOCK002"); p = memory_block_mark_init(shmaddr, "BLOCK002")
-    p = memory_block_create(shmaddr, DBLK*4, "BLOCK003"); p = memory_block_mark_init(shmaddr, "BLOCK003")
-    p = memory_block_create(shmaddr, DBLK*5, "BLOCK004"); p = memory_block_mark_init(shmaddr, "BLOCK004")
     call system(trim(command))       ! list shared memory blocks on system
     call memory_arena_print_status(shmaddr)  ! print arena metadata
   endif
