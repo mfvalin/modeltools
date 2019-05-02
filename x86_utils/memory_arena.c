@@ -80,9 +80,12 @@ void memory_arena_print_status(void *mem){
   uint64_t *mem64 = (uint64_t *) mem;
   arena_header *ap = (arena_header *) mem;
   symtab_entry *sym = (symtab_entry *) ( mem64 + ArenaHeaderSize64 );
-  int i, j;
+  int i, j, sane;
   char name[9];
-  uint64_t dname;
+  uint64_t dname, size64;
+  uint64_t *dataptr64;
+  block_header *bh, *bhnext;
+  block_tail *bt;
 
   fprintf(stderr,"Arena Header, id = %d\n", me);
   fprintf(stderr,"flags       = %8.8x\n",ap->flags);
@@ -93,7 +96,18 @@ void memory_arena_print_status(void *mem){
 
   fprintf(stderr,"\nSymbol table\n");
   for(i = 0 ; i < ap->n_entries ; i++){
+    size64 = sym[i].data_size;
+    dataptr64 = sym[i].data_index + mem64; 
+    bh = (block_header *) (dataptr64);
+    bt = (block_tail   *) (dataptr64 + BlockHeaderSize64 + size64);
+    bhnext = (block_header *) (dataptr64 + BlockHeaderSize64 + size64 + BlockTailSize64);
     dname = sym[i].data_name;
+    sane = ( bh->sign == 0xBEEFF00D ) & 
+           ( bt->sign == 0xDEADBEEF ) & 
+           (i == bh->ix) & 
+           (bt->bwd == sym[i].data_index) &
+           (bh->nwd == sym[i].data_size) &
+           (bh->fwd == sym[i].data_index + sym[i].data_size + BlockHeaderSize64 + BlockTailSize64) ;
     for(j = 0; j < 9 ; j++) {
       name[j] = '\0';
       if( 0 == (dname >> 56) ) dname <<= 8;
@@ -102,7 +116,10 @@ void memory_arena_print_status(void *mem){
       name[j] = dname >> 56;
       dname <<= 8;
     }
-    fprintf(stderr,"%4d: F=%8.8x I=%8d S=%8d '%s'\n",i,sym[i].flags,sym[i].data_index,sym[i].data_size,name);
+    fprintf(stderr,"%4d: %4d F=%8.8x I=%8d S=%8d (%8d) %s %s %s FW=%8d FWNXT=%8d BW=%8d '%s'\n",
+            i,bh->ix,sym[i].flags,sym[i].data_index,sym[i].data_size,bh->nwd,
+            sane ? "T" : "F", ( bh->sign == 0xBEEFF00D ) ? "t" : "f", ( bt->sign == 0xDEADBEEF ) ? "t" : "f",
+            bh->fwd, bhnext->fwd, bt->bwd, name);
   }
 }
 
@@ -173,7 +190,7 @@ static inline int32_t find_block(arena_header *ap, symtab_entry *sym, uint64_t n
   return -1 ; // miserable failure
 }
 
-// function memory_block_find(mem, size, flags, name) result(ptr) BIND(C,name='') !InTf
+// function memory_block_find(mem, size, flags, name) result(ptr) BIND(C,name='memory_block_find') !InTf
 //   import :: C_PTR, C_INT, C_CHAR                                               !InTf
 //   type(C_PTR), intent(IN), value :: mem                                        !InTf
 //   integer(C_INT), intent(OUT) :: size, flags                                   !InTf
@@ -205,7 +222,7 @@ void *memory_block_find(void *mem, uint32_t *size, uint32_t *flags, unsigned cha
 
   *size = sym[i].data_size * 2;            // return size in 32 bit units
   *flags = sym[i].flags;
-  dataptr = &mem64[sym[i].data_index];     // pointer to actual data
+  dataptr = &mem64[sym[i].data_index + BlockHeaderSize64];     // pointer to actual data
   return dataptr;
 }
 
@@ -234,7 +251,7 @@ void *memory_block_mark_init(void *mem, unsigned char *name){
   if(sym[i].flags == 0) sym[i].flags = me;                        // mark as initialized by me
   i = __sync_val_compare_and_swap(&(sym[i].lock), me, 0);         // unlock block
 
-  dataptr = &mem64[sym[i].data_index];                            // pointer to actual data
+  dataptr = &mem64[sym[i].data_index + BlockHeaderSize64];        // pointer to actual data
   return dataptr;
 }
 
@@ -296,11 +313,11 @@ void *memory_block_create(void *mem, uint32_t size, unsigned char *name){
     bh->nwd = size64;                     // size of data portion
     bh->sign = 0xBEEFF00D;                // marker below data
 
-    bt = (block_tail *) (mem64 + BlockHeaderSize64 + size64);
+    bt = (block_tail *) (mem64 + ap->first_free + BlockHeaderSize64 + size64);
     bt->sign = 0xDEADBEEF;                // marker above data
     bt->bwd = sym[i].data_index;          // back pointer, index of start of current block
 
-    ap->first_free = ap->first_free + block64;  // bump index of next free position
+    ap->first_free = next;                // bump index of next free position
     ap->n_entries++;                      // bump number of valid entries
   }
 

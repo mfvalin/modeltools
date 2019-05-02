@@ -31,7 +31,9 @@ program test_memory_arena
   integer :: err, rank, isiz, id, myhost, myhost0, myhost1, tempcomm, MY_World
   type(C_PTR) :: shmaddr, p
   integer(C_INT) :: shmsz, shmid
-  character(len=128) :: command
+  character(len=128) :: command, myblock
+  integer :: bsz, flags, i, errors, j
+  integer, dimension(:), pointer :: fp
 
   call mpi_init(err)
   call mpi_comm_rank(MPI_COMM_WORLD,rank,err)
@@ -50,22 +52,45 @@ program test_memory_arena
     shmsz = 1024 * 1024 * 4
     shmaddr = memory_arena_create_shared(shmid, NSYM, shmsz)
     do id = 1, isiz
-      write(command,100)'BLOCK',id-1
+      write(myblock,100)'BLOCK',id-1
 100   format(A5,I3.3)
-      p = memory_block_create(shmaddr, DBLK*id, trim(command)); p = memory_block_mark_init(shmaddr, trim(command))
+      p = memory_block_create(shmaddr, DBLK*id, trim(myblock)); p = memory_block_mark_init(shmaddr, trim(myblock))
     enddo
     write(command,*)'ipcs -m -u -i ',shmid
     call system(trim(command))       ! list shared memory blocks on system
     call memory_arena_print_status(shmaddr)  ! print arena metadata
   endif
 
-  call MPI_Bcast(shmid, 1, MPI_INTEGER, 0, MY_World, err)    ! broadcast id of shared memory segment
+  call MPI_Bcast(shmid, 1, MPI_INTEGER, 0, MY_World, err)          ! broadcast id of shared memory segment
   if(rank .ne. 0) shmaddr = memory_arena_from_id(shmid)            ! everybody but PE0 gets the segment address
+
+  write(myblock,100)'BLOCK',rank
+  p = memory_block_find(shmaddr, bsz, flags, trim(myblock))        ! get MY block
+  call c_f_pointer(p, fp, [bsz])                                   ! make Fortran pointer
+  do i = 1, bsz                    ! fill array
+    fp(i) = i + ishft(rank,24)
+  enddo
+  write(0,*) trim(myblock), ' values =',bsz
+  call MPI_Barrier(MY_World, err)
 
   if(rank == isiz -1 ) then        ! last PE prints  arena metadata
     write(command,*)'ipcs -m -u -i ',shmid
     call system(command)         ! list shared memory blocks on system
     call memory_arena_print_status(shmaddr)
+  endif
+  call MPI_Barrier(MY_World, err)
+
+  if(rank == 0) then             ! PE0 checks everything
+    do i = 1, isiz
+      write(myblock,100)'BLOCK',i-1
+      p = memory_block_find(shmaddr, bsz, flags, trim(myblock)) 
+      call c_f_pointer(p, fp, [bsz])
+      errors = 0
+      do j = 1, bsz
+        if(fp(j) .ne. j + ishft(i-1,24)) errors = errors + 1
+      enddo
+      write(0,*) trim(myblock), ' values =',bsz,' errors =',errors
+    enddo
   endif
 
   call MPI_Barrier(MY_World, err)
