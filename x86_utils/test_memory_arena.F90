@@ -54,7 +54,7 @@ program test_memory_arena
     do id = 1, isiz
       write(myblock,100)'BLOCK',id-1
 100   format(A5,I3.3)
-      p = memory_block_create(shmaddr, DBLK*id, trim(myblock)); p = memory_block_mark_init(shmaddr, trim(myblock))
+      p = memory_block_create(shmaddr, DBLK*id, trim(myblock))
     enddo
     write(command,*)'ipcs -m -u -i ',shmid
     call system(trim(command))       ! list shared memory blocks on system
@@ -71,6 +71,7 @@ program test_memory_arena
     fp(i) = i + ishft(rank,24)
   enddo
   write(0,*) trim(myblock), ' values =',bsz
+  p = memory_block_mark_init(shmaddr, trim(myblock))               ! mark block as initialized
   call MPI_Barrier(MY_World, err)
 
   if(rank == isiz -1 ) then        ! last PE prints  arena metadata
