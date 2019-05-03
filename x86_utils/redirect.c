@@ -116,10 +116,12 @@ void restore_stdout_stderr(char *prefixo, char *formato, char *prefixe, char *fo
       fprintf(stderr, "%s %s %s",same ? "oe" : "o ", prefixo, formato);  // put out header line
       prefix_lines(new_stdout, stderr, prefixo, same ? "oe" : "o ");     // copy captured onto original
     }
+    // send captured stderr to stderr
     if(prefixe != NULL && same == 0){  // prefix with e, only if stdout and stderr do not go to same file
       fprintf(stderr, "e  %s %s", prefixe, formate);    // put out header line
       prefix_lines(new_stderr, stderr, prefixe, "e ");  // copy captured onto original
     }
+    fflush(stderr);
 
     close(new_stdout);
     close(new_stderr);
