@@ -14,7 +14,7 @@ function memory_arena_init(mem, nsym, size) result(id) BIND(C,name='function mem
   integer(C_INT), intent(IN), value :: nsym, size
   integer(C_INT) :: id
 end function memory_arena_init
-function memory_block_find(mem, size, flags, name) result(ptr) BIND(C,name='')
+function memory_block_find(mem, size, flags, name) result(ptr) BIND(C,name='memory_block_find')
   import :: C_PTR, C_INT, C_CHAR
   type(C_PTR), intent(IN), value :: mem
   integer(C_INT), intent(OUT) :: size, flags
