@@ -66,7 +66,7 @@ static inline void processv(const void* data, uint32_t *state) // process a 16 b
   for(i=0 ; i<4 ; i++) state[i] = rotateLeft(state[i] + block[i] * Prime2, 13) * Prime1;
 }
 
-static inline void XXHash32_init(uint32_t seed, hash32 *h)
+static inline void XXHash32_init(hash32 *h, uint32_t seed)
 {
   h->state[0] = seed + Prime1 + Prime2;
   h->state[1] = seed + Prime2;
