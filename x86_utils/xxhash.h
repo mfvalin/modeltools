@@ -30,8 +30,8 @@ static const uint32_t Prime3 = 3266489917U;
 static const uint32_t Prime4 =  668265263U;
 static const uint32_t Prime5 =  374761393U;
 
-/// temporarily store up to 15 bytes between multiple add() calls
-#define MaxBufferSize 15+1
+/// temporarily store up to MaxBufferSize-1 bytes between multiple add() calls
+#define MaxBufferSize 16
 #define true 1
 #define false 0
 
@@ -51,79 +51,72 @@ static inline uint32_t rotateLeft(uint32_t x, unsigned char bits)
 }
 
 /// process a block of 4x4 bytes, this is the main part of the XXHash32 algorithm
-static inline void process(const void* data, uint32_t *state0, uint32_t *state1, uint32_t *state2, uint32_t *state3)
+// static inline void process(const void* data, uint32_t *state0, uint32_t *state1, uint32_t *state2, uint32_t *state3)
+// {
+//   const uint32_t* block = (const uint32_t*) data;
+//   *state0 = rotateLeft(*state0 + block[0] * Prime2, 13) * Prime1;
+//   *state1 = rotateLeft(*state1 + block[1] * Prime2, 13) * Prime1;
+//   *state2 = rotateLeft(*state2 + block[2] * Prime2, 13) * Prime1;
+//   *state3 = rotateLeft(*state3 + block[3] * Prime2, 13) * Prime1;
+// }
+static inline void processv(const void* data, uint32_t *state) // process a 16 byte block
 {
   const uint32_t* block = (const uint32_t*) data;
-  *state0 = rotateLeft(*state0 + block[0] * Prime2, 13) * Prime1;
-  *state1 = rotateLeft(*state1 + block[1] * Prime2, 13) * Prime1;
-  *state2 = rotateLeft(*state2 + block[2] * Prime2, 13) * Prime1;
-  *state3 = rotateLeft(*state3 + block[3] * Prime2, 13) * Prime1;
+  int i;
+  for(i=0 ; i<4 ; i++) state[i] = rotateLeft(state[i] + block[i] * Prime2, 13) * Prime1;
 }
 
-static inline void XXHash32_init(uint32_t seed, uint32_t bufferSize, uint32_t totalLength, uint32_t *state)
+static inline void XXHash32_init(uint32_t seed, hash32 *h)
 {
-  state[0] = seed + Prime1 + Prime2;
-  state[1] = seed + Prime2;
-  state[2] = seed;
-  state[3] = seed - Prime1;
-  bufferSize  = 0;
-  totalLength = 0;
+  h->state[0] = seed + Prime1 + Prime2;
+  h->state[1] = seed + Prime2;
+  h->state[2] = seed;
+  h->state[3] = seed - Prime1;
+  h->bufferSize  = 0;
+  h->totalLength = 0;
 }
 
-static inline int XXHash32_add(const void* input, uint64_t length, 
-			       uint32_t bufferSize, uint32_t totalLength, uint32_t *state, unsigned char *buffer) {
+static inline int XXHash32_add(hash32 *h, const void* input, uint64_t length) {
   unsigned int i;
+  uint32_t bufferSize = h->bufferSize;
+  uint32_t *state = h->state;
+  unsigned char *buffer = h->buffer;
+
   // no data ?
   if (input == NULL || length == 0)
     return false;
 
-  totalLength += length;
+  h->totalLength += length;
   // byte-wise access
   const unsigned char* data = (const unsigned char*)input;
 
   // unprocessed old data plus new data still fit in temporary buffer ?
-  if (bufferSize + length < MaxBufferSize)
-  {
-    // just add new data
-    while (length-- > 0)
-      buffer[bufferSize++] = *data++;
+  if (bufferSize + length < MaxBufferSize) {    // just add new data
+    while (length-- > 0)  buffer[bufferSize++] = *data++;
+    h->bufferSize = bufferSize;
     return true;
   }
-
   // point beyond last byte
   const unsigned char* stop      = data + length;
   const unsigned char* stopBlock = stop - MaxBufferSize;
 
   // some data left from previous update ?
-  if (bufferSize > 0)
-  {
-    // make sure temporary buffer is full (16 bytes)
-    while (bufferSize < MaxBufferSize)
-      buffer[bufferSize++] = *data++;
-
-    // process these 16 bytes (4x4)
-    process(buffer, &state[0], &state[1], &state[2], &state[3]);
+  if (bufferSize > 0) {    // make sure temporary buffer is full (MaxBufferSize bytes)
+    while (bufferSize < MaxBufferSize)  buffer[bufferSize++] = *data++;
+    processv(buffer, state);    // process these MaxBufferSize bytes
   }
 
-  // copying state to local variables helps optimizer A LOT
-  uint32_t s0 = state[0], s1 = state[1], s2 = state[2], s3 = state[3];
-  // 16 bytes at once
-  while (data <= stopBlock)
-  {
-    // local variables s0..s3 instead of state[0]..state[3] are much faster
-    process(data, &s0, &s1, &s2, &s3);
-    data += 16;
+  while (data <= stopBlock) {   // process MaxBufferSize bytes at a time
+    processv(data, state);
+    data += MaxBufferSize;
   }
-  // copy back
-  state[0] = s0; state[1] = s1; state[2] = s2; state[3] = s3;
-
   // copy remainder to temporary buffer
   bufferSize = stop - data;
   for (i = 0; i < bufferSize; i++)
     buffer[i] = data[i];
 
-  // done
-  return true;
+  h->bufferSize = bufferSize;
+  return true;  // done
 }
   
 static inline uint32_t XXHash32_hash(uint32_t bufferSize, uint32_t totalLength, uint32_t *state, unsigned char *buffer) {
@@ -131,13 +124,9 @@ static inline uint32_t XXHash32_hash(uint32_t bufferSize, uint32_t totalLength, 
 
   // fold 128 bit state into one single 32 bit value
   if (totalLength >= MaxBufferSize)
-    result += rotateLeft(state[0],  1) +
-	      rotateLeft(state[1],  7) +
-	      rotateLeft(state[2], 12) +
-	      rotateLeft(state[3], 18);
+    result += rotateLeft(state[0],  1) + rotateLeft(state[1],  7) + rotateLeft(state[2], 12) + rotateLeft(state[3], 18);
   else
-    // internal state wasn't set in add(), therefore original seed is still stored in state2
-    result += state[2] + Prime5;
+    result += state[2] + Prime5;  // internal state wasn't set in add(), therefore original seed is still stored in state2
 
   // process remaining bytes in temporary buffer
   const unsigned char* data = buffer;
@@ -152,7 +141,7 @@ static inline uint32_t XXHash32_hash(uint32_t bufferSize, uint32_t totalLength, 
   while (data != stop)
     result = rotateLeft(result +        (*data++) * Prime5, 11) * Prime1;
 
-  // mix bits
+  // mix result bits
   result ^= result >> 15;
   result *= Prime2;
   result ^= result >> 13;
