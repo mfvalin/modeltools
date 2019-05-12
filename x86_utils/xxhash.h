@@ -44,6 +44,15 @@ typedef struct{
   uint32_t      totalLength;
 } hash32;
 
+typedef struct{
+  // internal state and temporary buffer
+  // state[2] == seed if totalLength < MaxBufferSize
+  uint32_t      state[MaxBufferSize];
+  uint32_t      buffer[MaxBufferSize];
+  uint32_t      bufferSize;
+  uint32_t      totalLength;
+} hash32i;
+
 /// rotate bits, should compile to a single CPU instruction (ROL)
 static inline uint32_t rotateLeft(uint32_t x, unsigned char bits)
 {
@@ -66,6 +75,17 @@ static inline void processv(const void* data, uint32_t *state) // process a 16 b
   for(i=0 ; i<4 ; i++) state[i] = rotateLeft(state[i] + block[i] * Prime2, 13) * Prime1;
 }
 
+// static inline 
+void processvi(const void* data, uint32_t *state) // process a 16 byte block
+{
+  const uint32_t* block = (const uint32_t*) data;
+  int i;
+  for(i=0 ; i<8 ; i++) {
+    state[i] = rotateLeft(state[i] + block[i] * Prime2, 13) * Prime1;
+    state[i+8] = rotateLeft(state[i+8] + block[i+8] * Prime2, 13) * Prime1;
+  }
+}
+
 static inline void XXHash32_init(hash32 *h, uint32_t seed)
 {
   h->state[0] = seed + Prime1 + Prime2;
@@ -74,6 +94,23 @@ static inline void XXHash32_init(hash32 *h, uint32_t seed)
   h->state[3] = seed - Prime1;
   h->bufferSize  = 0;
   h->totalLength = 0;
+}
+
+// static inline 
+void XXHash32_initi(hash32i *h, uint32_t seed)
+{
+  int i;
+  h->state[0] = seed + Prime1 + Prime2;
+  h->state[1] = seed + Prime2;
+  h->state[2] = seed;
+  h->state[3] = seed - Prime1;
+  h->bufferSize  = 0;
+  h->totalLength = 0;
+  for(i=0 ; i<4 ; i++){
+    h->state[i+ 4] = h->state[i];
+    h->state[i+ 8] = h->state[i];
+    h->state[i+12] = h->state[i];
+  }
 }
 
 static inline int XXHash32_add(hash32 *h, const void* input, uint64_t length) {
