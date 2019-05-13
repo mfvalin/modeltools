@@ -19,11 +19,12 @@
 // OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
 // SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.#include <stdlib.h>
 //
-// transformed into C from C++  M. Valin may 2019
+// C++ to C adaptation:  M. Valin may 2019
 //
 #include <stdlib.h>
 #include <stdint.h>
-/// magic constants :-)
+
+// magic constants :-)
 static const uint32_t Prime1 = 2654435761U;
 static const uint32_t Prime2 = 2246822519U;
 static const uint32_t Prime3 = 3266489917U;
@@ -42,16 +43,7 @@ typedef struct{
   unsigned char buffer[MaxBufferSize];
   uint32_t      bufferSize;
   uint32_t      totalLength;
-} hash32;
-
-typedef struct{
-  // internal state and temporary buffer
-  // state[2] == seed if totalLength < MaxBufferSize
-  uint32_t      state[MaxBufferSize];
-  uint32_t      buffer[MaxBufferSize];
-  uint32_t      bufferSize;
-  uint32_t      totalLength;
-} hash32i;
+} hash_t;
 
 /// rotate bits, should compile to a single CPU instruction (ROL)
 static inline uint32_t rotateLeft(uint32_t x, unsigned char bits)
@@ -68,25 +60,14 @@ static inline uint32_t rotateLeft(uint32_t x, unsigned char bits)
 //   *state2 = rotateLeft(*state2 + block[2] * Prime2, 13) * Prime1;
 //   *state3 = rotateLeft(*state3 + block[3] * Prime2, 13) * Prime1;
 // }
-static inline void processv(const void* data, uint32_t *state) // process a 16 byte block
+static inline void processv4(const void* data, uint32_t *state) // process a 16 byte block
 {
   const uint32_t* block = (const uint32_t*) data;
   int i;
   for(i=0 ; i<4 ; i++) state[i] = rotateLeft(state[i] + block[i] * Prime2, 13) * Prime1;
 }
 
-// static inline 
-void processvi(const void* data, uint32_t *state) // process a 16 byte block
-{
-  const uint32_t* block = (const uint32_t*) data;
-  int i;
-  for(i=0 ; i<8 ; i++) {
-    state[i] = rotateLeft(state[i] + block[i] * Prime2, 13) * Prime1;
-    state[i+8] = rotateLeft(state[i+8] + block[i+8] * Prime2, 13) * Prime1;
-  }
-}
-
-static inline void XXHash32_init(hash32 *h, uint32_t seed)
+static inline void XXHash32_init(hash_t *h, uint32_t seed)
 {
   h->state[0] = seed + Prime1 + Prime2;
   h->state[1] = seed + Prime2;
@@ -96,24 +77,7 @@ static inline void XXHash32_init(hash32 *h, uint32_t seed)
   h->totalLength = 0;
 }
 
-// static inline 
-void XXHash32_initi(hash32i *h, uint32_t seed)
-{
-  int i;
-  h->state[0] = seed + Prime1 + Prime2;
-  h->state[1] = seed + Prime2;
-  h->state[2] = seed;
-  h->state[3] = seed - Prime1;
-  h->bufferSize  = 0;
-  h->totalLength = 0;
-  for(i=0 ; i<4 ; i++){
-    h->state[i+ 4] = h->state[i];
-    h->state[i+ 8] = h->state[i];
-    h->state[i+12] = h->state[i];
-  }
-}
-
-static inline int XXHash32_add(hash32 *h, const void* input, uint64_t length) {
+static inline int XXHash32_add(hash_t *h, const void* input, uint64_t length) {
   unsigned int i;
   uint32_t bufferSize = h->bufferSize;
   uint32_t *state = h->state;
@@ -140,11 +104,11 @@ static inline int XXHash32_add(hash32 *h, const void* input, uint64_t length) {
   // some data left from previous update ?
   if (bufferSize > 0) {    // make sure temporary buffer is full (MaxBufferSize bytes)
     while (bufferSize < MaxBufferSize)  buffer[bufferSize++] = *data++;
-    processv(buffer, state);    // process these MaxBufferSize bytes
+    processv4(buffer, state);    // process these MaxBufferSize bytes
   }
 
   while (data <= stopBlock) {   // process MaxBufferSize bytes at a time
-    processv(data, state);
+    processv4(data, state);
     data += MaxBufferSize;
   }
   // copy remainder to temporary buffer
@@ -187,9 +151,48 @@ static inline uint32_t XXHash32_hash(uint32_t bufferSize, uint32_t totalLength, 
   return result;
 }
 
-uint32_t xxhash32(hash32 *h, const void* input, uint64_t length, uint32_t seed);
-hash32 *xxhash32_create(void);
-hash32 *xxhash32_init(hash32 *h, uint32_t seed);
-int xxhash32_add(hash32 *h, const void* input, uint64_t length);
-uint32_t xxhash32_finalize(hash32 *h);
-uint32_t xxhash32_auto(const void* input, uint64_t length, uint32_t seed);
+// exported function definitions
+uint32_t Hash32_h(hash_t *h, uint32_t seed, const void* input, uint64_t length);
+hash_t   *Hash32_create(void);
+void     Hash32_init(hash_t *h, uint32_t seed);
+uint32_t Hash32_add(hash_t *h, const void* input, uint64_t length);
+uint32_t Hash32_finalize(hash_t *h);
+uint32_t Hash32(uint32_t seed, const void* input, uint32_t length);
+uint32_t Hash32_short(const char * data, int len);
+#if defined(MUST_NEVER_EVER_BE_TRUE)
+// Fortran interfaces
+interface                                                                 !InTf
+  function Hash32(seed, input, length) result(hash) BIND(C,name='Hash32') !InTf
+    import :: C_PTR, C_INT                                                !InTf
+    type(C_PTR), intent(IN), value :: input                               !InTf
+    integer(C_INT), intent(IN), value :: seed, length                     !InTf
+    integer(C_INT) :: hash                                                !InTf
+  end function Hash32                                                     !InTf
+  function Hash32_short(input, length) result(hash) BIND(C,name='Hash32_short') !InTf
+    import :: C_PTR, C_INT                                                !InTf
+    type(C_PTR), intent(IN), value :: input                               !InTf
+    integer(C_INT), intent(IN), value :: length                           !InTf
+    integer(C_INT) :: hash                                                !InTf
+  end function Hash32_short                                               !InTf
+  function Hash32_create() result(hash_struct) BIND(C,name='Hash32_create') !InTf
+    import :: C_PTR                                                       !InTf
+    type(C_PTR) :: hash_struct                                            !InTf
+  end function Hash32_create                                              !InTf
+  subroutine Hash32_init(hash_struct, seed) BIND(C,name='Hash32_init')    !InTf
+    import :: C_PTR, C_INT                                                !InTf
+    type(C_PTR), intent(IN), value :: hash_struct                         !InTf
+    integer(C_INT), intent(IN), value :: seed                             !InTf
+  end subroutine Hash32_init                                              !InTf
+  function Hash32_add(hash_struct, input, length) result(status) BIND(C,name='Hash32_add') !InTf
+    import :: C_PTR, C_INT                                                !InTf
+    type(C_PTR), intent(IN), value :: hash_struct, input                  !InTf
+    integer(C_INT), intent(IN), value :: length                           !InTf
+    integer(C_INT) :: status                                              !InTf
+  end function Hash32_add                                                 !InTf
+  function Hash32_finalize(hash_struct) result(hash) BIND(C,name='Hash32_finalize')   !InTf
+    import :: C_PTR, C_INT                                                !InTf
+    type(C_PTR), intent(IN), value :: hash_struct                         !InTf
+    integer(C_INT) :: hash                                                !InTf
+  end function Hash32_finalize                                            !InTf
+end interface                                                             !InTf
+#endif
