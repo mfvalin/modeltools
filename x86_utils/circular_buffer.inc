@@ -15,11 +15,17 @@
      type(C_PTR), intent(IN), value :: p
      integer(C_INT) :: status
    end function circular_buffer_detach_shared
-   function circular_buffer_create(nbytes) result(p) BIND(C,name='')
+   function circular_buffer_create(nbytes) result(p) BIND(C,name='circular_buffer_create')
      import :: C_PTR, C_INT
      integer(C_INT), intent(IN), value :: nbytes
      type(C_PTR) :: p
    end function circular_buffer_create
+   function circular_buffer_from_pointer(ptr, nbytes) result(p) BIND(C,name='circular_buffer_from_pointer')
+     import :: C_PTR, C_INT
+     integer(C_INT), intent(IN), value :: nbytes
+     type(C_PTR), intent(IN), value :: ptr
+     type(C_PTR) :: p
+   end function circular_buffer_from_pointer
    function circular_buffer_space_available(p) result(n) BIND(C,name='circular_buffer_space_available')
      import :: C_PTR, C_INT
      type(C_PTR), intent(IN), value :: p

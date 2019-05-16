@@ -21,6 +21,14 @@ function memory_block_find(mem, size, flags, name) result(ptr) BIND(C,name='memo
   character(C_CHAR), dimension(*), intent(IN) :: name
   type(C_PTR) :: ptr
 end function memory_block_find
+function memory_block_find_wait(mem, size, flags, name, timeout) result(ptr) BIND(C,name='memory_block_find_wait')
+  import :: C_PTR, C_INT, C_CHAR
+  type(C_PTR), intent(IN), value :: mem
+  integer(C_INT), intent(OUT) :: size, flags
+  character(C_CHAR), dimension(*), intent(IN) :: name
+  integer(C_INT), intent(IN), value :: timeout
+  type(C_PTR) :: ptr
+end function memory_block_find_wait
 function memory_block_mark_init(mem, name) result(ptr) BIND(C,name='memory_block_mark_init')
   import :: C_PTR, C_CHAR
   type(C_PTR), intent(IN), value :: mem

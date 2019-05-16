@@ -18,7 +18,7 @@
  */
 #include <stdio.h>
 #include <stdlib.h>
-#include <stdlib.h>
+#include <unistd.h>
 #include <sys/ipc.h>
 #include <sys/shm.h>
 #include <sys/types.h>
@@ -226,6 +226,29 @@ void *memory_block_find(void *mem, uint32_t *size, uint32_t *flags, unsigned cha
   return dataptr;
 }
 
+// function memory_block_find_wait(mem, size, flags, name, timeout) result(ptr) BIND(C,name='memory_block_find_wait')  !InTf
+//   import :: C_PTR, C_INT, C_CHAR                                               !InTf
+//   type(C_PTR), intent(IN), value :: mem                                        !InTf
+//   integer(C_INT), intent(OUT) :: size, flags                                   !InTf
+//   character(C_CHAR), dimension(*), intent(IN) :: name                          !InTf
+//   integer(C_INT), intent(IN), value :: timeout                                 !InTf
+//   type(C_PTR) :: ptr                                                           !InTf
+// end function memory_block_find_wait                                            !InTf
+//
+// same as memory_block_find, but wait until block is created (or timeout in milliseconds expires)
+// (timeout = -1 means infinite wait for all practical purposes, 3600000 is one hour)
+void *memory_block_find_wait(void *mem, uint32_t *size, uint32_t *flags, char *name, int timeout){
+  void *p = NULL;
+  useconds_t delay = 1000;  // 1000 microseconds = 1 millisecond
+
+  p = memory_block_find(mem, size, flags, name);     // does the block exist ?
+  while(p == NULL && timeout > 0) {                  // no, sleep a bit and retry
+    usleep(delay); timeout --;                       // decrement timeout
+    p = memory_block_find(mem, size, flags, name);   // does the block exist ?
+  }
+  return p;
+}
+
 // function memory_block_mark_init(mem, name) result(ptr) BIND(C,name='memory_block_mark_init') !InTf
 //   import :: C_PTR, C_CHAR                                              !InTf
 //   type(C_PTR), intent(IN), value :: mem                                !InTf
@@ -280,12 +303,6 @@ void *memory_block_create(void *mem, uint32_t size, unsigned char *name){
   block_tail *bt;
   char *dataptr;
   uint64_t name64 = block_name(name);
-
-//   for(i = 0 ; i < 8 ; i++){      // build 64 bit name token
-//     if(name[i] == '\0' || name[i] == ' ') break;
-//     name64 = (name64 << 8) | name[i];
-//   }
-  
 
   while(__sync_val_compare_and_swap(&(ap->lock), 0, me) != 0); // lock memory area
 
@@ -355,13 +372,12 @@ void *memory_arena_create_shared(int *id, uint32_t nsym, uint32_t size){
 //   integer, intent(IN), value :: id                                                !InTf
 //   type(C_PTR) :: ptr                                                              !InTf
 // end function memory_arena_from_id                                                 !InTf
-// end interface                                                                     !InTf
 
 // get memory address associated with shared memory segment shmid
 void *memory_arena_from_id(int shmid){
   return shmat(shmid, NULL, 0);
 }
-
+// end interface                                                                     !InTf
 #if defined(SELF_TEST)
 #include <errno.h>
 

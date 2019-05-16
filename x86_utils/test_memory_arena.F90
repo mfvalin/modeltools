@@ -104,14 +104,14 @@ subroutine mpi_split_by_node(oldcomm, newcomm, rank, isiz, err)
       integer(C_LONG) :: id
     end function gethostid
   end interface
-  include 'RPN_COMM_constants.inc'
+!   include 'RPN_COMM_constants.inc'
 
   integer, parameter :: MAX_CACHE=16
   integer :: myhost, myhost0, myhost1, tmpcomm, i
   integer, save :: ncached = 0
   integer, dimension(MAX_CACHE) :: cold, cnew
 
-  err = RPN_COMM_ERROR      ! precondition for failure
+  err = MPI_ERR_OTHER     ! precondition for failure
   rank = -1
   isiz = 0
   newcomm = MPI_COMM_NULL

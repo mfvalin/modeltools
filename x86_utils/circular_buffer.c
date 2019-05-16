@@ -91,45 +91,45 @@ static inline void move_integers(int *dst, int*src, int n){
   memcpy(dst, src, sizeof(int)*n);
 }
 
-//   function circular_buffer_init(p, nbytes) result(limit) bind(C,name='circular_buffer_init')  ! InTf
+//   function circular_buffer_init(p, nwords) result(limit) bind(C,name='circular_buffer_init')  ! InTf
 //     import :: C_PTR, C_INT                    ! InTf
 //     type(C_PTR), intent(IN), value :: p       ! InTf
-//     integer(C_INT), intent(IN), value :: nbytes  ! InTf
+//     integer(C_INT), intent(IN), value :: nwords  ! InTf
 //   end function circular_buffer_init           ! InTf
 
 // initialize a circular buffer
-// nbytes is the size in bytes of the memory area
+// nwords is the size in 32 bit elements of the memory area
 // return 0 upon success, -1 otherwise
-int circular_buffer_init(circular_buffer_p p, int32_t nbytes){   // InTc
+int circular_buffer_init(circular_buffer_p p, int32_t nwords){   // InTc
   if(p == NULL) return -1;
-  if(nbytes < 4096) return -1;   // area is too small
+  if(nwords < 4096) return -1;   // area is too small
   p->m.version = FIOL_VERSION;
   p->m.first = 0;
   p->m.in    = 0;
   p->m.out   = 0;
-  p->m.limit = (nbytes - sizeof(fiol_management)) / sizeof(int);
+  p->m.limit = nwords - ( sizeof(fiol_management) / sizeof(int) );
   return 0;
 }
 
-//   function circular_buffer_create_shared(shmid, nbytes) result(p) BIND(C,name='circular_buffer_create_shared')  ! InTf
+//   function circular_buffer_create_shared(shmid, nwords) result(p) BIND(C,name='circular_buffer_create_shared')  ! InTf
 //     import :: C_PTR, C_INT                       ! InTf
 //     integer(C_INT), intent(OUT) :: shmid         ! InTf
-//     integer(C_INT), intent(IN), value :: nbytes  ! InTf
+//     integer(C_INT), intent(IN), value :: nwords  ! InTf
 //     type(C_PTR) :: p                             ! InTf
 //   end function circular_buffer_create_shared     ! InTf
 
-// create and initialize a circular buffer of size nbytes in "shared memory"
+// create and initialize a circular buffer of size nwords in "shared memory"
 // return the "shared memory segment" address of the circular buffer upon success, NULL otherwise
 // shmid will be set to the shared memory id of the "shared memory segment upon success, -1 otherwise
-circular_buffer_p circular_buffer_create_shared(int32_t *shmid, int32_t nbytes){   // InTc
+circular_buffer_p circular_buffer_create_shared(int32_t *shmid, int32_t nwords){   // InTc
   void *t;
-  size_t sz = nbytes;
+  size_t sz = nwords * sizeof(int);
   int id;
   struct shmid_ds ds;
   int status;
 
   *shmid = -1;
-  if(nbytes < 64*1024) return NULL;
+  if(sz < 64*1024) return NULL;
   id = shmget(IPC_PRIVATE, sz, IPC_CREAT);   // create shared memory segment
   if(id == -1) return NULL;                  // error occurred
   t = shmat(id, NULL, 0);                    // attach shared memory segment
@@ -137,7 +137,7 @@ circular_buffer_p circular_buffer_create_shared(int32_t *shmid, int32_t nbytes){
   status = shmctl(id, IPC_RMID, &ds);        // mark segment for deletion (ONLY SAFE ON LINUX)
   if(status != 0) return NULL;               // this should not fail
   *shmid = id;
-  return (circular_buffer_init((circular_buffer_p)t, nbytes) != 0) ?NULL : (circular_buffer_p)t;
+  return (circular_buffer_init((circular_buffer_p)t, nwords) != 0) ? NULL : (circular_buffer_p)t;
 }
 
 //   function circular_buffer_detach_shared(p) result(status) BIND(C,name='circular_buffer_detach_shared')  ! InTf
@@ -153,21 +153,39 @@ int circular_buffer_detach_shared(circular_buffer_p p){   // InTc
   return shmdt(p) ;   // detach from "shared memory segment" creeated by circular_buffer_create_shared
 }
 
-//   function circular_buffer_create(nbytes) result(p) BIND(C,name='')  ! InTf
+//   function circular_buffer_create(nwords) result(p) BIND(C,name='circular_buffer_create')  ! InTf
 //     import :: C_PTR, C_INT                       ! InTf
-//     integer(C_INT), intent(IN), value :: nbytes  ! InTf
+//     integer(C_INT), intent(IN), value :: nwords  ! InTf
 //     type(C_PTR) :: p                             ! InTf
 //   end function circular_buffer_create            ! InTf
 
-// create and initialize a circular buffer of size nbytes
+// create and initialize a circular buffer of size nwords
 // return the address of the circular buffer upon success, NULL otherwise
-circular_buffer_p circular_buffer_create(int32_t nbytes){   // InTc
+circular_buffer_p circular_buffer_create(int32_t nwords){   // InTc
   circular_buffer_p t;
-  size_t sz = nbytes;
+  size_t sz = nwords * sizeof(int);
 
-  if(nbytes < 4096) return NULL;
+  if(sz < 4096) return NULL;
   t = (circular_buffer_p ) malloc(sz);
-  return (circular_buffer_init(t, nbytes) != 0) ? NULL : t;
+  return (circular_buffer_init(t, nwords) != 0) ? NULL : t;
+}
+
+//   function circular_buffer_from_pointer(ptr, nwords) result(p) BIND(C,name='circular_buffer_from_pointer')  ! InTf
+//     import :: C_PTR, C_INT                       ! InTf
+//     integer(C_INT), intent(IN), value :: nwords  ! InTf
+//     type(C_PTR), intent(IN), value :: ptr        ! InTf
+//     type(C_PTR) :: p                             ! InTf
+//   end function circular_buffer_from_pointer      ! InTf
+
+// create and initialize a circular buffer, using supplied space of size nwords at address p
+// return the address of the circular buffer upon success, NULL otherwise
+circular_buffer_p circular_buffer_from_pointer(void *p, int32_t nwords){   // InTc
+  circular_buffer_p t;
+  size_t sz = nwords * sizeof(int);
+
+  if(sz < 4096) return NULL;
+  t = (circular_buffer_p ) p;
+  return (circular_buffer_init(t, nwords) != 0) ? NULL : t;
 }
 
 //   function circular_buffer_space_available(p) result(n) BIND(C,name='circular_buffer_space_available')  ! InTf
