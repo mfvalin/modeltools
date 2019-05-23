@@ -1,13 +1,13 @@
  interface
-   function circular_buffer_init(p, nbytes) result(limit) bind(C,name='circular_buffer_init')
+   function circular_buffer_init(p, nwords) result(limit) bind(C,name='circular_buffer_init')
      import :: C_PTR, C_INT
      type(C_PTR), intent(IN), value :: p
-     integer(C_INT), intent(IN), value :: nbytes
+     integer(C_INT), intent(IN), value :: nwords
    end function circular_buffer_init
-   function circular_buffer_create_shared(shmid, nbytes) result(p) BIND(C,name='circular_buffer_create_shared')
+   function circular_buffer_create_shared(shmid, nwords) result(p) BIND(C,name='circular_buffer_create_shared')
      import :: C_PTR, C_INT
      integer(C_INT), intent(OUT) :: shmid
-     integer(C_INT), intent(IN), value :: nbytes
+     integer(C_INT), intent(IN), value :: nwords
      type(C_PTR) :: p
    end function circular_buffer_create_shared
    function circular_buffer_detach_shared(p) result(status) BIND(C,name='circular_buffer_detach_shared')
@@ -15,14 +15,14 @@
      type(C_PTR), intent(IN), value :: p
      integer(C_INT) :: status
    end function circular_buffer_detach_shared
-   function circular_buffer_create(nbytes) result(p) BIND(C,name='circular_buffer_create')
+   function circular_buffer_create(nwords) result(p) BIND(C,name='circular_buffer_create')
      import :: C_PTR, C_INT
-     integer(C_INT), intent(IN), value :: nbytes
+     integer(C_INT), intent(IN), value :: nwords
      type(C_PTR) :: p
    end function circular_buffer_create
-   function circular_buffer_from_pointer(ptr, nbytes) result(p) BIND(C,name='circular_buffer_from_pointer')
+   function circular_buffer_from_pointer(ptr, nwords) result(p) BIND(C,name='circular_buffer_from_pointer')
      import :: C_PTR, C_INT
-     integer(C_INT), intent(IN), value :: nbytes
+     integer(C_INT), intent(IN), value :: nwords
      type(C_PTR), intent(IN), value :: ptr
      type(C_PTR) :: p
    end function circular_buffer_from_pointer

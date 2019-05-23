@@ -72,6 +72,7 @@
 //                  IN                             OUT
 //    x = useful data       . = free space
 //
+#include <stdio.h>
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
@@ -82,7 +83,7 @@
 
 #define SPACE_AVAILABLE(in,out,limit)  ((in < out) ? out-in-1 : limit-in+out-1)
 
-#define DATA_AVAILABLE(in,out,limit)  ((in > out) ? in-out : limit-out+in-1)
+#define DATA_AVAILABLE(in,out,limit)  ((in >= out) ? in-out : limit-out+in-1)
 
 // interface   ! InTf
 
@@ -99,16 +100,16 @@ static inline void move_integers(int *dst, int*src, int n){
 
 // initialize a circular buffer
 // nwords is the size in 32 bit elements of the memory area
-// return 0 upon success, -1 otherwise
-int circular_buffer_init(circular_buffer_p p, int32_t nwords){   // InTc
-  if(p == NULL) return -1;
-  if(nwords < 4096) return -1;   // area is too small
+// return pointer to buffer upon success, NULL otherwise
+circular_buffer_p circular_buffer_init(circular_buffer_p p, int32_t nwords){   // InTc
+  if(p == NULL) return NULL;
+  if(nwords < 4096) return NULL;   // area is too small
   p->m.version = FIOL_VERSION;
   p->m.first = 0;
   p->m.in    = 0;
   p->m.out   = 0;
   p->m.limit = nwords - ( sizeof(fiol_management) / sizeof(int) );
-  return 0;
+  return p;
 }
 
 //   function circular_buffer_create_shared(shmid, nwords) result(p) BIND(C,name='circular_buffer_create_shared')  ! InTf

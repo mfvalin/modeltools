@@ -94,7 +94,7 @@ void memory_arena_print_status(void *mem){
   fprintf(stderr,"entries     = %d\n",ap->n_entries);
   fprintf(stderr,"first free  = %d\n",ap->first_free);
 
-  fprintf(stderr,"\nSymbol table\n");
+  fprintf(stderr,"\nSymbol table\n==============================================\n");
   for(i = 0 ; i < ap->n_entries ; i++){
     size64 = sym[i].data_size;
     dataptr64 = sym[i].data_index + mem64; 
@@ -121,6 +121,7 @@ void memory_arena_print_status(void *mem){
             sane ? "T" : "F", ( bh->sign == 0xBEEFF00D ) ? "t" : "f", ( bt->sign == 0xDEADBEEF ) ? "t" : "f",
             bh->fwd, bhnext->fwd, bt->bwd, name);
   }
+  fprintf(stderr,"==============================================\n");
 }
 
 // function memory_arena_init(mem, nsym, size) result(id) BIND(C,name='function memory_arena_init') !InTf
@@ -246,6 +247,7 @@ void *memory_block_find_wait(void *mem, uint32_t *size, uint32_t *flags, char *n
     usleep(delay); timeout --;                       // decrement timeout
     p = memory_block_find(mem, size, flags, name);   // does the block exist ?
   }
+// fprintf(stderr,"timeout = %d\n",timeout);
   return p;
 }
 

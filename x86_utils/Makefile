@@ -98,10 +98,10 @@ memory_arena.inc: memory_arena.c
 circular_buffer.inc: circular_buffer.c
 	grep InTf circular_buffer.c | sed -e 's://::' -e 's/[ !]*InTf.*//' >circular_buffer.inc
 
-test_arena.Abs: test_memory_arena.F90 memory_arena.c memory_arena.inc
+test_arena.Abs: test_memory_arena.F90 memory_arena.c memory_arena.inc circular_buffer.inc circular_buffer.c circular_buffer.h
 	rm -f test_arena.Abs
-	s.cc -c memory_arena.c
-	s.f90 -mpi test_memory_arena.F90 memory_arena.o -o test_arena.Abs
+	s.cc -c -O 2 memory_arena.c circular_buffer.c 
+	s.f90 -mpi test_memory_arena.F90 memory_arena.o circular_buffer.o -o test_arena.Abs
 
 clean:
 	rm -f intrp_bicub_yx0 intrp_bicub_yx intrp_bicub_yx.o intrp_bicub_yx.s a.out fp_x87_xmm_control.o intrp_bicub_yx.inc

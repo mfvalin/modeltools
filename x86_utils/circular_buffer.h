@@ -34,7 +34,7 @@ typedef struct{        // skeleton for circular buffer
 } circular_buffer;
 typedef circular_buffer *circular_buffer_p;
 
-int circular_buffer_init(circular_buffer_p p, int32_t nbytes);   // InTc
+circular_buffer_p circular_buffer_init(circular_buffer_p p, int32_t nbytes);   // InTc
 circular_buffer_p circular_buffer_create_shared(int32_t *shmid, int32_t nbytes);   // InTc
 int circular_buffer_detach_shared(circular_buffer_p p);   // InTc
 circular_buffer_p circular_buffer_create(int32_t nbytes);   // InTc
