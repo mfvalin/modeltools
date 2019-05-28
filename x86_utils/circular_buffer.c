@@ -445,7 +445,50 @@ int circular_buffer_atomic_get(circular_buffer_p p, int *dst, int n){   // InTc
   }
   *outp = out;
   in = *inp;
+//   out = *outp;
+  return DATA_AVAILABLE(in,out,limit);
+}
+
+// get n data tokens at position "out + offset"
+// DO NOT UPDATE out unless update flag is non zero
+// wait until n tokens are available at that position
+// return the number of data tokens available after this operation
+// return -1 upon error
+int circular_buffer_extract(circular_buffer_p p, int *dst, int n, int offset, int update){   // InTc
+  int volatile *inp = &(p->m.in);
+  int volatile *outp = &(p->m.out);
+  int *buf = p->data;
+  int in, out, limit, navail, ni;
+
+  if(p == NULL || dst == NULL) return -1;
+  if(p->m.version != FIOL_VERSION || n < 0) return -1;
+  // wait until enough data is available
+  limit = p->m.limit;  // first is assumed to be 0
+  navail = 0; in = 0 ;
   out = *outp;
+  while(navail < (n + offset)){  // we need n tokens after position "out + offset" (modulo limit)
+    in = *inp;
+    navail = DATA_AVAILABLE(in,out,limit);
+  }
+
+  out = out + offset ;  // acccount for offset
+  if(out >= limit) out = out - limit;
+
+  if(out < in){         // 1 segment
+    move_integers(dst, buf+out, n);
+    out += n;
+  }else{                // 1 or 2 segments
+    ni = n > (limit-out) ? (limit-out) : n;
+    move_integers(dst, buf+out, ni);
+    n -= ni;
+    out += ni;
+    dst += ni;
+    if(out >= limit) out = 0;
+    move_integers(dst, buf+out, n);
+    out += n;
+  }
+  if(update) *outp = out;
+  in = *inp;
   return DATA_AVAILABLE(in,out,limit);
 }
 
@@ -492,7 +535,50 @@ int circular_buffer_atomic_put(circular_buffer_p p, int *src, int n){   // InTc
     in += n;
   }
   *inp = in;
+//   in = *inp;
+  out = *outp;
+  return SPACE_AVAILABLE(in,out,limit);
+}
+
+// insertion of n tokens from the src array at position "in + offset"
+// DO NOT UPDATE in unless update flag is non zero
+// wait until n free slots are available
+// return the number of free slots available after this operation
+// return -1 upon error
+int circular_buffer_insert(circular_buffer_p p, int *src, int n, int offset, int update){   // InTc
+  int volatile *inp = &(p->m.in);
+  int volatile *outp = &(p->m.out);
+  int *buf = p->data;
+  int in, out, limit, navail, ni;
+
+  if(p == NULL || src == NULL) return -1;
+  if(p->m.version != FIOL_VERSION || n < 0) return -1;
+  // wait until there is enough room to insert data
+  limit = p->m.limit;
+  navail = 0; in = 0 ; out = 0;
   in = *inp;
+  while(navail < (n + offset)){  // we need to insert n tokens after position "in + offset" (modulo limit)
+    out = *outp;
+    navail = SPACE_AVAILABLE(in,out,limit);
+  }
+
+  in = in + offset ;    // acccount for offset
+  if(in >= limit) in = in - limit;
+
+  if(in < out){         // 1 segment
+    move_integers(buf+in, src, n);
+    in += n;
+  }else{                // 1 or 2 segments
+    ni = n > (limit-in) ? (limit-in) : n;
+    move_integers(buf+in, src, ni);
+    n -= ni;
+    in += ni;
+    src += ni;
+    if(in >= limit) in = 0;
+    move_integers(buf+in, src, n);
+    in += n;
+  }
+  if(update) *inp = in;
   out = *outp;
   return SPACE_AVAILABLE(in,out,limit);
 }
