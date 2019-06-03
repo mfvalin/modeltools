@@ -54,37 +54,58 @@ int TransposeBy4bytes(void *a, int la1, void *b, int lb1, int ni, int nj){
   b000 = (int *)b;
 // basic block for transpose is 8x8
 #if defined(FETCH128)
-  for (j=0 ; j<nj8 ; j+= 8){
+  ni8 = ni & 0x7FFFFFFC ;   // lower multiple of 4
+  nj8 = nj & 0x7FFFFFFC ;   // lower multiple of 4
+  for (j=0 ; j<nj8 ; j+= 4){
     a00 = a000;        // base address for row
-    a01 = a00 + la4;   // base of next block of 4x8
+//     a01 = a00 + la4;   // base of next block of 4x8
     b00 = b000;   // base address for column
-    for ( i=0 ; i<ni8 ; i+=8){     // transpose a[i:i+7,J:j+7] into b[j:j+7,i:i+7] using 4 x 4 blocks
+    for ( i=0 ; i<ni8 ; i+=4){     // transpose a[i:i+7,J:j+7] into b[j:j+7,i:i+7] using 4 x 4 blocks
 
-      r0 = _mm_loadu_si128(a00    );
-      r1 = _mm_loadu_si128(a00+la1);
-      r2 = _mm_loadu_si128(a00+la2);
-      r3 = _mm_loadu_si128(a00+la3);
-      
-      a00 = a00 + 8;           // bump by 8 cols
-      a01 = a00 + la4;         // base of next block of 4x8
+      r0 = _mm_loadu_si128((__m128i const *) &a00[0  ]);    // a0 a1 a2 a3
+      r1 = _mm_loadu_si128((__m128i const *) &a00[la1]);    // b0 b1 b2 b3
+      r2 = _mm_loadu_si128((__m128i const *) &a00[la2]);    // c0 c1 c2 c3
+      r3 = _mm_loadu_si128((__m128i const *) &a00[la3]);    //d0 d1 d2 d3
 
-      b01 = b00 + lb4;         // base of next block of 4x8
-      b00 = b00 + lb4 + lb4;   // bump by 8 rows
+      s0 = _mm_unpacklo_epi32(r0,r1);    // a0 b0 a1 b1
+      s1 = _mm_unpackhi_epi32(r0,r1);    // a2 b2 a3 b3
+      s2 = _mm_unpacklo_epi32(r2,r3);    // c0 d0 c1 d1
+      s3 = _mm_unpackhi_epi32(r2,r3);    // c2 d2 c3 d3
+
+      d0 = _mm_unpacklo_epi64(s0,s2);    // a0 b0 c0 d0
+      d1 = _mm_unpackhi_epi64(s0,s2);    // a1 b1 c1 d1
+      d2 = _mm_unpacklo_epi64(s1,s3);    // a2 b2 c2 d2
+      d3 = _mm_unpackhi_epi64(s1,s3);    // a3 b3 c3 d3
+
+      _mm_storeu_si128((__m128i *)&b00[  0] , d0);
+      _mm_storeu_si128((__m128i *)&b00[lb1] , d1);
+      _mm_storeu_si128((__m128i *)&b00[lb2] , d2);
+      _mm_storeu_si128((__m128i *)&b00[lb3] , d3);
+
+      a00 = a00 + 4;           // bump by 8 cols
+//       a00 = a00 + 8;           // bump by 8 cols
+//       a01 = a00 + la4;         // base of next block of 4x8
+
+//       b01 = b00 + lb4;         // base of next block of 4x8
+//       b00 = b00 + lb4 + lb4;   // bump by 8 rows
+      b00 = b00 + lb4;          // bump by 4 rows
     } // for i
     for ( ; i<ni ; i++){  // leftovers along i , j -> j+7
       b00[0] = a00[  0] ;  // b[j  ,i] = a[i,j  ]
       b00[1] = a00[la1] ;  // b[j+1,i] = a[i,j+1]
       b00[2] = a00[la2] ;  // b[j+2,i] = a[i,j+2]
       b00[3] = a00[la3] ;  // b[j+3,i] = a[i,j+3]
-      b00[4] = a00[la4    ] ;  // b[j+4,i] = a[i,j+4]
-      b00[5] = a00[la4+la1] ;  // b[j+5,i] = a[i,j+5]
-      b00[6] = a00[la4+la2] ;  // b[j+6,i] = a[i,j+6]
-      b00[7] = a00[la4+la3] ;  // b[j+7,i] = a[i,j+7]
+//       b00[4] = a00[la4    ] ;  // b[j+4,i] = a[i,j+4]
+//       b00[5] = a00[la4+la1] ;  // b[j+5,i] = a[i,j+5]
+//       b00[6] = a00[la4+la2] ;  // b[j+6,i] = a[i,j+6]
+//       b00[7] = a00[la4+la3] ;  // b[j+7,i] = a[i,j+7]
       b00 += lb1;
       a00++;
     }
-    a000 = a000 + la4 + la4;   // bump by 8 rows
-    b000 = b000 + 8;           // bump by 8 cols
+//     a000 = a000 + la4 + la4;   // bump by 8 rows
+//     b000 = b000 + 8;           // bump by 8 cols
+    a000 = a000 + la4 ;        // bump by 4 rows
+    b000 = b000 + 4;           // bump by 4 cols
   }  // for j
 #else
   for (j=0 ; j<nj8 ; j+= 8){
