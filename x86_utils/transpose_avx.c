@@ -1,5 +1,6 @@
 #include <stdio.h>
 #include <stdlib.h>
+#include <stdint.h>
 #include <immintrin.h>
 
 // NOTE: Fortran order assumed for matrices
@@ -21,6 +22,150 @@
 permLL uses _mm256_permute2f128_si256 (a,b, 0x20), bot128 = bot128 from a, top128 = bot128 from b
 permHH uses _mm256_permute2f128_si256 (a,b, 0x31), bot128 = top128 from a, top128 = top128 from b
 */
+#if defined(__AVX2__) && defined(__x86_64__)
+void Transpose32_4x4(uint32_t *a00, int la1, int la2, int la3, uint32_t *b00, int lb1, int lb2, int lb3){
+  __m128i r0, r1, r2, r3;
+  __m128i d0, d1, d2, d3;
+  __m128i s0, s1, s2, s3;
+
+  r0 = _mm_loadu_si128((__m128i const *) &a00[0  ]);  // a0 a1 a2 a3
+  r1 = _mm_loadu_si128((__m128i const *) &a00[la1]);  // b0 b1 b2 b3
+  r2 = _mm_loadu_si128((__m128i const *) &a00[la2]);  // c0 c1 c2 c3
+  r3 = _mm_loadu_si128((__m128i const *) &a00[la3]);  // d0 d1 d2 d3
+
+  d0 = _mm_unpacklo_epi32(r0,r1);  // a0 b0 a1 b1
+  d1 = _mm_unpackhi_epi32(r0,r1);  // a2 b2 a3 b3
+  d2 = _mm_unpacklo_epi32(r2,r3);  // c0 d0 c1 d1
+  d3 = _mm_unpackhi_epi32(r2,r3);  // c2 d2 c3 d3
+
+  s0 = _mm_unpacklo_epi64(d0,d2);  // a0 b0 c0 d0
+  s1 = _mm_unpackhi_epi64(d0,d2);  // a1 b1 c1 d1
+  s2 = _mm_unpacklo_epi64(d1,d3);  // a2 b2 c2 d2
+  s3 = _mm_unpackhi_epi64(d1,d3);  // a3 b3 c3 d3
+
+  _mm_storeu_si128((__m128i *) &b00[  0],s0);  // a0 b0 c0 d0
+  _mm_storeu_si128((__m128i *) &b00[lb1],s1);  // a1 b1 c1 d1
+  _mm_storeu_si128((__m128i *) &b00[lb2],s2);  // a2 b2 c2 d2
+  _mm_storeu_si128((__m128i *) &b00[lb3],s3);  // a3 b3 c3 d3
+}
+
+void Transpose32_4x8(uint32_t *a00, int la1, int la2, int la3, uint32_t *b00, int lb1, int lb2, int lb3, int lb4){
+  uint32_t *b01 = b00+lb4;
+  __m256i y0, y1, y2, y3;
+  __m256i t0, t1, t2, t3;
+
+  y0 = _mm256_loadu_si256 ((__m256i const *) &a00[  0]);  // a0 a1 a2 a3 a4 a5 a6 a7
+  y1 = _mm256_loadu_si256 ((__m256i const *) &a00[la1]);  // b0 b1 b2 b3 b4 b5 b6 b7
+  y2 = _mm256_loadu_si256 ((__m256i const *) &a00[la2]);  // c0 c1 c2 c3 c4 c5 c6 c7
+  y3 = _mm256_loadu_si256 ((__m256i const *) &a00[la3]);  // d0 d1 d2 d3 d4 d5 d6 d7
+
+  t0 = _mm256_unpacklo_epi32(y0,y1); // a0 b0 a1 b1 a4 b4 a5 b5
+  t1 = _mm256_unpackhi_epi32(y0,y1); // a2 b2 a3 b3 a6 b6 a7 b7
+  t2 = _mm256_unpacklo_epi32(y2,y3); // c0 d0 c1 d1 c4 d4 c5 d5
+  t3 = _mm256_unpackhi_epi32(y2,y3); // c2 d2 c3 d3 c6 d6 c7 d7
+
+  y0 = _mm256_unpacklo_epi64(t0,t2); // a0 b0 c0 d0 a1 b1 c1 d1
+  y1 = _mm256_unpackhi_epi64(t0,t2); // a4 b4 c4 d4 a5 b5 c5 d5
+  y2 = _mm256_unpacklo_epi64(t1,t3); // a2 b2 c2 d2 a3 b3 c3 d3
+  y3 = _mm256_unpackhi_epi64(t1,t3); // a6 b6 c6 d6 a7 b7 c7 d7
+
+  _mm_storeu_si128((__m128i *) &b00[  0], _mm256_extracti128_si256 (y0, 0) ); // a0 b0 c0 d0
+  _mm_storeu_si128((__m128i *) &b00[lb1], _mm256_extracti128_si256 (y0, 1) ); // a1 b1 c1 d1
+  _mm_storeu_si128((__m128i *) &b00[lb2], _mm256_extracti128_si256 (y2, 0) ); // a2 b2 c2 d2
+  _mm_storeu_si128((__m128i *) &b00[lb3], _mm256_extracti128_si256 (y2, 1) ); // a3 b3 c3 d3
+  _mm_storeu_si128((__m128i *) &b01[  0], _mm256_extracti128_si256 (y1, 0) ); // a4 b4 c4 d4
+  _mm_storeu_si128((__m128i *) &b01[lb1], _mm256_extracti128_si256 (y1, 1) ); // a5 b5 c5 d5
+  _mm_storeu_si128((__m128i *) &b01[lb2], _mm256_extracti128_si256 (y3, 0) ); // a6 b6 c6 d6
+  _mm_storeu_si128((__m128i *) &b01[lb3], _mm256_extracti128_si256 (y3, 1) ); // a7 b7 c7 d7
+  
+}
+
+void Transpose32_8x4(uint32_t *a00, int la1, int la2, int la3, int la4, uint32_t *b00, int lb1, int lb2, int lb3){
+  uint32_t *a01 = a00+la4;
+  __m256i y0, y1, y2, y3;
+  __m256i t0, t1, t2, t3, tt;
+
+  tt = _mm256_xor_si256(tt,tt);  // dummy statement for the following insertf128 instructions
+
+  t0 = _mm256_insertf128_si256(tt, _mm_loadu_si128((__m128i const *) &a00[0  ]) , 0); // a0 a1 a2 a3
+  t0 = _mm256_insertf128_si256(t0, _mm_loadu_si128((__m128i const *) &a01[0  ]) , 1); // a0 a1 a2 a3 e0 e1 e2 e3
+  t1 = _mm256_insertf128_si256(tt, _mm_loadu_si128((__m128i const *) &a00[la1]) , 0); // b0 b1 b2 b3
+  t1 = _mm256_insertf128_si256(t1, _mm_loadu_si128((__m128i const *) &a01[la1]) , 1); // b0 b1 b2 b3 f0 f1 f2 f3
+  t2 = _mm256_insertf128_si256(tt, _mm_loadu_si128((__m128i const *) &a00[la2]) , 0); // c0 c1 c2 c3
+  t2 = _mm256_insertf128_si256(t2, _mm_loadu_si128((__m128i const *) &a01[la2]) , 1); // c0 c1 c2 c3 g0 g1 g2 g3
+  t3 = _mm256_insertf128_si256(tt, _mm_loadu_si128((__m128i const *) &a00[la3]) , 0); // d0 d1 d2 d3
+  t3 = _mm256_insertf128_si256(t3, _mm_loadu_si128((__m128i const *) &a01[la3]) , 1); // d0 d1 d2 d3 h0 h1 h2 h3
+
+  y0 = _mm256_unpacklo_epi32(t0,t1); // a0 b0 a2 b2 e0 f0 e2 f2
+  y1 = _mm256_unpackhi_epi32(t0,t1); // a1 b1 a3 b3 e1 f1 e3 f3
+  y2 = _mm256_unpacklo_epi32(t2,t3); // c0 d0 c2 d2 g0 h0 g2 h2
+  y3 = _mm256_unpackhi_epi32(t2,t3); // c1 d1 c3 d3 g1 h1 g3 h3
+
+  t0 = _mm256_unpacklo_epi64(y0,y2); // a0 b0 c0 d0 e0 f0 g0 h0
+  t1 = _mm256_unpackhi_epi64(y0,y2); // a2 b2 c2 d2 e2 f2 g2 h2
+  t2 = _mm256_unpacklo_epi64(y1,y3); // a1 b1 c1 d1 e1 f1 g1 h1
+  t3 = _mm256_unpackhi_epi64(y1,y3); // a3 b3 c3 d3 e3 f3 g3 h3
+
+  _mm256_storeu_si256((__m256i *) &b00[  0],t0); // a0 b0 c0 d0 e0 f0 g0 h0
+  _mm256_storeu_si256((__m256i *) &b00[lb1],t2); // a1 b1 c1 d1 e1 f1 g1 h1
+  _mm256_storeu_si256((__m256i *) &b00[lb2],t1); // a2 b2 c2 d2 e2 f2 g2 h2
+  _mm256_storeu_si256((__m256i *) &b00[lb3],t3); // a3 b3 c3 d3 e3 f3 g3 h3
+}
+
+void Transpose32_8x8(uint32_t *a00, int la1, int la2, int la3, int la4, uint32_t *b00, int lb1, int lb2, int lb3, int lb4){
+  uint32_t *a01 = a00+la4;
+  uint32_t *b01 = b00+la4;
+  __m256i t0, t1, t2, t3, t4, t5, t6, t7;
+  __m256i y0, y1, y2, y3, y4, y5, y6, y7;
+  __m256i x0, x1, x2, x3, x4, x5, x6, x7;
+
+  y0 = _mm256_loadu_si256 ((__m256i const *) &a00[  0]); // a0 a1 a2 a3 a4 a5 a6 a7
+  y1 = _mm256_loadu_si256 ((__m256i const *) &a00[la1]); // b0 b1 b2 b3 b4 b5 b6 b7
+  y2 = _mm256_loadu_si256 ((__m256i const *) &a00[la2]); // c0 c1 c2 c3 c4 c5 c6 c7
+  y3 = _mm256_loadu_si256 ((__m256i const *) &a00[la3]); // d0 d1 d2 d3 d4 d5 d6 d7
+  y4 = _mm256_loadu_si256 ((__m256i const *) &a01[  0]); // e0 e1 e2 e3 e4 e5 e6 e7
+  y5 = _mm256_loadu_si256 ((__m256i const *) &a01[la1]); // f0 f1 f2 f3 f4 f5 f6 f7
+  y6 = _mm256_loadu_si256 ((__m256i const *) &a01[la2]); // g0 g1 g2 g3 g4 g5 g6 g7
+  y7 = _mm256_loadu_si256 ((__m256i const *) &a01[la3]); // h0 h1 h2 h3 h4 h5 h6 h7
+
+  t0 = _mm256_unpacklo_epi32(y0,y1); // a0 b0 a1 b1 a4 b4 a5 b5
+  t1 = _mm256_unpackhi_epi32(y0,y1); // a2 b2 a3 b3 a6 b6 a7 b7
+  t2 = _mm256_unpacklo_epi32(y2,y3); // c0 d0 c1 d1 c4 d4 c5 d5
+  t3 = _mm256_unpackhi_epi32(y2,y3); // c2 d2 c3 d3 c6 d6 c7 d7
+  t4 = _mm256_unpacklo_epi32(y4,y5); // e0 f0 e1 f1 e4 f4 e5 f5
+  t5 = _mm256_unpackhi_epi32(y4,y5); // e2 f2 e3 f3 e6 f6 e7 f7
+  t6 = _mm256_unpacklo_epi32(y6,y7); // g0 h0 g1 h1 g4 h4 g5 h5
+  t7 = _mm256_unpackhi_epi32(y6,y7); // g2 h2 g3 h3 g6 h6 g7 h7
+
+  y0 = _mm256_unpacklo_epi64(t0,t2); // a0 b0 c0 d0 a1 b1 c1 d1
+  y1 = _mm256_unpackhi_epi64(t0,t2); // a4 b4 c4 d4 a5 b5 c5 d5
+  y2 = _mm256_unpacklo_epi64(t1,t3); // a2 b2 c2 d2 a3 b3 c3 d3
+  y3 = _mm256_unpackhi_epi64(t1,t3); // a6 b6 c6 d6 a7 b7 c7 d7
+  y4 = _mm256_unpacklo_epi64(t4,t6); // e0 f0 g0 h0 e1 f1 g1 h1
+  y5 = _mm256_unpackhi_epi64(t4,t6); // e4 f4 g4 h4 e5 f5 g5 h5
+  y6 = _mm256_unpacklo_epi64(t5,t7); // e2 f2 g2 h2 e3 f3 g3 h3
+  y7 = _mm256_unpackhi_epi64(t5,t7); // e6 f6 g6 h6 e7 f7 g7 h7
+
+  t0 = _mm256_permute2f128_si256 (y0,y4, 0x20); // a0 b0 c0 d0 e0 f0 g0 h0
+  t4 = _mm256_permute2f128_si256 (y0,y4, 0x31); // a1 b1 c1 d1 e1 f1 g1 h1
+  t1 = _mm256_permute2f128_si256 (y1,y5, 0x20); // a2 b2 c2 d2 e2 f2 g2 h2
+  t5 = _mm256_permute2f128_si256 (y1,y5, 0x31); // a3 b3 c3 d3 e3 f3 g3 h3
+  t2 = _mm256_permute2f128_si256 (y2,y6, 0x20); // a4 b4 c4 d4 e4 f4 g4 h4
+  t6 = _mm256_permute2f128_si256 (y2,y6, 0x31); // a5 b5 c5 d5 e5 f5 g5 h5
+  t3 = _mm256_permute2f128_si256 (y3,y7, 0x20); // a6 b6 c6 d6 e6 f6 g6 h6
+  t7 = _mm256_permute2f128_si256 (y3,y7, 0x31); // a7 b7 c7 d7 e7 f7 g7 h7
+
+  _mm256_storeu_si256((__m256i *) &b00[  0],t0); // a0 b0 c0 d0 e0 f0 g0 h0
+  _mm256_storeu_si256((__m256i *) &b01[  0],t4); // a1 b1 c1 d1 e1 f1 g1 h1
+  _mm256_storeu_si256((__m256i *) &b00[lb1],t1); // a2 b2 c2 d2 e2 f2 g2 h2
+  _mm256_storeu_si256((__m256i *) &b01[lb1],t5); // a3 b3 c3 d3 e3 f3 g3 h3
+  _mm256_storeu_si256((__m256i *) &b00[lb2],t2); // a4 b4 c4 d4 e4 f4 g4 h4
+  _mm256_storeu_si256((__m256i *) &b01[lb2],t6); // a5 b5 c5 d5 e5 f5 g5 h5
+  _mm256_storeu_si256((__m256i *) &b00[lb3],t3); // a6 b6 c6 d6 e6 f6 g6 h6
+  _mm256_storeu_si256((__m256i *) &b01[lb3],t7); // a7 b7 c7 d7 e7 f7 g7 h7
+  b00 = b00 + lb4 + lb4;   // bump by 8 rows
+}
+#endif
 #if ! defined(TEST_ONLY)
 int TransposeBy4bytes(void *a, int la1, void *b, int lb1, int ni, int nj){
   int *a00, *a01, *b00, *b01;
