@@ -95,6 +95,33 @@ static int vmaxx =  999999999;
 static int vminy = -999999999;
 static int vmaxy =  999999999;
 
+static int qoffx = 0;
+static int qoffy = 0;
+static int uoffx = 0;
+static int uoffy = 0;
+static int voffx = 0;
+static int voffy = 0;
+
+// set offsets for q grid, replicate q values for u and v grids
+void set_intrp_bicub_off_yx(int qoffsetx, int qoffsety){
+  qoffx = qoffsetx;
+  qoffy = qoffsety;
+  uoffx = qoffsetx;
+  uoffy = qoffsety;
+  voffx = qoffsetx;
+  voffy = qoffsety;
+}
+
+// set offsets for q, u, and v grids
+void set_intrp_bicub_off_quv(int qoffsetx, int qoffsety, int uoffsetx, int uoffsety, int voffsetx, int voffsety){
+  qoffx = qoffsetx;
+  qoffy = qoffsety;
+  uoffx = uoffsetx;
+  uoffy = uoffsety;
+  voffx = voffsetx;
+  voffy = voffsety;
+}
+
 // set bounds for 'q' grid only (scalars)
 void set_intrp_bicub_yx(int qxmin, int qxmax, int qymin, int qymax){
   qminx = qxmin - 1 ;   // qxmin is in "origin 1", qminx is in "origin 0"
@@ -156,7 +183,13 @@ void set_intrp_bicub_quv(int qxmin, int qxmax, int qymin, int qymax,
   
    to call from FORTRAN, the following interface is used
 
-   interface                                                                                       !InTf!
+   interface                                                                                      !InTf!
+    subroutine set_intrp_bicub_off_yx(q,u,v) bind(C,name='set_intrp_bicub_off_yx')                !InTf!
+      integer, intent(IN), value :: q,u,v                                                         !InTf!
+    end subroutine set_intrp_bicub_off_yx                                                         !InTf!
+    subroutine set_intrp_bicub_off_quv(qx,qy,ux,uy,vx,vy) bind(C,name='set_intrp_bicub_off_quv')  !InTf!
+      integer, intent(IN), value :: qx,qy,ux,uy,vx,vy                                             !InTf!
+    end subroutine set_intrp_bicub_off_quv                                                        !InTf!
     subroutine set_intrp_bicub_yx(x1,x2,y1,y2) bind(C,name='set_intrp_bicub_yx')                  !InTf!
       integer, intent(IN), value :: x1,x2,y1,y2                                                   !InTf!
     end subroutine set_intrp_bicub_yx                                                             !InTf!
@@ -193,7 +226,7 @@ void set_intrp_bicub_quv(int qxmin, int qxmax, int qymin, int qymax,
       real(C_DOUBLE), intent(IN), dimension(*) :: s                                               !InTf!
       integer(C_INT), intent(IN), value :: ni, ninj, nk                                           !InTf!
     end subroutine intrp_bicub_yx_uv                                                              !InTf!
-   end interface                                                                                   !InTf!
+   end interface                                                                                  !InTf!
 
  */
 // compute 2D X Y cubic interpolation coefficients (Origin 0 internally)
@@ -225,6 +258,8 @@ static inline int bicub_coeffs_inline(double xx, double yy, int ni, double *wx, 
   iy = (iy > qmaxy) ? qmaxy : iy;
   x  = xx - 2 - ix;                      // xx and yy are in "ORIGIN 1"
   y  = yy - 2 - iy;
+  ix = ix + offsetx;
+  iy = iy + offsety;
 
   wx[0] = cm167*x*(x-one)*(x-two);       // polynomial coefficients along i
   wx[1] = cp5*(x+one)*(x-one)*(x-two);
@@ -276,7 +311,7 @@ void intrp_bicub_yx_s(float *f, float *r, int ni, int ninj, int nk, double xx, d
   wy[2] = cm5*y*(y+one)*(y-two);
   wy[3] = cp167*y*(y+one)*(y-one);
 #else
-  f += bicub_coeffs_inline(xx, yy, ni, wx, wy, qminx, qmaxx, qminy, qmaxy, 0, 0);  // use inline function
+  f += bicub_coeffs_inline(xx, yy, ni, wx, wy, qminx, qmaxx, qminy, qmaxy, qoffx, qoffy);  // use inline function
 #endif
 #if defined(__AVX__) && defined(__x86_64__) && !defined(NO_SIMD)
   fwx = _mm256_loadu_pd(wx) ;             // vector of coefficients along i
@@ -406,8 +441,8 @@ void intrp_bicub_yx_vec(float *u, float *v, float *ru, float *rv, int ni, int ni
   wyv[2] = cm5*yv*(yv+one)*(yv-two);
   wyv[3] = cp167*yv*(yv+one)*(yv-one);
 #else
-  u += bicub_coeffs_inline(xxu, yyu, ni, wxu, wyu, uminx, umaxx, uminy, umaxy, 0, 0);  // use inline function
-  v += bicub_coeffs_inline(xxv, yyv, ni, wxv, wyv, vminx, vmaxx, vminy, vmaxy, 0, 0);  // use inline function
+  u += bicub_coeffs_inline(xxu, yyu, ni, wxu, wyu, uminx, umaxx, uminy, umaxy, uoffx, uoffy);  // use inline function
+  v += bicub_coeffs_inline(xxv, yyv, ni, wxv, wyv, vminx, vmaxx, vminy, vmaxy, voffx, voffy);  // use inline function
 #endif
 #if defined(__AVX__) && defined(__x86_64__) && !defined(NO_SIMD)
   fwyu0 = _mm256_set1_pd(wyu[0]) ;           // scalar * vector not available, promote scalar to vector
@@ -524,7 +559,7 @@ void intrp_bicub_yx_uv(float *u, float *v, float *ru, float *rv, int ni, int nin
   wy[2] = cm5*y*(y+one)*(y-two);
   wy[3] = cp167*y*(y+one)*(y-one);
 #else
-  i = bicub_coeffs_inline(xx, yy, ni, wx, wy, qminx, qmaxx, qminy, qmaxy, 0, 0);  // use inline function
+  i = bicub_coeffs_inline(xx, yy, ni, wx, wy, qminx, qmaxx, qminy, qmaxy, qoffx, qoffy);  // use inline function
   u += i; v+= i;
 #endif
 #if defined(__AVX__) && defined(__x86_64__) && !defined(NO_SIMD)
@@ -672,7 +707,7 @@ void intrp_bicub_yx_s_mono(float *f, float *r, int ni, int ninj, int nk, double 
   wy[2] = cm5*y*(y+one)*(y-two);
   wy[3] = cp167*y*(y+one)*(y-one);
 #else
-  f += bicub_coeffs_inline(xx, yy, ni, wx, wy, qminx, qmaxx, qminy, qmaxy, 0, 0);  // use inline function
+  f += bicub_coeffs_inline(xx, yy, ni, wx, wy, qminx, qmaxx, qminy, qmaxy, qoffx, qoffy);  // use inline function
 #endif
 #if defined(__AVX__) && defined(__x86_64__) && !defined(NO_SIMD)
   fwx  = _mm256_loadu_pd(wx) ;            // vector of coefficients along i

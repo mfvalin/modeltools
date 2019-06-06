@@ -89,6 +89,10 @@ test_search_list: search_list.c test_search_list.c
 tricublin_f90.inc: tricublin_beta.c
 	grep InTf tricublin_beta.c | sed 's/[ ]*!InTf![ ]*//' > tricublin_f90.inc
 
+test_tricublin.Abs: tricublin_beta_test.F90 tricublin_f90.inc tricublin_beta.c
+	s.cc -c -O2 -march=core-avx2 tricublin_beta.c -DTIMING
+	s.f90 $(MPI) -O2 -march=core-avx2 tricublin_beta_test.F90 tricublin_beta.o -o test_tricublin.Abs
+
 boundary_clip.inc: boundary_clip.F90
 	build_f90_interface.sh boundary_clip.F90 >boundary_clip.inc
 
