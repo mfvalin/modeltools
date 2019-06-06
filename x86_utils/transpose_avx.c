@@ -59,23 +59,23 @@ void Transpose32_4x8(uint32_t *a00, int la1, int la2, int la3, uint32_t *b00, in
   y2 = _mm256_loadu_si256 ((__m256i const *) &a00[la2]);  // c0 c1 c2 c3 c4 c5 c6 c7
   y3 = _mm256_loadu_si256 ((__m256i const *) &a00[la3]);  // d0 d1 d2 d3 d4 d5 d6 d7
 
-  t0 = _mm256_unpacklo_epi32(y0,y1); // a0 b0 a1 b1 a4 b4 a5 b5
-  t1 = _mm256_unpackhi_epi32(y0,y1); // a2 b2 a3 b3 a6 b6 a7 b7
-  t2 = _mm256_unpacklo_epi32(y2,y3); // c0 d0 c1 d1 c4 d4 c5 d5
-  t3 = _mm256_unpackhi_epi32(y2,y3); // c2 d2 c3 d3 c6 d6 c7 d7
+  t0 = _mm256_unpacklo_epi32(y0,y1); // a0 b0 a2 b2 a4 b4 a6 b6
+  t1 = _mm256_unpackhi_epi32(y0,y1); // a1 b1 a3 b3 a5 b5 a7 b7
+  t2 = _mm256_unpacklo_epi32(y2,y3); // c0 d0 c2 d2 c4 d4 c6 d6
+  t3 = _mm256_unpackhi_epi32(y2,y3); // c1 d1 c3 d3 c5 d5 c7 d7
 
-  y0 = _mm256_unpacklo_epi64(t0,t2); // a0 b0 c0 d0 a1 b1 c1 d1
-  y1 = _mm256_unpackhi_epi64(t0,t2); // a4 b4 c4 d4 a5 b5 c5 d5
-  y2 = _mm256_unpacklo_epi64(t1,t3); // a2 b2 c2 d2 a3 b3 c3 d3
-  y3 = _mm256_unpackhi_epi64(t1,t3); // a6 b6 c6 d6 a7 b7 c7 d7
+  y0 = _mm256_unpacklo_epi64(t0,t2); // a0 b0 c0 d0 a4 b4 c4 d4
+  y1 = _mm256_unpackhi_epi64(t0,t2); // a2 b2 c2 d2 a6 b6 c6 d6
+  y2 = _mm256_unpacklo_epi64(t1,t3); // a1 b1 c1 d1 a5 b5 c5 d5
+  y3 = _mm256_unpackhi_epi64(t1,t3); // a3 b3 c3 d3 a7 b7 c7 d7
 
   _mm_storeu_si128((__m128i *) &b00[  0], _mm256_extracti128_si256 (y0, 0) ); // a0 b0 c0 d0
-  _mm_storeu_si128((__m128i *) &b00[lb1], _mm256_extracti128_si256 (y0, 1) ); // a1 b1 c1 d1
-  _mm_storeu_si128((__m128i *) &b00[lb2], _mm256_extracti128_si256 (y2, 0) ); // a2 b2 c2 d2
-  _mm_storeu_si128((__m128i *) &b00[lb3], _mm256_extracti128_si256 (y2, 1) ); // a3 b3 c3 d3
-  _mm_storeu_si128((__m128i *) &b01[  0], _mm256_extracti128_si256 (y1, 0) ); // a4 b4 c4 d4
-  _mm_storeu_si128((__m128i *) &b01[lb1], _mm256_extracti128_si256 (y1, 1) ); // a5 b5 c5 d5
-  _mm_storeu_si128((__m128i *) &b01[lb2], _mm256_extracti128_si256 (y3, 0) ); // a6 b6 c6 d6
+  _mm_storeu_si128((__m128i *) &b01[  0], _mm256_extracti128_si256 (y0, 1) ); // a4 b4 c4 d4
+  _mm_storeu_si128((__m128i *) &b00[lb1], _mm256_extracti128_si256 (y1, 0) ); // a2 b2 c2 d2
+  _mm_storeu_si128((__m128i *) &b01[lb1], _mm256_extracti128_si256 (y1, 1) ); // a6 b6 c6 d6
+  _mm_storeu_si128((__m128i *) &b00[lb2], _mm256_extracti128_si256 (y2, 0) ); // a1 b1 c1 d1
+  _mm_storeu_si128((__m128i *) &b01[lb2], _mm256_extracti128_si256 (y2, 1) ); // a5 b5 c5 d5
+  _mm_storeu_si128((__m128i *) &b00[lb3], _mm256_extracti128_si256 (y3, 0) ); // a3 b3 c3 d3
   _mm_storeu_si128((__m128i *) &b01[lb3], _mm256_extracti128_si256 (y3, 1) ); // a7 b7 c7 d7
   
 }
@@ -96,25 +96,25 @@ void Transpose32_8x4(uint32_t *a00, int la1, int la2, int la3, int la4, uint32_t
   t3 = _mm256_insertf128_si256(tt, _mm_loadu_si128((__m128i const *) &a00[la3]) , 0); // d0 d1 d2 d3
   t3 = _mm256_insertf128_si256(t3, _mm_loadu_si128((__m128i const *) &a01[la3]) , 1); // d0 d1 d2 d3 h0 h1 h2 h3
 
-  y0 = _mm256_unpacklo_epi32(t0,t1); // a0 b0 a2 b2 e0 f0 e2 f2
-  y1 = _mm256_unpackhi_epi32(t0,t1); // a1 b1 a3 b3 e1 f1 e3 f3
-  y2 = _mm256_unpacklo_epi32(t2,t3); // c0 d0 c2 d2 g0 h0 g2 h2
-  y3 = _mm256_unpackhi_epi32(t2,t3); // c1 d1 c3 d3 g1 h1 g3 h3
+  y0 = _mm256_unpacklo_epi32(t0,t1); // a0 b0 a1 b1 e0 f0 e1 f1
+  y1 = _mm256_unpackhi_epi32(t0,t1); // a2 b2 a3 b3 e2 f2 e3 f3
+  y2 = _mm256_unpacklo_epi32(t2,t3); // c0 d0 c1 d1 g0 h0 g1 h1
+  y3 = _mm256_unpackhi_epi32(t2,t3); // c2 d2 c3 d3 g2 h2 g3 h3
 
   t0 = _mm256_unpacklo_epi64(y0,y2); // a0 b0 c0 d0 e0 f0 g0 h0
-  t1 = _mm256_unpackhi_epi64(y0,y2); // a2 b2 c2 d2 e2 f2 g2 h2
-  t2 = _mm256_unpacklo_epi64(y1,y3); // a1 b1 c1 d1 e1 f1 g1 h1
+  t1 = _mm256_unpackhi_epi64(y0,y2); // a1 b1 c1 d1 e1 f1 g1 h1
+  t2 = _mm256_unpacklo_epi64(y1,y3); // a2 b2 c2 d2 e2 f2 g2 h2
   t3 = _mm256_unpackhi_epi64(y1,y3); // a3 b3 c3 d3 e3 f3 g3 h3
 
   _mm256_storeu_si256((__m256i *) &b00[  0],t0); // a0 b0 c0 d0 e0 f0 g0 h0
-  _mm256_storeu_si256((__m256i *) &b00[lb1],t2); // a1 b1 c1 d1 e1 f1 g1 h1
-  _mm256_storeu_si256((__m256i *) &b00[lb2],t1); // a2 b2 c2 d2 e2 f2 g2 h2
+  _mm256_storeu_si256((__m256i *) &b00[lb1],t1); // a1 b1 c1 d1 e1 f1 g1 h1
+  _mm256_storeu_si256((__m256i *) &b00[lb2],t2); // a2 b2 c2 d2 e2 f2 g2 h2
   _mm256_storeu_si256((__m256i *) &b00[lb3],t3); // a3 b3 c3 d3 e3 f3 g3 h3
 }
 
 void Transpose32_8x8(uint32_t *a00, int la1, int la2, int la3, int la4, uint32_t *b00, int lb1, int lb2, int lb3, int lb4){
   uint32_t *a01 = a00+la4;
-  uint32_t *b01 = b00+la4;
+  uint32_t *b01 = b00+lb4;
   __m256i t0, t1, t2, t3, t4, t5, t6, t7;
   __m256i y0, y1, y2, y3, y4, y5, y6, y7;
   __m256i x0, x1, x2, x3, x4, x5, x6, x7;
@@ -509,6 +509,52 @@ int TransposeBy8bytes(void *a, int la1, void *b, int lb1, int ni, int nj){
     }
   }
   return(0);
+}
+#endif
+
+#if defined(UNIT_TEST)
+#include <stdio.h>
+#include <stdlib.h>
+#include <stdint.h>
+#include <string.h>
+
+#define NI 15
+#define NJ 13
+
+#define PRINT for(j=0 ; j<9 ; j++){ for(i=0 ; i<9 ; i++){fprintf(stderr,"%2d ", s[j][i]);} ; for(i=0 ; i<9 ; i++){fprintf(stderr," %2d", d[j][i]);} fprintf(stderr,"\n");} fprintf(stderr,"\n\n")
+
+void reset(void *p){
+  uint32_t *t = memset(p, 0, sizeof(uint32_t)*NI*NJ);
+}
+
+main(){
+  uint32_t s[NJ][NI], d[NI][NJ];  // s will get transposed into D
+  uint32_t *t;
+  uint32_t i, j, k;
+
+  reset(s); reset(d);
+  k=1;
+  for(j=0 ; j<8 ; j++){
+    for(i=0 ; i<8 ; i++){
+      s[j][i] = k++;
+    }
+  }
+//   PRINT; 
+  fprintf(stderr,"================ Transpose32_8x8 ================\n");
+  Transpose32_8x8(&s[0][0], NI, NI*2, NI*3, NI*4, &d[0][0], NJ, NJ*2, NJ*3, NJ*4);
+  PRINT;
+  reset(d);
+  fprintf(stderr,"================ Transpose32_4x4 ================\n");
+  Transpose32_4x4(&s[0][0], NI, NI*2, NI*3, &d[0][0], NJ, NJ*2, NJ*3);
+  PRINT;
+  reset(d);
+  fprintf(stderr,"================ Transpose32_4x8 ================\n");
+  Transpose32_4x8(&s[0][0], NI, NI*2, NI*3, &d[0][0], NJ, NJ*2, NJ*3, NJ*4);
+  PRINT;
+  reset(d);
+  fprintf(stderr,"================ Transpose32_8x4 ================\n");
+  Transpose32_8x4(&s[0][0], NI, NI*2, NI*3, NI*4, &d[0][0], NJ, NJ*2, NJ*3);
+  PRINT;
 }
 #endif
 
