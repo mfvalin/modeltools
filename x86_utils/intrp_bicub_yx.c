@@ -184,8 +184,8 @@ void set_intrp_bicub_quv(int qxmin, int qxmax, int qymin, int qymax,
    to call from FORTRAN, the following interface is used
 
    interface                                                                                      !InTf!
-    subroutine set_intrp_bicub_off_yx(q,u,v) bind(C,name='set_intrp_bicub_off_yx')                !InTf!
-      integer, intent(IN), value :: q,u,v                                                         !InTf!
+    subroutine set_intrp_bicub_off_yx(qx,qy) bind(C,name='set_intrp_bicub_off_yx')                !InTf!
+      integer, intent(IN), value :: qx,qy                                                         !InTf!
     end subroutine set_intrp_bicub_off_yx                                                         !InTf!
     subroutine set_intrp_bicub_off_quv(qx,qy,ux,uy,vx,vy) bind(C,name='set_intrp_bicub_off_quv')  !InTf!
       integer, intent(IN), value :: qx,qy,ux,uy,vx,vy                                             !InTf!
