@@ -21,9 +21,11 @@
 
 #define MAXLOCKID 15
 static uint32_t maxlockid = MAXLOCKID;
+
 // barrier (partial) done flags
 static uint32_t volatile barrs0[MAXLOCKID+1] __attribute__ ((aligned (64)));
 static uint32_t volatile *barrs;       // in case we want to allocate to another address
+
 // barrier (partial) counts
 static uint32_t volatile count0[MAXLOCKID+1] __attribute__ ((aligned (64)));
 static uint32_t volatile *count;       // in case we want to allocate to another address
@@ -31,7 +33,8 @@ static uint32_t volatile *count;       // in case we want to allocate to another
 // allocate a  shared memory segment of size Bytes 
 // segment will be preventively marked for deletion (only works on linux)
 // return address and id of shared memory segment (in sid)
-void *allocate_safe_shared_memory(int32_t *sid, uint32_t size){
+void *allocate_safe_shared_memory(int32_t *sid, uint32_t size)   // InTc
+{
   size_t siz = size;
   int32_t id;
   void *ptr;
@@ -48,7 +51,8 @@ void *allocate_safe_shared_memory(int32_t *sid, uint32_t size){
 
 // switch to tables of a different dimension at another address
 // size is in bytes
-uint32_t setup_barrier_and_lock(void *p, uint32_t size){
+uint32_t setup_barrier_and_lock(void *p, uint32_t size)   // InTc
+{
   uint32_t tmp;
 
   tmp = ((size >> 7) << 6) ;     // multiple of 64 from multiple of 128 (2 tables to allocate)
@@ -61,7 +65,9 @@ uint32_t setup_barrier_and_lock(void *p, uint32_t size){
 
 // unsophisticated version, probably fastest up to 8 participants
 // id = which barrier is to be used
-uint32_t node_barrier_simple(int32_t id, int32_t maxcount){  // version with "flag flip"
+// version with "flag flip"
+uint32_t node_barrier_simple(int32_t id, int32_t maxcount)   // InTc
+{
   int lgo, cnt;
 
   if(id < 0 || id >  maxlockid) return 1;  // bad id
@@ -80,7 +86,8 @@ uint32_t node_barrier_simple(int32_t id, int32_t maxcount){  // version with "fl
 
 // more sophisticated version with 2 level "flag flip" (should be faster for large counts)
 // id is this PEs identifier (0 < maxcount)
-uint32_t node_barrier_multi(int32_t id, int32_t maxcount){  
+uint32_t node_barrier_multi(int32_t id, int32_t maxcount)   // InTc
+{  
   int lgo, lgo2, cnt;
   int group, base, allgrps, grpcnt, maxid;
 
@@ -114,12 +121,14 @@ uint32_t node_barrier_multi(int32_t id, int32_t maxcount){
   return 0;
 }
 
-int32_t acquire_lock(uint32_t lock, int me){
+int32_t acquire_lock(uint32_t lock, int me)   // InTc
+{
   acquire_idlock(count+lock, me);
   return 0;
 }
 
-int32_t release_lock(uint32_t lock, int me){
+int32_t release_lock(uint32_t lock, int me)   // InTc
+{
   release_idlock(count+lock, me);
   return 0;
 }
@@ -136,8 +145,9 @@ static uint64_t rdtsc(void) {   // version rapide "out of order"
 }
 #include <mpi.h>
 #include <stdio.h>
+#include <unistd.h>
 
-main(int argc, char **argv){
+int main(int argc, char **argv){
   int ierr, i;
   int localrank, localsize;
   int globalrank, globalsize;
@@ -148,7 +158,7 @@ main(int argc, char **argv){
   int myhost, myhost0, myhost1;
   void *ptr;
   int32_t sid, size;
-  uint64_t t0 , t1, t2;
+  uint64_t t0 , t1;
   double tmin, tmax, tavg, tmp;
 
   ierr = MPI_Init( &argc, &argv );
@@ -261,5 +271,7 @@ main(int argc, char **argv){
     if(globalrank == 0) printf("MPI barrier min, max, avg = %9f, %9f, %9f\n",tmin,tmax,tavg);
 
   ierr = MPI_Finalize();
+  if(ierr != MPI_SUCCESS) return 1;
+  return 0;
 }
 #endif
