@@ -220,15 +220,15 @@ int main(int argc, char **argv){
   kount = (int *) ptr;
   kount += 256;
     kount[10] = 0;
+    ierr = MPI_Barrier(MPI_COMM_WORLD);
     t0 = rdtsc();
     for(i=0 ; i<100 ; i++){
 //       ierr = acquire_lock(0,1);
-//       ierr = acquire_a_lock(kount,1+localrank);
-      ierr = __sync_fetch_and_add (kount+10,1);
-//       kount[10]++;
-      usleep(1);
+      ierr = acquire_a_lock(kount,1+localrank);
+      kount[10]++;
+//       usleep(1);
 //       ierr = release_lock(0,1);  // release_idlock
-//       ierr = release_a_lock(kount,1+localrank);  // release_idlock
+      ierr = release_a_lock(kount,1+localrank);  // release_idlock
     }
     t1 = rdtsc();
     ierr = MPI_Barrier(MPI_COMM_WORLD);
