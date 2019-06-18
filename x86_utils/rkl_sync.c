@@ -19,8 +19,13 @@
 
 #include <rkl_sync.h>
 
+// default number of locks/barriers = 16
 #define MAXLOCKID 15
 static uint32_t maxlockid = MAXLOCKID;
+
+// locks
+static uint32_t volatile lock0[MAXLOCKID+1] __attribute__ ((aligned (64)));
+static uint32_t volatile *locks;       // in case we want to allocate to another address
 
 // barrier (partial) done flags
 static uint32_t volatile barrs0[MAXLOCKID+1] __attribute__ ((aligned (64)));
@@ -33,6 +38,7 @@ static uint32_t volatile *count;       // in case we want to allocate to another
 // allocate a  shared memory segment of size Bytes 
 // segment will be preventively marked for deletion (only works on linux)
 // return address and id of shared memory segment (in sid)
+// in case of error id is <0 and the returned address is NULL
 void *allocate_safe_shared_memory(int32_t *sid, uint32_t size)   // InTc
 {
   size_t siz = size;
@@ -50,23 +56,25 @@ void *allocate_safe_shared_memory(int32_t *sid, uint32_t size)   // InTc
 }
 
 // switch to tables of a different dimension at another address
-// size is in bytes
-uint32_t setup_barrier_and_lock(void *p, uint32_t size)   // InTc
+// p        : base 
+// size     : in bytes
+// maxitems : number of locks/barriers to allocate (will be rounded down to a multiple of 16)
+// return the next available address
+void *setup_locks_and_barriers(void *p, uint32_t size, uint32_t maxitems)   // InTc
 {
-  uint32_t tmp;
-
-  tmp = ((size >> 7) << 6) ;     // multiple of 64 from multiple of 128 (2 tables to allocate)
-  if(tmp < 64) return 1;         // less than 64 bytes per table, OOPS
-  maxlockid = (tmp >> 2) -1 ;    // bytes to integers
-  barrs = (uint32_t *) p;
-  count = barrs + maxlockid + 1;
-  return 0;
+  maxitems = (maxitems >> 4) << 4;  // multiple of 16 x 4 byte items
+  if(size < (maxitems * 3 * sizeof(uint32_t)) ) return NULL;   // not enough memory for tables, OOPS
+  maxlockid = maxitems - 1;         // maximum index
+  locks = (uint32_t *) p;
+  barrs = locks + maxitems;
+  count = barrs + maxitems;
+  return (void *)(count + maxitems);     // next free address
 }
 
 // unsophisticated version, probably fastest up to 8 participants
 // id = which barrier is to be used
 // version with "flag flip"
-uint32_t node_barrier_simple(int32_t id, int32_t maxcount)   // InTc
+uint32_t simple_node_barrier(int32_t id, int32_t maxcount)   // InTc
 {
   int lgo, cnt;
 
@@ -85,7 +93,8 @@ uint32_t node_barrier_simple(int32_t id, int32_t maxcount)   // InTc
   return 0;
 }
 
-// more sophisticated version with 2 level "flag flip" (should be faster for large counts)
+#if defined(TEST_MULTI)
+// more sophisticated version with 2 level "flag flip" (may be faster for large counts)
 // id is this PEs identifier (0 < maxcount)
 uint32_t node_barrier_multi(int32_t id, int32_t maxcount)   // InTc
 {  
@@ -121,19 +130,16 @@ uint32_t node_barrier_multi(int32_t id, int32_t maxcount)   // InTc
   }
   return 0;
 }
+#endif
 
-int32_t acquire_a_lock(volatile int32_t *lock, int me)   // InTc
+void AcquireLock(volatile int32_t *lock)   // InTc
 {
-//   acquire_idlock(count+lock, me);
-  while(__sync_val_compare_and_swap((volatile int32_t *)lock, 0, 1) != 0) ;
-  return 0;
+  acquire_lock(lock) ;
 }
 
-int32_t release_a_lock(volatile int32_t *lock, int me)   // InTc
+void ReleaseLock(volatile int32_t *lock)   // InTc
 {
-//   release_idlock(count+lock, me);
-  while(__sync_val_compare_and_swap((volatile int32_t *)lock, 1, 0) != 1) ;
-  return 0;
+  release_lock(lock) ;
 }
 
 #if defined(SELF_TEST)
@@ -164,6 +170,8 @@ int main(int argc, char **argv){
   uint64_t t0 , t1;
   double tmin, tmax, tavg, tmp;
   volatile int32_t *kount;
+  double tall[2048];
+  int it;
 
   ierr = MPI_Init( &argc, &argv );
   ierr = MPI_Comm_rank(MPI_COMM_WORLD,&globalrank);
@@ -182,106 +190,98 @@ int main(int argc, char **argv){
   if(localrank == 0) printf("PEs in node = %d, peers in MY_Peers = %d\n",localsize,peersize);
   size =globalsize *4096;   // 4 KBytes per process
 
-  if(localrank == 0){
-    ptr = allocate_safe_shared_memory(&sid, size);
-    ierr = MPI_Bcast(&sid,1,MPI_INTEGER,0,MY_World);
-//     ierr = setup_locks_and_barriers(ptr, size);
-#if ! defined(TIMING)
-    printf("setup status = %d\n",ierr);
-#endif
-    ierr = MPI_Barrier(MY_World);
-
-#if ! defined(TIMING)
-    ierr = acquire_lock(1,localrank);
-    if(ierr == 0) printf("lock acquired by %d\n",localrank);
-    sleep(1);
-    ierr = release_lock(1,localrank);
-    printf("lock %d release status = %d\n",1,ierr);
-    if(ierr != 0) printf("lock release successful\n");
-#endif
-  }else{
-    ierr = MPI_Bcast(&sid,1,MPI_INTEGER,0,MY_World);
-    ptr = shmat(sid,NULL,0);
-//     ierr = setup_locks_and_barriers(ptr, size);  
-#if ! defined(TIMING)
-    printf("setup status = %d\n",ierr);
-#endif
-    ierr = MPI_Barrier(MY_World);
-#if ! defined(TIMING)
-    ierr = acquire_lock(1,localrank);       // acquire_idlock
-    if(ierr == 0) printf("lock acquired by %d\n",localrank);
-    sleep(1);
-    ierr = release_lock(1,localrank);
-    printf("lock %d release status = %d\n",1,ierr);
-    if(ierr != 0) printf("lock release successful\n");
-#endif
+  if(localrank == 0){                                // root PE
+    ptr = allocate_safe_shared_memory(&sid, size);   // create a shared memory segment and get it's address
+    ierr = MPI_Bcast(&sid,1,MPI_INTEGER,0,MY_World); // broadcast the segment's id
+  }else{                                             // other PEs
+    ierr = MPI_Bcast(&sid,1,MPI_INTEGER,0,MY_World); // get the segment's id
+    ptr = shmat(sid,NULL,0);                         // get the shared memory segment's address
   }
-  ierr = setup_barrier_and_lock(ptr, 128);
-  kount = (int *) ptr;
-  kount += 256;
-    kount[10] = 0;
-    ierr = MPI_Barrier(MPI_COMM_WORLD);
-    t0 = rdtsc();
-    for(i=0 ; i<100 ; i++){
-//       ierr = acquire_lock(0,1);
-      ierr = acquire_a_lock(kount,1+localrank);
-      kount[10]++;
-//       usleep(1);
-//       ierr = release_lock(0,1);  // release_idlock
-      ierr = release_a_lock(kount,1+localrank);  // release_idlock
-    }
-    t1 = rdtsc();
-    ierr = MPI_Barrier(MPI_COMM_WORLD);
-//     printf("lock acquire/release time = %d\n",(t1-t0)/100);
-    tmp = (t1-t0)/100;
-    ierr = MPI_Allreduce(&tmp,&tmin,1,MPI_DOUBLE,MPI_MIN,MPI_COMM_WORLD);
-    ierr = MPI_Allreduce(&tmp,&tmax,1,MPI_DOUBLE,MPI_MAX,MPI_COMM_WORLD);
-    ierr = MPI_Allreduce(&tmp,&tavg,1,MPI_DOUBLE,MPI_SUM,MPI_COMM_WORLD);
-    tavg = tavg / globalsize;
-    if(globalrank == 0) printf("lock min, max, avg = %9f, %9f, %9f, kount = %d\n",tmin,tmax,tavg,kount[10]);
-    t0 = rdtsc();
-    for(i=0 ; i<100 ; i++){
-      node_barrier_simple(0, localsize);
-      node_barrier_simple(0, localsize);
-      node_barrier_simple(0, localsize);
-    }
-    t1 = rdtsc();
-//     printf("barrier time = %d\n",(t1-t0)/300);
-    tmp = (t1-t0)/300;
-    ierr = MPI_Allreduce(&tmp,&tmin,1,MPI_DOUBLE,MPI_MIN,MPI_COMM_WORLD);
-    ierr = MPI_Allreduce(&tmp,&tmax,1,MPI_DOUBLE,MPI_MAX,MPI_COMM_WORLD);
-    ierr = MPI_Allreduce(&tmp,&tavg,1,MPI_DOUBLE,MPI_SUM,MPI_COMM_WORLD);
-    tavg = tavg / globalsize;
-    if(globalrank == 0) printf("simple SMP barrier min, max, avg = %9f, %9f, %9f\n",tmin,tmax,tavg);
-    t0 = rdtsc();
-    for(i=0 ; i<100 ; i++){
-      node_barrier_multi(localrank, localsize);
-      node_barrier_multi(localrank, localsize);
-      node_barrier_multi(localrank, localsize);
-    }
-    t1 = rdtsc();
-//     printf("barrier time = %d\n",(t1-t0)/300);
-    tmp = (t1-t0)/300;
-    ierr = MPI_Allreduce(&tmp,&tmin,1,MPI_DOUBLE,MPI_MIN,MPI_COMM_WORLD);
-    ierr = MPI_Allreduce(&tmp,&tmax,1,MPI_DOUBLE,MPI_MAX,MPI_COMM_WORLD);
-    ierr = MPI_Allreduce(&tmp,&tavg,1,MPI_DOUBLE,MPI_SUM,MPI_COMM_WORLD);
-    tavg = tavg / globalsize;
-    if(globalrank == 0) printf("multi SMP barrier min, max, avg = %9f, %9f, %9f\n",tmin,tmax,tavg);
+  ierr = MPI_Barrier(MY_World);                      // wait for all PEs to have attached the segment
 
-    t0 = rdtsc();
-    for(i=0 ; i<100 ; i++){
-      ierr = MPI_Barrier(MY_World);
-      ierr = MPI_Barrier(MY_World);
-      ierr = MPI_Barrier(MY_World);
+  kount = (int *) setup_locks_and_barriers(ptr, size, 16);
+  kount[1] = 0;
+  ierr = MPI_Barrier(MY_World);                // kount[1] is now available to all PEs
+
+// performance and correctness test of increment under lock
+  t0 = rdtsc();
+  for(i=0 ; i<100 ; i++){
+    AcquireLock(kount);
+    kount[1]++;
+    ReleaseLock(kount);  // release_idlock
+  }
+  t1 = rdtsc();
+  ierr = MPI_Barrier(MY_World);   // wait until all PEs are done
+  tmp = (t1-t0)/100;
+  ierr = MPI_Allreduce(&tmp,&tmin,1,MPI_DOUBLE,MPI_MIN,MY_World);  // collect minimum value
+  ierr = MPI_Allreduce(&tmp,&tmax,1,MPI_DOUBLE,MPI_MAX,MY_World);  // collect maximum value
+  ierr = MPI_Allreduce(&tmp,&tavg,1,MPI_DOUBLE,MPI_SUM,MY_World);  // sum of timings to compute average
+  ierr = MPI_Gather(&tmp,1,MPI_DOUBLE,&tall,1,MPI_DOUBLE,0,MY_World);
+  tavg = tavg / localsize;
+  if(kount[1] != 100 * localsize) {
+    printf("ERROR: kount = %d, expected = %d\n",kount[1], 100 * localsize);
+    exit(1);
+  }
+  if(globalrank == 0){
+    printf("lock min, max, avg = %6.0f, %6.0f, %6.0f, kount = %d\n",tmin,tmax,tavg,kount[1]);
+    for(i = 0 ; i < localsize ; i++){
+      printf("%6.0f ",tall[i]);
     }
-    t1 = rdtsc();
-//     printf("barrier time = %d\n",(t1-t0)/300);
-    tmp = (t1-t0)/300;
-    ierr = MPI_Allreduce(&tmp,&tmin,1,MPI_DOUBLE,MPI_MIN,MPI_COMM_WORLD);
-    ierr = MPI_Allreduce(&tmp,&tmax,1,MPI_DOUBLE,MPI_MAX,MPI_COMM_WORLD);
-    ierr = MPI_Allreduce(&tmp,&tavg,1,MPI_DOUBLE,MPI_SUM,MPI_COMM_WORLD);
-    tavg = tavg / globalsize;
-    if(globalrank == 0) printf("MPI barrier min, max, avg = %9f, %9f, %9f\n",tmin,tmax,tavg);
+    printf("\n\n");
+  }
+
+// performance test 
+  t0 = rdtsc();
+  for(i=0 ; i<100 ; i++){
+    simple_node_barrier(0, localsize);  // 3 barriers in a row to really stress things
+    simple_node_barrier(0, localsize);
+    simple_node_barrier(0, localsize);
+  }
+  t1 = rdtsc();
+  tmp = (t1-t0)/300;
+  ierr = MPI_Allreduce(&tmp,&tmin,1,MPI_DOUBLE,MPI_MIN,MY_World);
+  ierr = MPI_Allreduce(&tmp,&tmax,1,MPI_DOUBLE,MPI_MAX,MY_World);
+  ierr = MPI_Allreduce(&tmp,&tavg,1,MPI_DOUBLE,MPI_SUM,MY_World);
+  ierr = MPI_Gather(&tmp,1,MPI_DOUBLE,&tall,1,MPI_DOUBLE,0,MY_World);
+  tavg = tavg / globalsize;
+  if(globalrank == 0){
+    printf("simple SMP barrier min, max, avg = %6.0f, %6.0f, %6.0f\n",tmin,tmax,tavg);
+    for(i = 0 ; i < localsize ; i++){
+      printf("%6.0f ",tall[i]);
+    }
+    printf("\n\n");
+  }
+
+#if defined(TEST_MULTI)
+test of more complex barrier algorithm
+  t0 = rdtsc();
+  for(i=0 ; i<100 ; i++){
+    node_barrier_multi(localrank, localsize);
+    node_barrier_multi(localrank, localsize);
+    node_barrier_multi(localrank, localsize);
+  }
+  t1 = rdtsc();
+  tmp = (t1-t0)/300;
+  ierr = MPI_Allreduce(&tmp,&tmin,1,MPI_DOUBLE,MPI_MIN,MPI_COMM_WORLD);
+  ierr = MPI_Allreduce(&tmp,&tmax,1,MPI_DOUBLE,MPI_MAX,MPI_COMM_WORLD);
+  ierr = MPI_Allreduce(&tmp,&tavg,1,MPI_DOUBLE,MPI_SUM,MPI_COMM_WORLD);
+  tavg = tavg / globalsize;
+  if(globalrank == 0) printf("multi SMP barrier min, max, avg = %6.0f, %6.0f, %6.0f\n",tmin,tmax,tavg);
+#endif
+
+  t0 = rdtsc();
+  for(i=0 ; i<100 ; i++){
+    ierr = MPI_Barrier(MY_World);
+    ierr = MPI_Barrier(MY_World);
+    ierr = MPI_Barrier(MY_World);
+  }
+  t1 = rdtsc();
+  tmp = (t1-t0)/300;
+  ierr = MPI_Allreduce(&tmp,&tmin,1,MPI_DOUBLE,MPI_MIN,MY_World);
+  ierr = MPI_Allreduce(&tmp,&tmax,1,MPI_DOUBLE,MPI_MAX,MY_World);
+  ierr = MPI_Allreduce(&tmp,&tavg,1,MPI_DOUBLE,MPI_SUM,MY_World);
+  tavg = tavg / globalsize;
+  if(globalrank == 0) printf("MPI barrier min, max, avg = %6.0f, %6.0f, %6.0f\n",tmin,tmax,tavg);
 
   ierr = MPI_Finalize();
   if(ierr != MPI_SUCCESS) return 1;

@@ -15,26 +15,29 @@ static inline void acquire_idlock(volatile void *lock, int32_t id){
   while(__sync_val_compare_and_swap((volatile uint32_t *)lock, 0, id) != 0) ;
 }
 
-static inline void acquire_lock0(volatile void *lock){
-  acquire_idlock(lock, -1) ;
+static inline void acquire_lock(volatile void *lock){
+  acquire_idlock(lock, 1) ;
 }
 
+// this will deadlock if attempt is made to release a lock with the wrong id
 static inline void release_idlock(volatile void *lock, int32_t id){
   while(__sync_val_compare_and_swap((volatile uint32_t *)lock, id, 0) != id) ;
 }
 
-static inline void release_lock0(volatile void *lock){
-  release_idlock(lock, -1) ;
+// this will deadlock if attempt is made to release a lock with id other than 1
+static inline void release_lock(volatile void *lock){
+  release_idlock(lock, 1) ;
 }
 
 static inline int32_t test_idlock(volatile void *lock, int32_t id){
-  return (*(volatile uint32_t *)lock != 0 );
+  return (*(volatile uint32_t *)lock != id );
 }
 
 static inline int32_t test_lock0(volatile void *lock){
   return (*(volatile uint32_t *)lock != 0 );
 }
 
-static inline void reset_lock(volatile void *lock){
+// forcefully reset lock
+static inline void force_reset_lock(volatile void *lock){
   *(volatile uint32_t *)lock = 0 ;
 }
