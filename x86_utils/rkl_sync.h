@@ -11,7 +11,6 @@
 //     MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
 //     Lesser General Public License for more details.
 
-
 static inline void acquire_idlock(volatile void *lock, int32_t id){
   while(__sync_val_compare_and_swap((volatile uint32_t *)lock, 0, id) != 0) ;
 }

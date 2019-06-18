@@ -74,12 +74,13 @@ uint32_t node_barrier_simple(int32_t id, int32_t maxcount)   // InTc
   if(maxcount == 1) return 0;              // trivial case, no need for fancy footwork
 
   lgo = barrs[id];                         // save current flag value
-  cnt = __sync_fetch_and_add (count, 1);   // increment barrier count
+  cnt = __sync_fetch_and_add (count+id, 1);   // increment barrier count
   if(cnt == maxcount - 1){                 // last participant
-    count[id] = 0;                         // reset count
+//     count[id] = 0;                         // reset count
+    cnt = __sync_fetch_and_add (count+id, -maxcount);  // reset count to zero
     barrs[id] = 1 - barrs[id];             // invert flag
   }else{                                   // all other participants
-    while(lgo == barrs[id]) ;              // wait while flag is not inverted
+    while(lgo == barrs[id]) ;   // wait while flag is not inverted
   }
   return 0;
 }
@@ -121,15 +122,17 @@ uint32_t node_barrier_multi(int32_t id, int32_t maxcount)   // InTc
   return 0;
 }
 
-int32_t acquire_lock(uint32_t lock, int me)   // InTc
+int32_t acquire_a_lock(volatile int32_t *lock, int me)   // InTc
 {
-  acquire_idlock(count+lock, me);
+//   acquire_idlock(count+lock, me);
+  while(__sync_val_compare_and_swap((volatile int32_t *)lock, 0, 1) != 0) ;
   return 0;
 }
 
-int32_t release_lock(uint32_t lock, int me)   // InTc
+int32_t release_a_lock(volatile int32_t *lock, int me)   // InTc
 {
-  release_idlock(count+lock, me);
+//   release_idlock(count+lock, me);
+  while(__sync_val_compare_and_swap((volatile int32_t *)lock, 1, 0) != 1) ;
   return 0;
 }
 
@@ -160,6 +163,7 @@ int main(int argc, char **argv){
   int32_t sid, size;
   uint64_t t0 , t1;
   double tmin, tmax, tavg, tmp;
+  volatile int32_t *kount;
 
   ierr = MPI_Init( &argc, &argv );
   ierr = MPI_Comm_rank(MPI_COMM_WORLD,&globalrank);
@@ -213,19 +217,28 @@ int main(int argc, char **argv){
 #endif
   }
   ierr = setup_barrier_and_lock(ptr, 128);
+  kount = (int *) ptr;
+  kount += 256;
+    kount[10] = 0;
     t0 = rdtsc();
     for(i=0 ; i<100 ; i++){
-      ierr = acquire_lock(2,localrank);
-      ierr = release_lock(2,localrank);  // release_idlock
+//       ierr = acquire_lock(0,1);
+//       ierr = acquire_a_lock(kount,1+localrank);
+      ierr = __sync_fetch_and_add (kount+10,1);
+//       kount[10]++;
+      usleep(1);
+//       ierr = release_lock(0,1);  // release_idlock
+//       ierr = release_a_lock(kount,1+localrank);  // release_idlock
     }
     t1 = rdtsc();
+    ierr = MPI_Barrier(MPI_COMM_WORLD);
 //     printf("lock acquire/release time = %d\n",(t1-t0)/100);
     tmp = (t1-t0)/100;
     ierr = MPI_Allreduce(&tmp,&tmin,1,MPI_DOUBLE,MPI_MIN,MPI_COMM_WORLD);
     ierr = MPI_Allreduce(&tmp,&tmax,1,MPI_DOUBLE,MPI_MAX,MPI_COMM_WORLD);
     ierr = MPI_Allreduce(&tmp,&tavg,1,MPI_DOUBLE,MPI_SUM,MPI_COMM_WORLD);
     tavg = tavg / globalsize;
-    if(globalrank == 0) printf("lock min, max, avg = %9f, %9f, %9f\n",tmin,tmax,tavg);
+    if(globalrank == 0) printf("lock min, max, avg = %9f, %9f, %9f, kount = %d\n",tmin,tmax,tavg,kount[10]);
     t0 = rdtsc();
     for(i=0 ; i<100 ; i++){
       node_barrier_simple(0, localsize);
