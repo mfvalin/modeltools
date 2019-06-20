@@ -346,7 +346,7 @@ int main(int argc, char **argv){
     printf("ERROR: kount = %d, expected = %d\n",kount[1], 100 * localsize);
     exit(1);
   }
-  if(globalrank == 0){
+  if(localrank == 0){
     printf("lock min, max, avg = %6.0f, %6.0f, %6.0f, kount = %d\n",tmin,tmax,tavg,kount[1]);
     for(i = 0 ; i < localsize ; i++){
       printf("%6.0f ",tall[i]);
@@ -367,8 +367,8 @@ int main(int argc, char **argv){
   ierr = MPI_Allreduce(&tmp,&tmax,1,MPI_DOUBLE,MPI_MAX,MY_World);
   ierr = MPI_Allreduce(&tmp,&tavg,1,MPI_DOUBLE,MPI_SUM,MY_World);
   ierr = MPI_Gather(&tmp,1,MPI_DOUBLE,&tall,1,MPI_DOUBLE,0,MY_World);
-  tavg = tavg / globalsize;
-  if(globalrank == 0){
+  tavg = tavg / localsize;
+  if(localrank == 0){
     printf("simple SMP barrier min, max, avg = %6.0f, %6.0f, %6.0f\n",tmin,tmax,tavg);
     for(i = 0 ; i < localsize ; i++){
       printf("%6.0f ",tall[i]);
@@ -386,11 +386,11 @@ test of more complex barrier algorithm
   }
   t1 = rdtsc();
   tmp = (t1-t0)/300;
-  ierr = MPI_Allreduce(&tmp,&tmin,1,MPI_DOUBLE,MPI_MIN,MPI_COMM_WORLD);
-  ierr = MPI_Allreduce(&tmp,&tmax,1,MPI_DOUBLE,MPI_MAX,MPI_COMM_WORLD);
-  ierr = MPI_Allreduce(&tmp,&tavg,1,MPI_DOUBLE,MPI_SUM,MPI_COMM_WORLD);
-  tavg = tavg / globalsize;
-  if(globalrank == 0) printf("multi SMP barrier min, max, avg = %6.0f, %6.0f, %6.0f\n",tmin,tmax,tavg);
+  ierr = MPI_Allreduce(&tmp,&tmin,1,MPI_DOUBLE,MPI_MIN,MY_World);
+  ierr = MPI_Allreduce(&tmp,&tmax,1,MPI_DOUBLE,MPI_MAX,MY_World);
+  ierr = MPI_Allreduce(&tmp,&tavg,1,MPI_DOUBLE,MPI_SUM,MY_World);
+  tavg = tavg / localsize;
+  if(localrank == 0) printf("multi SMP barrier min, max, avg = %6.0f, %6.0f, %6.0f\n",tmin,tmax,tavg);
 #endif
 
   t0 = rdtsc();
@@ -404,8 +404,8 @@ test of more complex barrier algorithm
   ierr = MPI_Allreduce(&tmp,&tmin,1,MPI_DOUBLE,MPI_MIN,MY_World);
   ierr = MPI_Allreduce(&tmp,&tmax,1,MPI_DOUBLE,MPI_MAX,MY_World);
   ierr = MPI_Allreduce(&tmp,&tavg,1,MPI_DOUBLE,MPI_SUM,MY_World);
-  tavg = tavg / globalsize;
-  if(globalrank == 0) printf("MPI barrier min, max, avg = %6.0f, %6.0f, %6.0f\n",tmin,tmax,tavg);
+  tavg = tavg / localsize;
+  if(localrank == 0) printf("MPI barrier min, max, avg = %6.0f, %6.0f, %6.0f\n",tmin,tmax,tavg);
 
   ierr = MPI_Finalize();
   if(ierr != MPI_SUCCESS) return 1;
