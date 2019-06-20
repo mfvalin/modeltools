@@ -572,12 +572,14 @@ static uint64_t rdtsc(void) {   // version rapide "out of order"
   return (uint64_t)lo | (((uint64_t)hi) << 32);
 }
 static double cvt = 1.0 / 3.7E+9 ;  // assumes 3.7GHz clock
-
+#if !defined(WITH_MPI)
 double MPI_Wtime(){
   return cvt * rdtsc();
 }
-
-main(int argc, char **argv){
+#else
+#include <mpi.h>
+#endif
+int main(int argc, char **argv){
   double *mtx1_4x4;
   double *mtx2_4x4;
   int *mat1_4x4;
@@ -713,5 +715,6 @@ main(int argc, char **argv){
     for (i=0 ; i<NJ ; i++) printf("%4d",i) ;
     printf(">\n");
   }
+  return 0;
 }
 #endif
