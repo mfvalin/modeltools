@@ -113,8 +113,8 @@ subroutine transpose_64_mpi(comm, npe, pe_me, forward, za, zb, mini1, maxi1, n1g
 #if defined(SELF_TEST)
 ! write(6,101)send_cnt, send_dsp, recv_cnt, recv_dsp
   if(pe_me == 0) then
-!     if(forward)       print *,'xpose timing TR AA =',forward,t2-t1,t3-t2
-!     if(.not. forward) print *,'xpose timing TR AA =',forward,(t3-t2)+(t1-t0),t2-t1
+!     if(forward)       print '(A,2G12.3)','forward transpose timing TR AA =',t2-t1,t3-t2
+!     if(.not. forward) print '(A,2G12.3)','inverse transpose timing TR AA =',(t3-t2)+(t1-t0),t2-t1
   endif
 101 format(20I4)
 #endif
@@ -150,10 +150,11 @@ program test    ! calling sequence : ./a.out nrows mni lnj nk (arguments are pos
 ! (PE is a synonym for process in the comments)
   use ISO_FORTRAN_ENV
   implicit none
-  integer :: MNI    = 125   ! maximum size along the first dimension of the local tile
-  integer :: LNJ    = 60    ! maximum size along the second dimension of the local tile
-  integer :: NK     = 83    ! maximum size along the third dimension of the local tile
+  integer :: MNI    = 26    ! maximum size along the first dimension of the local tile
+  integer :: LNJ    = 22    ! maximum size along the second dimension of the local tile
+  integer :: NK     = 80    ! maximum size along the third dimension of the local tile
   integer :: nrows  = 1     ! npey, number of rows of PEs (3 rows with 36 PEs mean a 8x3 MPI configuration)
+  integer :: pernode= 36    ! assuming 36 processes per node
   include 'mpif.h'
 
   character(len=128) :: arg
@@ -161,8 +162,9 @@ program test    ! calling sequence : ./a.out nrows mni lnj nk (arguments are pos
   real(kind=REAL64), dimension(:,:,:), allocatable  :: zb  ! transposed array
   real(kind=REAL64), dimension(:,:,:), allocatable  :: zc  ! back transposed array
   real(kind=REAL64) :: t1, t2, t3
-  integer :: i, j, k, ierr, rank, npes, lnkmax, mylnk, lni, gni, errors, errtot
-  integer :: my_row, pe_mey, nrow, pe_mex, ncols, npts
+  integer :: i, j, k, ierr, rank, npes, lnkmax, mylnk, lni, gni, errors, errtot, lnkbase, err2, errtot2, err2s(216)
+  integer :: my_row, pe_mey, nrow, pe_mex, ncols, npts, irep, nodes
+  integer(kind=8) :: netvol
 
   call MPI_init(ierr)
   call MPI_comm_rank(MPI_COMM_WORLD,rank,ierr)
@@ -180,10 +182,15 @@ program test    ! calling sequence : ./a.out nrows mni lnj nk (arguments are pos
 
   call GET_COMMAND_ARGUMENT(4, arg)
   if(arg .ne. " ") read(arg,*)NK
+  call GET_COMMAND_ARGUMENT(5, arg)
+  if(arg .ne. " ") read(arg,*)pernode
 
   npts = MNI*LNJ*NK*npes
+  nodes = (npes + pernode -1) / pernode
+  netvol = npts * 2
+  netvol = netvol * (nodes-1) / nodes
   if(rank == 0) then
-    print 102,' nrows, ncols, MNI, LNJ, NK =',nrows, ncols, MNI, LNJ, NK
+    print 102,' nrows, ncols, nodes, MNI, LNJ, NK =',nrows, ncols, nodes, MNI, LNJ, NK
     print *,'NPTS =',npts
   endif
   ! split into rows
@@ -193,7 +200,8 @@ program test    ! calling sequence : ./a.out nrows mni lnj nk (arguments are pos
   call MPI_comm_size(my_row, nrow, ierr)
 
   lnkmax = (NK + nrow -1)/nrow                       ! max number of levels after transpose (all processes)
-  mylnk = max( min(lnkmax , NK - lnkmax * rank) , 0) ! number of levels after transpose for THIS process
+  mylnk = max( min(lnkmax , NK - lnkmax * pe_mex) , 0) ! number of levels after transpose for THIS process
+  lnkbase = lnkmax * pe_mex + 1                        ! first k level for this PE
   gni = MNI*ncols - 2                                ! global first dimension (last tile deliberately 2 points short)
   lni = min(MNI, gni - (MNI*pe_mex))                 ! first dimension for THIS tile
   allocate(zb(LNJ, lnkmax, gni))    ! allocate arrays
@@ -207,7 +215,7 @@ program test    ! calling sequence : ./a.out nrows mni lnj nk (arguments are pos
   do k = 1,NK
   do j = 1,LNJ
   do i = 1,lni
-    za(i,j,k) = (10000*i + 100*j + k) 
+    za(i,j,k) = (10000*(i+pe_mex*MNI) + 100*j + k) 
   enddo
   enddo
   enddo
@@ -238,25 +246,33 @@ program test    ! calling sequence : ./a.out nrows mni lnj nk (arguments are pos
   call MPI_barrier(MPI_COMM_WORLD,ierr)
   call transpose_64_mpi(my_row, nrow, pe_mex, .false., zc, zb, 0, MNI+1, gni, MNI, LNJ, NK, lnkmax)
 
-  call MPI_barrier(MPI_COMM_WORLD,ierr)
-
-  t1 = MPI_wtime()
-  call transpose_64_mpi(my_row, nrow, pe_mex, .true., za, zb, 0, MNI+1, gni, MNI, LNJ, NK, lnkmax)
+  
+  do irep = 1, 5
+    call MPI_barrier(MPI_COMM_WORLD,ierr)
+    if(pe_mey+pe_mex == 0) print *
+    call MPI_barrier(my_row,ierr)
+    t1 = MPI_wtime()*1000000.
+    call transpose_64_mpi(my_row, nrow, pe_mex, .true., za, zb, 0, MNI+1, gni, MNI, LNJ, NK, lnkmax)
 #if defined(DIAG)
-  if(pe_mey == 0) then
-    print *,'=============== 2 =================='
-    do k = mylnk,1,-1
-      print *,'k = ',k
-      do i = gni,1,-1
-        print 101,i*1.0_8,zb(:,k,i)
+    if(pe_mey == 0 .and. irep == 1) then
+      print *,'=============== 2 =================='
+      do k = mylnk,1,-1
+        print *,'k = ',k
+        do i = gni,1,-1
+          print 101,i*1.0_8,zb(:,k,i)
+        enddo
       enddo
-    enddo
-  endif
+    endif
 #endif
+    call MPI_barrier(my_row,ierr)
+    t2 = MPI_wtime()*1000000.
+    call transpose_64_mpi(my_row, nrow, pe_mex, .false., zc, zb, 0, MNI+1, gni, MNI, LNJ, NK, lnkmax)
+    call MPI_barrier(my_row,ierr)
+    t3 = MPI_wtime()*1000000.
+    if(pe_mex == 0) print 102,'row, fwd, inv time =',pe_mey,nint(t2-t1), nint(t3-t2)
+  enddo
 
-  t2 = MPI_wtime()
-  call transpose_64_mpi(my_row, nrow, pe_mex, .false., zc, zb, 0, MNI+1, gni, MNI, LNJ, NK, lnkmax)
-  t3 = MPI_wtime()
+
 #if defined(DIAG)
   if(pe_mey == 0) then
     print *,'=============== 3 =================='
@@ -268,6 +284,21 @@ program test    ! calling sequence : ./a.out nrows mni lnj nk (arguments are pos
     enddo
   endif
 #endif
+  err2 = 0
+  do i = 1,gni
+  do k = 1, mylnk
+  do j = 1,LNJ
+    if(zb(j,k,i) .ne. (10000*i + 100*j + k + lnkbase - 1)) err2 = err2 + 1
+  enddo
+  enddo
+  enddo
+  if(err2 .ne. 0) print 102,'pe_mex, pe_mey,mylnk,err2 =',pe_mex, pe_mey,mylnk,err2
+  call MPI_barrier(MPI_COMM_WORLD,ierr)
+  err2s = 0
+  call MPI_gather(err2, 1, MPI_INTEGER, err2s, nrow, MPI_INTEGER, 0, my_row, ierr)
+  call MPI_barrier(MPI_COMM_WORLD,ierr)
+!   if(pe_mex == 0) print 102,'pe_mey, pts, err2s =',pe_mey,gni*mylnk*LNJ,err2s(1:nrow)
+  call MPI_reduce(err2, errtot2, 1, MPI_INTEGER, MPI_SUM, 0, my_row, ierr)
   errors = 0
   do k = 1,NK
   do j = 1,LNJ
@@ -278,14 +309,15 @@ program test    ! calling sequence : ./a.out nrows mni lnj nk (arguments are pos
   enddo
   call MPI_barrier(MPI_COMM_WORLD,ierr)
   if(rank == 0) then
-    print *,'global grid =',gni,LNJ*nrows,NK
-    print *,'bytes/sec =',8*(npts/(t3-t1))
+    print 102,'global grid =',gni,LNJ*nrows,NK
+    print '(A,F10.0)','MBytes/sec =',8*(npts*4.0/(t3-t1))
+    print '(A,2F10.0)','network MBytes/sec =',8*(netvol/(t3-t1)),8*(netvol/(t3-t1))/(nodes-1)
   endif
   call MPI_reduce(errors, errtot, 1, MPI_INTEGER, MPI_SUM, 0, my_row,ierr)
   call MPI_barrier(MPI_COMM_WORLD,ierr)
-  if(pe_mex == 0) print *,'row, fwd, inv time =',pe_mey,t2-t1, t3-t2
+!   if(pe_mex == 0) print 102,'row, fwd, inv time =',pe_mey,nint(t2-t1), nint(t3-t2)h
   call MPI_barrier(MPI_COMM_WORLD,ierr)
-  if(pe_mex == 0) print *,'row, number of errors =',pe_mey,errtot
+  if(pe_mex == 0) print 102,'row, number of errors =',pe_mey,errtot, errtot2
 
   deallocate(za,zb,zc)
 
