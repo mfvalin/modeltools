@@ -96,6 +96,13 @@ static uint32_t volatile *count;       // in case we want to allocate to another
 // return address and id of shared memory segment (in sid)
 // in case of error id is <0 and the returned address is NULL
 //
+// Fortran interface
+//   function allocate_safe_shared_memory(sid, siz) result(p) bind(C,name='allocate_safe_shared_memory')   !InTf!
+//     import :: C_INT, C_PTR                      !InTf!
+//     integer(C_INT), intent(OUT) :: sid          !InTf!
+//     integer(C_INT), intent(IN), value :: siz    !InTf!
+//     type(C_PTR) :: p                            !InTf!
+//   end function allocate_safe_shared_memory      !InTf!
 // ARGUMENTS
 void *allocate_safe_shared_memory(int32_t *sid, uint32_t size)   // !InTc!
 //****
@@ -124,6 +131,14 @@ void *allocate_safe_shared_memory(int32_t *sid, uint32_t size)   // !InTc!
 // maxitems : number of locks/barriers to allocate (will be rounded down to a multiple of 16)
 // return the next available address (above tables)
 //
+// Fortran interface
+//   function setup_locks_and_barriers(pi, siz, maxitems) result(po) bind(C,name='setup_locks_and_barriers')   !InTf!
+//     import :: C_INT, C_PTR                           !InTf!
+//     type(C_PTR), intent(IN), value :: pi             !InTf!
+//     integer(C_INT), intent(IN), value :: siz         !InTf!
+//     integer(C_INT), intent(IN), value :: maxitems    !InTf!
+//     type(C_PTR) :: po                                !InTf!
+//   end function setup_locks_and_barriers              !InTf!
 // ARGUMENTS
 void *setup_locks_and_barriers(void *p, uint32_t size, uint32_t maxitems)   // !InTc!
 //****
@@ -147,7 +162,7 @@ void *setup_locks_and_barriers(void *p, uint32_t size, uint32_t maxitems)   // !
 // the function will return 0 upon success, 1 in case of error (invalid id)
 //
 // Fortran interface
-//   function simple_node_barrier(id, maxcount) result(status)   !InTf!
+//   function simple_node_barrier(id, maxcount) result(status) bind(C,name='simple_node_barrier')  !InTf!
 //     import :: C_INT                                           !InTf!
 //     integer(C_INT), intent(IN), value :: id, maxcount         !InTf!
 //     integer(C_INT) :: status                                  !InTf!
@@ -217,6 +232,11 @@ uint32_t node_barrier_multi(int32_t id, int32_t maxcount)   // !InTc!
 // the variable pointed to by lock must have been initialized to zero
 // lock   : address of lock variable
 //
+// Fortran interface
+//   subroutine AcquireLock(lock) bind(C,name='AcquireLock')         !InTf!
+//     import :: C_INT                               !InTf!
+//     integer(C_INT), intent(INOUT) :: lock         !InTf!
+//   end subroutine AcquireLock                      !InTf!
 // ARGUMENTS
 void AcquireLock(volatile int32_t *lock)   // !InTc!
 //****
@@ -232,6 +252,12 @@ void AcquireLock(volatile int32_t *lock)   // !InTc!
 // lock   : address of lock variable
 // id     : identifier for this thread/process
 //
+// Fortran interface
+//   subroutine AcquireIdLock(lock, id) bind(C,name='AcquireIdLock')         !InTf!
+//     import :: C_INT                               !InTf!
+//     integer(C_INT), intent(INOUT) :: lock         !InTf!
+//     integer(C_INT), intent(IN), value :: id       !InTf!
+//   end subroutine AcquireIdLock                    !InTf!
 // ARGUMENTS
 void AcquireIdLock(volatile int32_t *lock, int32_t id)   // !InTc!
 //****
@@ -244,6 +270,11 @@ void AcquireIdLock(volatile int32_t *lock, int32_t id)   // !InTc!
 // release a lock acquired via AcquireLock using 4 byte variable at address lock
 // attempting to release a lock that is not acquired will result in a deadlock
 //
+// Fortran interface
+//   subroutine ReleaseLock(lock) bind(C,name='ReleaseLock')         !InTf!
+//     import :: C_INT                               !InTf!
+//     integer(C_INT), intent(INOUT) :: lock         !InTf!
+//   end subroutine ReleaseLock                      !InTf!
 // ARGUMENTS
 void ReleaseLock(volatile int32_t *lock)   // !InTc!
 //****
@@ -258,6 +289,12 @@ void ReleaseLock(volatile int32_t *lock)   // !InTc!
 // lock   : address of lock variable
 // id     : identifier for this thread/process
 //
+// Fortran interface
+//   subroutine ReleaseIdLock(lock, id) bind(C,name='ReleaseIdLock')         !InTf!
+//     import :: C_INT                               !InTf!
+//     integer(C_INT), intent(INOUT) :: lock         !InTf!
+//     integer(C_INT), intent(IN), value :: id       !InTf!
+//   end subroutine ReleaseIdLock                    !InTf!
 // ARGUMENTS
 void ReleaseIdLock(volatile int32_t *lock, int32_t id)   // !InTc!
 //****
