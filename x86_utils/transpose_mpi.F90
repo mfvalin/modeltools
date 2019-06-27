@@ -162,7 +162,9 @@ program test    ! calling sequence : ./a.out nrows mni lnj nk (arguments are pos
   real(kind=REAL64), dimension(:,:,:), allocatable  :: zb  ! transposed array
   real(kind=REAL64), dimension(:,:,:), allocatable  :: zc  ! back transposed array
   real(kind=REAL64) :: t1, t2, t3
-  integer :: i, j, k, ierr, rank, npes, lnkmax, mylnk, lni, gni, errors, errtot, lnkbase, err2, errtot2, err2s(216)
+  integer :: i, j, k, ierr, rank, npes, lnkmax, mylnk, lni, gni, errors, errtot, lnkbase, err2, errtot2
+  integer, dimension(288) :: err2ss
+  integer, dimension(:), pointer :: err2s  ! this does not work on swan, there is something fishy
   integer :: my_row, pe_mey, nrow, pe_mex, ncols, npts, irep, nodes
   integer(kind=8) :: netvol
 
@@ -198,6 +200,7 @@ program test    ! calling sequence : ./a.out nrows mni lnj nk (arguments are pos
   call MPI_comm_split(MPI_COMM_WORLD, pe_mey, rank, my_row, ierr)
   call MPI_comm_rank(my_row, pe_mex, ierr)
   call MPI_comm_size(my_row, nrow, ierr)
+  allocate(err2s(nrow))
 
   lnkmax = (NK + nrow -1)/nrow                       ! max number of levels after transpose (all processes)
   mylnk = max( min(lnkmax , NK - lnkmax * pe_mex) , 0) ! number of levels after transpose for THIS process
@@ -272,6 +275,13 @@ program test    ! calling sequence : ./a.out nrows mni lnj nk (arguments are pos
     if(pe_mex == 0) print 102,'row, fwd, inv time =',pe_mey,nint(t2-t1), nint(t3-t2)
   enddo
 
+  call MPI_barrier(MPI_COMM_WORLD,ierr)
+  if(rank == 0) then
+    print 102,'global grid =',gni,LNJ*nrows,NK
+    print '(A,F10.0)','MBytes/sec =',8*(npts*4.0/(t3-t1))
+    print '(A,2F10.0)','network MBytes/sec =',8*(netvol/(t3-t1)),8*(netvol/(t3-t1))/(nodes-1)
+  endif
+  call MPI_barrier(MPI_COMM_WORLD,ierr)
 
 #if defined(DIAG)
   if(pe_mey == 0) then
@@ -295,10 +305,15 @@ program test    ! calling sequence : ./a.out nrows mni lnj nk (arguments are pos
   if(err2 .ne. 0) print 102,'pe_mex, pe_mey,mylnk,err2 =',pe_mex, pe_mey,mylnk,err2
   call MPI_barrier(MPI_COMM_WORLD,ierr)
   err2s = 0
-  call MPI_gather(err2, 1, MPI_INTEGER, err2s, nrow, MPI_INTEGER, 0, my_row, ierr)
+  err2ss = 0
+!   if(pe_mex == 0) print *,'before gather',my_row,nrow
+  call MPI_gather(err2, 1, MPI_INTEGER, err2ss, nrow, MPI_INTEGER, 0, my_row, ierr)
+  err2s(1:nrow) = err2ss(1:nrow)
+!   if(pe_mex == 0) print *,'after gather',my_row
   call MPI_barrier(MPI_COMM_WORLD,ierr)
 !   if(pe_mex == 0) print 102,'pe_mey, pts, err2s =',pe_mey,gni*mylnk*LNJ,err2s(1:nrow)
   call MPI_reduce(err2, errtot2, 1, MPI_INTEGER, MPI_SUM, 0, my_row, ierr)
+!   if(pe_mex == 0) print *,'after first reduce',my_row
   errors = 0
   do k = 1,NK
   do j = 1,LNJ
@@ -307,19 +322,17 @@ program test    ! calling sequence : ./a.out nrows mni lnj nk (arguments are pos
   enddo
   enddo
   enddo
+!   if(pe_mex == 0) print *,'before second reduce',my_row
   call MPI_barrier(MPI_COMM_WORLD,ierr)
-  if(rank == 0) then
-    print 102,'global grid =',gni,LNJ*nrows,NK
-    print '(A,F10.0)','MBytes/sec =',8*(npts*4.0/(t3-t1))
-    print '(A,2F10.0)','network MBytes/sec =',8*(netvol/(t3-t1)),8*(netvol/(t3-t1))/(nodes-1)
-  endif
   call MPI_reduce(errors, errtot, 1, MPI_INTEGER, MPI_SUM, 0, my_row,ierr)
+!   if(pe_mex == 0) print *,'after second reduce',my_row
   call MPI_barrier(MPI_COMM_WORLD,ierr)
 !   if(pe_mex == 0) print 102,'row, fwd, inv time =',pe_mey,nint(t2-t1), nint(t3-t2)h
   call MPI_barrier(MPI_COMM_WORLD,ierr)
   if(pe_mex == 0) print 102,'row, number of errors =',pe_mey,errtot, errtot2
 
   deallocate(za,zb,zc)
+  deallocate(err2s)
 
 1 call MPI_finalize(ierr)
   stop
