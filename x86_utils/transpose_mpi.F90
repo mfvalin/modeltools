@@ -173,7 +173,13 @@ program test    ! calling sequence : ./a.out nrows mni lnj nk (arguments are pos
   call MPI_comm_size(MPI_COMM_WORLD,npes,ierr)
 
   call GET_COMMAND_ARGUMENT(1, arg)
-  if(arg .ne. " ") read(arg,*)nrows
+  if(arg .ne. " ") then
+    if( arg(1:2) == "-h") then
+      if(rank == 0) print *,"program nrows(1) mni(26) lnj(22) nk(80) pernode(36)"
+      goto 1
+    endif
+    read(arg,*)nrows
+  endif
   ncols = (npes+nrows-1)/nrows       ! number of columns given number of PEs and number of rows
 
   call GET_COMMAND_ARGUMENT(2, arg)
@@ -279,7 +285,7 @@ program test    ! calling sequence : ./a.out nrows mni lnj nk (arguments are pos
   if(rank == 0) then
     print 102,'global grid =',gni,LNJ*nrows,NK
     print '(A,F10.0)','MBytes/sec =',8*(npts*4.0/(t3-t1))
-    print '(A,2F10.0)','network MBytes/sec =',8*(netvol/(t3-t1)),8*(netvol/(t3-t1))/(nodes-1)
+    print '(A,2F10.0)','network MBytes/sec =',8*(netvol/(t3-t1)),8*(netvol/(t3-t1))/max(1,nodes-1)
   endif
   call MPI_barrier(MPI_COMM_WORLD,ierr)
 
