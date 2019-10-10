@@ -46,15 +46,20 @@
 // FWD and BWD are indices into a 64 bit unsigned integer array starting at the beginning of the memory arena
 // FWD, IX, NWD, SIGNL, SIGNH, BWD are 32 bit integers
 //
-//          memory arena layout
+//          memory arena layout (multiple arenas can be present)
 // +--------------------+---------------------+-------------------->
 // | arena header       | symbol table        | data blocks
 // +--------------------+---------------------+-------------------->
 //
+//          master arena layout (there must be one and only one)
+// +--------------------+--------------------+---------------------+-------------------->
+// | master tables      | arena header       | symbol table        | data blocks
+// +--------------------+--------------------+---------------------+-------------------->
+//
 // indices are used instead of addresses because the memory arena might be mapped to different addresses 
 // in different processes
 
-static uint32_t me = 999999999;  // identifier for this process (usually MPI rank)
+static uint32_t me = 999999999;  // identifier for this process (usually MPI rank) (alternative : getpid() )
 // interface                                                                      !InTf
 // function memory_arena_set_id(id) result(me) BIND(C,name='memory_arena_set_id') !InTf
 //   import :: C_INT                                                              !InTf
@@ -367,6 +372,8 @@ void *memory_arena_create_shared(int *id, uint32_t nsym, uint32_t size){
   size_t shmsz = size * sizeof(uint32_t);  // 32 bit units to bytes
   int err;
   struct shmid_ds dummy;
+
+  if(me == 999999999) me = getpid();   // if not initialized, set to pid
 
   shmid = shmget(IPC_PRIVATE, shmsz, 0600);
   *id = shmid;
