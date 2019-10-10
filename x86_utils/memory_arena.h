@@ -19,6 +19,17 @@ typedef struct{
 } symtab_entry;
 #define SymtabEntrySize64 (sizeof(symtab_entry) / sizeof(uint64_t))
 
+#define MAX_SYMS 1000000
+typedef struct{              // MUST BE CONSISTENT WITH arena_header
+  uint32_t lock;
+  uint32_t flags;
+  uint32_t max_entries;
+  uint32_t first_free;
+  uint32_t n_entries;
+  uint32_t arena_size;
+  symtab_entry t[MAX_SYMS];   // will never get allocated, only used for indexing
+} memory_arena;
+
 typedef struct{
   uint32_t fwd;
   uint32_t ix;

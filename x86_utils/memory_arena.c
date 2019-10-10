@@ -78,8 +78,10 @@ int32_t memory_arena_set_id(uint32_t id){
 // dump arena header and symbol table
 void memory_arena_print_status(void *mem){
   uint64_t *mem64 = (uint64_t *) mem;
-  arena_header *ap = (arena_header *) mem;
-  symtab_entry *sym = (symtab_entry *) ( mem64 + ArenaHeaderSize64 );
+//   arena_header *ap = (arena_header *) mem;
+  memory_arena *ma = (memory_arena *) mem;
+//   symtab_entry *sym = (symtab_entry *) ( mem64 + ArenaHeaderSize64 );
+  symtab_entry *sym = ma->t;
   int i, j, sane;
   char name[9];
   uint64_t dname, size64;
@@ -88,14 +90,14 @@ void memory_arena_print_status(void *mem){
   block_tail *bt;
 
   fprintf(stderr,"Arena Header, id = %d\n", me);
-  fprintf(stderr,"flags       = %8.8x\n",ap->flags);
-  fprintf(stderr,"max entries = %d\n",ap->max_entries);
-  fprintf(stderr,"max size    = %d\n",ap->arena_size);
-  fprintf(stderr,"entries     = %d\n",ap->n_entries);
-  fprintf(stderr,"first free  = %d\n",ap->first_free);
+  fprintf(stderr,"flags       = %8.8x\n",ma->flags);
+  fprintf(stderr,"max entries = %d\n",ma->max_entries);
+  fprintf(stderr,"max size    = %d\n",ma->arena_size);
+  fprintf(stderr,"entries     = %d\n",ma->n_entries);
+  fprintf(stderr,"first free  = %d\n",ma->first_free);
 
   fprintf(stderr,"\nSymbol table\n==============================================\n");
-  for(i = 0 ; i < ap->n_entries ; i++){
+  for(i = 0 ; i < ma->n_entries ; i++){
     size64 = sym[i].data_size;
     dataptr64 = sym[i].data_index + mem64; 
     bh = (block_header *) (dataptr64);
@@ -137,21 +139,23 @@ void memory_arena_print_status(void *mem){
 // nsym : size of symbol table to allocate (max number of blocks expected)
 uint32_t memory_arena_init(void *mem, uint32_t nsym, uint32_t size){
   uint64_t *mem64 = (uint64_t *) mem;
-  arena_header *ap = (arena_header *) mem;
-  symtab_entry *sym = (symtab_entry *) ( mem64 + ArenaHeaderSize64 );
+//   arena_header *ap = (arena_header *) mem;
+  memory_arena *ma = (memory_arena *) mem;
+//   symtab_entry *sym = (symtab_entry *) ( mem64 + ArenaHeaderSize64 );
+  symtab_entry *sym = ma->t;
   uint32_t size64 = size >> 1;  // round size down to 64 bit element size
   int i;
 
-  while(__sync_val_compare_and_swap(&(ap->lock), 0, me) != 0); // lock memory area
+  while(__sync_val_compare_and_swap(&(ma->lock), 0, me) != 0); // lock memory area
 
-  if(ap->flags != 0) return ap->flags;                           // area already initialized, return id of initializer
+  if(ma->flags != 0) return ma->flags;                           // area already initialized, return id of initializer
 
-  ap->flags = 0;           // initialize arena header
-  ap->max_entries = nsym;
-  ap->first_free = ArenaHeaderSize64 + nsym * SymtabEntrySize64;
-fprintf(stderr,"ArenaHeaderSize64 = %d, SymtabEntrySize64 = %d, nsym = %d, base = %d\n",ArenaHeaderSize64,SymtabEntrySize64,nsym,ap->first_free);
-  ap->n_entries = 0;
-  ap->arena_size = size64;
+  ma->flags = 0;           // initialize arena header
+  ma->max_entries = nsym;
+  ma->first_free = ArenaHeaderSize64 + nsym * SymtabEntrySize64;
+fprintf(stderr,"ArenaHeaderSize64 = %d, SymtabEntrySize64 = %d, nsym = %d, base = %d\n",ArenaHeaderSize64,SymtabEntrySize64,nsym,ma->first_free);
+  ma->n_entries = 0;
+  ma->arena_size = size64;
 
   for(i = 0 ; i < nsym ; i++){   // initialize symbol table
     sym[i].lock = 0;
@@ -161,12 +165,12 @@ fprintf(stderr,"ArenaHeaderSize64 = %d, SymtabEntrySize64 = %d, nsym = %d, base 
     sym[i].data_name = 0;
   }
 
-  ap->flags = me;  // flag area as initilized by me
+  ma->flags = me;  // flag area as initilized by me
 
-  return __sync_val_compare_and_swap(&(ap->lock), me, 0); // unlock and return my id
+  return __sync_val_compare_and_swap(&(ma->lock), me, 0); // unlock and return my id
 }
 
-// translate char string (max 8 characters) into a 64 bit unsigned token
+// translate char string (max 9 characters) into a 64 bit unsigned token
 // translation will stop at first null or space character
 static inline uint64_t block_name(unsigned char *name){
   int i;
@@ -180,10 +184,10 @@ static inline uint64_t block_name(unsigned char *name){
 }
 
 // find entry in symbol table, return index if found, -1 otherwise
-static inline int32_t find_block(arena_header *ap, symtab_entry *sym, uint64_t name64){
+static inline int32_t find_block(memory_arena *ma, symtab_entry *sym, uint64_t name64){
   uint32_t i;
 
-  for(i = 0 ; i < ap->n_entries ; i++){
+  for(i = 0 ; i < ma->n_entries ; i++){
     if(sym[i].data_name == name64){
       return i;
     }
@@ -206,19 +210,21 @@ static inline int32_t find_block(arena_header *ap, symtab_entry *sym, uint64_t n
 // name : name of block to find (characters beyond the 8th will be ignored)
 void *memory_block_find(void *mem, uint32_t *size, uint32_t *flags, unsigned char *name){
   uint64_t *mem64 = (uint64_t *) mem;
-  arena_header *ap = (arena_header *) mem;
-  symtab_entry *sym = (symtab_entry *) ( mem64 + ArenaHeaderSize64 );
+//   arena_header *ap = (arena_header *) mem;
+  memory_arena *ma = (memory_arena *) mem;
+//   symtab_entry *sym = (symtab_entry *) ( mem64 + ArenaHeaderSize64 );
+  symtab_entry *sym = ma->t;
   void *dataptr = NULL;
   uint64_t name64 = block_name(name);
   int32_t i;
 
   *size = 0;         // precondition to fail
   *flags = 0;
-  if(ap == NULL || name == NULL) return NULL;
+  if(ma == NULL || name == NULL) return NULL;
   name64 = block_name(name);
   if(name64 == 0) return NULL;
 
-  i = find_block(ap, sym, name64);
+  i = find_block(ma, sym, name64);
   if(i < 0) return NULL;  // name not found in symbol table
 
   *size = sym[i].data_size * 2;            // return size in 32 bit units
@@ -263,13 +269,15 @@ void *memory_block_find_wait(void *mem, uint32_t *size, uint32_t *flags, char *n
 // name : name of block to mark (characters beyond the 8th will be ignored)
 void *memory_block_mark_init(void *mem, unsigned char *name){
   uint64_t *mem64 = (uint64_t *) mem;
-  arena_header *ap = (arena_header *) mem;
-  symtab_entry *sym = (symtab_entry *) ( mem64 + ArenaHeaderSize64 );
+//   arena_header *ap = (arena_header *) mem;
+  memory_arena *ma = (memory_arena *) mem;
+//   symtab_entry *sym = (symtab_entry *) ( mem64 + ArenaHeaderSize64 );
+  symtab_entry *sym = ma->t;
   uint64_t name64 = block_name(name);
   int32_t i;
   void *dataptr = NULL;
 
-  i = find_block(ap, sym, name64);
+  i = find_block(ma, sym, name64);
   if(i < 0) return NULL;  // name not found in symbol table
 
   while(__sync_val_compare_and_swap(&(sym[i].lock), 0, me) != 0); // lock block
@@ -295,8 +303,10 @@ void *memory_block_mark_init(void *mem, unsigned char *name){
 // name : name of block to create (characters beyond the 8th will be ignored)
 void *memory_block_create(void *mem, uint32_t size, unsigned char *name){
   uint64_t *mem64 = (uint64_t *) mem;
-  arena_header *ap = (arena_header *) mem;
-  symtab_entry *sym = (symtab_entry *) ( mem64 + ArenaHeaderSize64 );
+//   arena_header *ap = (arena_header *) mem;
+  memory_arena *ma = (memory_arena *) mem;
+//   symtab_entry *sym = (symtab_entry *) ( mem64 + ArenaHeaderSize64 );
+  symtab_entry *sym = ma->t;
   uint32_t i, next;
   uint32_t fail;
   uint32_t size64 = (size + 1) >> 1;  // round size up to 64 bit element size
@@ -306,41 +316,41 @@ void *memory_block_create(void *mem, uint32_t size, unsigned char *name){
   char *dataptr;
   uint64_t name64 = block_name(name);
 
-  while(__sync_val_compare_and_swap(&(ap->lock), 0, me) != 0); // lock memory area
+  while(__sync_val_compare_and_swap(&(ma->lock), 0, me) != 0); // lock memory area
 
-  fail  = ap->first_free + block64 + 1 > ap->arena_size;    // block larger than what we have left
-  fail |= ap->n_entries == ap->max_entries;                 // symbol table is full
+  fail  = ma->first_free + block64 + 1 > ma->arena_size;    // block larger than what we have left
+  fail |= ma->n_entries == ma->max_entries;                 // symbol table is full
 
   if(fail){
     dataptr = NULL;
   }else{
-    i = ap->n_entries;
+    i = ma->n_entries;
 
     sym[i].lock  = 0;                     // keep lock as unlocked
     sym[i].flags = 0;                     // keep flag as uninitialized
-    sym[i].data_index = ap->first_free;   // start of block
+    sym[i].data_index = ma->first_free;   // start of block
     sym[i].data_size = size64;            // data size for block
     sym[i].data_name = name64;            // data block name
 
-    next = ap->first_free + block64;
+    next = ma->first_free + block64;
     mem64[next] = 0;                      // fwd for next block will be 0
 
-    bh = (block_header *) (mem64 + ap->first_free);    // start of block
-    dataptr = (char *) (mem64 + ap->first_free + BlockHeaderSize64) ; // start of data in block
+    bh = (block_header *) (mem64 + ma->first_free);    // start of block
+    dataptr = (char *) (mem64 + ma->first_free + BlockHeaderSize64) ; // start of data in block
     bh->fwd = next;                       // next block will start there
     bh->ix = i;                           // index of this block in symbol table
     bh->nwd = size64;                     // size of data portion
     bh->sign = 0xBEEFF00D;                // marker below data
 
-    bt = (block_tail *) (mem64 + ap->first_free + BlockHeaderSize64 + size64);
+    bt = (block_tail *) (mem64 + ma->first_free + BlockHeaderSize64 + size64);
     bt->sign = 0xDEADBEEF;                // marker above data
     bt->bwd = sym[i].data_index;          // back pointer, index of start of current block
 
-    ap->first_free = next;                // bump index of next free position
-    ap->n_entries++;                      // bump number of valid entries
+    ma->first_free = next;                // bump index of next free position
+    ma->n_entries++;                      // bump number of valid entries
   }
 
-  i = __sync_val_compare_and_swap(&(ap->lock), me, 0);         // unlock memory area
+  i = __sync_val_compare_and_swap(&(ma->lock), me, 0);         // unlock memory area
   return dataptr;
 }
 
