@@ -60,6 +60,9 @@
 // in different processes
 
 static uint32_t me = 999999999;  // identifier for this process (usually MPI rank) (alternative : getpid() )
+
+static local_arena LA;
+
 // interface                                                                      !InTf
 // function memory_arena_set_id(id) result(me) BIND(C,name='memory_arena_set_id') !InTf
 //   import :: C_INT                                                              !InTf
@@ -73,6 +76,19 @@ int32_t memory_arena_set_id(uint32_t id){
   if(id < 0) return -1;
   me = id + 1;
   return me;
+}
+
+// translate char string (max 8 characters) into a 64 bit unsigned token
+// translation will stop at first null or space character
+static inline uint64_t block_name(unsigned char *name){
+  int i;
+  uint64_t name64 = 0;
+
+  for(i = 0 ; i < 8 ; i++){      // build 64 bit name token
+    if(name[i] == '\0' || name[i] == ' ') break;
+    name64 = (name64 << 8) | (name[i] & 0x7F);
+  }
+  return name64;
 }
 
 // subroutine memory_arena_print_status(mem) BIND(C,name='memory_arena_print_status') !InTf
@@ -131,7 +147,7 @@ void memory_arena_print_status(void *mem){
   fprintf(stderr,"==============================================\n");
 }
 
-// function memory_arena_init(mem, nsym, size) result(id) BIND(C,name='function memory_arena_init') !InTf
+// function memory_arena_init(mem, nsym, size) result(id) BIND(C,name='memory_arena_init') !InTf
 //   import :: C_PTR, C_INT                                                                         !InTf
 //   type(C_PTR), intent(IN), value :: mem                                                          !InTf
 //   integer(C_INT), intent(IN), value :: nsym, size                                                !InTf
@@ -143,7 +159,7 @@ void memory_arena_print_status(void *mem){
 // size : size of memory area in 32 bit units
 // nsym : size of symbol table to allocate (max number of blocks expected)
 uint32_t memory_arena_init(void *mem, uint32_t nsym, uint32_t size){
-  uint64_t *mem64 = (uint64_t *) mem;
+//   uint64_t *mem64 = (uint64_t *) mem;
 //   arena_header *ap = (arena_header *) mem;
   memory_arena *ma = (memory_arena *) mem;
 //   symtab_entry *sym = (symtab_entry *) ( mem64 + ArenaHeaderSize64 );
@@ -175,17 +191,38 @@ fprintf(stderr,"ArenaHeaderSize64 = %d, SymtabEntrySize64 = %d, nsym = %d, base 
   return __sync_val_compare_and_swap(&(ma->lock), me, 0); // unlock and return my id
 }
 
-// translate char string (max 9 characters) into a 64 bit unsigned token
-// translation will stop at first null or space character
-static inline uint64_t block_name(unsigned char *name){
-  int i;
-  uint64_t name64 = 0;
+// function master_arena_init(mem, nsym, size) result(id) BIND(C,name='master_arena_init') !InTf
+//   import :: C_PTR, C_INT                                                                         !InTf
+//   type(C_PTR), intent(IN), value :: mem                                                          !InTf
+//   integer(C_INT), intent(IN), value :: nsym, size                                                !InTf
+//   integer(C_INT) :: id                                                                           !InTf
+// end function master_arena_init                                                                   !InTf
 
-  for(i = 0 ; i < 8 ; i++){      // build 64 bit name token
-    if(name[i] == '\0' || name[i] == ' ') break;
-    name64 = (name64 << 8) | (name[i] & 0x7F);
+// initialize an already allocated 'master arena' (node shared memory usually), return id of current process
+// mem  : pointer to memory area
+// size : size of memory area in 32 bit units
+// nsym : size of symbol table to allocate (max number of blocks expected)
+uint32_t master_arena_init(void *mem, uint32_t nsym, uint32_t size){
+  master_arena *MA = (master_arena *) mem;
+  memory_arena *ma = (memory_arena *) &(MA->ma);
+  int i, status;
+
+  size = size - MasterHeaderSize64 * 2;     // space left for memory arena proper
+
+  while(__sync_val_compare_and_swap(&(MA->lock), 0, me) != 0); // lock master area
+
+  for(i=0 ; i<MAX_MASTER ; i++){   // zero all entries in master table
+    MA->me[i].arena_name = 0;
+    MA->me[i].arena_sz   = 0;
+    MA->me[i].arena_id   = -1;
   }
-  return name64;
+  MA->me[0].arena_name   = block_name("MaStEr");  // special name for master arena
+  MA->me[0].arena_sz   = size >> 1;            // fix size entry of area 0 (arena part of master arena)
+  status = memory_arena_init(ma, nsym, size);  // initialize memory arena part of master arena
+
+  __sync_val_compare_and_swap(&(MA->lock), me, 0); // unlock master area
+
+  return status;
 }
 
 // find entry in symbol table, return index if found, -1 otherwise
@@ -382,6 +419,40 @@ void *memory_arena_create_shared(int *id, uint32_t nsym, uint32_t size){
   err = shmctl(shmid, IPC_RMID, &dummy);
 
   err = memory_arena_init(shmaddr, nsym, size);
+
+  return shmaddr;
+}
+
+// function master_arena_create_shared(id, nsym, size) result(ptr) BIND(C,name='master_arena_create_shared') !InTf
+//   import :: C_PTR, C_INT                                                       !InTf
+//   integer, intent(OUT) :: id                                                   !InTf
+//   integer, intent(IN), value :: nsym, size                                     !InTf
+//   type(C_PTR) :: ptr                                                           !InTf
+// end function master_arena_create_shared                                        !InTf
+
+void *master_arena_create_shared(int *id, uint32_t nsym, uint32_t size){
+  int shmid = -1;
+  void *shmaddr = NULL;
+  size_t shmsz = size * sizeof(uint32_t);  // 32 bit units to bytes
+  int err;
+  struct shmid_ds dummy;
+  master_arena *MA;
+
+  if(me == 999999999) me = getpid();   // if not initialized, set to pid
+
+  shmid = shmget(IPC_PRIVATE, shmsz, 0600);
+  *id = shmid;
+  if(shmid == -1) return NULL;
+  shmaddr = shmat(shmid, NULL, 0);
+  err = shmctl(shmid, IPC_RMID, &dummy);
+
+  MA = (master_arena *) shmaddr;
+  MA->lock       = 0;
+  MA->arena_id   = shmid;
+  MA->arena_sz   = size >> 1;
+  MA->arena_name = block_name("MaStEr");  // special name
+
+  err = master_arena_init(shmaddr, nsym, size);
 
   return shmaddr;
 }

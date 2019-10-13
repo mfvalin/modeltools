@@ -43,6 +43,15 @@ typedef struct{
   uint64_t arena_name;       // name of master arena
   size_t   arena_sz;         // size of master arena segment
   master_entry me[MAX_MASTER];
+} master_header;
+#define MasterHeaderSize64 (sizeof(master_header) / sizeof(uint64_t))
+
+typedef struct{              // MUST BE CONSISTENT WITH master_header
+  uint32_t lock;             // to lock master arena
+  int      arena_id;         // shared memory id of master arena
+  uint64_t arena_name;       // name of master arena
+  size_t   arena_sz;         // size of master arena segment
+  master_entry me[MAX_MASTER];
   memory_arena ma;           // a normal memory arena
 } master_arena;              // master arena contains the master table, followed by a normal arena
 

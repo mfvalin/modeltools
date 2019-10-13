@@ -8,12 +8,18 @@ subroutine memory_arena_print_status(mem) BIND(C,name='memory_arena_print_status
   import :: C_PTR
   type(C_PTR), intent(IN), value :: mem
 end subroutine memory_arena_print_status
-function memory_arena_init(mem, nsym, size) result(id) BIND(C,name='function memory_arena_init')
+function memory_arena_init(mem, nsym, size) result(id) BIND(C,name='memory_arena_init')
   import :: C_PTR, C_INT
   type(C_PTR), intent(IN), value :: mem
   integer(C_INT), intent(IN), value :: nsym, size
   integer(C_INT) :: id
 end function memory_arena_init
+function master_arena_init(mem, nsym, size) result(id) BIND(C,name='master_arena_init')
+  import :: C_PTR, C_INT
+  type(C_PTR), intent(IN), value :: mem
+  integer(C_INT), intent(IN), value :: nsym, size
+  integer(C_INT) :: id
+end function master_arena_init
 function memory_block_find(mem, size, flags, name) result(ptr) BIND(C,name='memory_block_find')
   import :: C_PTR, C_INT, C_CHAR
   type(C_PTR), intent(IN), value :: mem
@@ -48,6 +54,12 @@ function memory_arena_create_shared(id, nsym, size) result(ptr) BIND(C,name='mem
   integer, intent(IN), value :: nsym, size
   type(C_PTR) :: ptr
 end function memory_arena_create_shared
+function master_arena_create_shared(id, nsym, size) result(ptr) BIND(C,name='master_arena_create_shared')
+  import :: C_PTR, C_INT
+  integer, intent(OUT) :: id
+  integer, intent(IN), value :: nsym, size
+  type(C_PTR) :: ptr
+end function master_arena_create_shared
 function memory_arena_from_id(id) result(ptr) BIND(C,name='memory_arena_from_id')
   import :: C_PTR, C_INT
   integer, intent(IN), value :: id
