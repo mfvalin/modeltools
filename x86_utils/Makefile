@@ -96,7 +96,7 @@ test_tricublin.Abs: tricublin_beta_test.F90 tricublin_f90.inc tricublin_beta.c
 boundary_clip.inc: boundary_clip.F90
 	build_f90_interface.sh boundary_clip.F90 >boundary_clip.inc
 
-memory_arena.inc: memory_arena.c
+memory_arena.inc: memory_arena.c memory_arena.h
 	grep InTf memory_arena.c | sed -e 's:^// ::' -e 's/[ ]*!InTf.*//' >memory_arena.inc
 
 circular_buffer.inc: circular_buffer.c

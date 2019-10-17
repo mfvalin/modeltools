@@ -99,9 +99,7 @@ static inline uint64_t block_name(unsigned char *name){
 // dump arena header and symbol table
 void memory_arena_print_status(void *mem){
   uint64_t *mem64 = (uint64_t *) mem;
-//   arena_header *ap = (arena_header *) mem;
   memory_arena *ma = (memory_arena *) mem;
-//   symtab_entry *sym = (symtab_entry *) ( mem64 + ArenaHeaderSize64 );
   symtab_entry *sym = ma->t;
   int i, j, sane;
   char name[9];
@@ -110,8 +108,8 @@ void memory_arena_print_status(void *mem){
   block_header *bh, *bhnext;
   block_tail *bt;
 
-  fprintf(stderr,"Arena Header, id = %d\n", me);
-  fprintf(stderr,"flags       = %8.8x\n",ma->flags);
+  fprintf(stderr,"Arena Header, id = %d, address = %p\n", me, ma);
+  fprintf(stderr,"owner       = %8.8x\n",ma->owner);
   fprintf(stderr,"max entries = %d\n",ma->max_entries);
   fprintf(stderr,"max size    = %d\n",ma->arena_size);
   fprintf(stderr,"entries     = %d\n",ma->n_entries);
@@ -119,6 +117,7 @@ void memory_arena_print_status(void *mem){
 
   fprintf(stderr,"\nSymbol table\n==============================================\n");
   for(i = 0 ; i < ma->n_entries ; i++){
+if(i >= 5) break;
     size64 = sym[i].data_size;
     dataptr64 = sym[i].data_index + mem64; 
     bh = (block_header *) (dataptr64);
@@ -147,11 +146,11 @@ void memory_arena_print_status(void *mem){
   fprintf(stderr,"==============================================\n");
 }
 
-// function memory_arena_init(mem, nsym, size) result(id) BIND(C,name='memory_arena_init') !InTf
+// function memory_arena_init(mem, nsym, size) result(me) BIND(C,name='memory_arena_init')          !InTf
 //   import :: C_PTR, C_INT                                                                         !InTf
 //   type(C_PTR), intent(IN), value :: mem                                                          !InTf
 //   integer(C_INT), intent(IN), value :: nsym, size                                                !InTf
-//   integer(C_INT) :: id                                                                           !InTf
+//   integer(C_INT) :: me                                                                           !InTf
 // end function memory_arena_init                                                                   !InTf
 
 // initialize an already allocated 'memory arena' (node shared memory usually), return id of current process
@@ -159,39 +158,36 @@ void memory_arena_print_status(void *mem){
 // size : size of memory area in 32 bit units
 // nsym : size of symbol table to allocate (max number of blocks expected)
 uint32_t memory_arena_init(void *mem, uint32_t nsym, uint32_t size){
-//   uint64_t *mem64 = (uint64_t *) mem;
-//   arena_header *ap = (arena_header *) mem;
   memory_arena *ma = (memory_arena *) mem;
-//   symtab_entry *sym = (symtab_entry *) ( mem64 + ArenaHeaderSize64 );
   symtab_entry *sym = ma->t;
   uint32_t size64 = size >> 1;  // round size down to 64 bit element size
   int i;
+fprintf(stderr,"ma init %p, owner = %d\n", ma, ma->owner);
+  while(__sync_val_compare_and_swap(&(ma->lock), 0, me) != 0); // lock memory arena
 
-  while(__sync_val_compare_and_swap(&(ma->lock), 0, me) != 0); // lock memory area
+  if(ma->owner != 0) return ma->owner;                           // area already initialized, return id of initializer
 
-  if(ma->flags != 0) return ma->flags;                           // area already initialized, return id of initializer
-
-  ma->flags = 0;           // initialize arena header
+  ma->owner = 0;           // initialize arena header
   ma->max_entries = nsym;
   ma->first_free = ArenaHeaderSize64 + nsym * SymtabEntrySize64;
-fprintf(stderr,"ArenaHeaderSize64 = %d, SymtabEntrySize64 = %d, nsym = %d, base = %d\n",ArenaHeaderSize64,SymtabEntrySize64,nsym,ma->first_free);
+// fprintf(stderr,"ArenaHeaderSize64 = %d, SymtabEntrySize64 = %d, nsym = %d, base = %d\n",ArenaHeaderSize64,SymtabEntrySize64,nsym,ma->first_free);
   ma->n_entries = 0;
   ma->arena_size = size64;
 
-  for(i = 0 ; i < nsym ; i++){   // initialize symbol table
-    sym[i].lock = 0;
-    sym[i].flags = 0;
+  for(i = 0 ; i < nsym ; i++){   // initialize symbol table to null values
+    sym[i].lock       = 0;
+    sym[i].flags      = 0;
     sym[i].data_index = 0;
-    sym[i].data_size = 0;
-    sym[i].data_name = 0;
+    sym[i].data_size  = 0;
+    sym[i].data_name  = 0;
   }
 
-  ma->flags = me;  // flag area as initilized by me
+  ma->owner = me;  // flag area as initialized by me
 
-  return __sync_val_compare_and_swap(&(ma->lock), me, 0); // unlock and return my id
+  return __sync_val_compare_and_swap(&(ma->lock), me, 0); // unlock memory arena and return my id
 }
 
-// function master_arena_init(mem, nsym, size) result(id) BIND(C,name='master_arena_init') !InTf
+// function master_arena_init(mem, nsym, size) result(id) BIND(C,name='master_arena_init')          !InTf
 //   import :: C_PTR, C_INT                                                                         !InTf
 //   type(C_PTR), intent(IN), value :: mem                                                          !InTf
 //   integer(C_INT), intent(IN), value :: nsym, size                                                !InTf
@@ -209,18 +205,22 @@ uint32_t master_arena_init(void *mem, uint32_t nsym, uint32_t size){
 
   size = size - MasterHeaderSize64 * 2;     // space left for memory arena proper
 
-  while(__sync_val_compare_and_swap(&(MA->lock), 0, me) != 0); // lock master area
+  while(__sync_val_compare_and_swap(&(MA->lock), 0, me) != 0); // lock master arena
 
   for(i=0 ; i<MAX_MASTER ; i++){   // zero all entries in master table
     MA->me[i].arena_name = 0;
     MA->me[i].arena_sz   = 0;
     MA->me[i].arena_id   = -1;
+    MA->me[i].owner_id   = -1;
   }
-  MA->me[0].arena_name   = block_name("MaStEr");  // special name for master arena
-  MA->me[0].arena_sz   = size >> 1;            // fix size entry of area 0 (arena part of master arena)
-  status = memory_arena_init(ma, nsym, size);  // initialize memory arena part of master arena
+  MA->me[0].arena_name = block_name("MaStEr");  // special name for master arena
+  MA->me[0].arena_sz   = size >> 1;             // fix size entry of area 0 (arena part of master arena)
+  MA->me[0].owner_id   = me;                    // creator id
+printf("MA = %p, ma = %p, delta = %ld\n",MA, ma, (void *)ma - (void *)MA);
 
-  __sync_val_compare_and_swap(&(MA->lock), me, 0); // unlock master area
+  status = memory_arena_init(ma, nsym, size);   // initialize memory arena part of master arena
+
+  __sync_val_compare_and_swap(&(MA->lock), me, 0); // unlock master arena
 
   return status;
 }
@@ -252,9 +252,7 @@ static inline int32_t find_block(memory_arena *ma, symtab_entry *sym, uint64_t n
 // name : name of block to find (characters beyond the 8th will be ignored)
 void *memory_block_find(void *mem, uint32_t *size, uint32_t *flags, unsigned char *name){
   uint64_t *mem64 = (uint64_t *) mem;
-//   arena_header *ap = (arena_header *) mem;
   memory_arena *ma = (memory_arena *) mem;
-//   symtab_entry *sym = (symtab_entry *) ( mem64 + ArenaHeaderSize64 );
   symtab_entry *sym = ma->t;
   void *dataptr = NULL;
   uint64_t name64 = block_name(name);
@@ -285,7 +283,7 @@ void *memory_block_find(void *mem, uint32_t *size, uint32_t *flags, unsigned cha
 // end function memory_block_find_wait                                            !InTf
 //
 // same as memory_block_find, but wait until block is created (or timeout in milliseconds expires)
-// (timeout = -1 means infinite wait for all practical purposes, 3600000 is one hour)
+// (timeout(milliseconds) = -1 means infinite wait for all practical purposes, 3600000 is one hour)
 void *memory_block_find_wait(void *mem, uint32_t *size, uint32_t *flags, char *name, int timeout){
   void *p = NULL;
   useconds_t delay = 1000;  // 1000 microseconds = 1 millisecond
@@ -311,9 +309,7 @@ void *memory_block_find_wait(void *mem, uint32_t *size, uint32_t *flags, char *n
 // name : name of block to mark (characters beyond the 8th will be ignored)
 void *memory_block_mark_init(void *mem, unsigned char *name){
   uint64_t *mem64 = (uint64_t *) mem;
-//   arena_header *ap = (arena_header *) mem;
   memory_arena *ma = (memory_arena *) mem;
-//   symtab_entry *sym = (symtab_entry *) ( mem64 + ArenaHeaderSize64 );
   symtab_entry *sym = ma->t;
   uint64_t name64 = block_name(name);
   int32_t i;
@@ -345,9 +341,7 @@ void *memory_block_mark_init(void *mem, unsigned char *name){
 // name : name of block to create (characters beyond the 8th will be ignored)
 void *memory_block_create(void *mem, uint32_t size, unsigned char *name){
   uint64_t *mem64 = (uint64_t *) mem;
-//   arena_header *ap = (arena_header *) mem;
   memory_arena *ma = (memory_arena *) mem;
-//   symtab_entry *sym = (symtab_entry *) ( mem64 + ArenaHeaderSize64 );
   symtab_entry *sym = ma->t;
   uint32_t i, next;
   uint32_t fail;
@@ -396,76 +390,120 @@ void *memory_block_create(void *mem, uint32_t size, unsigned char *name){
   return dataptr;
 }
 
-// function memory_arena_create_shared(id, nsym, size) result(ptr) BIND(C,name='memory_arena_create_shared') !InTf
+// function memory_allocate_shared(shmid, size) result(ptr) BIND(C,name='memory_allocate_shared') !InTf
 //   import :: C_PTR, C_INT                                                       !InTf
-//   integer, intent(OUT) :: id                                                   !InTf
+//   integer, intent(OUT) :: shmid                                                !InTf
+//   integer, intent(IN), value :: size                                           !InTf
+//   type(C_PTR) :: ptr                                                           !InTf
+// end function memory_allocate_shared                                            !InTf
+
+// allocate a shared memory block
+// shmid : shared memory id of block (set by memory_allocate_shared)
+// size  : size of block in 32 bit units
+// return local address of memory block
+void *memory_allocate_shared(int *shmid, uint32_t size){    
+  int id = -1;
+  void *shmaddr = NULL;
+  size_t shmsz = size * sizeof(uint32_t);  // 32 bit units to bytes
+  int err;
+  struct shmid_ds dummy;
+
+  if(me == 999999999) me = getpid();   // if not initialized, set to pid
+
+  id = shmget(IPC_PRIVATE, shmsz, 0600);    // get a memory block, only accessible by user
+  *shmid = id;                              // block id returned to caller
+  if(id == -1) return NULL;
+  shmaddr = shmat(id, NULL, 0);             // local address of memory block
+  err = shmctl(id, IPC_RMID, &dummy);       // mark block as to be deleted when no process attached
+
+  return shmaddr;     // return local address of memory block
+}
+
+// function memory_arena_create_shared(shmid, nsym, size) result(ptr) BIND(C,name='memory_arena_create_shared') !InTf
+//   import :: C_PTR, C_INT                                                       !InTf
+//   integer, intent(OUT) :: shmid                                                !InTf
 //   integer, intent(IN), value :: nsym, size                                     !InTf
 //   type(C_PTR) :: ptr                                                           !InTf
 // end function memory_arena_create_shared                                        !InTf
 
-void *memory_arena_create_shared(int *id, uint32_t nsym, uint32_t size){
-  int shmid = -1;
-  void *shmaddr = NULL;
-  size_t shmsz = size * sizeof(uint32_t);  // 32 bit units to bytes
+void *memory_arena_create_shared(int *shmid, uint32_t nsym, uint32_t size){
+  void *shmaddr = memory_allocate_shared(shmid, size);    // request shared memory block
   int err;
-  struct shmid_ds dummy;
 
-  if(me == 999999999) me = getpid();   // if not initialized, set to pid
+  if(shmaddr == NULL) return shmaddr;             // request failed
 
-  shmid = shmget(IPC_PRIVATE, shmsz, 0600);
-  *id = shmid;
-  if(shmid == -1) return NULL;
-  shmaddr = shmat(shmid, NULL, 0);
-  err = shmctl(shmid, IPC_RMID, &dummy);
-
-  err = memory_arena_init(shmaddr, nsym, size);
+  err = memory_arena_init(shmaddr, nsym, size);   // initialize memory arena
 
   return shmaddr;
 }
 
-// function master_arena_create_shared(id, nsym, size) result(ptr) BIND(C,name='master_arena_create_shared') !InTf
+// function master_arena_create_shared(shmid, nsym, size) result(ptr) BIND(C,name='master_arena_create_shared') !InTf
 //   import :: C_PTR, C_INT                                                       !InTf
-//   integer, intent(OUT) :: id                                                   !InTf
+//   integer, intent(OUT) :: shmid                                                !InTf
 //   integer, intent(IN), value :: nsym, size                                     !InTf
 //   type(C_PTR) :: ptr                                                           !InTf
 // end function master_arena_create_shared                                        !InTf
 
-void *master_arena_create_shared(int *id, uint32_t nsym, uint32_t size){
-  int shmid = -1;
-  void *shmaddr = NULL;
-  size_t shmsz = size * sizeof(uint32_t);  // 32 bit units to bytes
+void *master_arena_create_shared(int *shmid, uint32_t nsym, uint32_t size){
+  void *shmaddr = memory_allocate_shared(shmid, size);    // request shared memory block
   int err;
-  struct shmid_ds dummy;
   master_arena *MA;
-
-  if(me == 999999999) me = getpid();   // if not initialized, set to pid
-
-  shmid = shmget(IPC_PRIVATE, shmsz, 0600);
-  *id = shmid;
-  if(shmid == -1) return NULL;
-  shmaddr = shmat(shmid, NULL, 0);
-  err = shmctl(shmid, IPC_RMID, &dummy);
 
   MA = (master_arena *) shmaddr;
   MA->lock       = 0;
-  MA->arena_id   = shmid;
-  MA->arena_sz   = size >> 1;
+  MA->arena_id   = *shmid;
+  MA->arena_sz   = size >> 1;             // 64 bit units
   MA->arena_name = block_name("MaStEr");  // special name
-
+printf("MA = %p\n",MA);
   err = master_arena_init(shmaddr, nsym, size);
 
-  return shmaddr;
+  return MA;                       // return address of master arena
 }
 
-// function memory_arena_from_id(id) result(ptr) BIND(C,name='memory_arena_from_id') !InTf
+// function memory_address_from_id(shmid) result(ptr) BIND(C,name='memory_address_from_id') !InTf
 //   import :: C_PTR, C_INT                                                          !InTf
-//   integer, intent(IN), value :: id                                                !InTf
+//   integer, intent(IN), value :: shmid                                             !InTf
 //   type(C_PTR) :: ptr                                                              !InTf
-// end function memory_arena_from_id                                                 !InTf
+// end function memory_address_from_id                                               !InTf
 
 // get memory address associated with shared memory segment shmid
-void *memory_arena_from_id(int shmid){
+// schmid    : shared memory segment id (from memory_arena_create_shared, memory_allocate_shared, master_arena_create_shared)
+// return    : local memory addres of said segment
+void *memory_address_from_id(int shmid){
   return shmat(shmid, NULL, 0);
+}
+
+// function memory_arena_from_master(mem) result(ptr) BIND(C,name='memory_arena_from_master') !InTf
+//   import :: C_PTR                                                                 !InTf
+//   type(C_PTR), intent(IN), value :: mem                                           !InTf
+//   type(C_PTR) :: ptr                                                              !InTf
+// end function memory_arena_from_master                                             !InTf
+
+// get memory arena address from master arena address
+// mem     : local memory address of master arena
+// return  : local memory addres of memory arena from master arena
+void *memory_arena_from_master(void *mem){
+  master_arena *MA = (master_arena *) mem;
+  return &(MA->ma);
+}
+
+// function memory_arena_from_master_id(shmid) result(ptr) BIND(C,name='memory_arena_from_master_id') !InTf
+//   import :: C_PTR, C_INT                                                          !InTf
+//   integer, intent(IN), value :: shmid                                             !InTf
+//   type(C_PTR) :: ptr                                                              !InTf
+// end function memory_arena_from_master_id                                          !InTf
+
+// get memory address associated with shared memory segment shmid
+// schmid  : master arena segment id (from master_arena_create_shared)
+// return  : local memory addres of memory arena from master arena
+void *memory_arena_from_master_id(int shmid){
+  void *shmaddr = shmat(shmid, NULL, 0);
+  master_arena *MA;
+
+  if(shmaddr == NULL) return NULL;
+
+  MA = (master_arena *) shmaddr;
+  return &(MA->ma);
 }
 // end interface                                                                     !InTf
 #if defined(SELF_TEST)

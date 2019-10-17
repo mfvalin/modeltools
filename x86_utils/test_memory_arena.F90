@@ -34,7 +34,7 @@ program test_memory_arena
     end function sleep
   end interface
   integer :: err, rank, isiz, id, MY_World
-  type(C_PTR) :: shmaddr, p, cio_from, cio_into
+  type(C_PTR) :: shmaddr, p, cio_from, cio_into, masteraddr
   integer(C_INT) :: shmsz, shmid
   character(len=128) :: command, myblock
   integer :: bsz, flags, i, errors, j, bsza
@@ -47,7 +47,9 @@ program test_memory_arena
   id = memory_arena_set_id(rank) ! send my rank as id
   if(rank == 0) then             ! PE0 creates arena and some blocks
     shmsz = 1024 * 1024 * 128    ! 512 MBytes
-    shmaddr = memory_arena_create_shared(shmid, NSYM, shmsz)
+!     shmaddr = memory_arena_create_shared(shmid, NSYM, shmsz)
+    masteraddr = master_arena_create_shared(shmid, NSYM, shmsz)
+    shmaddr = memory_arena_from_master(masteraddr);                   ! get memory arena address from master arena address
 !     do id = 1, isiz
 !       write(myblock,100)'BLOCK',id-1
 100   format(A5,I3.3)
@@ -57,10 +59,13 @@ program test_memory_arena
     call system(trim(command))       ! list shared memory blocks on system
     call memory_arena_print_status(shmaddr)  ! print arena metadata
   endif
-
+! goto 777
   call MPI_Bcast(shmid, 1, MPI_INTEGER, 0, MY_World, err)          ! broadcast id of shared memory segment
   if(rank .ne. 0) then
-    shmaddr = memory_arena_from_id(shmid)                          ! everybody but PE0 gets the segment address
+!     shmaddr = memory_arena_from_id(shmid)                        ! everybody but PE0 gets the segment address
+!     shmaddr = memory_arena_from_master_id(shmid)                 ! everybody but PE0 gets the segment address
+    masteraddr = memory_address_from_id(shmid)                     ! everybody but PE0 gets the master arena address
+    shmaddr = memory_arena_from_master(masteraddr);                ! get memory arena address from master arena address
     write(myblock,100)'FROM-',rank
     p = memory_block_create(shmaddr, 8*1024, trim(myblock))        ! outbound circular buffer
     cio_from = circular_buffer_from_pointer(p, 8*1024)
@@ -168,6 +173,7 @@ program test_memory_arena
     enddo
     write(0,*) trim(myblock), ' inbound data =',bsza,' left =',bsz,' errors =',errors
   endif
+777 continue
 !===============================================
   call MPI_Barrier(MY_World, err)
 !===============================================
