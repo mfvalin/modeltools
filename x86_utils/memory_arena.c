@@ -117,7 +117,6 @@ void memory_arena_print_status(void *mem){
 
   fprintf(stderr,"\nSymbol table\n==============================================\n");
   for(i = 0 ; i < ma->n_entries ; i++){
-if(i >= 5) break;
     size64 = sym[i].data_size;
     dataptr64 = sym[i].data_index + mem64; 
     bh = (block_header *) (dataptr64);
@@ -187,6 +186,49 @@ fprintf(stderr,"ma init %p, owner = %d\n", ma, ma->owner);
   return __sync_val_compare_and_swap(&(ma->lock), me, 0); // unlock memory arena and return my id
 }
 
+// function update_local_table(mem) result(status) BIND(C,name='update_local_table')                !InTf
+//   import :: C_PTR, C_INT                                                                         !InTf
+//   type(C_PTR), intent(IN), value :: mem                                                          !InTf
+//   integer(C_INT) :: status                                                                       !InTf
+// end function update_local_table                                                                  !InTf
+// update local table from master arena
+// mem    : address of master arena
+// return : number of arenas detected
+uint32_t update_local_table(void *mem){
+  master_arena *MA = (master_arena *) mem;
+  memory_arena *ma = (memory_arena *) &(MA->ma);
+  int i;
+
+  while(__sync_val_compare_and_swap(&(MA->lock), 0, me) != 0); // lock master arena
+
+  LA.lock      = 0;
+  LA.master_id = me;
+  LA.master_sz = MA->arena_sz;
+  LA.MA        = MA;
+
+  LA.le[0].arena_sz    = ma->arena_size;                 // memory arena associated to master arena
+  LA.le[0].arena_name  = block_name("MaStEr");
+  LA.le[0].ma          = ma;
+fprintf(stderr,"local update, arena = %d, id = %d, address = %p, size = %ld\n",0, MA->me[0].arena_id, LA.le[0].ma, LA.le[0].arena_sz);
+
+  for(i=1 ; i<MAX_MASTER ; i++){   // zero rest of local table
+    if(LA.le[i].arena_sz == 0){                     // not initialized yet
+      if(MA->me[i].arena_sz > 0) {                  // there is a shared memory segment
+        LA.le[i].ma  = shmat(MA->me[i].arena_id, NULL, 0);    // attach segment, get address
+        LA.le[i].arena_sz    = MA->me[i].arena_sz;
+        LA.le[i].arena_name  = MA->me[i].arena_name;
+      }else{                                        // no more segment, break
+        break;
+      }
+    }
+fprintf(stderr,"local update, arena = %d, id = %d, address = %p, size = %ld\n",i, MA->me[i].arena_id, LA.le[i].ma, LA.le[i].arena_sz);
+  }
+
+  __sync_val_compare_and_swap(&(MA->lock), me, 0); // unlock master arena
+
+  return i;
+}
+
 // function master_arena_init(mem, nsym, size) result(id) BIND(C,name='master_arena_init')          !InTf
 //   import :: C_PTR, C_INT                                                                         !InTf
 //   type(C_PTR), intent(IN), value :: mem                                                          !InTf
@@ -202,6 +244,7 @@ uint32_t master_arena_init(void *mem, uint32_t nsym, uint32_t size){
   master_arena *MA = (master_arena *) mem;
   memory_arena *ma = (memory_arena *) &(MA->ma);
   int i, status;
+  uint32_t size0 = size;
 
   size = size - MasterHeaderSize64 * 2;     // space left for memory arena proper
 
@@ -216,7 +259,7 @@ uint32_t master_arena_init(void *mem, uint32_t nsym, uint32_t size){
   MA->me[0].arena_name = block_name("MaStEr");  // special name for master arena
   MA->me[0].arena_sz   = size >> 1;             // fix size entry of area 0 (arena part of master arena)
   MA->me[0].owner_id   = me;                    // creator id
-printf("MA = %p, ma = %p, delta = %ld\n",MA, ma, (void *)ma - (void *)MA);
+// printf("MA = %p, ma = %p, delta = %ld\n",MA, ma, (void *)ma - (void *)MA);
 
   status = memory_arena_init(ma, nsym, size);   // initialize memory arena part of master arena
 
@@ -454,8 +497,10 @@ void *master_arena_create_shared(int *shmid, uint32_t nsym, uint32_t size){
   MA->arena_id   = *shmid;
   MA->arena_sz   = size >> 1;             // 64 bit units
   MA->arena_name = block_name("MaStEr");  // special name
-printf("MA = %p\n",MA);
+  
+printf("MA = %p, id = %d\n",MA, MA->arena_id);
   err = master_arena_init(shmaddr, nsym, size);
+  MA->me[0].arena_id   = MA->arena_id;                    // segment id
 
   return MA;                       // return address of master arena
 }

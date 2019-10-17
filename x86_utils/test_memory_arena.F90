@@ -37,7 +37,7 @@ program test_memory_arena
   type(C_PTR) :: shmaddr, p, cio_from, cio_into, masteraddr
   integer(C_INT) :: shmsz, shmid
   character(len=128) :: command, myblock
-  integer :: bsz, flags, i, errors, j, bsza
+  integer :: bsz, flags, i, errors, j, bsza, nareas
   integer, dimension(:), pointer :: fp
   integer, dimension(128) :: message
 
@@ -50,6 +50,7 @@ program test_memory_arena
 !     shmaddr = memory_arena_create_shared(shmid, NSYM, shmsz)
     masteraddr = master_arena_create_shared(shmid, NSYM, shmsz)
     shmaddr = memory_arena_from_master(masteraddr);                   ! get memory arena address from master arena address
+    nareas = update_local_table(masteraddr)
 !     do id = 1, isiz
 !       write(myblock,100)'BLOCK',id-1
 100   format(A5,I3.3)
@@ -66,6 +67,7 @@ program test_memory_arena
 !     shmaddr = memory_arena_from_master_id(shmid)                 ! everybody but PE0 gets the segment address
     masteraddr = memory_address_from_id(shmid)                     ! everybody but PE0 gets the master arena address
     shmaddr = memory_arena_from_master(masteraddr);                ! get memory arena address from master arena address
+    nareas = update_local_table(masteraddr)
     write(myblock,100)'FROM-',rank
     p = memory_block_create(shmaddr, 8*1024, trim(myblock))        ! outbound circular buffer
     cio_from = circular_buffer_from_pointer(p, 8*1024)

@@ -14,6 +14,11 @@ function memory_arena_init(mem, nsym, size) result(me) BIND(C,name='memory_arena
   integer(C_INT), intent(IN), value :: nsym, size
   integer(C_INT) :: me
 end function memory_arena_init
+function update_local_table(mem) result(status) BIND(C,name='update_local_table')
+  import :: C_PTR, C_INT
+  type(C_PTR), intent(IN), value :: mem
+  integer(C_INT) :: status
+end function update_local_table
 function master_arena_init(mem, nsym, size) result(id) BIND(C,name='master_arena_init')
   import :: C_PTR, C_INT
   type(C_PTR), intent(IN), value :: mem
