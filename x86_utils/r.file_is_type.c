@@ -28,6 +28,7 @@
  *MODIFICATION : ERIC MICHAUD - JANV 1995                                    *
  *Modification : M. Lepine - Juil 2011 (reconnaissance fichiers NetCDF)      *
  *Modification : M. Lepine - Juil 2011 (bug fix get_mode)                    *
+ *Modification : M. Valin  - Jan  2020 (reconnaissance fichiers CMCARC)      *
  *                                                                           *
  *OBJET                                                                      *
  *     DETERMINER QUEL EST LE TYPE D'UN FICHIER                              *
@@ -351,33 +352,31 @@ c_wkoffit(char *nom,int l1)
        if (islower(*pn2)) {
          *pn3 = *pn2;
          lowc = 1;
-       }
-       else
+       } else {
          *pn3 = tolower(*pn2);
+       }
        pn2++;
        pn3++;
      }
      *pn2 = '\0';
      *pn3 = '\0';
-     if (lowc == 0)
-       strcpy(nom2,nom3);
+     if (lowc == 0) strcpy(nom2,nom3);
    }
    pf = fopen(nom2,"rb");
-   if (pf == (FILE *) NULL)
+   if (pf == (FILE *) NULL){
       return(-3);
-   else {
+   } else {
 
      /* positionnement a la fin du fichier */
       fseek(pf,pos,2);       
       lngf=ftell(pf);
       if (lngf == 0) return(retour(pf,-2));
 
-     /* positionnement au debut du fichier */
+     /* positionnement et lecture au debut du fichier */
       fseek(pf,pos,0); 
-      fread(cbuf, 1024, 1, pf);
-
+      fread(cbuf, 1024, 1, pf);           // suite de caracteres
       fseek(pf,pos,0);     
-      fread32(ptbuf,sizeof(int),1024,pf);
+      fread32(ptbuf,sizeof(int),1024,pf); // suite d'entiers 32 bits
 
      /* CMCARC v5 */
       if( strncmp(cbuf+17,CMCARC_SIGN_V5,8) == 0 ) {
@@ -390,79 +389,78 @@ c_wkoffit(char *nom,int l1)
       }
 
      /* RANDOM89 */
-      if (*ptbuf == SIGN_STD89_RND && *(ptbuf+1) == SIGN_STD89_RND)
+      if (*ptbuf == SIGN_STD89_RND && *(ptbuf+1) == SIGN_STD89_RND){
           return(retour(pf,WKF_RANDOM89));
-      else
+      }
 
      /* CCRN */
-      if (*(ptbuf) == 64 && *(ptbuf+17) == 64 && *(ptbuf+2) == 0x20202020)
+      if (*(ptbuf) == 64 && *(ptbuf+17) == 64 && *(ptbuf+2) == 0x20202020){
          return(retour(pf,WKF_CCRN));
-      else
+      }
 
      /* CCRN-RPN */
-      if (*(ptbuf+2) == 0x504b3834 && isftnbin(pf,*ptbuf))  /* PK84 */
+      if (*(ptbuf+2) == 0x504b3834 && isftnbin(pf,*ptbuf)){  /* PK84 */
          return(retour(pf,WKF_CCRN_RPN));
-      else
+      }
 
      /* SEQUENTIEL89 */
-      if (*(ptbuf+28) == SIGN_STD89_SEQ && *(ptbuf+29) == SIGN_STD89_SEQ)
+      if (*(ptbuf+28) == SIGN_STD89_SEQ && *(ptbuf+29) == SIGN_STD89_SEQ){
          return(retour(pf,WKF_SEQUENTIEL89));
-      else
+      }
 
      /* SEQUENTIELFORTRAN89 */ 
       if (*(ptbuf+29) == SIGN_STD89_SEQ && *(ptbuf+30) == SIGN_STD89_SEQ
-                       && isftnbin(pf,*ptbuf))
+                       && isftnbin(pf,*ptbuf)) {
          return(retour(pf,WKF_SEQUENTIELFORTRAN89));
-      else
+      }
  
     /* STANDARD 98 RANDOM */
-      if (*(ptbuf+3) == 'STDR') 
+      if (*(ptbuf+3) == 'STDR') {
          return(retour(pf,WKF_RANDOM98));
-      else
+      }
 
     /* STANDARD 98 SEQUENTIEL */
-      if (*(ptbuf+3) == 'STDS') 
+      if (*(ptbuf+3) == 'STDS') {
          return(retour(pf,WKF_SEQUENTIEL98));
-      else
+      }
 
     /* BURP */
-      if ((*(ptbuf+3) == 'BRP0') || (*(ptbuf+3) == 'bRp0'))
+      if ((*(ptbuf+3) == 'BRP0') || (*(ptbuf+3) == 'bRp0')){
          return(retour(pf,WKF_BURP));
-      else
+      }
 
     /* GRIB */
-      if (*(ptbuf) == 0x47524942)   
+      if (*(ptbuf) == 0x47524942)   {
          return(retour(pf,WKF_GRIB));
-      else
+      }
 
     /* BUFR */
-      if (*(ptbuf) == 0x42554652)  
+      if (*(ptbuf) == 0x42554652)  {
          return(retour(pf,WKF_BUFR));
-      else
+      }
 
     /* NetCDF classic format */
-      if (*(ptbuf) == 'CDF\001')
+      if (*(ptbuf) == 'CDF\001'){
          return(retour(pf,WKF_NETCDF));
-      else
+      }
 	
     /* NetCDF 64-bit offset format */
-      if (*(ptbuf) == 'CDF\002')
+      if (*(ptbuf) == 'CDF\002'){
          return(retour(pf,WKF_NETCDF));
-      else
+      }
 
     /* BLOK */
-      if (*(ptbuf) == 0x424c4f4b)   
+      if (*(ptbuf) == 0x424c4f4b)   {
          return(retour(pf,WKF_BLOK));
-      else
+      }
 
     /* FORTRAN */
-      if (isftnbin(pf,*ptbuf))
+      if (isftnbin(pf,*ptbuf)){
          return(retour(pf,WKF_FORTRAN));
-      else {
+      }
    
     /* INCONNU  */
-	     return(retour(pf,test_fichier (nom2) ));
-      }
+      return(retour(pf,test_fichier (nom2) ));
    }
 }
 
@@ -536,7 +534,7 @@ char *nom;
  *
  *  langage   :  C
  *
- *  objet     :  THIS MODULE TEST IF A FILE IS A PostScript
+ *  objet     :  THIS MODULE TESTS IF A FILE IS A PostScript
  *
  */
 
@@ -604,7 +602,7 @@ char *path;
  *
  *  langage   :  C
  *
- *  objet     :  THIS MODULE TEST IF A FILE IS A XWDFile
+ *  objet     :  THIS MODULE TESTS IF A FILE IS A XWDFile
  *
  */
 
@@ -655,7 +653,7 @@ char *path;
  *
  *  langage   :  C
  *
- *  objet     :  THIS MODULE TEST IF A FILE IS A GIF
+ *  objet     :  THIS MODULE TESTS IF A FILE IS A GIF
  *
  */
 
@@ -782,7 +780,7 @@ if (cpt < 10) mode = 0 ;
  *
  *  langage   :  C
  *
- *  objet     :  THIS MODULE TEST IF A FILE IS A KMW
+ *  objet     :  THIS MODULE TESTS IF A FILE IS A KMW
  *
  */
 
@@ -820,7 +818,7 @@ char *path;
  *
  *  langage   :  C
  *
- *  objet     :  THIS MODULE TEST IF A FILE IS A RRBX FILE
+ *  objet     :  THIS MODULE TESTS IF A FILE IS A RRBX FILE
  *
  */
 
@@ -869,7 +867,7 @@ static  int isrrbx( path )
  *
  *  langage   :  C
  *
- *  objet     :  THIS MODULE TEST IF A FILE IS A SUNRASTER
+ *  objet     :  THIS MODULE TESTS IF A FILE IS A SUNRASTER
  *
  */
 
@@ -937,7 +935,7 @@ static  int isrrbx( path )
  *
  *  langage   :  C
  *
- *  objet     :  THIS MODULE TEST IF A FILE IS A PPM
+ *  objet     :  THIS MODULE TESTS IF A FILE IS A PPM
  *
  */
 
