@@ -29,6 +29,8 @@
  *Modification : M. Lepine - Juil 2011 (reconnaissance fichiers NetCDF)      *
  *Modification : M. Lepine - Juil 2011 (bug fix get_mode)                    *
  *Modification : M. Valin  - Jan  2020 (reconnaissance fichiers CMCARC)      *
+ *                                     enleve dependance rmnlib              *
+ *                                     creation du programme r.file_is_type  *
  *                                                                           *
  *OBJET                                                                      *
  *     DETERMINER QUEL EST LE TYPE D'UN FICHIER                              *
@@ -162,6 +164,7 @@
 
 
 #include <stdio.h>
+#include <stdint.h>
 #include <stdlib.h>
 #include <ctype.h>
 #include <string.h>
@@ -181,9 +184,47 @@
 #define B32 :32
 #endif
 
-#include <rpnmacros.h>
+static int endian_int=1;
+static char *little_endian=(char *)&endian_int;
+/***************************************************************************** 
+ *                            F R E A D 3 2                                  *
+ *                                                                           * 
+ *Object                                                                     * 
+ *   Reads nitems elements of data, each size bytes long                     *
+ *   and swap each bytes for each 4 bytes elements                           *
+ *                                                                           * 
+ *Arguments                                                                  * 
+ *                                                                           * 
+ *  IN  ptr     pointer to array to receive  data                            * 
+ *  IN  size    size in bytes of elements of data                            * 
+ *  IN  nitems  number of items to read                                      * 
+ *  IN  stream  file pointer                                                 * 
+ *                                                                           * 
+ *****************************************************************************/
+static size_t fread32(void *ptr, size_t size, size_t nitems, FILE *stream)
+{
+  size_t nr;
+  int i, n4=(size*nitems)/4;    /* number of 4 bytes */
+  uint32_t *pt4 = (uint32_t *) ptr;
 
-size_t fread32(void *ptr, size_t size, size_t nitems, FILE *stream);
+  if (*little_endian) {
+    if ((size & 3) != 0) {
+      fprintf(stderr,"fread64 error: size=%d must be a multiple of 4\n",size);
+      return(-1);
+    }
+    
+    nr = fread(ptr,size,nitems,stream);
+    
+    for (i=0; i < n4; i++) {
+      *pt4 = (*pt4>>24) | (*pt4<<24) | ((*pt4>>8)&0xFF00) | ((*pt4&0xFF00)<<8);
+      pt4++;
+    }
+  }
+  else
+    nr = fread(ptr,size,nitems,stream);
+
+  return((size_t) nr);
+}
 
 /*  RRBX stuff */
  
@@ -308,7 +349,7 @@ FILE *pf;
 int lng;
 {
    int mot;
-   INT_32 offset;
+   int32_t offset;
 
    offset = lng +4;
    fseek(pf,offset,0);
@@ -323,14 +364,14 @@ int lng;
 
 /********************************************/
 
-wordint
+int32_t
 c_wkoffit(char *nom,int l1) 
 {
    FILE *pf;
    char nom2[4096], nom3[4096], *pn2, *pn3;
    char cbuf[1024];
    int buffer[1024], *ptbuf, lowc=0;
-   INT_32 pos,lngf;
+   int32_t pos,lngf;
    int longnom;
 
    longnom = ( ( l1 <= 4095 ) ? l1 : 4095 );
@@ -462,13 +503,6 @@ c_wkoffit(char *nom,int l1)
     /* INCONNU  */
       return(retour(pf,test_fichier (nom2) ));
    }
-}
-
-wordint f77name(wkoffit)(char *nom, F2Cl fl1)
-{
-  int l1=fl1;
-  
-  return(c_wkoffit(nom,l1));
 }
 
 /****************************************************/
@@ -696,7 +730,7 @@ char *path;
  int  *depth ;
  int  *height ;
  int  *width ;
- INT_32 *length;
+ int32_t *length;
      {
      int cpt = 0;
      int kmwndx = 0 ;
@@ -705,7 +739,7 @@ char *path;
      static char sigkmw[] = "PLOT$Z";
 
      register char *data = buf;
-     INT_32  curpos;
+     int32_t  curpos;
 
 /*
  *  verifie dans les 350 premiers caracteres si on trouve
@@ -790,7 +824,7 @@ char *path;
    FILE *fp;
    int height,width, depth;
    int ierr=0;
-   INT_32 length;
+   int32_t length;
 
    if( (fp = fopen( path, "rb")) == NULL ) return(ierr);
 
@@ -1002,7 +1036,7 @@ char    in_sequence = FALSE;
 char    pass_seq;
 char    plus_sign;              /* for relative values */
 char    strip_seq = FALSE;
-INT_32    flen;
+int32_t    flen;
 char    buffer[256];
 
 /*
@@ -1421,4 +1455,16 @@ int main(int argc, char **argv){
   }
   return 1;
 }
+
+#else
+
+// not utility, provide Fortran callable entry point
+#include <rpnmacros.h>
+wordint f77name(wkoffit)(char *nom, F2Cl fl1)
+{
+  int l1=fl1;
+  
+  return(c_wkoffit(nom,l1));
+}
+
 #endif
