@@ -47,7 +47,7 @@ void sumx2(float *r, float *x, float *y, int ni){
   vy0 = _mm_loadu_ps(y);
   vxy = _mm256_insertf128_ps(vxy,vx0,0);   // _mm256_set_m128(vy0,vx0);
   vxy = _mm256_insertf128_ps(vxy,vy0,1);
-  sxy = _mm_fmadd_ps(vx0,vy0,sxy);         // running sums of x*x and y*y
+  sxy = _mm_fmadd_ps(vx0,vy0,sxy);         // running sums of x*y
   vs1 = _mm256_add_ps(vxy,vs1);            // running sums of x and y
   vs2 = _mm256_fmadd_ps(vxy,vxy,vs2);      // running sums of x*x and y*y
 
@@ -56,7 +56,7 @@ void sumx2(float *r, float *x, float *y, int ni){
   vy0 = _mm_loadu_ps(y);
   vxy = _mm256_insertf128_ps(vxy,vx0,0);   // _mm256_set_m128(vy0,vx0);
   vxy = _mm256_insertf128_ps(vxy,vy0,1);
-  sxy = _mm_fmadd_ps(vx0,vy0,sxy);         // running sums of x*x and y*y
+  sxy = _mm_fmadd_ps(vx0,vy0,sxy);         // running sums of x*y
   vs1 = _mm256_add_ps(vxy,vs1);            // running sums of x and y
   vs2 = _mm256_fmadd_ps(vxy,vxy,vs2);      // running sums of x*x and y*y
 
