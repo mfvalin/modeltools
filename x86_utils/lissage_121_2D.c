@@ -112,10 +112,12 @@ void lissage_121_1D(float *z, int ni){
 #if defined(SELF_TEST)
 #include <stdio.h>
 int main(){
-  float z1[] = {1.0f, 0.0f, 1.0f, 0.0f, 1.0f, 0.0f, 1.0f, 0.0f, 1.0f, 0.0f, 1.0f, 0.0f };
-  float z2[] = {1.0f, 0.0f,-1.0f, 0.0f, 1.0f, 0.0f,-1.0f, 0.0f, 1.0f, 0.0f,-1.0f, 0.0f };
-  float z3[] = {1.0f, 1.0f, 0.0f, 0.0f,-1.0f,-1.0f, 0.0f, 0.0f, 1.0f, 1.0f, 0.0f, 0.0f,-1.0f,-1.0f, 0.0f, 0.0f };
-  float z4[] = {0.0f,-1.0f,-1.0f, 0.0f, 0.0f, 1.0f, 1.0f, 0.0f, 0.0f,-1.0f,-1.0f, 0.0f, 0.0f, 1.0f, 1.0f, 0.0f };
+  float z1[] = {1.0f, 0.0f, 1.0f, 0.0f, 1.0f, 0.0f, 1.0f, 0.0f, 1.0f, 0.0f, 1.0f, 0.0f };  // 2 deltax
+  float z2[] = {1.0f, 0.0f,-1.0f, 0.0f, 1.0f, 0.0f,-1.0f, 0.0f, 1.0f, 0.0f,-1.0f, 0.0f };  // 4 deltax
+  float z3[] = {1.0f, 1.0f, 0.0f, 0.0f,-1.0f,-1.0f, 0.0f, 0.0f, 
+                1.0f, 1.0f, 0.0f, 0.0f,-1.0f,-1.0f, 0.0f, 0.0f };   // 8 deltax
+  float z4[] = {0.0f,-1.0f,-1.0f, 0.0f, 0.0f, 1.0f, 1.0f, 0.0f,
+                0.0f,-1.0f,-1.0f, 0.0f, 0.0f, 1.0f, 1.0f, 0.0f };   // 8 deltax (z3 with offset)
   int i;
   for(i=0 ; i<12 ; i++) printf(" %4.2f",z1[i]) ; printf("\n");
   lissage_121_1D(z1, 12);
