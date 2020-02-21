@@ -24,45 +24,100 @@ static int cores = -1;
 static int numanode = -1;
 static int core = -1;
 static int node_affinity = 0;
+static int core_affinity = 0;
 static int lo_core=-1;
 static int hi_core=-1;
-static uint8_t *flg;
+static int8_t *flg;
 static int8_t *nod;
 
 int sched_getcpu(void) ;
 
+// initialize internal tables
 static void init_core_numa(){
   int i;
   int last_numa = -1;
   cores = sysconf(_SC_NPROCESSORS_CONF);                 // get number of cores on node
   (void)sched_getaffinity(0, sizeof(set), &set);         // get processor affinity mask
-  flg = (uint8_t *)malloc(sizeof(uint8_t) * cores);      // allocate flag table
-  nod = (int8_t *)malloc(sizeof(uint8_t) * cores);      // allocate numa node table
-  memset(flg, 0, cores);
-  memset(nod, 0xFF, cores);
-  for (i = 0; i < cores ; i++) { // translate affinity mask into flags
-    if( CPU_ISSET(i, &set) ) {
-      if(lo_core == -1) lo_core = i ;
-      hi_core = i ;
+  flg = (int8_t *)malloc(sizeof(uint8_t) * cores);       // allocate flag table
+  nod = (int8_t *)malloc(sizeof(uint8_t) * cores);       // allocate numa node table
+  memset(flg,    0, cores);                              // core affinity
+  memset(nod, 0xFF, cores);                              // numa node associated with allowed cores
+  for (i = 0; i < cores ; i++) {       // translate affinity mask into flags
+    if( CPU_ISSET(i, &set) ) {         // we can run on this core
+      core_affinity++ ;                // number of cores this process can run on
+      if(lo_core == -1) lo_core = i ;  // first allowed core encountered
+      hi_core = i ;                    // last core allowed
       flg[i] = 1 ;
-      nod[i] = numa_node_of_cpu(i);
-      if(nod[i] != last_numa) { node_affinity++ ; last_numa = nod[i] ; }
+      nod[i] = numa_node_of_cpu(i);    // numa node this core belongs to
+      if(nod[i] != last_numa) {        // new node number
+	node_affinity++ ;              // number of numa nodes this process can run on (should be 1)
+	last_numa = nod[i] ;
+      }
     }
   }
 }
+//interface   !InTf!
+// function GetCoreAffinity() result(p) bind(C,name='GetCoreAffinity')  !InTf!
+//   import :: C_PTR                                     !InTf!
+//   type(C_PTR) :: p                                    !InTf!
+// end function GetCoreAffinity                          !InTf!
 
-void current_core_and_node(int *cpu, int *node){
-  *cpu  = sched_getcpu()          ; core     = *cpu ;
-  *node = numa_node_of_cpu(core)  ; numanode = *node ;
-}
-
-int32_t cores_on_node(){
+// get core (hyperthread) affinity table
+int8_t *GetCoreAffinity(){
   if(cores == -1) init_core_numa();
-  return cores;
+  return flg;
 }
+
+// function GetNumaAffinity() result(p) bind(C,name='GetNumaAffinity')  !InTf!
+//   import :: C_PTR                                     !InTf!
+//   type(C_PTR) :: p                                    !InTf!
+// end function GetNumaAffinity                          !InTf!
+
+// get numa (socket) affinity table
+int8_t *GetNumaAffinity(){
+  if(cores == -1) init_core_numa();
+  return nod;
+}
+
+// function CoresForProcess() result(n) bind(c,name='CoresForProcess')  !InTf!
+//   import :: C_INT                                     !InTf!
+//   integer(C_INT) :: n                                 !InTf!
+// end function CoresForProcess                          !InTf!
+
+// number of cores (and hyperthreads available to this process
+int CoresForProcess(){
+  if(cores == -1) init_core_numa();
+  return core_affinity;   // number of cores this process can run on
+}
+
+// subroutine GetCurrentCoreAndNode(cpu, node) bind(C,name='GetCurrentCoreAndNode')  !InTf!
+//   import :: C_INT                                     !InTf!
+//   integer(C_INT), intent(OUT) :: cpu, node            !InTf!
+// end subroutine GetCurrentCoreAndNode                  !InTf!
+
+// return current core and numa node (socket in most cases)
+void GetCurrentCoreAndNode(int *cpu, int *node){          // current core and numa node for this process
+  *cpu  = sched_getcpu()          ; core     = *cpu ;     // code number (may be a hyperthread)
+  *node = numa_node_of_cpu(core)  ; numanode = *node ;    // numa node
+}
+
+// function CoresOnNode() result(n) bind(c,name='CoresOnNode')  !InTf!
+//   import :: C_INT                                     !InTf!
+//   integer(C_INT) :: n                                 !InTf!
+// end function CoresOnNode                              !InTf!
+
+// return number of cores on node (including hyperthreads if any)
+int32_t CoresOnNode(){
+  if(cores == -1) init_core_numa();
+  return cores;      // numer of cores
+}
+//end interface   !InTf!
 
 /* Derived from util-linux-2.13-pre7/schedutils/taskset.c */
-char *cpuset_to_str(cpu_set_t *mask)    // cpu set to string conversion
+// convert affinity into printable string
+// string is allocated internally and should be freed by user when no longer needed
+// mask : affinity set returned by sched_getaffinity
+char *cpuset_to_str(cpu_set_t *mask)    // cpu set to C string conversion
 {
   char *str = (char *) malloc(7 * CPU_SETSIZE);  // safe allocation, 7 chars per core
   char *ptr = str;
@@ -96,14 +151,17 @@ int main(int argc, char **argv){
   char *clbuf;
   int i;
   int mycore, mynuma;
+  int8_t *f, *n;
 
-  printf("cores on node = %d \n",cores_on_node());
+  printf("cores on node = %d \n",CoresOnNode());
   clbuf = cpuset_to_str(&set);
-  printf("core affinity = %s (%d/%d), on %d numa node(s), ",clbuf, lo_core, hi_core, node_affinity);
+  printf("core affinity = %s (%d/%d)[%d], on %d numa node(s), ",clbuf, lo_core, hi_core, core_affinity, node_affinity);
   free(clbuf);
-  printf("mask = "); for(i=0 ; i<cores ; i++) printf("%1d",flg[i]) ; printf("\n");
-  printf("numa node mask = "); for(i=0 ; i<cores ; i++) printf("%1.1x",nod[i]&0xF) ; printf("\n");
-  current_core_and_node(&mycore, &mynuma);
+  f = GetCoreAffinity();
+  n = GetNumaAffinity();
+  printf("mask = "); for(i=0 ; i<cores ; i++) printf("%1d",f[i]) ; printf("\n");
+  printf("numa node mask = "); for(i=0 ; i<cores ; i++) printf("%1.1x",n[i]&0xF) ; printf("\n");
+  GetCurrentCoreAndNode(&mycore, &mynuma);
   printf("current core = %d in numa node %d\n",mycore, mynuma);
   return 0;
 }
