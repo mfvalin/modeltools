@@ -87,6 +87,8 @@ static local_arena LA;
 //
 // set id for memory management arena, return identifier (-1 in case of error)
 // id must be a POSITIVE INTEGER
+//
+// ARGUMENTS
 int32_t memory_arena_set_id(uint32_t id){
 //****
   if(id < 0) return -1;
@@ -118,6 +120,8 @@ static inline uint64_t block_name(unsigned char *name){
 //
 // mem  : pointer to previously created and initialized memory arena
 //        see  memory_arena_init
+//
+// ARGUMENTS
 void memory_arena_print_status(void *mem){
 //****
   uint64_t *mem64 = (uint64_t *) mem;
@@ -183,6 +187,7 @@ void memory_arena_print_status(void *mem){
 // size : size of memory area in 32 bit units
 // nsym : size of symbol table to allocate (max number of blocks expected)
 //
+// ARGUMENTS
 uint32_t memory_arena_init(void *mem, uint32_t nsym, uint32_t size){
 //****
   memory_arena *ma = (memory_arena *) mem;
@@ -328,6 +333,7 @@ static inline int32_t find_block(memory_arena *ma, symtab_entry *sym, uint64_t n
 // name  : name of block to find (characters beyond the 8th will be ignored)
 // ptr   : local address of block
 //
+// ARGUMENTS
 void *memory_block_find(void *mem, uint32_t *size, uint32_t *flags, unsigned char *name){
 //****
   uint64_t *mem64 = (uint64_t *) mem;
@@ -373,6 +379,7 @@ void *memory_block_find(void *mem, uint32_t *size, uint32_t *flags, unsigned cha
 // timeout : time to wait for block creation in milliseconds (-1 means forever)
 // ptr   : local address of block
 //
+// ARGUMENTS
 void *memory_block_find_wait(void *mem, uint32_t *size, uint32_t *flags, char *name, int timeout){
 //****
   void *p = NULL;
@@ -402,6 +409,7 @@ void *memory_block_find_wait(void *mem, uint32_t *size, uint32_t *flags, char *n
 // name : name of block to mark (characters beyond the 8th will be ignored)
 // ptr  : local address of block
 //
+// ARGUMENTS
 void *memory_block_mark_init(void *mem, unsigned char *name){
 //****
   uint64_t *mem64 = (uint64_t *) mem;
@@ -440,6 +448,7 @@ void *memory_block_mark_init(void *mem, unsigned char *name){
 // name : name of block to create (characters beyond the 8th will be ignored)
 // ptr  : local address of created block
 //
+// ARGUMENTS
 void *memory_block_create(void *mem, uint32_t size, unsigned char *name){
 //****
   uint64_t *mem64 = (uint64_t *) mem;
@@ -507,6 +516,7 @@ void *memory_block_create(void *mem, uint32_t size, unsigned char *name){
 // size  : size of block in 32 bit units
 // return local address of memory block
 //
+// ARGUMENTS
 void *memory_allocate_shared(int *shmid, uint32_t size){    
 //****
   int id = -1;
@@ -581,6 +591,7 @@ printf("MA = %p, id = %d\n",MA, MA->arena_id);
 //
 // schmid    : shared memory segment id (from memory_arena_create_shared, memory_allocate_shared, master_arena_create_shared)
 // ptr       : local memory addres of said segment
+// ARGUMENTS
 void *memory_address_from_id(int shmid){
 //****
   return shmat(shmid, NULL, 0);
