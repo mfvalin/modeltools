@@ -71,15 +71,15 @@ typedef struct{
 }local_arena;                // copy in local process memory pointing to memory arenas
 
 typedef struct{
-  uint32_t fwd;              // forward index to next block (64 bit items) (0 for last block)
-  uint32_t ix;               // index to this block (64 bit items)
-  uint32_t nwd;              // length of data portion of block (64 bit items)
-  uint32_t sign;             // low marker
+  uint32_t fwd;              // forward index to next block (64 bit units) (0 for last block)
+  uint32_t ix;               // index to this block (64 bit units)
+  uint32_t nwd;              // length of data portion of block (in 64 bit units)
+  uint32_t sign;             // low marker signature
 }block_header;
 #define BlockHeaderSize64 (sizeof(block_header) / sizeof(uint64_t))
 
 typedef struct{
-  uint32_t sign;             // high marker
-  uint32_t bwd;              // backward index to start of this block (64 bit items)
+  uint32_t sign;             // high marker signature
+  uint32_t bwd;              // backward index to start of this block (in 64 bit units)
 }block_tail;
 #define BlockTailSize64 (sizeof(block_tail) / sizeof(uint64_t))

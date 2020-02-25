@@ -16,15 +16,24 @@
  * Free Software Foundation, Inc., 59 Temple Place - Suite 330,
  * Boston, MA 02111-1307, USA.
  */
-#include <stdio.h>
-#include <stdlib.h>
-#include <unistd.h>
-#include <sys/ipc.h>
-#include <sys/shm.h>
-#include <sys/types.h>
-
-#include "memory_arena.h"
-
+//****P* librkl/RPN kernel library memory arena management
+// DESCRIPTION
+// set of routines to implement named block management in a memory pool
+// possibly shared by multiple threads and processes
+//
+//          master arena layout (there must be one and only one)
+// +--------------------+--------------------+---------------------+-------------------->
+// | master tables      | arena header       | symbol table        | data blocks
+// +--------------------+--------------------+---------------------+-------------------->
+//
+//          memory arena layout (multiple arenas can coexist)
+// +--------------------+---------------------+-------------------->
+// | arena header       | symbol table        | data blocks
+// +--------------------+---------------------+-------------------->
+//
+// indices are used instead of addresses because the memory arena might be mapped 
+// at different addresses in different processes
+//
 //          data block layout
 //     +----------------------------------------------------------------- +
 //     |                                                                  |
@@ -44,35 +53,42 @@
 // FWD of last allocated block will point to a non existent block with FWD = 0
 // 
 // FWD and BWD are indices into a 64 bit unsigned integer array starting at the beginning of the memory arena
-// FWD, IX, NWD, SIGNL, SIGNH, BWD are 32 bit integers
+// FWD, IX, NWD, SIGNL, SIGNH, BWD are 32 bit unsigned integers
 //
-//          memory arena layout (multiple arenas can be present)
-// +--------------------+---------------------+-------------------->
-// | arena header       | symbol table        | data blocks
-// +--------------------+---------------------+-------------------->
-//
-//          master arena layout (there must be one and only one)
-// +--------------------+--------------------+---------------------+-------------------->
-// | master tables      | arena header       | symbol table        | data blocks
-// +--------------------+--------------------+---------------------+-------------------->
-//
-// indices are used instead of addresses because the memory arena might be mapped to different addresses 
-// in different processes
+#if defined(NEVER_EVER_TRUE)
+// EXAMPLES
+//****
+#endif
+
+#include <stdio.h>
+#include <stdlib.h>
+#include <unistd.h>
+#include <sys/ipc.h>
+#include <sys/shm.h>
+#include <sys/types.h>
+
+#include "memory_arena.h"
+
 
 static uint32_t me = 999999999;  // identifier for this process (usually MPI rank) (alternative : getpid() )
 
 static local_arena LA;
 
 // interface                                                                      !InTf
+//****f* librkl/memory_arena_set_id ( set memory arena id )
+// Synopsis
+// set owner's id (usually MPI rank) for memory arenas
+//
 // function memory_arena_set_id(id) result(me) BIND(C,name='memory_arena_set_id') !InTf
 //   import :: C_INT                                                              !InTf
 //   integer(C_INT), intent(IN), value :: id                                      !InTf
 //   integer(C_INT) :: me                                                         !InTf
 // end function memory_arena_set_id                                               !InTf
-
+//
 // set id for memory management arena, return identifier (-1 in case of error)
 // id must be a POSITIVE INTEGER
 int32_t memory_arena_set_id(uint32_t id){
+//****
   if(id < 0) return -1;
   me = id + 1;
   return me;
@@ -91,13 +107,19 @@ static inline uint64_t block_name(unsigned char *name){
   return name64;
 }
 
+//****f* librkl/memory_arena_print_status ( print description of contents of memory arena )
+// Synopsis
+// dump arena header and symbol table
+//
 // subroutine memory_arena_print_status(mem) BIND(C,name='memory_arena_print_status') !InTf
 //   import :: C_PTR                                                                  !InTf
 //   type(C_PTR), intent(IN), value :: mem                                            !InTf
 // end subroutine memory_arena_print_status                                           !InTf
-
-// dump arena header and symbol table
+//
+// mem  : pointer to previously created and initialized memory arena
+//        see  memory_arena_init
 void memory_arena_print_status(void *mem){
+//****
   uint64_t *mem64 = (uint64_t *) mem;
   memory_arena *ma = (memory_arena *) mem;
   symtab_entry *sym = ma->t;
@@ -145,18 +167,24 @@ void memory_arena_print_status(void *mem){
   fprintf(stderr,"==============================================\n");
 }
 
+//****f* librkl/memory_arena_init  ( initialize a memory arena )
+// Synopsis
+// initialize an already allocated 'memory arena' (node shared memory usually), 
+// return id of current process
+//
 // function memory_arena_init(mem, nsym, size) result(me) BIND(C,name='memory_arena_init')          !InTf
 //   import :: C_PTR, C_INT                                                                         !InTf
 //   type(C_PTR), intent(IN), value :: mem                                                          !InTf
 //   integer(C_INT), intent(IN), value :: nsym, size                                                !InTf
 //   integer(C_INT) :: me                                                                           !InTf
 // end function memory_arena_init                                                                   !InTf
-
-// initialize an already allocated 'memory arena' (node shared memory usually), return id of current process
-// mem  : pointer to memory area
+//
+// mem  : pointer to memory area (see memory_arena_init)
 // size : size of memory area in 32 bit units
 // nsym : size of symbol table to allocate (max number of blocks expected)
+//
 uint32_t memory_arena_init(void *mem, uint32_t nsym, uint32_t size){
+//****
   memory_arena *ma = (memory_arena *) mem;
   symtab_entry *sym = ma->t;
   uint32_t size64 = size >> 1;  // round size down to 64 bit element size
@@ -280,6 +308,12 @@ static inline int32_t find_block(memory_arena *ma, symtab_entry *sym, uint64_t n
   return -1 ; // miserable failure
 }
 
+//****f* librkl/memory_block_find ( find a memory block in a memory arena )
+// Synopsis
+// find memory block 'name', return data address (NULL if not found), 
+//                                  size of block (0 if not found),
+//                                  block flags (0 if not found),
+//
 // function memory_block_find(mem, size, flags, name) result(ptr) BIND(C,name='memory_block_find') !InTf
 //   import :: C_PTR, C_INT, C_CHAR                                               !InTf
 //   type(C_PTR), intent(IN), value :: mem                                        !InTf
@@ -287,13 +321,15 @@ static inline int32_t find_block(memory_arena *ma, symtab_entry *sym, uint64_t n
 //   character(C_CHAR), dimension(*), intent(IN) :: name                          !InTf
 //   type(C_PTR) :: ptr                                                           !InTf
 // end function memory_block_find                                                 !InTf
-
-// find memory block 'name', return data address (NULL if not found), 
-//                                  size of block (0 if not found),
-//                                  block flags (0 if not found),
-// mem  : address of the managed 'memory arena'
-// name : name of block to find (characters beyond the 8th will be ignored)
+//
+// mem   : address of the managed 'memory arena'
+// size  : size of the memory block (in 32 bit units)
+// flags : blosk flags
+// name  : name of block to find (characters beyond the 8th will be ignored)
+// ptr   : local address of block
+//
 void *memory_block_find(void *mem, uint32_t *size, uint32_t *flags, unsigned char *name){
+//****
   uint64_t *mem64 = (uint64_t *) mem;
   memory_arena *ma = (memory_arena *) mem;
   symtab_entry *sym = ma->t;
@@ -316,6 +352,11 @@ void *memory_block_find(void *mem, uint32_t *size, uint32_t *flags, unsigned cha
   return dataptr;
 }
 
+//****f* librkl/memory_block_find_wait ( find a memory block in a memory arena ) (with wait)
+// Synopsis
+// same as memory_block_find, but wait until block is created (or timeout in milliseconds expires)
+// (timeout(milliseconds) = -1 means infinite wait for all practical purposes, 3600000 is one hour)
+//
 // function memory_block_find_wait(mem, size, flags, name, timeout) result(ptr) BIND(C,name='memory_block_find_wait')  !InTf
 //   import :: C_PTR, C_INT, C_CHAR                                               !InTf
 //   type(C_PTR), intent(IN), value :: mem                                        !InTf
@@ -325,9 +366,15 @@ void *memory_block_find(void *mem, uint32_t *size, uint32_t *flags, unsigned cha
 //   type(C_PTR) :: ptr                                                           !InTf
 // end function memory_block_find_wait                                            !InTf
 //
-// same as memory_block_find, but wait until block is created (or timeout in milliseconds expires)
-// (timeout(milliseconds) = -1 means infinite wait for all practical purposes, 3600000 is one hour)
+// mem   : address of the managed 'memory arena'
+// size  : size of the memory block (in 32 bit units)
+// flags : blosk flags
+// name  : name of block to find (characters beyond the 8th will be ignored)
+// timeout : time to wait for block creation in milliseconds (-1 means forever)
+// ptr   : local address of block
+//
 void *memory_block_find_wait(void *mem, uint32_t *size, uint32_t *flags, char *name, int timeout){
+//****
   void *p = NULL;
   useconds_t delay = 1000;  // 1000 microseconds = 1 millisecond
 
@@ -340,17 +387,23 @@ void *memory_block_find_wait(void *mem, uint32_t *size, uint32_t *flags, char *n
   return p;
 }
 
+//****f* librkl/memory_block_mark_init ( mark a memory block as initialized )
+// Synopsis
+// mark memory block 'name' as initialized, return block address if found, NULL otherwise
+//
 // function memory_block_mark_init(mem, name) result(ptr) BIND(C,name='memory_block_mark_init') !InTf
 //   import :: C_PTR, C_CHAR                                              !InTf
 //   type(C_PTR), intent(IN), value :: mem                                !InTf
 //   character(C_CHAR), dimension(*), intent(IN) :: name                  !InTf
 //   type(C_PTR) :: ptr                                                   !InTf
 // end function memory_block_mark_init                                    !InTf
-
-// mark memory block 'name' as initialized, return block address if found, NULL otherwise
+//
 // mem  : address of the managed 'memory arena'
 // name : name of block to mark (characters beyond the 8th will be ignored)
+// ptr  : local address of block
+//
 void *memory_block_mark_init(void *mem, unsigned char *name){
+//****
   uint64_t *mem64 = (uint64_t *) mem;
   memory_arena *ma = (memory_arena *) mem;
   symtab_entry *sym = ma->t;
@@ -369,6 +422,11 @@ void *memory_block_mark_init(void *mem, unsigned char *name){
   return dataptr;
 }
 
+//****f* librkl/memory_block_create ( create a named memory block in a memory arena )
+// Synopsis
+// create a named block in a managed 'memory arena'
+// return start address of data (NULL in case of error)
+//
 // function memory_block_create(mem, size, name) result(ptr) BIND(C,name='memory_block_create') !InTf
 //   import :: C_PTR, C_INT, C_CHAR                                               !InTf
 //   type(C_PTR), intent(IN), value :: mem                                        !InTf
@@ -376,13 +434,14 @@ void *memory_block_mark_init(void *mem, unsigned char *name){
 //   character(C_CHAR), dimension(*), intent(IN) :: name                          !InTf
 //   type(C_PTR) :: ptr                                                           !InTf
 // end function memory_block_create                                               !InTf
-
-// create a named block in a managed 'memory arena'
-// return start address of data (NULL in case of error)
+//
 // mem  : address of the managed 'memory arena'
-// size : desired size of blok in 32 bit units
+// size : desired size of block in 32 bit units
 // name : name of block to create (characters beyond the 8th will be ignored)
+// ptr  : local address of created block
+//
 void *memory_block_create(void *mem, uint32_t size, unsigned char *name){
+//****
   uint64_t *mem64 = (uint64_t *) mem;
   memory_arena *ma = (memory_arena *) mem;
   symtab_entry *sym = ma->t;
@@ -433,18 +492,23 @@ void *memory_block_create(void *mem, uint32_t size, unsigned char *name){
   return dataptr;
 }
 
+//****f* librkl/memory_allocate_shared ( allocate a shared memory block )
+// Synopsis
+// allocate a shared memory segment (on his process)
+//
 // function memory_allocate_shared(shmid, size) result(ptr) BIND(C,name='memory_allocate_shared') !InTf
 //   import :: C_PTR, C_INT                                                       !InTf
 //   integer, intent(OUT) :: shmid                                                !InTf
 //   integer, intent(IN), value :: size                                           !InTf
 //   type(C_PTR) :: ptr                                                           !InTf
 // end function memory_allocate_shared                                            !InTf
-
-// allocate a shared memory block
-// shmid : shared memory id of block (set by memory_allocate_shared)
+//
+// shmid : shared memory id of block (set by memory_allocate_shared) (see shmget)
 // size  : size of block in 32 bit units
 // return local address of memory block
+//
 void *memory_allocate_shared(int *shmid, uint32_t size){    
+//****
   int id = -1;
   void *shmaddr = NULL;
   size_t shmsz = size * sizeof(uint32_t);  // 32 bit units to bytes
@@ -505,16 +569,20 @@ printf("MA = %p, id = %d\n",MA, MA->arena_id);
   return MA;                       // return address of master arena
 }
 
+//****f* librkl/memory_address_from_id ( get memory address associated with shared memory segment id )
+// Synopsis
+// get memory address associated with shared memory segment shmid
+//
 // function memory_address_from_id(shmid) result(ptr) BIND(C,name='memory_address_from_id') !InTf
 //   import :: C_PTR, C_INT                                                          !InTf
 //   integer, intent(IN), value :: shmid                                             !InTf
 //   type(C_PTR) :: ptr                                                              !InTf
 // end function memory_address_from_id                                               !InTf
-
-// get memory address associated with shared memory segment shmid
+//
 // schmid    : shared memory segment id (from memory_arena_create_shared, memory_allocate_shared, master_arena_create_shared)
-// return    : local memory addres of said segment
+// ptr       : local memory addres of said segment
 void *memory_address_from_id(int shmid){
+//****
   return shmat(shmid, NULL, 0);
 }
 
