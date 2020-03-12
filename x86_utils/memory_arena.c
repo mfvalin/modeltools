@@ -66,9 +66,18 @@
 #include <sys/ipc.h>
 #include <sys/shm.h>
 #include <sys/types.h>
+#include <immintrin.h>
 
 #include "memory_arena.h"
 
+// memory store fence
+#define W_FENCE asm volatile("": : :"memory"); _mm_sfence();
+
+// memory load fence
+#define R_FENCE asm volatile("": : :"memory"); _mm_lfence();
+
+// memory load+store fence
+#define M_FENCE asm volatile("": : :"memory"); _mm_mfence();
 
 static uint32_t me = 999999999;  // identifier for this process (usually MPI rank) (alternative : getpid() )
 
@@ -240,7 +249,7 @@ uint32_t update_local_table(void *mem){
   LA.MA        = MA;
 
   LA.le[0].arena_sz    = ma->arena_size;                 // memory arena associated to master arena
-  LA.le[0].arena_name  = block_name("MaStEr");
+  LA.le[0].arena_name  = block_name((unsigned char *)(unsigned char *)"MaStEr");
   LA.le[0].ma          = ma;
 fprintf(stderr,"local update, arena = %d, id = %d, address = %p, size = %ld\n",0, MA->me[0].arena_id, LA.le[0].ma, LA.le[0].arena_sz);
 
@@ -277,7 +286,6 @@ uint32_t master_arena_init(void *mem, uint32_t nsym, uint32_t size){
   master_arena *MA = (master_arena *) mem;
   memory_arena *ma = (memory_arena *) &(MA->ma);
   int i, status;
-  uint32_t size0 = size;
 
   size = size - MasterHeaderSize64 * 2;     // space left for memory arena proper
 
@@ -289,7 +297,7 @@ uint32_t master_arena_init(void *mem, uint32_t nsym, uint32_t size){
     MA->me[i].arena_id   = -1;
     MA->me[i].owner_id   = -1;
   }
-  MA->me[0].arena_name = block_name("MaStEr");  // special name for master arena
+  MA->me[0].arena_name = block_name((unsigned char *)"MaStEr");  // special name for master arena
   MA->me[0].arena_sz   = size >> 1;             // fix size entry of area 0 (arena part of master arena)
   MA->me[0].owner_id   = me;                    // creator id
 // printf("MA = %p, ma = %p, delta = %ld\n",MA, ma, (void *)ma - (void *)MA);
@@ -380,7 +388,7 @@ void *memory_block_find(void *mem, uint32_t *size, uint32_t *flags, unsigned cha
 // ptr   : local address of block
 //
 // ARGUMENTS
-void *memory_block_find_wait(void *mem, uint32_t *size, uint32_t *flags, char *name, int timeout){
+void *memory_block_find_wait(void *mem, uint32_t *size, uint32_t *flags, unsigned char *name, int timeout){
 //****
   void *p = NULL;
   useconds_t delay = 1000;  // 1000 microseconds = 1 millisecond
@@ -532,6 +540,7 @@ void *memory_allocate_shared(int *shmid, uint32_t size){
   if(id == -1) return NULL;
   shmaddr = shmat(id, NULL, 0);             // local address of memory block
   err = shmctl(id, IPC_RMID, &dummy);       // mark block as to be deleted when no process attached
+  if(err == -1) return NULL;
 
   return shmaddr;     // return local address of memory block
 }
@@ -550,6 +559,7 @@ void *memory_arena_create_shared(int *shmid, uint32_t nsym, uint32_t size){
   if(shmaddr == NULL) return shmaddr;             // request failed
 
   err = memory_arena_init(shmaddr, nsym, size);   // initialize memory arena
+  if(err < 0) return NULL;
 
   return shmaddr;
 }
@@ -570,10 +580,11 @@ void *master_arena_create_shared(int *shmid, uint32_t nsym, uint32_t size){
   MA->lock       = 0;
   MA->arena_id   = *shmid;
   MA->arena_sz   = size >> 1;             // 64 bit units
-  MA->arena_name = block_name("MaStEr");  // special name
+  MA->arena_name = block_name((unsigned char *)"MaStEr");  // special name
   
 printf("MA = %p, id = %d\n",MA, MA->arena_id);
   err = master_arena_init(shmaddr, nsym, size);
+  if(err < 0) return NULL;
   MA->me[0].arena_id   = MA->arena_id;                    // segment id
 
   return MA;                       // return address of master arena
