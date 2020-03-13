@@ -50,3 +50,15 @@ int32_t *circular_buffer_advance_in(circular_buffer_p p, int32_t *n1, int32_t *n
 int32_t *circular_buffer_advance_out(circular_buffer_p p, int32_t *n1, int32_t *n2);   // InTc
 int circular_buffer_atomic_get(circular_buffer_p p, int *dst, int n);   // InTc
 int circular_buffer_atomic_put(circular_buffer_p p, int *src, int n);   // InTc
+
+#include <immintrin.h>
+
+// memory store fence
+#define W_FENCE asm volatile("": : :"memory"); _mm_sfence();
+
+// memory load fence
+#define R_FENCE asm volatile("": : :"memory"); _mm_lfence();
+
+// memory load+store fence
+#define M_FENCE asm volatile("": : :"memory"); _mm_mfence();
+

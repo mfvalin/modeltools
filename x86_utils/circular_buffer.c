@@ -79,6 +79,7 @@
 #include <sys/ipc.h>
 #include <sys/types.h>
 #include <sys/shm.h>
+
 #include <circular_buffer.h>
 
 #define SPACE_AVAILABLE(in,out,limit)  ((in < out) ? out-in-1 : limit-in+out-1)
@@ -443,6 +444,7 @@ int circular_buffer_atomic_get(circular_buffer_p p, int *dst, int n){   // InTc
     move_integers(dst, buf+out, n);
     out += n;
   }
+  M_FENCE;  // memory fence, make sure everything fetched and stored before adjusting the "out" pointer
   *outp = out;
   in = *inp;
 //   out = *outp;
@@ -487,7 +489,7 @@ int circular_buffer_extract(circular_buffer_p p, int *dst, int n, int offset, in
     move_integers(dst, buf+out, n);
     out += n;
   }
-  if(update) *outp = out;
+  if(update) { M_FENCE ; *outp = out; }  // memory fence, make sure everything fetched and stored before adjusting the "out" pointer
   in = *inp;
   return DATA_AVAILABLE(in,out,limit);
 }
@@ -534,6 +536,7 @@ int circular_buffer_atomic_put(circular_buffer_p p, int *src, int n){   // InTc
     move_integers(buf+in, src, n);
     in += n;
   }
+  W_FENCE ;  // write fence, make sure everything is in memory before adjusting the "in" pointer
   *inp = in;
 //   in = *inp;
   out = *outp;
@@ -578,7 +581,7 @@ int circular_buffer_insert(circular_buffer_p p, int *src, int n, int offset, int
     move_integers(buf+in, src, n);
     in += n;
   }
-  if(update) *inp = in;
+  if(update) { W_FENCE ; *inp = in; }   // write fence, make sure everything is in memory before adjusting the "in" pointer
   out = *outp;
   return SPACE_AVAILABLE(in,out,limit);
 }
