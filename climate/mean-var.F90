@@ -442,11 +442,12 @@
     arg_count = command_argument_count()
     call get_command_argument(0,progname,arg_len,status)  ! get program name
 
-    nspecials = 4
+    nspecials = 5
     specials(1) = ">>  "
     specials(2) = "^^  "
     specials(3) = "!!  "
     specials(4) = "HY  "
+    specials(5) = "^>  "
 
     if(arg_count < 1) then             ! no arguments, OUCH !!
       call print_usage(progname)
