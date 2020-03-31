@@ -16,7 +16,7 @@
 ! * Free Software Foundation, Inc., 59 Temple Place - Suite 330,
 ! * Boston, MA 02111-1307, USA.
 ! */
-#define VERSION '1.0_rc23 2020/03/13'
+#define VERSION '1.0_rc24 2020/03/31'
 #define AVG_MARKER '/'
 #define VAR_MARKER '%'
 #define STD_MARKER '7'
@@ -259,7 +259,8 @@
       ix = -1
       level2 = -1  ! a priori, one level data
       call convip_plus( ip1, r1, it1, -1, string, .false. )    ! convert ip1
-      if(ip3 == 0 .and. ip2 < 1000000) then    ! special "old style coding" for time in hours
+!     if(ip3 == 0 .and. ip2 < 1000000) then    ! special "old style coding" for time in hours
+      if(ip2 < 1000000) then    ! special "old style coding" for time in hours
         it2 = 10
         r2 = ip2
       else
@@ -267,8 +268,13 @@
       endif
       call convip_plus( ip3, r3, it3, -1, string, .false. )    ! convert ip3
 
-      if( (it1 == it3) .and. (ip1 > 0) .and. (ip3 > 0) ) level2 = ip3   ! 2 level data
-      if( (it1 == it2) .and. (ip1 > 0) .and. (ip2 > 0) ) level2 = ip2   ! 2 level data
+!  2 level data DISALLOWED
+!       if( (it1 == it3) .and. (ip1 > 0) .and. (ip3 > 0) .and. (.not. weight_ip3) ) then
+!         level2 = ip3   ! 2 level data
+!       endif
+!       if( (it1 == it2) .and. (ip1 > 0) .and. (ip2 > 0) ) then
+!         level2 = ip2   ! 2 level data
+!       endif
 
       dnp = npas
       dnp = dnp * deet
