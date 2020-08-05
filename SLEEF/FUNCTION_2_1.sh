@@ -75,7 +75,7 @@ void ${Vlibsleef}${FuNcTiOn}_f${PoStFiX}(float *f, float *r1, float *r2, int n){
 
   for(i=0 ; i<n-3 ; i+=4){  // blocks of 4 values
     src = _mm_loadu_ps(f+i) ;
-    dst = Sleef_cinz_${FuNcTiOn}f4_u${PrEcIsIoN}sse2(src) ;
+    dst = Sleef_cinz_${FuNcTiOn}f4_u${PrEcIsIoN}sse4(src) ;
     _mm_storeu_ps(r1+i, dst.x) ;
     _mm_storeu_ps(r2+i, dst.y) ;
   }
@@ -119,7 +119,7 @@ void ${Vlibsleef}${FuNcTiOn}_d${PoStFiX}(double *f, double *r1, double *r2, int 
 
   for(i=0 ; i<n-1 ; i+=2){  // blocks of 2 values
     src = _mm_loadu_pd(f+i) ;
-    dst = Sleef_cinz_${FuNcTiOn}d2_u${PrEcIsIoN}sse2(src) ;
+    dst = Sleef_cinz_${FuNcTiOn}d2_u${PrEcIsIoN}sse4(src) ;
     _mm_storeu_pd(r1+i, dst.x) ;
     _mm_storeu_pd(r2+i, dst.y) ;
   }
