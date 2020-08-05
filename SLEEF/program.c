@@ -1,4 +1,4 @@
-#define _GNU_SOURCE
+#define _GNU_SOURCE_xx
 
 #include <stdio.h>
 #include <stdint.h>
@@ -29,11 +29,11 @@ int main(){
   t0 = rdtsc();
   for(i=0 ; i<COL ; i++) array[i] = i / (COL*1.0f) * 3.1415926535f * 2.0f;
   t1 = rdtsc();
-  v_sin_f(array, array, COL);
+  Vsl_sin_f(array, array, COL);
   t2 = rdtsc();
-  sin_f(array, array, COL);
+  Vm_sin_f(array, array, COL);
   t3 = rdtsc();
-  v_sin_f35(array, array, COL);
+  Vsl_sin_f35(array, array, COL);
   t4 = rdtsc();
   t0 /= 3700 ;
   t1 /= 3700 ;
