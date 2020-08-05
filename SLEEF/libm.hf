@@ -1,0 +1,95 @@
+!   Copyright Recherche en Prevision Numerique and contributors 2020.
+!   Distributed under the Boost Software License, Version 1.0.
+!   https://www.boost.org/LICENSE_1_0.txt
+!   M.Valin 2020/07/31
+!
+! Fortran interfaces for real*4 and real*8 to some libm functions
+! using the Fortran intrinsic function name if it exists
+!
+! some of these functions are known as intrinsics to the Fortran compiler
+! and some are not
+!
+#if defined(USE_LIBM_ALL) || defined (USE_LIBM_cbrt)
+  interface cbrt
+    function cbrt_f(f4) result(r4) BIND(C,name='cbrtf')
+      import :: C_FLOAT
+      real(C_FLOAT), intent(IN), value :: f4
+      real(C_FLOAT) :: r4
+    end function cbrt_f
+    function cbrt_d(f8) result(r8) BIND(C,name='cbrt')
+      import :: C_DOUBLE
+      real(C_DOUBLE), intent(IN), value :: f8
+      real(C_DOUBLE) :: r8
+    end function cbrt_d
+  end interface cbrt
+#endif
+#if defined(USE_LIBM_ALL) || defined (USE_LIBM_sin)
+  interface sin
+    function sin_f(f4) result(r4) BIND(C,name='sinf')
+      import :: C_FLOAT
+      real(C_FLOAT), intent(IN), value :: f4
+      real(C_FLOAT) :: r4
+    end function sin_f
+    function sin_d(f8) result(r8) BIND(C,name='sin')
+      import :: C_DOUBLE
+      real(C_DOUBLE), intent(IN), value :: f8
+      real(C_DOUBLE) :: r8
+    end function sin_d
+  end interface sin
+#endif
+#if defined(USE_LIBM_ALL) || defined (USE_LIBM_cos)
+  interface cos
+    function cos_f(f4) result(r4) BIND(C,name='cosf')
+      import :: C_FLOAT
+      real(C_FLOAT), intent(IN), value :: f4
+      real(C_FLOAT) :: r4
+    end function cos_f
+    function cos_d(f8) result(r8) BIND(C,name='cos')
+      import :: C_DOUBLE
+      real(C_DOUBLE), intent(IN), value :: f8
+      real(C_DOUBLE) :: r8
+    end function cos_d
+  end interface cos
+#endif
+#if defined(USE_LIBM_ALL) || defined (USE_LIBM_sincos)
+  interface sincos
+    subroutine sincos_f(f4, r4, r4a) BIND(C,name='sincosf')
+      import :: C_FLOAT
+      real(C_FLOAT), intent(IN), value :: f4
+      real(C_FLOAT), intent(OUT) :: r4, r4a
+    end subroutine sincos_f
+    subroutine sincos_d(f8, r8, r8a) BIND(C,name='sincos')
+      import :: C_DOUBLE
+      real(C_DOUBLE), intent(IN), value :: f8
+      real(C_DOUBLE), intent(OUT) :: r8, r8a
+    end subroutine sincos_d
+  end interface sincos
+#endif
+#if defined(USE_LIBM_ALL) || defined (USE_LIBM_tan)
+  interface tan
+    function tan_f(f4) result(r4) BIND(C,name='tanf')
+      import :: C_FLOAT
+      real(C_FLOAT), intent(IN), value :: f4
+      real(C_FLOAT) :: r4
+    end function tan_f
+    function tan_d(f8) result(r8) BIND(C,name='tan')
+      import :: C_DOUBLE
+      real(C_DOUBLE), intent(IN), value :: f8
+      real(C_DOUBLE) :: r8
+    end function tan_d
+  end interface tan
+#endif
+#if defined(USE_LIBM_ALL) || defined (USE_LIBM_pow)
+  interface pow
+    function pow_f(f4, f4a) result(r4) BIND(C,name='powf')
+      import :: C_FLOAT
+      real(C_FLOAT), intent(IN), value :: f4, f4a
+      real(C_FLOAT) :: r4
+    end function pow_f
+    function pow_d(f8, f8a) result(r8) BIND(C,name='pow')
+      import :: C_DOUBLE
+      real(C_DOUBLE), intent(IN), value :: f8, f8a
+      real(C_DOUBLE) :: r8
+    end function pow_d
+  end interface pow
+#endif
