@@ -10,7 +10,9 @@ set -x
 #prefixes for the various interfaces
 export Vlibm=${Vlibm:-Vm_}            # functions calling libm
 export Vlibsleef=${Vlibsleef:-Vsl_}   # functions calling libsleef
-export Vfortran=${Vfortran:-V_}       # Fortrasn interface to functions calling libsleef
+export Vfortran=${Vfortran:-V_}       # Fortran interface to functions calling libsleef
+#
+# the above environment variables are used by scripts FUNCTION.sh, FUNCTION_1_2.sh, FUNCTION_2_1.sh
 #
 # some possibly missing prototypes for libm funcions
 cat <<EOT
@@ -27,7 +29,8 @@ cat <<EOT
 #endif
 EOT
 #
-# timing function with Fortran interface (returns clock cycles)
+# timing function and its Fortran interface (returns clock cycles)
+# for architectures other than X86-64(__x86_64__) and ARM-64(__aarch64__), a dymmy function is generated
 cat <<EOT
 // interface 
 //   function ${Vfortran}rdtsc() result(t) BIND(C,name='Vsl_rdtsc')
@@ -37,7 +40,7 @@ cat <<EOT
 // end interface
 static uint64_t time0 = 0;
 uint64_t ${Vlibsleef}rdtsc(void) {   // serialized version on X86
-#if defined(__x86_64__)
+#if defined(__x86_64__) || defined(USE_RDTSCP)
   uint32_t lo, hi, rcx;
   __asm__ volatile ("rdtscp" :  "=a" (lo), "=d" (hi), "=c" (rcx) );
   return (uint64_t)lo | (((uint64_t)hi) << 32);

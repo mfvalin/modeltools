@@ -6,7 +6,7 @@
 
 #include<math.h>
 
-#if WITH_INLINE_FUNCTIONS
+#if defined(WITH_INLINE_FUNCTIONS)
 
 #include <string.h>
 #include <x86intrin.h>
@@ -23,6 +23,15 @@
 
 #include <sleef.h>
 
+#endif
+
+#if defined(NO_X86)
+#define USE_RDTSCP
+#undef __x86_64__
+#endif
+
+#if defined(NO_SLEEF)
+#undef __SLEEF_H__
 #endif
 
 #include <functions.h>
