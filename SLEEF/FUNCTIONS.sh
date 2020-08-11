@@ -53,6 +53,7 @@ uint64_t ${Vlibsleef}rdtsc(void) {   // serialized version on X86
   return time0++;  // dummy for the time being
 #endif
 }
+
 EOT
 # one input, one output
 ./FUNCTION.sh sin10 sin35 cos10 cos35 tan10 tan35 \

@@ -23,16 +23,16 @@ PoStFiX=""
 
 # ${Vlibm} function calling libm (only done if precision <= 10)
 ((PrEcIsIoN <= 10)) && cat <<EOT
-
 void ${Vlibm}${FuNcTiOn}_f(float *f, float *r1, float *r2, int n){   // 32 bit floating point
   int i;
   for(i=0 ; i<n ; i++) ${FuNcTiOn}f(f[i], r1+i, r2+i);
 }
-
+//===========================================================================================
 void ${Vlibm}${FuNcTiOn}_d(double *f, double *r1, double *r2, int n){   // 64 bit floating point
   int i;
   for(i=0 ; i<n ; i++) ${FuNcTiOn}(f[i], r1+i, r2+i);
 }
+//===========================================================================================
 EOT
 
 # ${Vlibsleef} version calling libsleef, with specified precision
@@ -53,19 +53,27 @@ cat <<EOT
 //     real(C_DOUBLE), dimension(n), intent(OUT) :: r1, r2   ! 64 bit floating point results
 //   end subroutine ${Vfortran}${FuNcTiOn}_d${PoStFiX}
 // end interface
-
+//===========================================================================================
 void ${Vlibsleef}${FuNcTiOn}_f${PoStFiX}(float *f, float *r1, float *r2, int n){
-#if defined(__SLEEF_H__) && defined(__x86_64__)
   int i = 0;
   Sleef_float_2  rst;
+#if defined(__SLEEF_H__) && defined(__x86_64__)
 #if defined(__x86_64__)
+
+  Sleef___m128_2 dst128;
+
 #if defined(__AVX2__)
-  Sleef___m256_2 dst;
+  Sleef___m256_2 dst256;
 
   for(i=0 ; i<n-7 ; i+=8){  // blocks of 8 values if AVX2 available
-    dst = Sleef_finz_${FuNcTiOn}f8_u${PrEcIsIoN}avx2(_mm256_loadu_ps(f+i)) ;
-    _mm256_storeu_ps(r1+i, dst.x) ;
-    _mm256_storeu_ps(r2+i, dst.y) ;
+    dst256 = Sleef_finz_${FuNcTiOn}f8_u${PrEcIsIoN}avx2(_mm256_loadu_ps(f+i)) ;
+    _mm256_storeu_ps(r1+i, dst256.x) ;
+    _mm256_storeu_ps(r2+i, dst256.y) ;
+  }
+  for(i=0 ; i<n-3 ; i+=4){  // blocks of 4 values if AVX2 available
+    dst128 = Sleef_finz_${FuNcTiOn}f4_u${PrEcIsIoN}avx2128(_mm_loadu_ps(f+i)) ;
+    _mm_storeu_ps(r1+i, dst128.x) ;
+    _mm_storeu_ps(r2+i, dst128.y) ;
   }
 
   for( ; i<n ; i++){     // one value at a time for leftovers
@@ -74,16 +82,15 @@ void ${Vlibsleef}${FuNcTiOn}_f${PoStFiX}(float *f, float *r1, float *r2, int n){
     i++;
   }
 #else     // __AVX2__
-  Sleef___m128_2 dst;
 
   for(i=0 ; i<n-3 ; i+=4){  // blocks of 4 values if SSE2/SSE4.2 available
 #if defined(__SSE4_2__)
-    dst = Sleef_cinz_${FuNcTiOn}f4_u${PrEcIsIoN}sse4(_mm_loadu_ps(f+i)) ;
+    dst128 = Sleef_cinz_${FuNcTiOn}f4_u${PrEcIsIoN}sse4(_mm_loadu_ps(f+i)) ;
 #else     // __SSE4_2__
-    dst = Sleef_cinz_${FuNcTiOn}f4_u${PrEcIsIoN}sse2(_mm_loadu_ps(f+i)) ;
+    dst128 = Sleef_cinz_${FuNcTiOn}f4_u${PrEcIsIoN}sse2(_mm_loadu_ps(f+i)) ;
 #endif    // __SSE4_2__
-    _mm_storeu_ps(r1+i, dst.x) ;
-    _mm_storeu_ps(r2+i, dst.y) ;
+    _mm_storeu_ps(r1+i, dst128.x) ;
+    _mm_storeu_ps(r2+i, dst128.y) ;
   }
 
   for( ; i<n ; i++){     // one value at a time for leftovers
@@ -92,28 +99,39 @@ void ${Vlibsleef}${FuNcTiOn}_f${PoStFiX}(float *f, float *r1, float *r2, int n){
     i++;
   }
 #endif    // __AVX2__
+
+#else     // __x86_64__
+  for( ; i<n ; i++){     // one value at a time for leftovers
+    rst = Sleef_${FuNcTiOn}f_u${PrEcIsIoN}(f[i]) ;                  // sleef other architectures
+    r1[i] = rst.x ; r2[i] = rst.y ;
+  }
 #endif    // __x86_64__
 
 #else     // __SLEEF_H__
   ${Vlibm}${FuNcTiOn}_f(f, r1, r2, n);   // not using SLEEF, call libm function directly
 #endif    // __SLEEF_H__
 }
-
+//===========================================================================================
 void ${Vlibsleef}${FuNcTiOn}_d${PoStFiX}(double *f, double *r1, double *r2, int n){
-#if defined(__SLEEF_H__) && defined(__x86_64__)
   int i = 0;
   Sleef_double_2  rst;
+#if defined(__SLEEF_H__) && defined(__x86_64__)
 #if defined(__x86_64__)
 
+  Sleef___m128d_2 dst128;
+
 #if defined(__AVX2__)
-  __m256d src;
-  Sleef___m256d_2 dst;
+  Sleef___m256d_2 dst256;
 
   for( ; i<n-3 ; i+=4){  // blocks of 4 values if AVX2 available
-    src = _mm256_loadu_pd(f+i) ;
-    dst = Sleef_finz_${FuNcTiOn}d4_u${PrEcIsIoN}avx2(src) ;
-    _mm256_storeu_pd(r1+i, dst.x) ;
-    _mm256_storeu_pd(r2+i, dst.y) ;
+    dst256 = Sleef_finz_${FuNcTiOn}d4_u${PrEcIsIoN}avx2(_mm256_loadu_pd(f+i)) ;
+    _mm256_storeu_pd(r1+i, dst256.x) ;
+    _mm256_storeu_pd(r2+i, dst256.y) ;
+  }
+  for( ; i<n-1 ; i+=2){  // blocks of 2 values if AVX2 available
+    dst128 = Sleef_finz_${FuNcTiOn}d2_u${PrEcIsIoN}avx2128(_mm_loadu_pd(f+i)) ;
+    _mm_storeu_pd(r1+i, dst128.x) ;
+    _mm_storeu_pd(r2+i, dst128.y) ;
   }
 
   for( ; i<n ; i++){     // one value at a time for leftovers
@@ -122,28 +140,35 @@ void ${Vlibsleef}${FuNcTiOn}_d${PoStFiX}(double *f, double *r1, double *r2, int 
   }
 
 #else     // __AVX2__
-  Sleef___m128d_2 dst;
 
   for( ; i<n-1 ; i+=2){  // blocks of 2 values if SSE2/SSE4.2 available
 #if defined(__SSE4_2__)
-    dst = Sleef_cinz_${FuNcTiOn}d2_u${PrEcIsIoN}sse4(_mm_loadu_pd(f+i)) ;
+    dst128 = Sleef_cinz_${FuNcTiOn}d2_u${PrEcIsIoN}sse4(_mm_loadu_pd(f+i)) ;
 #else     // __SSE4_2__
-    dst = Sleef_cinz_${FuNcTiOn}d2_u${PrEcIsIoN}sse2(_mm_loadu_pd(f+i)) ;
+    dst128 = Sleef_cinz_${FuNcTiOn}d2_u${PrEcIsIoN}sse2(_mm_loadu_pd(f+i)) ;
 #endif    // __SSE4_2__
-    _mm_storeu_pd(r1+i, dst.x) ;
-    _mm_storeu_pd(r2+i, dst.y) ;
+    _mm_storeu_pd(r1+i, dst128.x) ;
+    _mm_storeu_pd(r2+i, dst128.y) ;
   }
 
   for( ; i<n ; i++){     // one value at a time for leftovers
     rst   = Sleef_cinz_${FuNcTiOn}d1_u${PrEcIsIoN}purec(f[i]) ;
     r1[i] = rst.x ; r2[i] = rst.y ;
   }
+
 #endif    // __AVX2__
+
+#else    // __x86_64__
+  for( ; i<n ; i++){     // one value at a time for leftovers
+    rst = Sleef_${FuNcTiOn}_u${PrEcIsIoN}(f[i]) ;                  // sleef other architectures
+    r1[i] = rst.x ; r2[i] = rst.y ;
+  }
 #endif    // __x86_64__
 
 #else     // __SLEEF_H__
   ${Vlibm}${FuNcTiOn}_d(f, r1, r2, n);   // not using SLEEF, call libm function directly
 #endif    // __SLEEF_H__
 }
+//===========================================================================================
 EOT
 done

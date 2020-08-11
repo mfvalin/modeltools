@@ -23,16 +23,17 @@ PoStFiX=""                     # name postfix, non blank only if precision > 15 
 
 # ${Vlibm} function calling libm (only generated if precision <= 15)
 ((PrEcIsIoN <= 15)) && cat <<EOT
-
+//===========================================================================================
 void ${Vlibm}${FuNcTiOn}_f(float *f, float *r, int n){   // 32 bit floating point
   int i;
   for(i=0 ; i<n ; i++) r[i] = ${FuNcTiOn}f(f[i]);
 }
-
+//===========================================================================================
 void ${Vlibm}${FuNcTiOn}_d(double *f, double *r, int n){   // 64 bit floating point
   int i;
   for(i=0 ; i<n ; i++) r[i] = ${FuNcTiOn}(f[i]);
 }
+//===========================================================================================
 EOT
 # ${Vlibsleef} version calling libsleef, with specified precision
 # ${Vfortran}  Fortran interface to ${Vlibsleef} version above
@@ -52,6 +53,7 @@ cat <<EOT
 //     real(C_DOUBLE), dimension(n), intent(OUT) :: r   ! 64 bit floating point result
 //   end subroutine ${Vfortran}${FuNcTiOn}_d${PoStFiX}
 // end interface
+//===========================================================================================
 void ${Vlibsleef}${FuNcTiOn}_f${PoStFiX}(float *f, float *r, int n){
 #if defined(__SLEEF_H__) && defined(__x86_64__)
   int i = 0;
@@ -61,7 +63,11 @@ void ${Vlibsleef}${FuNcTiOn}_f${PoStFiX}(float *f, float *r, int n){
   for( ; i<n-7 ; i+=8){  // blocks of 8 values if AVX2 available
     _mm256_storeu_ps(r+i, Sleef_finz_${FuNcTiOn}f8_u${PrEcIsIoN}avx2(_mm256_loadu_ps(f+i))) ;
   }
-#endif    // __AVX2__
+  for( ; i<n-3 ; i+=4){  // blocks of 4 values if AVX2 available
+    _mm_storeu_ps(r+i, Sleef_finz_${FuNcTiOn}f4_u${PrEcIsIoN}avx2128(_mm_loadu_ps(f+i))) ;
+  }
+
+#else    // __AVX2__
 
   for( ; i<n-3 ; i+=4){  // blocks of 4 values if SSE2/SSE4.2 available
 #if defined(__SSE4_2__)
@@ -70,6 +76,8 @@ void ${Vlibsleef}${FuNcTiOn}_f${PoStFiX}(float *f, float *r, int n){
     _mm_storeu_ps(r+i, Sleef_cinz_${FuNcTiOn}f4_u${PrEcIsIoN}sse2(_mm_loadu_ps(f+i))) ;
 #endif    // __SSE4_2__
   }
+
+#endif    // __AVX2__
 
 #endif    // __x86_64__
 
@@ -88,10 +96,10 @@ void ${Vlibsleef}${FuNcTiOn}_f${PoStFiX}(float *f, float *r, int n){
   }
 
 #else     // __SLEEF_H__
-  ${Vlibm}${FuNcTiOn}_f(f, r, n);   // not using SLEEF, call libm function directly
+  ${Vlibm}${FuNcTiOn}_f(f, r, n);   // not using SLEEF, call vector libm function directly
 #endif    // __SLEEF_H__
 }
-
+//===========================================================================================
 void ${Vlibsleef}${FuNcTiOn}_d${PoStFiX}(double *f, double *r, int n){
 #if defined(__SLEEF_H__) && defined(__x86_64__)
   int i = 0;
@@ -101,7 +109,11 @@ void ${Vlibsleef}${FuNcTiOn}_d${PoStFiX}(double *f, double *r, int n){
   for( ; i<n-3 ; i+=4){  // blocks of 4 values if AVX2 available
     _mm256_storeu_pd(r+i, Sleef_finz_${FuNcTiOn}d4_u${PrEcIsIoN}avx2(_mm256_loadu_pd(f+i))) ;
   }
-#endif    // __AVX2__
+  for( ; i<n-1 ; i+=2){  // blocks of 2 values if AVX2 available
+    _mm_storeu_pd(r+i, Sleef_finz_${FuNcTiOn}d2_u${PrEcIsIoN}avx2128(_mm_loadu_pd(f+i))) ;
+  }
+
+#else    // __AVX2__
 
   for( ; i<n-1 ; i+=2){  // blocks of 2 values if SSE2/SSE4.2 available
 #if defined(__SSE4_2__)
@@ -110,6 +122,8 @@ void ${Vlibsleef}${FuNcTiOn}_d${PoStFiX}(double *f, double *r, int n){
     _mm_storeu_pd(r+i, Sleef_cinz_${FuNcTiOn}d2_u${PrEcIsIoN}sse2(_mm_loadu_pd(f+i))) ;
 #endif    // __SSE4_2__
   }
+
+#endif    // __AVX2__
 
 #endif    // __x86_64__
 
@@ -128,9 +142,10 @@ void ${Vlibsleef}${FuNcTiOn}_d${PoStFiX}(double *f, double *r, int n){
   }
 
 #else     // __SLEEF_H__
-  ${Vlibm}${FuNcTiOn}_d(f, r, n);   // not using SLEEF, call libm function directly
+  ${Vlibm}${FuNcTiOn}_d(f, r, n);   // not using SLEEF, call vector libm function directly
 #endif    // __SLEEF_H__
 }
+//===========================================================================================
 EOT
 
 done
