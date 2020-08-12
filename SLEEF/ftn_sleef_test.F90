@@ -8,7 +8,8 @@ program test_sleef  ! timing test for vector subroutines calling libsleef wrappe
 #include <libm.hf>
   include 'sleef.inc'
 
-  integer, parameter :: NP = 100003
+  real, parameter :: CLOCK = 3.7
+  integer, parameter :: NP = 1005
   integer, parameter :: N2 = NP/2
   real(C_FLOAT), dimension(NP) :: f4
   real(C_FLOAT), dimension(NP) :: r4, r4b, r4a, r4c, r4d
@@ -23,9 +24,9 @@ program test_sleef  ! timing test for vector subroutines calling libsleef wrappe
     f8(i) = 10.0 * i / NP
   enddo
 ! V_rdtsc() reads the time stamp counter (X86 only at this moment)
-  print 2,' function    ftn-r4  sleef-r4    ftn-r8  sleef-r8 (ns/result)  ', &
-          'err-mid(f)','err-mid(d)','err-last(f)','err-last(d)'
-2 format(A,A20,3A30)
+  print 2,'  function    ftn-r4  sleef-r4    ftn-r8  sleef-r8 (ns/result) ', &
+          'err-mid(f)','err-mid(d)','err-last(f)','err-last(d)','  MAX4  MAX8  ULP4  ULP8'
+2 format(A,A20,3A30,A)
   t = 999999999999_8
   do j = 1, 10
     r4 = 999999.0
@@ -50,8 +51,8 @@ program test_sleef  ! timing test for vector subroutines calling libsleef wrappe
   enddo
   call V_bit_diff(r4, r4a, NP, mi4, ma4, avg4)
   call V_bit_diff(r8, r8a, NP, mi8, ma8, avg8)
-  print 1,'sin',t/3.7/NP,r4(N2),r4(N2)-r4a(N2),r8(N2),r8(N2)-r8a(N2), &
-                         r4(NP),r4(NP)-r4a(NP),r8(NP),r8(NP)-r8a(NP), ma4, ma8
+  print 1,'sin',t/CLOCK/NP,r4(N2),r4(N2)-r4a(N2),r8(N2),r8(N2)-r8a(N2), &
+                         r4(NP),r4(NP)-r4a(NP),r8(NP),r8(NP)-r8a(NP), ma4, ma8, avg4, avg8
 
   t = 999999999999_8
   do j = 1, 10
@@ -77,8 +78,8 @@ program test_sleef  ! timing test for vector subroutines calling libsleef wrappe
   enddo
   call V_bit_diff(r4, r4a, NP, mi4, ma4, avg4)
   call V_bit_diff(r8, r8a, NP, mi8, ma8, avg8)
-  print 1,'sin35',t/3.7/NP,r4(N2),r4(N2)-r4a(N2),r8(N2),r8(N2)-r8a(N2), &
-                           r4(NP),r4(NP)-r4a(NP),r8(NP),r8(NP)-r8a(NP), ma4, ma8
+  print 1,'sin35',t/CLOCK/NP,r4(N2),r4(N2)-r4a(N2),r8(N2),r8(N2)-r8a(N2), &
+                           r4(NP),r4(NP)-r4a(NP),r8(NP),r8(NP)-r8a(NP), ma4, ma8, avg4, avg8
 
   t = 999999999999_8
   do j = 1, 10
@@ -104,8 +105,8 @@ program test_sleef  ! timing test for vector subroutines calling libsleef wrappe
   enddo
   call V_bit_diff(r4, r4a, NP, mi4, ma4, avg4)
   call V_bit_diff(r8, r8a, NP, mi8, ma8, avg8)
-  print 1,'cos',t/3.7/NP,r4(N2),r4(N2)-r4a(N2),r8(N2),r8(N2)-r8a(N2), &
-                         r4(NP),r4(NP)-r4a(NP),r8(NP),r8(NP)-r8a(NP), ma4, ma8
+  print 1,'cos',t/CLOCK/NP,r4(N2),r4(N2)-r4a(N2),r8(N2),r8(N2)-r8a(N2), &
+                         r4(NP),r4(NP)-r4a(NP),r8(NP),r8(NP)-r8a(NP), ma4, ma8, avg4, avg8
 
   t = 999999999999_8
   do j = 1, 10
@@ -131,8 +132,8 @@ program test_sleef  ! timing test for vector subroutines calling libsleef wrappe
   enddo
   call V_bit_diff(r4, r4a, NP, mi4, ma4, avg4)
   call V_bit_diff(r8, r8a, NP, mi8, ma8, avg8)
-  print 1,'cos35',t/3.7/NP,r4(N2),r4(N2)-r4a(N2),r8(N2),r8(N2)-r8a(N2), &
-                           r4(NP),r4(NP)-r4a(NP),r8(NP),r8(NP)-r8a(NP), ma4, ma8
+  print 1,'cos35',t/CLOCK/NP,r4(N2),r4(N2)-r4a(N2),r8(N2),r8(N2)-r8a(N2), &
+                           r4(NP),r4(NP)-r4a(NP),r8(NP),r8(NP)-r8a(NP), ma4, ma8, avg4, avg8
 
   t = 999999999999_8
   do j = 1, 10
@@ -174,12 +175,12 @@ program test_sleef  ! timing test for vector subroutines calling libsleef wrappe
   enddo
   call V_bit_diff(r4a, r4c, NP, mi4, ma4, avg4)
   call V_bit_diff(r8a, r8c, NP, mi8, ma8, avg8)
-  print 1,'SINcos',t/3.7/NP,r4a(N2),r4a(N2)-r4c(N2),r8a(N2),r8a(N2)-r8c(N2), &
-                            r4a(NP),r4a(NP)-r4c(NP),r8a(NP),r8a(NP)-r8c(NP), ma4, ma8
+  print 1,'SINcos',t/CLOCK/NP,r4a(N2),r4a(N2)-r4c(N2),r8a(N2),r8a(N2)-r8c(N2), &
+                            r4a(NP),r4a(NP)-r4c(NP),r8a(NP),r8a(NP)-r8c(NP), ma4, ma8, avg4, avg8
   call V_bit_diff(r4b, r4d, NP, mi4, ma4, avg4)
   call V_bit_diff(r8b, r8d, NP, mi8, ma8, avg8)
-  print 1,'sinCOS',t/3.7/NP,r4b(N2),r4b(N2)-r4d(N2),r8b(N2),r8b(N2)-r8d(N2), &
-                            r4b(NP),r4b(NP)-r4d(NP),r8b(NP),r8b(NP)-r8d(NP), ma4, ma8
+  print 1,'sinCOS',t/CLOCK/NP,r4b(N2),r4b(N2)-r4d(N2),r8b(N2),r8b(N2)-r8d(N2), &
+                            r4b(NP),r4b(NP)-r4d(NP),r8b(NP),r8b(NP)-r8d(NP), ma4, ma8, avg4, avg8
 
   t = 999999999999_8
   do j = 1, 10
@@ -221,12 +222,12 @@ program test_sleef  ! timing test for vector subroutines calling libsleef wrappe
   enddo
   call V_bit_diff(r4, r4c, NP, mi4, ma4, avg4)
   call V_bit_diff(r8, r8c, NP, mi8, ma8, avg8)
-  print 1,'SINcos35',t/3.7/NP,r4(N2),r4(N2)-r4c(N2),r8(N2),r8(N2)-r8c(N2), &
-                            r4(NP),r4(NP)-r4c(NP),r8(NP),r8(NP)-r8c(NP), ma4, ma8
+  print 1,'SINcos35',t/CLOCK/NP,r4(N2),r4(N2)-r4c(N2),r8(N2),r8(N2)-r8c(N2), &
+                            r4(NP),r4(NP)-r4c(NP),r8(NP),r8(NP)-r8c(NP), ma4, ma8, avg4, avg8
   call V_bit_diff(r4a, r4d, NP, mi4, ma4, avg4)
   call V_bit_diff(r8a, r8d, NP, mi8, ma8, avg8)
-  print 1,'sinCOS35',t/3.7/NP,r4a(N2),r4a(N2)-r4d(N2),r8a(N2),r8a(N2)-r8d(N2), &
-                            r4a(NP),r4a(NP)-r4d(NP),r8a(NP),r8a(NP)-r8d(NP), ma4, ma8
+  print 1,'sinCOS35',t/CLOCK/NP,r4a(N2),r4a(N2)-r4d(N2),r8a(N2),r8a(N2)-r8d(N2), &
+                            r4a(NP),r4a(NP)-r4d(NP),r8a(NP),r8a(NP)-r8d(NP), ma4, ma8, avg4, avg8
 
   t = 999999999999_8
   do j = 1, 10
@@ -252,8 +253,8 @@ program test_sleef  ! timing test for vector subroutines calling libsleef wrappe
   enddo
   call V_bit_diff(r4, r4a, NP, mi4, ma4, avg4)
   call V_bit_diff(r8, r8a, NP, mi8, ma8, avg8)
-  print 1,'tan',t/3.7/NP,r4(N2),r4(N2)-r4a(N2),r8(N2),r8(N2)-r8a(N2), &
-                         r4(NP),r4(NP)-r4a(NP),r8(NP),r8(NP)-r8a(NP), ma4, ma8
+  print 1,'tan',t/CLOCK/NP,r4(N2),r4(N2)-r4a(N2),r8(N2),r8(N2)-r8a(N2), &
+                         r4(NP),r4(NP)-r4a(NP),r8(NP),r8(NP)-r8a(NP), ma4, ma8, avg4, avg8
 
   t = 999999999999_8
   do j = 1, 10
@@ -279,8 +280,8 @@ program test_sleef  ! timing test for vector subroutines calling libsleef wrappe
   enddo
   call V_bit_diff(r4, r4a, NP, mi4, ma4, avg4)
   call V_bit_diff(r8, r8a, NP, mi8, ma8, avg8)
-  print 1,'tan35',t/3.7/NP,r4(N2),r4(N2)-r4a(N2),r8(N2),r8(N2)-r8a(N2), &
-                           r4(NP),r4(NP)-r4a(NP),r8(NP),r8(NP)-r8a(NP), ma4, ma8
+  print 1,'tan35',t/CLOCK/NP,r4(N2),r4(N2)-r4a(N2),r8(N2),r8(N2)-r8a(N2), &
+                           r4(NP),r4(NP)-r4a(NP),r8(NP),r8(NP)-r8a(NP), ma4, ma8, avg4, avg8
 
   do i = 1, NP
     f4(i) = 1.0 - (2.0*i)/np
@@ -311,8 +312,8 @@ program test_sleef  ! timing test for vector subroutines calling libsleef wrappe
   enddo
   call V_bit_diff(r4, r4a, NP, mi4, ma4, avg4)
   call V_bit_diff(r8, r8a, NP, mi8, ma8, avg8)
-  print 1,'asin',t/3.7/NP,r4(N2),r4(N2)-r4a(N2),r8(N2),r8(N2)-r8a(N2), &
-                          r4(NP),r4(NP)-r4a(NP),r8(NP),r8(NP)-r8a(NP), ma4, ma8
+  print 1,'asin',t/CLOCK/NP,r4(N2),r4(N2)-r4a(N2),r8(N2),r8(N2)-r8a(N2), &
+                          r4(NP),r4(NP)-r4a(NP),r8(NP),r8(NP)-r8a(NP), ma4, ma8, avg4, avg8
 
   t = 999999999999_8
   do j = 1, 10
@@ -338,8 +339,8 @@ program test_sleef  ! timing test for vector subroutines calling libsleef wrappe
   enddo
   call V_bit_diff(r4, r4a, NP, mi4, ma4, avg4)
   call V_bit_diff(r8, r8a, NP, mi8, ma8, avg8)
-  print 1,'asin35',t/3.7/NP,r4(N2),r4(N2)-r4a(N2),r8(N2),r8(N2)-r8a(N2), &
-                            r4(NP),r4(NP)-r4a(NP),r8(NP),r8(NP)-r8a(NP), ma4, ma8
+  print 1,'asin35',t/CLOCK/NP,r4(N2),r4(N2)-r4a(N2),r8(N2),r8(N2)-r8a(N2), &
+                            r4(NP),r4(NP)-r4a(NP),r8(NP),r8(NP)-r8a(NP), ma4, ma8, avg4, avg8
 
   t = 999999999999_8
   do j = 1, 10
@@ -365,8 +366,8 @@ program test_sleef  ! timing test for vector subroutines calling libsleef wrappe
   enddo
   call V_bit_diff(r4, r4a, NP, mi4, ma4, avg4)
   call V_bit_diff(r8, r8a, NP, mi8, ma8, avg8)
-  print 1,'acos',t/3.7/NP,r4(N2),r4(N2)-r4a(N2),r8(N2),r8(N2)-r8a(N2), &
-                          r4(NP),r4(NP)-r4a(NP),r8(NP),r8(NP)-r8a(NP), ma4, ma8
+  print 1,'acos',t/CLOCK/NP,r4(N2),r4(N2)-r4a(N2),r8(N2),r8(N2)-r8a(N2), &
+                          r4(NP),r4(NP)-r4a(NP),r8(NP),r8(NP)-r8a(NP), ma4, ma8, avg4, avg8
 
   t = 999999999999_8
   do j = 1, 10
@@ -392,8 +393,8 @@ program test_sleef  ! timing test for vector subroutines calling libsleef wrappe
   enddo
   call V_bit_diff(r4, r4a, NP, mi4, ma4, avg4)
   call V_bit_diff(r8, r8a, NP, mi8, ma8, avg8)
-  print 1,'acos35',t/3.7/NP,r4(N2),r4(N2)-r4a(N2),r8(N2),r8(N2)-r8a(N2), &
-                            r4(NP),r4(NP)-r4a(NP),r8(NP),r8(NP)-r8a(NP), ma4, ma8
+  print 1,'acos35',t/CLOCK/NP,r4(N2),r4(N2)-r4a(N2),r8(N2),r8(N2)-r8a(N2), &
+                            r4(NP),r4(NP)-r4a(NP),r8(NP),r8(NP)-r8a(NP), ma4, ma8, avg4, avg8
 
   t = 999999999999_8
   do j = 1, 10
@@ -419,8 +420,8 @@ program test_sleef  ! timing test for vector subroutines calling libsleef wrappe
   enddo
   call V_bit_diff(r4, r4a, NP, mi4, ma4, avg4)
   call V_bit_diff(r8, r8a, NP, mi8, ma8, avg8)
-  print 1,'atan',t/3.7/NP,r4(N2),r4(N2)-r4a(N2),r8(N2),r8(N2)-r8a(N2), &
-                          r4(NP),r4(NP)-r4a(NP),r8(NP),r8(NP)-r8a(NP), ma4, ma8
+  print 1,'atan',t/CLOCK/NP,r4(N2),r4(N2)-r4a(N2),r8(N2),r8(N2)-r8a(N2), &
+                          r4(NP),r4(NP)-r4a(NP),r8(NP),r8(NP)-r8a(NP), ma4, ma8, avg4, avg8
 
   t = 999999999999_8
   do j = 1, 10
@@ -446,8 +447,8 @@ program test_sleef  ! timing test for vector subroutines calling libsleef wrappe
   enddo
   call V_bit_diff(r4, r4a, NP, mi4, ma4, avg4)
   call V_bit_diff(r8, r8a, NP, mi8, ma8, avg8)
-  print 1,'atan35',t/3.7/NP,r4(N2),r4(N2)-r4a(N2),r8(N2),r8(N2)-r8a(N2), &
-                            r4(NP),r4(NP)-r4a(NP),r8(NP),r8(NP)-r8a(NP), ma4, ma8
+  print 1,'atan35',t/CLOCK/NP,r4(N2),r4(N2)-r4a(N2),r8(N2),r8(N2)-r8a(N2), &
+                            r4(NP),r4(NP)-r4a(NP),r8(NP),r8(NP)-r8a(NP), ma4, ma8, avg4, avg8
 
   do i = 1, NP
     f4(i) = (2.0*i)/np
@@ -478,8 +479,8 @@ program test_sleef  ! timing test for vector subroutines calling libsleef wrappe
   enddo
   call V_bit_diff(r4, r4a, NP, mi4, ma4, avg4)
   call V_bit_diff(r8, r8a, NP, mi8, ma8, avg8)
-  print 1,'exp',t/3.7/NP,r4(N2),r4(N2)-r4a(N2),r8(N2),r8(N2)-r8a(N2), &
-                         r4(NP),r4(NP)-r4a(NP),r8(NP),r8(NP)-r8a(NP), ma4, ma8
+  print 1,'exp',t/CLOCK/NP,r4(N2),r4(N2)-r4a(N2),r8(N2),r8(N2)-r8a(N2), &
+                         r4(NP),r4(NP)-r4a(NP),r8(NP),r8(NP)-r8a(NP), ma4, ma8, avg4, avg8
 
 #define pow(x,y) x**y
   t = 999999999999_8
@@ -506,8 +507,8 @@ program test_sleef  ! timing test for vector subroutines calling libsleef wrappe
   enddo
   call V_bit_diff(r4, r4a, NP, mi4, ma4, avg4)
   call V_bit_diff(r8, r8a, NP, mi8, ma8, avg8)
-  print 1,'pow',t/3.7/NP,r4(N2),r4(N2)-r4a(N2),r8(N2),r8(N2)-r8a(N2), &
-                         r4(NP),r4(NP)-r4a(NP),r8(NP),r8(NP)-r8a(NP), ma4, ma8
+  print 1,'pow',t/CLOCK/NP,r4(N2),r4(N2)-r4a(N2),r8(N2),r8(N2)-r8a(N2), &
+                         r4(NP),r4(NP)-r4a(NP),r8(NP),r8(NP)-r8a(NP), ma4, ma8, avg4, avg8
 
   do i = 1, NP
     f4(i) = (2.0*i)
@@ -538,8 +539,8 @@ program test_sleef  ! timing test for vector subroutines calling libsleef wrappe
   enddo
   call V_bit_diff(r4, r4a, NP, mi4, ma4, avg4)
   call V_bit_diff(r8, r8a, NP, mi8, ma8, avg8)
-  print 1,'log',t/3.7/NP,r4(N2),r4(N2)-r4a(N2),r8(N2),r8(N2)-r8a(N2), &
-                         r4(NP),r4(NP)-r4a(NP),r8(NP),r8(NP)-r8a(NP), ma4, ma8
+  print 1,'log',t/CLOCK/NP,r4(N2),r4(N2)-r4a(N2),r8(N2),r8(N2)-r8a(N2), &
+                         r4(NP),r4(NP)-r4a(NP),r8(NP),r8(NP)-r8a(NP), ma4, ma8, avg4, avg8
 
   t = 999999999999_8
   do j = 1, 10
@@ -565,8 +566,8 @@ program test_sleef  ! timing test for vector subroutines calling libsleef wrappe
   enddo
   call V_bit_diff(r4, r4a, NP, mi4, ma4, avg4)
   call V_bit_diff(r8, r8a, NP, mi8, ma8, avg8)
-  print 1,'log35',t/3.7/NP,r4(N2),r4(N2)-r4a(N2),r8(N2),r8(N2)-r8a(N2), &
-                           r4(NP),r4(NP)-r4a(NP),r8(NP),r8(NP)-r8a(NP), ma4, ma8
+  print 1,'log35',t/CLOCK/NP,r4(N2),r4(N2)-r4a(N2),r8(N2),r8(N2)-r8a(N2), &
+                           r4(NP),r4(NP)-r4a(NP),r8(NP),r8(NP)-r8a(NP), ma4, ma8, avg4, avg8
 
   t = 999999999999_8
   do j = 1, 10
@@ -592,8 +593,8 @@ program test_sleef  ! timing test for vector subroutines calling libsleef wrappe
   enddo
   call V_bit_diff(r4, r4a, NP, mi4, ma4, avg4)
   call V_bit_diff(r8, r8a, NP, mi8, ma8, avg8)
-  print 1,'sqrt',t/3.7/NP,r4(N2),r4(N2)-r4a(N2),r8(N2),r8(N2)-r8a(N2), &
-                          r4(NP),r4(NP)-r4a(NP),r8(NP),r8(NP)-r8a(NP), ma4, ma8
+  print 1,'sqrt',t/CLOCK/NP,r4(N2),r4(N2)-r4a(N2),r8(N2),r8(N2)-r8a(N2), &
+                          r4(NP),r4(NP)-r4a(NP),r8(NP),r8(NP)-r8a(NP), ma4, ma8, avg4, avg8
 
   t = 999999999999_8
   do j = 1, 10
@@ -619,8 +620,8 @@ program test_sleef  ! timing test for vector subroutines calling libsleef wrappe
   enddo
   call V_bit_diff(r4, r4a, NP, mi4, ma4, avg4)
   call V_bit_diff(r8, r8a, NP, mi8, ma8, avg8)
-  print 1,'cbrt',t/3.7/NP,r4(N2),r4(N2)-r4a(N2),r8(N2),r8(N2)-r8a(N2), &
-                          r4(NP),r4(NP)-r4a(NP),r8(NP),r8(NP)-r8a(NP), ma4, ma8
+  print 1,'cbrt',t/CLOCK/NP,r4(N2),r4(N2)-r4a(N2),r8(N2),r8(N2)-r8a(N2), &
+                          r4(NP),r4(NP)-r4a(NP),r8(NP),r8(NP)-r8a(NP), ma4, ma8, avg4, avg8
 
   t = 999999999999_8
   do j = 1, 10
@@ -646,8 +647,8 @@ program test_sleef  ! timing test for vector subroutines calling libsleef wrappe
   enddo
   call V_bit_diff(r4, r4a, NP, mi4, ma4, avg4)
   call V_bit_diff(r8, r8a, NP, mi8, ma8, avg8)
-  print 1,'cbrt35',t/3.7/NP,r4(N2),r4(N2)-r4a(N2),r8(N2),r8(N2)-r8a(N2), &
-                            r4(NP),r4(NP)-r4a(NP),r8(NP),r8(NP)-r8a(NP), ma4, ma8
+  print 1,'cbrt35',t/CLOCK/NP,r4(N2),r4(N2)-r4a(N2),r8(N2),r8(N2)-r8a(N2), &
+                            r4(NP),r4(NP)-r4a(NP),r8(NP),r8(NP)-r8a(NP), ma4, ma8, avg4, avg8
 
 
   do i = 1, NP
@@ -678,8 +679,8 @@ program test_sleef  ! timing test for vector subroutines calling libsleef wrappe
   enddo
   call V_bit_diff(r4, r4a, NP, mi4, ma4, avg4)
   call V_bit_diff(r8, r8a, NP, mi8, ma8, avg8)
-  print 1,'sinh',t/3.7/NP,r4(N2),r4(N2)-r4a(N2),r8(N2),r8(N2)-r8a(N2), &
-                          r4(NP),r4(NP)-r4a(NP),r8(NP),r8(NP)-r8a(NP), ma4, ma8
+  print 1,'sinh',t/CLOCK/NP,r4(N2),r4(N2)-r4a(N2),r8(N2),r8(N2)-r8a(N2), &
+                          r4(NP),r4(NP)-r4a(NP),r8(NP),r8(NP)-r8a(NP), ma4, ma8, avg4, avg8
 
   do i = 1, NP
     f4(i) = (10.0*i)/np
@@ -709,8 +710,8 @@ program test_sleef  ! timing test for vector subroutines calling libsleef wrappe
   enddo
   call V_bit_diff(r4, r4a, NP, mi4, ma4, avg4)
   call V_bit_diff(r8, r8a, NP, mi8, ma8, avg8)
-  print 1,'cosh',t/3.7/NP,r4(N2),r4(N2)-r4a(N2),r8(N2),r8(N2)-r8a(N2), &
-                          r4(NP),r4(NP)-r4a(NP),r8(NP),r8(NP)-r8a(NP), ma4, ma8
+  print 1,'cosh',t/CLOCK/NP,r4(N2),r4(N2)-r4a(N2),r8(N2),r8(N2)-r8a(N2), &
+                          r4(NP),r4(NP)-r4a(NP),r8(NP),r8(NP)-r8a(NP), ma4, ma8, avg4, avg8
 
   do i = 1, NP
     f4(i) = (10.0*i)/np
@@ -740,8 +741,8 @@ program test_sleef  ! timing test for vector subroutines calling libsleef wrappe
   enddo
   call V_bit_diff(r4, r4a, NP, mi4, ma4, avg4)
   call V_bit_diff(r8, r8a, NP, mi8, ma8, avg8)
-  print 1,'asinh',t/3.7/NP,r4(N2),r4(N2)-r4a(N2),r8(N2),r8(N2)-r8a(N2), &
-                           r4(NP),r4(NP)-r4a(NP),r8(NP),r8(NP)-r8a(NP), ma4, ma8
+  print 1,'asinh',t/CLOCK/NP,r4(N2),r4(N2)-r4a(N2),r8(N2),r8(N2)-r8a(N2), &
+                           r4(NP),r4(NP)-r4a(NP),r8(NP),r8(NP)-r8a(NP), ma4, ma8, avg4, avg8
 
   do i = 1, NP
     f4(i) = 1.0 + (1.0*i)/np
@@ -771,8 +772,8 @@ program test_sleef  ! timing test for vector subroutines calling libsleef wrappe
   enddo
   call V_bit_diff(r4, r4a, NP, mi4, ma4, avg4)
   call V_bit_diff(r8, r8a, NP, mi8, ma8, avg8)
-  print 1,'acosh',t/3.7/NP,r4(N2),r4(N2)-r4a(N2),r8(N2),r8(N2)-r8a(N2), &
-                           r4(NP),r4(NP)-r4a(NP),r8(NP),r8(NP)-r8a(NP), ma4, ma8
+  print 1,'acosh',t/CLOCK/NP,r4(N2),r4(N2)-r4a(N2),r8(N2),r8(N2)-r8a(N2), &
+                           r4(NP),r4(NP)-r4a(NP),r8(NP),r8(NP)-r8a(NP), ma4, ma8, avg4, avg8
 
   do i = 1, NP
     f4(i) = (10.0*i)/np
@@ -802,8 +803,8 @@ program test_sleef  ! timing test for vector subroutines calling libsleef wrappe
   enddo
   call V_bit_diff(r4, r4a, NP, mi4, ma4, avg4)
   call V_bit_diff(r8, r8a, NP, mi8, ma8, avg8)
-  print 1,'tanh',t/3.7/NP,r4(N2),r4(N2)-r4a(N2),r8(N2),r8(N2)-r8a(N2), &
-                          r4(NP),r4(NP)-r4a(NP),r8(NP),r8(NP)-r8a(NP), ma4, ma8
+  print 1,'tanh',t/CLOCK/NP,r4(N2),r4(N2)-r4a(N2),r8(N2),r8(N2)-r8a(N2), &
+                          r4(NP),r4(NP)-r4a(NP),r8(NP),r8(NP)-r8a(NP), ma4, ma8, avg4, avg8
 
   do i = 1, NP
     f4(i) = (10.0*i)/np
@@ -837,9 +838,9 @@ program test_sleef  ! timing test for vector subroutines calling libsleef wrappe
   enddo
   call V_bit_diff(r4, r4a, NP, mi4, ma4, avg4)
   call V_bit_diff(r8, r8a, NP, mi8, ma8, avg8)
-  print 1,'atanh',t/3.7/NP,r4(N2),r4(N2)-r4a(N2),r8(N2),r8(N2)-r8a(N2), &
-                           r4(NP),r4(NP)-r4a(NP),r8(NP),r8(NP)-r8a(NP), ma4, ma8
+  print 1,'atanh',t/CLOCK/NP,r4(N2),r4(N2)-r4a(N2),r8(N2),r8(N2)-r8a(N2), &
+                           r4(NP),r4(NP)-r4a(NP),r8(NP),r8(NP)-r8a(NP), ma4, ma8, avg4, avg8
 
 
-1 format(A10,4F10.2,3X,8E15.5, 2I12)
+1 format(A10,4F10.2,3X,8E15.5,2I6,2F6.2)
 end program

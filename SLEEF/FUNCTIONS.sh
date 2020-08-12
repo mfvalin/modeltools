@@ -58,11 +58,10 @@ void Vsl_bit_diff_f(float *f1, float *f2, int n, int *minlsbs, int *maxlsbs, flo
   for(i = 0 ; i < n ; i++){
     // if( ((if1[i] >> 23) & 0xFF) == 0xFF ) continue ;  // f1 == nan
     nlsb = (if1[i] & 0x7FFFFFFF) - (if2[i] & 0x7FFFFFFF) ;
-    //if( ((if1[i] >> 23) & 0xFF) == 0xFF ) {
     nlsb = (nlsb < 0) ? -nlsb : nlsb ;
-    if( nlsb > 4 ) {
-    printf("f1 = %f, f2 = %f, i = %d, n = %d\n",f1[i],f2[i], i, n);
-    }
+    //if( nlsb > 4 ) {
+    //printf("f1 = %f, f2 = %f, i = %d, n = %d\n",f1[i],f2[i], i, n);
+    //}
     mini = (nlsb < mini) ? nlsb : mini ;
     maxi = (nlsb > maxi) ? nlsb : maxi ;
     toti += nlsb ;
@@ -82,9 +81,9 @@ void Vsl_bit_diff_d(double *f1, double *f2, int n, int *minlsbs, int *maxlsbs, f
     // if( ((if1[i] >> 52) & 0x7FF) == 0x7FF ) continue ;  // f1 == nan
     nlsb = (if1[i] & 0x7FFFFFFFFFFFFFFFL) - (if2[i] & 0x7FFFFFFFFFFFFFFFL) ;
     nlsb = (nlsb > 0) ? nlsb : -nlsb ;
-    if( nlsb > 4 ) {
-    printf("f1 = %f, f2 = %f, i = %d, n = %d\n",f1[i],f2[i], i, n);
-    }
+    //if( nlsb > 4 ) {
+    //printf("f1 = %f, f2 = %f, i = %d, n = %d\n",f1[i],f2[i], i, n);
+    //}
     mini = (nlsb < mini) ? nlsb : mini ;
     maxi = (nlsb > maxi) ? nlsb : maxi ;
     toti += nlsb ;
