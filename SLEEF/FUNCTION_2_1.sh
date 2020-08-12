@@ -65,12 +65,12 @@ void ${Vlibsleef}${FuNcTiOn}_f${PoStFiX}(float *f, float *r1, float *r2, int n){
 #if defined(__AVX2__)
   Sleef___m256_2 dst256;
 
-  for(i=0 ; i<n-7 ; i+=8){  // blocks of 8 values if AVX2 available
+  for( ; i<n-7 ; i+=8){  // blocks of 8 values if AVX2 available
     dst256 = Sleef_finz_${FuNcTiOn}f8_u${PrEcIsIoN}avx2(_mm256_loadu_ps(f+i)) ;
     _mm256_storeu_ps(r1+i, dst256.x) ;
     _mm256_storeu_ps(r2+i, dst256.y) ;
   }
-  for(i=0 ; i<n-3 ; i+=4){  // blocks of 4 values if AVX2 available
+  for( ; i<n-3 ; i+=4){  // blocks of 4 values if AVX2 available
     dst128 = Sleef_finz_${FuNcTiOn}f4_u${PrEcIsIoN}avx2128(_mm_loadu_ps(f+i)) ;
     _mm_storeu_ps(r1+i, dst128.x) ;
     _mm_storeu_ps(r2+i, dst128.y) ;
@@ -79,11 +79,10 @@ void ${Vlibsleef}${FuNcTiOn}_f${PoStFiX}(float *f, float *r1, float *r2, int n){
   for( ; i<n ; i++){     // one value at a time for leftovers
     rst   = Sleef_finz_${FuNcTiOn}f1_u${PrEcIsIoN}purecfma(f[i]) ;
     r1[i] = rst.x ; r2[i] = rst.y ;
-    i++;
   }
 #else     // __AVX2__
 
-  for(i=0 ; i<n-3 ; i+=4){  // blocks of 4 values if SSE2/SSE4.2 available
+  for( ; i<n-3 ; i+=4){  // blocks of 4 values if SSE2/SSE4.2 available
 #if defined(__SSE4_2__)
     dst128 = Sleef_cinz_${FuNcTiOn}f4_u${PrEcIsIoN}sse4(_mm_loadu_ps(f+i)) ;
 #else     // __SSE4_2__

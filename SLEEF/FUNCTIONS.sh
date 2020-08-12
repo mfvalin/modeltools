@@ -32,6 +32,69 @@ EOT
 # timing function and its Fortran interface (returns clock cycles)
 # for architectures other than X86-64(__x86_64__) and ARM-64(__aarch64__), a dymmy function is generated
 cat <<EOT
+//===========================================================================================
+// interface ${Vfortran}bit_diff
+//  subroutine Vsl_bit_diff_f(f1, f2, n, lo, hi, avg) BIND(C,name='Vsl_bit_diff_f')
+//  import :: C_FLOAT, C_INT
+//  real(C_FLOAT), dimension(*), intent(IN) :: f1, f2
+//  integer(C_INT), intent(IN), value :: n
+//  integer(C_INT), intent(OUT) :: lo, hi
+//  real(C_FLOAT), intent(OUT) :: avg
+//  end subroutine Vsl_bit_diff_f
+//  subroutine Vsl_bit_diff_d(f1, f2, n, lo, hi, avg) BIND(C,name='Vsl_bit_diff_d')
+//  import :: C_FLOAT, C_INT, C_DOUBLE
+//  real(C_DOUBLE), dimension(*), intent(IN) :: f1, f2
+//  integer(C_INT), intent(IN), value :: n
+//  integer(C_INT), intent(OUT) :: lo, hi
+//  real(C_FLOAT), intent(OUT) :: avg
+//  end subroutine Vsl_bit_diff_d
+// end interface ${Vfortran}bit_diff
+//===========================================================================================
+void Vsl_bit_diff_f(float *f1, float *f2, int n, int *minlsbs, int *maxlsbs, float *avglsbs){
+  uint32_t *if1 = (uint32_t *) f1 ;
+  uint32_t *if2 = (uint32_t *) f2 ;
+  int i, mini, maxi, toti, nlsb ;
+  mini = 0x7FFFFFFF ; maxi = 0 ; toti = 0 ;
+  for(i = 0 ; i < n ; i++){
+    // if( ((if1[i] >> 23) & 0xFF) == 0xFF ) continue ;  // f1 == nan
+    nlsb = (if1[i] & 0x7FFFFFFF) - (if2[i] & 0x7FFFFFFF) ;
+    //if( ((if1[i] >> 23) & 0xFF) == 0xFF ) {
+    nlsb = (nlsb < 0) ? -nlsb : nlsb ;
+    if( nlsb > 4 ) {
+    printf("f1 = %f, f2 = %f, i = %d, n = %d\n",f1[i],f2[i], i, n);
+    }
+    mini = (nlsb < mini) ? nlsb : mini ;
+    maxi = (nlsb > maxi) ? nlsb : maxi ;
+    toti += nlsb ;
+  }
+  *avglsbs = toti ;
+  *avglsbs /= n ;
+  *maxlsbs = maxi ;
+  *minlsbs = mini ;
+}
+//===========================================================================================
+void Vsl_bit_diff_d(double *f1, double *f2, int n, int *minlsbs, int *maxlsbs, float *avglsbs){
+  uint64_t *if1 = (uint64_t *) f1 ;
+  uint64_t *if2 = (uint64_t *) f2 ;
+  int i, mini, maxi, toti, nlsb ;
+  mini = 0x7FFFFFFF ; maxi = 0 ; toti = 0 ;
+  for(i = 0 ; i < n ; i++){
+    // if( ((if1[i] >> 52) & 0x7FF) == 0x7FF ) continue ;  // f1 == nan
+    nlsb = (if1[i] & 0x7FFFFFFFFFFFFFFFL) - (if2[i] & 0x7FFFFFFFFFFFFFFFL) ;
+    nlsb = (nlsb > 0) ? nlsb : -nlsb ;
+    if( nlsb > 4 ) {
+    printf("f1 = %f, f2 = %f, i = %d, n = %d\n",f1[i],f2[i], i, n);
+    }
+    mini = (nlsb < mini) ? nlsb : mini ;
+    maxi = (nlsb > maxi) ? nlsb : maxi ;
+    toti += nlsb ;
+  }
+  *avglsbs = toti ;
+  *avglsbs /= n ;
+  *maxlsbs = maxi ;
+  *minlsbs = mini ;
+}
+//===========================================================================================
 // interface 
 //   function ${Vfortran}rdtsc() result(t) BIND(C,name='Vsl_rdtsc')
 //   import :: C_LONG_LONG
