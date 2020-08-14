@@ -8,8 +8,12 @@ program test_sleef  ! timing test for vector subroutines calling libsleef wrappe
 #include <libm.hf>
   include 'sleef.inc'
 
+#if !defined NP
+#define NP 1007
+#endif
+
   real, parameter :: CLOCK = 3.7
-  integer, parameter :: NP = 1005
+!   integer, parameter :: NP = 1005
   integer, parameter :: N2 = NP/2
   real(C_FLOAT), dimension(NP) :: f4
   real(C_FLOAT), dimension(NP) :: r4, r4b, r4a, r4c, r4d
@@ -284,8 +288,8 @@ program test_sleef  ! timing test for vector subroutines calling libsleef wrappe
                            r4(NP),r4(NP)-r4a(NP),r8(NP),r8(NP)-r8a(NP), ma4, ma8, avg4, avg8
 
   do i = 1, NP
-    f4(i) = 1.0 - (2.0*i)/np
-    f8(i) = 1.0 - (2.0*i)/np
+    f4(i) = 1.0 - (2.0*i)/NP
+    f8(i) = 1.0 - (2.0*i)/NP
   enddo
 
   t = 999999999999_8
@@ -451,8 +455,8 @@ program test_sleef  ! timing test for vector subroutines calling libsleef wrappe
                             r4(NP),r4(NP)-r4a(NP),r8(NP),r8(NP)-r8a(NP), ma4, ma8, avg4, avg8
 
   do i = 1, NP
-    f4(i) = (2.0*i)/np
-    f8(i) = (2.0*i)/np
+    f4(i) = (2.0*i)/NP
+    f8(i) = (2.0*i)/NP
   enddo
 
   t = 999999999999_8
@@ -652,8 +656,8 @@ program test_sleef  ! timing test for vector subroutines calling libsleef wrappe
 
 
   do i = 1, NP
-    f4(i) = (10.0*i)/np
-    f8(i) = (10.0*i)/np
+    f4(i) = (10.0*i)/NP
+    f8(i) = (10.0*i)/NP
   enddo
   t = 999999999999_8
   do j = 1, 10
@@ -683,8 +687,8 @@ program test_sleef  ! timing test for vector subroutines calling libsleef wrappe
                           r4(NP),r4(NP)-r4a(NP),r8(NP),r8(NP)-r8a(NP), ma4, ma8, avg4, avg8
 
   do i = 1, NP
-    f4(i) = (10.0*i)/np
-    f8(i) = (10.0*i)/np
+    f4(i) = (10.0*i)/NP
+    f8(i) = (10.0*i)/NP
   enddo
   t = 999999999999_8
   do j = 1, 10
@@ -714,8 +718,8 @@ program test_sleef  ! timing test for vector subroutines calling libsleef wrappe
                           r4(NP),r4(NP)-r4a(NP),r8(NP),r8(NP)-r8a(NP), ma4, ma8, avg4, avg8
 
   do i = 1, NP
-    f4(i) = (10.0*i)/np
-    f8(i) = (10.0*i)/np
+    f4(i) = (10.0*i)/NP
+    f8(i) = (10.0*i)/NP
   enddo
   t = 999999999999_8
   do j = 1, 10
@@ -745,8 +749,8 @@ program test_sleef  ! timing test for vector subroutines calling libsleef wrappe
                            r4(NP),r4(NP)-r4a(NP),r8(NP),r8(NP)-r8a(NP), ma4, ma8, avg4, avg8
 
   do i = 1, NP
-    f4(i) = 1.0 + (1.0*i)/np
-    f8(i) = 1.0 + (1.0*i)/np
+    f4(i) = 1.0 + (1.0*i)/NP
+    f8(i) = 1.0 + (1.0*i)/NP
   enddo
   t = 999999999999_8
   do j = 1, 10
@@ -776,8 +780,8 @@ program test_sleef  ! timing test for vector subroutines calling libsleef wrappe
                            r4(NP),r4(NP)-r4a(NP),r8(NP),r8(NP)-r8a(NP), ma4, ma8, avg4, avg8
 
   do i = 1, NP
-    f4(i) = (10.0*i)/np
-    f8(i) = (10.0*i)/np
+    f4(i) = (10.0*i)/NP
+    f8(i) = (10.0*i)/NP
   enddo
   t = 999999999999_8
   do j = 1, 10
@@ -807,12 +811,12 @@ program test_sleef  ! timing test for vector subroutines calling libsleef wrappe
                           r4(NP),r4(NP)-r4a(NP),r8(NP),r8(NP)-r8a(NP), ma4, ma8, avg4, avg8
 
   do i = 1, NP
-    f4(i) = (10.0*i)/np
-    f8(i) = (10.0*i)/np
+    f4(i) = (10.0*i)/NP
+    f8(i) = (10.0*i)/NP
   enddo
   do i = 1, NP
-    f4(i) = (0.1*i)/np
-    f8(i) = (0.1*i)/np
+    f4(i) = (0.1*i)/NP
+    f8(i) = (0.1*i)/NP
   enddo
   t = 999999999999_8
   do j = 1, 10

@@ -34,20 +34,20 @@ EOT
 cat <<EOT
 //===========================================================================================
 // interface ${Vfortran}bit_diff
-//  subroutine Vsl_bit_diff_f(f1, f2, n, lo, hi, avg) BIND(C,name='Vsl_bit_diff_f')
-//  import :: C_FLOAT, C_INT
-//  real(C_FLOAT), dimension(*), intent(IN) :: f1, f2
-//  integer(C_INT), intent(IN), value :: n
-//  integer(C_INT), intent(OUT) :: lo, hi
-//  real(C_FLOAT), intent(OUT) :: avg
-//  end subroutine Vsl_bit_diff_f
-//  subroutine Vsl_bit_diff_d(f1, f2, n, lo, hi, avg) BIND(C,name='Vsl_bit_diff_d')
-//  import :: C_FLOAT, C_INT, C_DOUBLE
-//  real(C_DOUBLE), dimension(*), intent(IN) :: f1, f2
-//  integer(C_INT), intent(IN), value :: n
-//  integer(C_INT), intent(OUT) :: lo, hi
-//  real(C_FLOAT), intent(OUT) :: avg
-//  end subroutine Vsl_bit_diff_d
+//   subroutine Vsl_bit_diff_f(f1, f2, n, lo, hi, avg) BIND(C,name='Vsl_bit_diff_f')
+//     import :: C_FLOAT, C_INT
+//     real(C_FLOAT), dimension(*), intent(IN) :: f1, f2
+//     integer(C_INT), intent(IN), value :: n
+//     integer(C_INT), intent(OUT) :: lo, hi
+//     real(C_FLOAT), intent(OUT) :: avg
+//   end subroutine Vsl_bit_diff_f
+//   subroutine Vsl_bit_diff_d(f1, f2, n, lo, hi, avg) BIND(C,name='Vsl_bit_diff_d')
+//     import :: C_FLOAT, C_INT, C_DOUBLE
+//     real(C_DOUBLE), dimension(*), intent(IN) :: f1, f2
+//     integer(C_INT), intent(IN), value :: n
+//     integer(C_INT), intent(OUT) :: lo, hi
+//     real(C_FLOAT), intent(OUT) :: avg
+//   end subroutine Vsl_bit_diff_d
 // end interface ${Vfortran}bit_diff
 //===========================================================================================
 void Vsl_bit_diff_f(float *f1, float *f2, int n, int *minlsbs, int *maxlsbs, float *avglsbs){
@@ -96,8 +96,8 @@ void Vsl_bit_diff_d(double *f1, double *f2, int n, int *minlsbs, int *maxlsbs, f
 //===========================================================================================
 // interface 
 //   function ${Vfortran}rdtsc() result(t) BIND(C,name='Vsl_rdtsc')
-//   import :: C_LONG_LONG
-//   integer(C_LONG_LONG) :: t
+//     import :: C_LONG_LONG
+//     integer(C_LONG_LONG) :: t
 //   end function ${Vfortran}rdtsc
 // end interface
 static uint64_t time0 = 0;
