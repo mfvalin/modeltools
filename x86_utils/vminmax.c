@@ -33,7 +33,7 @@ static int32_t mask16[] = { -1, -1, -1, -1, -1, -1, -1, -1, 0, 0, 0, 0, 0, 0, 0,
 
 packed_meta QuantizeHeaderMinMax(float *fz, int n){
   int i = 0 ;
-  int32_t s0, s1 ;
+//   int32_t s0, s1 ;
   uint32_t minzb, minza, maxza ;
   float minz, maxz, avgz ;
   u_float zu ;
@@ -42,15 +42,16 @@ packed_meta QuantizeHeaderMinMax(float *fz, int n){
   int32_t *iz = (int32_t *) fz;
 #if defined(__AVX2__) && defined(WITH_SIMD)
   __m256  vsumz, vminz, vmaxz, vz, vt ;
-  __m256i v0, vmask, vs0, vs1, vmina, vminb, vmaxa, va, vsuma, vti ;
+//   __m256i v0, vmask, vs0, vs1, vmina, vminb, vmaxa, va, vsuma, vti ;
+  __m256i v0, vmask, vs1, vmina, vminb, vmaxa, va, vsuma, vti ;
   __m128  tf0, tf1, tf2 ;
   __m128i ti0, ti1, ti2 ;
 #endif
 
   avgz  = 0.0 ;
   avgu  = 0 ;
-  s0    = 0 ;                                // sign bit will be 0 only if all signs are 0
-  s1    = -1 ;                               // sign bit will be 1 only if all signs are 1
+//   s0    = 0 ;                                // sign bit will be 0 only if all signs are 0
+//   s1    = -1 ;                               // sign bit will be 1 only if all signs are 1
   minza = 0x7FFFFFFF  ;                      // all bits on, largest unsigned value
   minzb = 0x7FFFFFFF  ;                      // all bits on, largest unsigned value
   maxza = 1 ;                                // will stay this way only if all z values are 0
@@ -65,7 +66,7 @@ packed_meta QuantizeHeaderMinMax(float *fz, int n){
   vz  = _mm256_loadu_ps(fz) ;
   vsumz = _mm256_and_ps(vz, vt) ;                       // mask unwanted elements from floating sum
   v0  = _mm256_xor_si256((__m256i) vz, (__m256i) vz) ;  // set to zero
-  vs0 = v0 ;                                            // set to all zeroes  (s0)
+//   vs0 = v0 ;                                            // set to all zeroes  (s0)
   vs1 = _mm256_cmpeq_epi32(v0, v0) ;                    // set to all ones    (s1)
   vmask = _mm256_srli_epi32(vs1, 1) ;                   // 0x7FFFFFFF
   va    = _mm256_and_si256((__m256i) vz, vmask) ;       // absolute value in integer register
@@ -83,8 +84,8 @@ packed_meta QuantizeHeaderMinMax(float *fz, int n){
     vz    = _mm256_loadu_ps(fz + i) ;               // value
     vmaxz = _mm256_max_ps(vmaxz, vz) ;
     vminz = _mm256_min_ps(vminz, vz) ;
-    vs0   = _mm256_or_si256(vs0, (__m256i) vz)  ;   // will remain 0 only if all signs are 0
-    vs1   = _mm256_and_si256(vs1, (__m256i) vz) ;   // will remain 1 only if all signs are 1
+//     vs0   = _mm256_or_si256(vs0, (__m256i) vz)  ;   // will remain 0 only if all signs are 0
+//     vs1   = _mm256_and_si256(vs1, (__m256i) vz) ;   // will remain 1 only if all signs are 1
     vsumz = _mm256_add_ps(vz, vsumz) ;              // sum of floating values
     va    = _mm256_and_si256((__m256i) vz, vmask) ; // absolute value in integer register (treated as an integer)
     vmaxa = _mm256_max_epu32(vmaxa, va) ;           // largest aboslute value
@@ -94,17 +95,17 @@ packed_meta QuantizeHeaderMinMax(float *fz, int n){
     va    = _mm256_blendv_epi8 (va, vmina, _mm256_cmpeq_epi32(va, v0) ) ;  // use vmina where va == 0
     vmina = _mm256_min_epu32(vmina, va) ;           // smallest absolute value
   }
-  ti0 = _mm256_extracti128_si256(vs0, 0) ;                      // fold vs0
-  ti0 = _mm_or_si128(ti0, _mm256_extracti128_si256(vs0, 1) ) ;  // 4 elements 0|4 1|5 2|6 3|7
-  ti0 = _mm_or_si128(ti0, _mm_srli_si128(ti0, 8) ) ;            // 2 elements 0|4|2|6 1|5|3|7  x  x
-  ti0 = _mm_or_si128(ti0, _mm_srli_si128(ti0, 4) ) ;            // 1 element
-  _mm_store_ss((float *)&s0, (__m128) ti0) ;
+//   ti0 = _mm256_extracti128_si256(vs0, 0) ;                      // fold vs0
+//   ti0 = _mm_or_si128(ti0, _mm256_extracti128_si256(vs0, 1) ) ;  // 4 elements 0|4 1|5 2|6 3|7
+//   ti0 = _mm_or_si128(ti0, _mm_srli_si128(ti0, 8) ) ;            // 2 elements 0|4|2|6 1|5|3|7  x  x
+//   ti0 = _mm_or_si128(ti0, _mm_srli_si128(ti0, 4) ) ;            // 1 element
+//   _mm_store_ss((float *)&s0, (__m128) ti0) ;
 
-  ti1 = _mm256_extracti128_si256(vs1, 0) ;                      // fold vs1
-  ti1 = _mm_and_si128(ti1, _mm256_extracti128_si256(vs1, 1) ) ; // 4 elements 0&4 1&5 2&6 3&7
-  ti1 = _mm_and_si128(ti1, _mm_srli_si128(ti1, 8) ) ;           // 2 elements 0&4&2&6 1&5&3&7  x  x
-  ti1 = _mm_and_si128(ti1, _mm_srli_si128(ti1, 4) ) ;           // 1 element
-  _mm_store_ss((float *)&s1, (__m128) ti1) ;
+//   ti1 = _mm256_extracti128_si256(vs1, 0) ;                      // fold vs1
+//   ti1 = _mm_and_si128(ti1, _mm256_extracti128_si256(vs1, 1) ) ; // 4 elements 0&4 1&5 2&6 3&7
+//   ti1 = _mm_and_si128(ti1, _mm_srli_si128(ti1, 8) ) ;           // 2 elements 0&4&2&6 1&5&3&7  x  x
+//   ti1 = _mm_and_si128(ti1, _mm_srli_si128(ti1, 4) ) ;           // 1 element
+//   _mm_store_ss((float *)&s1, (__m128) ti1) ;
 
   ti2 = _mm_add_epi64(_mm256_extracti128_si256(vsuma, 0), _mm256_extracti128_si256(vsuma, 1)) ;  // 0+2 1+3
   ti2 = _mm_add_epi64(ti2,  _mm_srli_si128(ti2, 8) ) ;          // 1 element
@@ -143,8 +144,8 @@ packed_meta QuantizeHeaderMinMax(float *fz, int n){
 #endif
   for( ; i < n ; i++){
     zu.u = iz[i] ;
-    s0 |= zu.u ;                             // sign bit will be 0 only if all signs are 0
-    s1 &= zu.u ;                             // sign bit will be 1 only if all signs are 1
+//     s0 |= zu.u ;                             // sign bit will be 0 only if all signs are 0
+//     s1 &= zu.u ;                             // sign bit will be 1 only if all signs are 1
     avgz = avgz + zu.f ;
     minz = (zu.f < minz) ? zu.f : minz ;     // minimum float value
     maxz = (zu.f > maxz) ? zu.f : maxz ;     // maximum float value
@@ -166,9 +167,9 @@ packed_meta QuantizeHeaderMinMax(float *fz, int n){
   zu.u       = avgu / n ;
   pm.avga    = zu.f ;
 
-  if(s0 <  0) pm.flags |= HAS_MINUS ;        // there are negative numbers
-  if(s1 >= 0) pm.flags |= HAS_PLUS  ;        // there are positive numbers or zeroes
-  if( (s0 < 0) && (s1 >= 0) ){
+  if(minz <  0) pm.flags |= HAS_MINUS ;      // there are negative numbers
+  if(maxz >  0) pm.flags |= HAS_PLUS  ;      // there are positive numbers or zeroes
+  if( (maxz > 0) && (minz < 0) ){            // there are positive and negative numbers
     pm.flags |= IS_SIGNED ;
   }
   return pm ;
