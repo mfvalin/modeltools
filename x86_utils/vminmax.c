@@ -1,7 +1,7 @@
 #include <stdint.h>
 
 #if defined(__AVX2__)
-#include <x86intrin.h>
+#include <immintrin.h>
 #endif
 
 #define IS_SIGNED 0x80000000U
@@ -27,11 +27,13 @@ typedef struct{
   } packed_meta;
   
 // get min and max absolute values
+#if defined(__AVX2__) && defined(WITH_SIMD)
 static int32_t mask16[] = { -1, -1, -1, -1, -1, -1, -1, -1, 0, 0, 0, 0, 0, 0, 0, 0 };
+#endif
+
 packed_meta QuantizeHeaderMinMax(float *fz, int n){
-  int32_t *iz = (int32_t *) fz;
-  int32_t i = 0 ;
-  int32_t s0, s1, j ;
+  int i = 0 ;
+  int32_t s0, s1 ;
   uint32_t minzb, minza, maxza ;
   float minz, maxz, avgz ;
   u_float zu ;
@@ -42,13 +44,22 @@ packed_meta QuantizeHeaderMinMax(float *fz, int n){
   __m256i v0, vmask, vs0, vs1, vmina, vminb, vmaxa, va, vsuma, vti ;
   __m128  tf0, tf1, tf2 ;
   __m128i ti0, ti1, ti2 ;
-#define WITH_SIMD_ 1
 #else
-#define WITH_SIMD_ 0
+  int32_t *iz = (int32_t *) fz;
 #endif
 
-  if(n >= 8 && WITH_SIMD_ == 1) {
+  avgz     = 0.0 ;
+  avgu     = 0 ;
+  s0 = 0 ;                                   // sign bit will be 0 only if all signs are 0
+  s1 = -1 ;                                  // sign bit will be 1 only if all signs are 1
+  minza = 0x7FFFFFFF  ;                       // all bits on, largest unsigned value
+  minzb = 0x7FFFFFFF  ;                       // all bits on, largest unsigned value
+  maxza = 1 ;                                 // will stay this way only if all z values are 0
+  minz  = fz[0] ;
+  maxz  = fz[0] ;
+
 #if defined(__AVX2__) && defined(WITH_SIMD)
+  if(n >= 8) {
   i = (n & 7) ?  (n & 7) : 8 ;
   vt    = _mm256_loadu_ps((float *) (mask16 + (8-i)) ) ;
   vz  = _mm256_loadu_ps(fz) ;
@@ -87,17 +98,17 @@ packed_meta QuantizeHeaderMinMax(float *fz, int n){
   ti0 = _mm_or_si128(ti0, _mm256_extracti128_si256(vs0, 1) ) ;  // 4 elements 0|4 1|5 2|6 3|7
   ti0 = _mm_or_si128(ti0, _mm_srli_si128(ti0, 8) ) ;            // 2 elements 0|4|2|6 1|5|3|7  x  x
   ti0 = _mm_or_si128(ti0, _mm_srli_si128(ti0, 4) ) ;            // 1 element
-  _mm_storeu_si32(&s0, ti0) ;
+  _mm_store_ss((float *)&s0, (__m128) ti0) ;
 
   ti1 = _mm256_extracti128_si256(vs1, 0) ;                      // fold vs1
-  ti1 = _mm_and_si128(ti1, _mm256_extracti128_si256(vs1, 1) ) ;  // 4 elements 0&4 1&5 2&6 3&7
-  ti1 = _mm_and_si128(ti1, _mm_srli_si128(ti1, 8) ) ;            // 2 elements 0&4&2&6 1&5&3&7  x  x
-  ti1 = _mm_and_si128(ti1, _mm_srli_si128(ti1, 4) ) ;            // 1 element
-  _mm_storeu_si32(&s1, ti1) ;
+  ti1 = _mm_and_si128(ti1, _mm256_extracti128_si256(vs1, 1) ) ; // 4 elements 0&4 1&5 2&6 3&7
+  ti1 = _mm_and_si128(ti1, _mm_srli_si128(ti1, 8) ) ;           // 2 elements 0&4&2&6 1&5&3&7  x  x
+  ti1 = _mm_and_si128(ti1, _mm_srli_si128(ti1, 4) ) ;           // 1 element
+  _mm_store_ss((float *)&s1, (__m128) ti1) ;
 
   ti2 = _mm_add_epi64(_mm256_extracti128_si256(vsuma, 0), _mm256_extracti128_si256(vsuma, 1)) ;  // 0+2 1+3
   ti2 = _mm_add_epi64(ti2,  _mm_srli_si128(ti2, 8) ) ;          // 1 element
-  _mm_storeu_si64(&avgu, ti2) ;
+  _mm_store_sd((double *)&avgu, (__m128d) ti2) ;
 
   tf0 = _mm_add_ps(_mm256_extractf128_ps(vsumz, 0), _mm256_extractf128_ps(vsumz, 1)) ;  // 0+4 1+5 2+6 3+7
   tf0 = _mm_add_ps(tf0, _mm_shuffle_ps(tf0, tf0, 0x0E)) ;       // 4 elements 0+4+2+6 1+5+3+7  x  x
@@ -117,30 +128,22 @@ packed_meta QuantizeHeaderMinMax(float *fz, int n){
   ti0 = _mm_max_epu32(_mm256_extracti128_si256(vmaxa, 0), _mm256_extracti128_si256(vmaxa, 1)) ; // 0,4 1,5 2,6 3,7
   ti0 = _mm_max_epu32(ti0, _mm_srli_si128(ti0, 8) ) ;            // 2 elements 0,4,2,6 1,5,3,7
   ti0 = _mm_max_epu32(ti0, _mm_srli_si128(ti0, 4) ) ;            // 1 element
-  _mm_storeu_si32(&maxza, ti0) ;
+  _mm_store_ss((float *)&maxza, (__m128) ti0) ;
 
   ti1 = _mm_min_epu32(_mm256_extracti128_si256(vmina, 0), _mm256_extracti128_si256(vmina, 1)) ; // 0,4 1,5 2,6 3,7
   ti1 = _mm_min_epu32(ti1, _mm_srli_si128(ti1, 8) ) ;            // 2 elements 0,4,2,6 1,5,3,7
   ti1 = _mm_min_epu32(ti1, _mm_srli_si128(ti1, 4) ) ;            // 1 element
-  _mm_storeu_si32(&minza, ti1) ;
+  _mm_store_ss((float *)&minza, (__m128) ti1) ;
 
   ti2 = _mm_min_epu32(_mm256_extracti128_si256(vminb, 0), _mm256_extracti128_si256(vminb, 1)) ; // 0,4 1,5 2,6 3,7
   ti2 = _mm_min_epu32(ti2, _mm_srli_si128(ti2, 8) ) ;            // 2 elements 0,4,2,6 1,5,3,7
   ti2 = _mm_min_epu32(ti2, _mm_srli_si128(ti2, 4) ) ;            // 1 element
-  _mm_storeu_si32(&minzb, ti2) ;
+  _mm_store_ss((float *)&minzb, (__m128) ti2) ;
+#else
+  if(0 == 1){
 #endif
   }else{
-
-    minza = 0x7FFFFFFF  ;                       // all bits on, largest unsigned value
-    minzb = 0x7FFFFFFF  ;                       // all bits on, largest unsigned value
-    maxza = 1 ;                                 // will stay this way only if all z values are 0
-    minz  = fz[0] ;
-    maxz  = fz[0] ;
-    pm.flags = 0 ;
-    avgz     = 0.0 ;
-    avgu     = 0 ;
-    s0 = 0 ;                                   // sign bit will be 0 only if all signs are 0
-    s1 = -1 ;                                  // sign bit will be 1 only if all signs are 1
+#if ! defined(__AVX2__) || ! defined(WITH_SIMD)
     for(i = 0 ; i < n ; i++){
       zu.u = iz[i] ;
       s0 |= zu.u ;                             // sign bit will be 0 only if all signs are 0
@@ -155,8 +158,10 @@ packed_meta QuantizeHeaderMinMax(float *fz, int n){
       zu.u = ( zu.u == 0 ) ? minza  : zu.u  ;  // replace 0 with minza for minza computation
       minza= ( zu.u < minza ) ? zu.u : minza ; // smallest non zero absolute value
     }
+#endif
   }
   if(minza > maxza) minza = maxza - 1 ;      // if all values are 0, maxza = 1, minza = 0
+  pm.flags = 0 ;
   if( minzb == 0 ) pm.flags |= HAS_ZEROS ;
   pm.minza.u = minza ;
   pm.maxza.u = maxza ;
