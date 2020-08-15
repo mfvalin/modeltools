@@ -39,27 +39,27 @@ packed_meta QuantizeHeaderMinMax(float *fz, int n){
   u_float zu ;
   packed_meta pm ;
   uint64_t avgu ;
+  int32_t *iz = (int32_t *) fz;
 #if defined(__AVX2__) && defined(WITH_SIMD)
   __m256  vsumz, vminz, vmaxz, vz, vt ;
   __m256i v0, vmask, vs0, vs1, vmina, vminb, vmaxa, va, vsuma, vti ;
   __m128  tf0, tf1, tf2 ;
   __m128i ti0, ti1, ti2 ;
-#else
-  int32_t *iz = (int32_t *) fz;
 #endif
 
-  avgz     = 0.0 ;
-  avgu     = 0 ;
-  s0 = 0 ;                                   // sign bit will be 0 only if all signs are 0
-  s1 = -1 ;                                  // sign bit will be 1 only if all signs are 1
-  minza = 0x7FFFFFFF  ;                       // all bits on, largest unsigned value
-  minzb = 0x7FFFFFFF  ;                       // all bits on, largest unsigned value
-  maxza = 1 ;                                 // will stay this way only if all z values are 0
+  avgz  = 0.0 ;
+  avgu  = 0 ;
+  s0    = 0 ;                                // sign bit will be 0 only if all signs are 0
+  s1    = -1 ;                               // sign bit will be 1 only if all signs are 1
+  minza = 0x7FFFFFFF  ;                      // all bits on, largest unsigned value
+  minzb = 0x7FFFFFFF  ;                      // all bits on, largest unsigned value
+  maxza = 1 ;                                // will stay this way only if all z values are 0
   minz  = fz[0] ;
   maxz  = fz[0] ;
+  i     = 0 ;
 
 #if defined(__AVX2__) && defined(WITH_SIMD)
-  if(n >= 8) {
+  if(n >= 8) {                               // the vectorized part will not work if n < 8
   i = (n & 7) ?  (n & 7) : 8 ;
   vt    = _mm256_loadu_ps((float *) (mask16 + (8-i)) ) ;
   vz  = _mm256_loadu_ps(fz) ;
@@ -139,26 +139,21 @@ packed_meta QuantizeHeaderMinMax(float *fz, int n){
   ti2 = _mm_min_epu32(ti2, _mm_srli_si128(ti2, 8) ) ;            // 2 elements 0,4,2,6 1,5,3,7
   ti2 = _mm_min_epu32(ti2, _mm_srli_si128(ti2, 4) ) ;            // 1 element
   _mm_store_ss((float *)&minzb, (__m128) ti2) ;
-#else
-  if(0 == 1){
+  }
 #endif
-  }else{
-#if ! defined(__AVX2__) || ! defined(WITH_SIMD)
-    for(i = 0 ; i < n ; i++){
-      zu.u = iz[i] ;
-      s0 |= zu.u ;                             // sign bit will be 0 only if all signs are 0
-      s1 &= zu.u ;                             // sign bit will be 1 only if all signs are 1
-      avgz = avgz + zu.f ;
-      minz = (zu.f < minz) ? zu.f : minz ;     // minimum float value
-      maxz = (zu.f > maxz) ? zu.f : maxz ;     // maximum float value
-      zu.u = (zu.u & 0x7FFFFFFF) ;             // abs(value)
-      maxza= ( zu.u > maxza ) ? zu.u : maxza ; // largest absolute value
-      minzb= ( zu.u < minzb ) ? zu.u : minzb ; // smallest (possibly zero) absolute value
-      avgu = avgu + zu.u ;
-      zu.u = ( zu.u == 0 ) ? minza  : zu.u  ;  // replace 0 with minza for minza computation
-      minza= ( zu.u < minza ) ? zu.u : minza ; // smallest non zero absolute value
-    }
-#endif
+  for( ; i < n ; i++){
+    zu.u = iz[i] ;
+    s0 |= zu.u ;                             // sign bit will be 0 only if all signs are 0
+    s1 &= zu.u ;                             // sign bit will be 1 only if all signs are 1
+    avgz = avgz + zu.f ;
+    minz = (zu.f < minz) ? zu.f : minz ;     // minimum float value
+    maxz = (zu.f > maxz) ? zu.f : maxz ;     // maximum float value
+    zu.u = (zu.u & 0x7FFFFFFF) ;             // abs(value)
+    maxza= ( zu.u > maxza ) ? zu.u : maxza ; // largest absolute value
+    minzb= ( zu.u < minzb ) ? zu.u : minzb ; // smallest (possibly zero) absolute value
+    avgu = avgu + zu.u ;
+    zu.u = ( zu.u == 0 ) ? minza  : zu.u  ;  // replace 0 with minza for minza computation
+    minza= ( zu.u < minza ) ? zu.u : minza ; // smallest non zero absolute value
   }
   if(minza > maxza) minza = maxza - 1 ;      // if all values are 0, maxza = 1, minza = 0
   pm.flags = 0 ;
@@ -169,7 +164,6 @@ packed_meta QuantizeHeaderMinMax(float *fz, int n){
   pm.minz    = minz  ;
   pm.maxz    = maxz  ;
   zu.u       = avgu / n ;
-// printf("avgu = %16.16x, n= %d, zu.u = %8.8x, zu.f = %g\n",avgu,n,zu.u,zu.f);
   pm.avga    = zu.f ;
 
   if(s0 <  0) pm.flags |= HAS_MINUS ;        // there are negative numbers
