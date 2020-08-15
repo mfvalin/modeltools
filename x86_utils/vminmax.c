@@ -1,13 +1,28 @@
+//  useful routines for C and FORTRAN programming
+//  Copyright (C) 2020  Environnement Canada
+// 
+//  This is free software; you can redistribute it and/or
+//  modify it under the terms of the GNU Lesser General Public
+//  License as published by the Free Software Foundation,
+//  version 2.1 of the License.
+// 
+//  This software is distributed in the hope that it will be useful,
+//  but WITHOUT ANY WARRANTY; without even the implied warranty of
+//  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+//  Lesser General Public License for more details.
+// 
+
 #include <stdint.h>
 
 #if defined(__AVX2__)
 #include <immintrin.h>
 #endif
 
-#define IS_SIGNED 0x80000000U
-#define HAS_PLUS  0x40000000U
-#define HAS_MINUS 0x20000000U
-#define HAS_ZEROS 0x10000000U
+#define IS_SIGNED   0x80000000U
+#define PLUS_MINUS  0x60000000U
+#define HAS_PLUS    0x40000000U
+#define HAS_MINUS   0x20000000U
+#define HAS_ZEROS   0x10000000U
 
 typedef union{
   uint32_t u;
@@ -20,17 +35,22 @@ typedef struct{
   uint32_t shift;   // shift count (upper 16 bits) + nbits (lower 16 bits)
   u_float  maxza;   // largest absolute value (1 if all values are 0)
   u_float  minza;   // smallest nonzero absolute value
-  float    avgz;    // average
-  float    avga;
+  float    avgz;    // rough average
+  float    avga;    // rough average of absolute values
   float    maxz;    // maximum value (signed)
   float    minz;    // minimum value (signed)
   } packed_meta;
   
-// get min and max absolute values
 #if defined(__AVX2__) && defined(WITH_SIMD)
 static int32_t mask16[] = { -1, -1, -1, -1, -1, -1, -1, -1, 0, 0, 0, 0, 0, 0, 0, 0 };
 #endif
 
+// get from a float array of n elements :
+//   min, max, average values
+//   largest and smallest (nonzero) absolute values
+//   smallest (possibly zero) absolute value
+//   "refloated" "integer" averaged absolute value
+//   HAS_PLUS, HAS_MINUS, IS_SIGNED flags
 packed_meta QuantizeHeaderMinMax(float *fz, int n){
   int i = 0 ;
 //   int32_t s0, s1 ;
@@ -60,7 +80,7 @@ packed_meta QuantizeHeaderMinMax(float *fz, int n){
   i     = 0 ;
 
 #if defined(__AVX2__) && defined(WITH_SIMD)
-  if(n >= 8) {                               // the vectorized part will not work if n < 8
+  if(n >= 8) {                               // the AVX2 vectorized part will not handle n < 8
   i = (n & 7) ?  (n & 7) : 8 ;
   vt    = _mm256_loadu_ps((float *) (mask16 + (8-i)) ) ;
   vz  = _mm256_loadu_ps(fz) ;
@@ -107,39 +127,46 @@ packed_meta QuantizeHeaderMinMax(float *fz, int n){
 //   ti1 = _mm_and_si128(ti1, _mm_srli_si128(ti1, 4) ) ;           // 1 element
 //   _mm_store_ss((float *)&s1, (__m128) ti1) ;
 
+// note :
+// _mm_store_ss / _mm_store_sd used instead of _mm_storeu_si32 / _mm_storeu_si64
+// because of missing Intel intrinsics for some compilers
+// another alternative would be to define _mm_storeu_si32 / _mm_storeu_si64 as macros
+// #define _mm_storeu_si32(addr, what)  _mm_store_ss((float  *)addr, (__m128)  what)
+// #define _mm_storeu_si64(addr, what)  _mm_store_sd((double *)addr, (__m128d) what)
+//
   ti2 = _mm_add_epi64(_mm256_extracti128_si256(vsuma, 0), _mm256_extracti128_si256(vsuma, 1)) ;  // 0+2 1+3
   ti2 = _mm_add_epi64(ti2,  _mm_srli_si128(ti2, 8) ) ;          // 1 element
-  _mm_store_sd((double *)&avgu, (__m128d) ti2) ;
+  _mm_store_sd((double *)&avgu, (__m128d) ti2) ;                // store folded sum of absolute values
 
   tf0 = _mm_add_ps(_mm256_extractf128_ps(vsumz, 0), _mm256_extractf128_ps(vsumz, 1)) ;  // 0+4 1+5 2+6 3+7
   tf0 = _mm_add_ps(tf0, _mm_shuffle_ps(tf0, tf0, 0x0E)) ;       // 4 elements 0+4+2+6 1+5+3+7  x  x
   tf0 = _mm_add_ps(tf0, _mm_shuffle_ps(tf0, tf0, 0x01)) ;       // 2 elements 0+4+2+6+1+5+3+7  x  x  x
-  _mm_store_ss(&avgz, tf0) ;
+  _mm_store_ss(&avgz, tf0) ;                                    // store folded sum
 
   tf1 = _mm_max_ps(_mm256_extractf128_ps(vmaxz, 0), _mm256_extractf128_ps(vmaxz, 1)) ;  // 0+4 1+5 2+6 3+7
   tf1 = _mm_max_ps(tf1, _mm_shuffle_ps(tf1, tf1, 0x0E)) ;       // 4 elements 0+4+2+6 1+5+3+7  x  x
   tf1 = _mm_max_ps(tf1, _mm_shuffle_ps(tf1, tf1, 0x01)) ;       // 2 elements 0+4+2+6+1+5+3+7  x  x  x
-  _mm_store_ss(&maxz, tf1) ;
+  _mm_store_ss(&maxz, tf1) ;                                    // store folded maximum value
 
   tf2 = _mm_min_ps(_mm256_extractf128_ps(vminz, 0), _mm256_extractf128_ps(vminz, 1)) ;  // 0+4 1+5 2+6 3+7
   tf2 = _mm_min_ps(tf2, _mm_shuffle_ps(tf2, tf2, 0x0E)) ;       // 4 elements 0+4+2+6 1+5+3+7  x  x
   tf2 = _mm_min_ps(tf2, _mm_shuffle_ps(tf2, tf2, 0x01)) ;       // 2 elements 0+4+2+6+1+5+3+7  x  x  x
-  _mm_store_ss(&minz, tf2) ;
+  _mm_store_ss(&minz, tf2) ;                                    // store folded minimum value
 
   ti0 = _mm_max_epu32(_mm256_extracti128_si256(vmaxa, 0), _mm256_extracti128_si256(vmaxa, 1)) ; // 0,4 1,5 2,6 3,7
   ti0 = _mm_max_epu32(ti0, _mm_srli_si128(ti0, 8) ) ;            // 2 elements 0,4,2,6 1,5,3,7
   ti0 = _mm_max_epu32(ti0, _mm_srli_si128(ti0, 4) ) ;            // 1 element
-  _mm_store_ss((float *)&maxza, (__m128) ti0) ;
+  _mm_store_ss((float *)&maxza, (__m128) ti0) ;                  // stote folded largest absolute value
 
   ti1 = _mm_min_epu32(_mm256_extracti128_si256(vmina, 0), _mm256_extracti128_si256(vmina, 1)) ; // 0,4 1,5 2,6 3,7
   ti1 = _mm_min_epu32(ti1, _mm_srli_si128(ti1, 8) ) ;            // 2 elements 0,4,2,6 1,5,3,7
   ti1 = _mm_min_epu32(ti1, _mm_srli_si128(ti1, 4) ) ;            // 1 element
-  _mm_store_ss((float *)&minza, (__m128) ti1) ;
+  _mm_store_ss((float *)&minza, (__m128) ti1) ;                  // stote folded smallest nonzero absolute value
 
   ti2 = _mm_min_epu32(_mm256_extracti128_si256(vminb, 0), _mm256_extracti128_si256(vminb, 1)) ; // 0,4 1,5 2,6 3,7
   ti2 = _mm_min_epu32(ti2, _mm_srli_si128(ti2, 8) ) ;            // 2 elements 0,4,2,6 1,5,3,7
   ti2 = _mm_min_epu32(ti2, _mm_srli_si128(ti2, 4) ) ;            // 1 element
-  _mm_store_ss((float *)&minzb, (__m128) ti2) ;
+  _mm_store_ss((float *)&minzb, (__m128) ti2) ;                  // stote folded smallest absolute value
   }
 #endif
   for( ; i < n ; i++){
