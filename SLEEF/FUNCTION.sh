@@ -43,14 +43,14 @@ cat <<EOT
 //   subroutine ${Vfortran}${FuNcTiOn}_f${PoStFiX}(f, r, n) BIND(C,name='${Vlibsleef}${FuNcTiOn}_f${PoStFiX}')
 //     import :: C_INT, C_FLOAT
 //     integer(C_INT), intent(IN), value :: n
-//     real(C_FLOAT), dimension(n), intent(IN)  :: f   ! 32 bit floating point input
-//     real(C_FLOAT), dimension(n), intent(OUT) :: r   ! 32 bit floating point result
+//     real(C_FLOAT), dimension(*), intent(IN)  :: f   ! 32 bit floating point input
+//     real(C_FLOAT), dimension(*), intent(OUT) :: r   ! 32 bit floating point result
 //   end subroutine ${Vfortran}${FuNcTiOn}_f${PoStFiX}
 //   subroutine ${Vfortran}${FuNcTiOn}_d${PoStFiX}(f, r, n) BIND(C,name='${Vlibsleef}${FuNcTiOn}_d${PoStFiX}')
 //     import :: C_INT, C_DOUBLE
 //     integer(C_INT), intent(IN), value :: n
-//     real(C_DOUBLE), dimension(n), intent(IN)  :: f   ! 64 bit floating point input
-//     real(C_DOUBLE), dimension(n), intent(OUT) :: r   ! 64 bit floating point result
+//     real(C_DOUBLE), dimension(*), intent(IN)  :: f   ! 64 bit floating point input
+//     real(C_DOUBLE), dimension(*), intent(OUT) :: r   ! 64 bit floating point result
 //   end subroutine ${Vfortran}${FuNcTiOn}_d${PoStFiX}
 // end interface
 //===========================================================================================

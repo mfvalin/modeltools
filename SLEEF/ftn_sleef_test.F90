@@ -9,7 +9,7 @@ program test_sleef  ! timing test for vector subroutines calling libsleef wrappe
   include 'sleef.inc'
 
 #if !defined NP
-#define NP 1007
+#define NP 40
 #endif
 
   real, parameter :: CLOCK = 3.7

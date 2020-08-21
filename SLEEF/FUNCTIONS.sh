@@ -51,20 +51,17 @@ cat <<EOT
 // end interface ${Vfortran}bit_diff
 //===========================================================================================
 void Vsl_bit_diff_f(float *f1, float *f2, int n, int *minlsbs, int *maxlsbs, float *avglsbs){
-  uint32_t *if1 = (uint32_t *) f1 ;
-  uint32_t *if2 = (uint32_t *) f2 ;
+  uint32_t *if1 = (uint32_t *) f1 ;  // IEEE floats treated as unsigned ints for comparison purposes
+  uint32_t *if2 = (uint32_t *) f2 ;  // leftmost bit will be suppressed to get absolute value
   int i, mini, maxi, toti, nlsb ;
   mini = 0x7FFFFFFF ; maxi = 0 ; toti = 0 ;
   for(i = 0 ; i < n ; i++){
-    // if( ((if1[i] >> 23) & 0xFF) == 0xFF ) continue ;  // f1 == nan
-    nlsb = (if1[i] & 0x7FFFFFFF) - (if2[i] & 0x7FFFFFFF) ;
-    nlsb = (nlsb < 0) ? -nlsb : nlsb ;
-    //if( nlsb > 4 ) {
-    //printf("f1 = %f, f2 = %f, i = %d, n = %d\n",f1[i],f2[i], i, n);
-    //}
-    mini = (nlsb < mini) ? nlsb : mini ;
-    maxi = (nlsb > maxi) ? nlsb : maxi ;
-    toti += nlsb ;
+    // if( ((if1[i] >> 23) & 0xFF) == 0xFF ) continue ;         // ignore if f1 == nan
+    nlsb = (if1[i] & 0x7FFFFFFF) - (if2[i] & 0x7FFFFFFF) ;   // difference between absolute values
+    nlsb = (nlsb < 0) ? -nlsb : nlsb ;                       // absolute value of difference
+    mini = (nlsb < mini) ? nlsb : mini ;                     // minimum
+    maxi = (nlsb > maxi) ? nlsb : maxi ;                     // maximum
+    toti += nlsb ;                                           // sum
   }
   *avglsbs = toti ;
   *avglsbs /= n ;
@@ -75,15 +72,12 @@ void Vsl_bit_diff_f(float *f1, float *f2, int n, int *minlsbs, int *maxlsbs, flo
 void Vsl_bit_diff_d(double *f1, double *f2, int n, int *minlsbs, int *maxlsbs, float *avglsbs){
   uint64_t *if1 = (uint64_t *) f1 ;
   uint64_t *if2 = (uint64_t *) f2 ;
-  int i, mini, maxi, toti, nlsb ;
+  uint64_t i, mini, maxi, toti, nlsb ;
   mini = 0x7FFFFFFF ; maxi = 0 ; toti = 0 ;
   for(i = 0 ; i < n ; i++){
     // if( ((if1[i] >> 52) & 0x7FF) == 0x7FF ) continue ;  // f1 == nan
     nlsb = (if1[i] & 0x7FFFFFFFFFFFFFFFL) - (if2[i] & 0x7FFFFFFFFFFFFFFFL) ;
     nlsb = (nlsb > 0) ? nlsb : -nlsb ;
-    //if( nlsb > 4 ) {
-    //printf("f1 = %f, f2 = %f, i = %d, n = %d\n",f1[i],f2[i], i, n);
-    //}
     mini = (nlsb < mini) ? nlsb : mini ;
     maxi = (nlsb > maxi) ? nlsb : maxi ;
     toti += nlsb ;
