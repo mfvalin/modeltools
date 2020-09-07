@@ -42,6 +42,7 @@ static int debug = 0;
 //       integer(C_INT) :: old                                   !InTf!
 //     end function ZfpCompress3D_debug                          !InTf!
 //   end interface                                               !InTf!
+#if defined(SELF_TEST)
 // quick and dirty error analysis
 void AnalyzeCompressionErrors(float *fa, float *fb, int np, float small, char *str){  // will have to add a few options
   int i;
@@ -137,7 +138,7 @@ void AnalyzeCompressionErrors(float *fa, float *fb, int np, float small, char *s
 //   while(idif64 >>= 1) accuracy --;
 //   printf("average accuracy bits = %6.2f, PSNR = %f\n",acc2, snr);
 }
-
+#endif
 int ZfpCompress3D_debug(int flag){ 
   int oldval = debug ;
   debug = flag ; 

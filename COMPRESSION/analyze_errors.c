@@ -16,6 +16,53 @@
 #include <stdlib.h>
 #include <stdint.h>
 //   interface                                                   !InTf!
+//     subroutine AnalyzeFields(a, b, ni, lni, nj, small, stats) bind(C,name='AnalyzeFields')   !InTf!
+//       import :: C_INTPTR_T, C_INT, C_FLOAT                    !InTf!
+//       integer(C_INTPTR_T), intent(IN), value :: a, b          !InTf!
+//       integer(C_INT), intent(IN), value :: ni, lni, nj        !InTf!
+//       real(C_FLOAT), intent(IN), value :: small               !InTf!
+//       real(C_FLOAT), intent(OUT), dimension(*) :: stats       !InTf!
+//     end subroutine AnalyzeFields                              !InTf!
+//   end interface                                               !InTf!
+void AnalyzeFields(float *fa, float *fb, int ni, int lni, int nj, float small, float *stats){
+  int i, j, im, ip, jm, jp ;
+  double ci, cj, grada, gradb, gradbara, gradbarb, t, ddi, ddj ;
+
+// compute gradients grad(fa) = sqrt( [d(fa)/di]**2 +  [d(fa)/dj]**2 )
+// compute maximum gradient and average gradient for fields fa and fb
+  grada = 0.0f ; gradbara = 0.0 ;
+  gradb = 0.0f ; gradbarb = 0.0 ;
+  for(j = 0 ; j < nj ; j++){
+    jm = (j > 0) ? -lni : 0 ;                // row below current row
+    jp = (j < nj-1) ? lni : 0 ;              // row above current row
+    cj = ((jp - jm) > 1 ) ? 0.5f : 1.0f ;    // scaling factor (.5 if centered difference, 1.0 otherwise)
+    im = (i > 0) ? i-1 : i ;
+    ip = (i < ni-1) ? i+1 : i ;
+    ddi = fa[1] - fa[0] ; ddj = cj * (fa[0+jp] - fa[0+jm]) ;  // first point, i backward difference
+    t = sqrt(ddi*ddi + ddj*ddj) ; grada = (t > grada) ? t : grada ; gradbara += t;
+    ddi = fb[1] - fb[0] ; ddj = cj * (fb[0+jp] - fb[0+jm]) ;  // first point, i backward difference
+    t = sqrt(ddi*ddi + ddj*ddj) ; gradb = (t > gradb) ? t : gradb ; gradbarb += t;
+    for(i = 1 ; i < ni-1 ; i++){
+      ddi = (fa[i+1] - fa[i-1]) * 0.5 ; ddj = cj * (fa[i+jp] - fa[i+jm]) ; 
+      t = sqrt(ddi*ddi + ddj*ddj) ; grada = (t > grada) ? t : grada ; gradbara += t;
+      ddi = (fb[i+1] - fb[i-1]) * 0.5 ; ddj = cj * (fb[i+jp] - fb[i+jm]) ; 
+      t = sqrt(ddi*ddi + ddj*ddj) ; gradb = (t > gradb) ? t : gradb ; gradbarb += t;
+    }
+    ddi = fa[ni-1] - fa[ni-2] ; ddj = cj * (fa[ni-1+jp] - fa[ni-1+jm]) ;  // last point, i forward difference
+    t = sqrt(ddi*ddi + ddj*ddj) ; grada = (t > grada) ? t : grada ; gradbara += t;
+    ddi = fb[ni-1] - fb[ni-2] ; ddj = cj * (fb[ni-1+jp] - fb[ni-1+jm]) ;  // last point, i forward difference
+    t = sqrt(ddi*ddi + ddj*ddj) ; gradb = (t > gradb) ? t : gradb ; gradbarb += t;
+    fa += lni ;   // next base row
+    fb += lni ;   // next base row
+  }
+  stats[0] = grada ;
+  stats[1] = gradb ;
+  stats[2] = gradbara/(ni*nj) ;
+  stats[3] = gradbarb/(ni*nj) ;
+  printf("max/avg gradients a = %8.3g %8.3g, max/avg gradients b = %8.3g %8.3g\n",grada, gradbara/(ni*nj), gradb, gradbarb/(ni*nj));
+}
+
+//   interface                                                   !InTf!
 //     subroutine AnalyzeErrors(a, b, n, small, str) bind(C,name='AnalyzeErrors')   !InTf!
 //       import :: C_INTPTR_T, C_INT, C_FLOAT, C_CHAR            !InTf!
 //       integer(C_INTPTR_T), intent(IN), value :: a, b          !InTf!

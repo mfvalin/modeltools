@@ -38,29 +38,7 @@ program test_zfp
   character(len=12) :: etiket
   character(len=1) :: grtyp
   real(C_FLOAT) :: small
-
-! interface                                                   !InTf!
-!   function ZfpCompress3D(z, nx, ny, nz, approx, stream, streamsize) result(addr) bind(C,name='ZfpCompress3D')  !InTf!
-!     import :: C_INTPTR_T, C_INT, C_DOUBLE                   !InTf!
-!     integer(C_INTPTR_T), intent(IN), value :: z, stream       !InTf!
-!     integer(C_INT), intent(IN), value :: nx, ny, nz         !InTf!
-!     integer(C_INT), intent(INOUT) :: streamsize             !InTf!
-!     real(C_DOUBLE), intent(IN), value :: approx             !InTf!
-!     integer(C_INTPTR_T) :: addr                               !InTf!
-!   end function ZfpCompress3D                                !InTf!
-!   subroutine AnalyzeCompressionErrors(a, b, n, small, str) bind(C,name='AnalyzeCompressionErrors')   !InTf!
-!     import :: C_INTPTR_T, C_INT, C_FLOAT, C_CHAR            !InTf!
-!     integer(C_INTPTR_T), intent(IN), value :: a, b          !InTf!
-!     integer(C_INT), intent(IN), value :: n                  !InTf!
-!     real(C_FLOAT), intent(IN), value :: small               !InTf!
-!     character(C_CHAR), dimension(*) :: str                  !InTf!
-!   end subroutine AnalyzeCompressionErrors                   !InTf!
-!   function ZfpCompress3D_debug(flag) result(old) bind(C,name='ZfpCompress3D_debug')   !InTf!
-!     import :: C_INT                                         !InTf!
-!     integer(C_INT), intent(IN), value :: flag               !InTf!
-!     integer(C_INT) :: old                                   !InTf!
-!   end function ZfpCompress3D_debug                          !InTf!
-! end interface                                               !InTf!
+  real(C_FLOAT), dimension(4) :: stats
 
   nargs = command_argument_count()
   do k = 1, nz
@@ -85,8 +63,8 @@ program test_zfp
   write(6,*) 'FILE='//trim(filename),' nrec =',nrec
 
   do l=2,nargs
-    call get_command_argument(l, str)
-    read(str,*) toler
+    call get_command_argument(l, str)  ! each following argument is a precision/rate value
+    read(str,*) toler                  ! <0 means rate in bits, float > 0 means tolerable error
     key = fstinf(iun,ni,nj,nk,-1,'            ',-1,-1,-1,'  ','   ')
     do while(key >= 0)
       if(ni <10 .or. nj < 10) goto 1
@@ -110,19 +88,19 @@ program test_zfp
       zt(2,:,:) = zi(2:ni:2,1:nj:2)
       zt(3,:,:) = zi(1:ni:2,2:nj:2)
       zt(4,:,:) = zi(2:ni:2,2:nj:2)
-!       call AnalyzeCompressionErrors(loc(zi), loc(zi) , ni*nj)         ! evaluate
       buf = ZfpCompress3D(loc(zi), ni, nj, 1, toler, 0_8, streamsize)  ! compress
       dum = ZfpCompress3D(loc(zo), ni, nj, 1, 0.0_8, buf, streamsize)  ! decompress
       call AnalyzeErrors(loc(zi), loc(zo) , ni*nj, small, nomvar//achar(0))          ! evaluate
-      write(6,*)''
-!       buf = ZfpCompress3D(loc(zt), 4, ni/2, nj/2, toler, 0_8, streamsize)  ! compress
-!       dum = ZfpCompress3D(loc(zo), 4, ni/2, nj/2, 0.0_8, buf, streamsize)  ! decompress
-!       call AnalyzeCompressionErrors(loc(zt), loc(zo) , ni*nj)          ! evaluate
+      call AnalyzeFields(loc(zi), loc(zo) , ni, ni, nj, small, stats)
+      zo = zi
+      call F_CDF97_2D_split_inplace_n(zo, ni, ni, nj, 3)
+      call AnalyzeFields(loc(zi(1,1)), loc(zo(1,1)) , ni/2, ni, nj/2, small, stats)
+      call AnalyzeFields(loc(zi(1+ni/2,1)), loc(zo(1+ni/2,1)) , ni/2, ni, nj/2, small, stats)
+      call AnalyzeFields(loc(zi(1,1+nj/2)), loc(zo(1,1+nj/2)) , ni/2, ni, nj/2, small, stats)
+      call AnalyzeFields(loc(zi(1+ni/2,1+nj/2)), loc(zo(1+ni/2,1+nj/2)) , ni/2, ni, nj/2, small, stats)
       write(6,*)'------------------------------------------------------------'
-!       goto 2
 1     key = fstsui(iun,ni,nj,nk)
     enddo
-! 2   continue
   enddo
   goto 888
 
