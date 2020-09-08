@@ -16,6 +16,64 @@
 #include <stdlib.h>
 #include <stdint.h>
 //   interface                                                   !InTf!
+//     subroutine AnalyzeField(a, ni, lni, nj, small, stats) bind(C,name='AnalyzeField')   !InTf!
+//       import :: C_INTPTR_T, C_INT, C_FLOAT                    !InTf!
+//       integer(C_INTPTR_T), intent(IN), value :: a             !InTf!
+//       integer(C_INT), intent(IN), value :: ni, lni, nj        !InTf!
+//       real(C_FLOAT), intent(IN), value :: small               !InTf!
+//       real(C_FLOAT), intent(OUT), dimension(*) :: stats       !InTf!
+//     end subroutine AnalyzeField                               !InTf!
+//   end interface                                               !InTf!
+void AnalyzeField(float *fa, int ni, int lni, int nj, float small, float *stats){
+  int i, j, im, ip, jm, jp ;
+  double ci, cj, grad, gradbar, t, ddi, ddj ; // for gradient computation
+  double sum, sum2;
+  float fmin, fmax ;
+  
+
+// compute gradient grad(fa) = sqrt( [d(fa)/di]**2 +  [d(fa)/dj]**2 )
+// compute maximum gradient and average gradient
+  grad    = 0.0 ; 
+  gradbar = 0.0 ;
+  sum     = 0.0 ;
+  sum2    = 0.0 ;
+  fmin    = fa[0] ;
+  fmax    = fa[0] ;
+  
+  for(j = 0 ; j < nj ; j++){
+    jm = (j > 0) ? -lni : 0 ;                // row below current row (or row itself if row 0)
+    jp = (j < nj-1) ? lni : 0 ;              // row above current row (or row itself if top row)
+    cj = ((jp - jm) > 1 ) ? 0.5f : 1.0f ;    // scaling factor (.5 if centered difference, 1.0 otherwise)
+    im = (i > 0) ? i-1 : i ;
+    ip = (i < ni-1) ? i+1 : i ;
+    ddi = fa[1] - fa[0] ; ddj = cj * (fa[0+jp] - fa[0+jm]) ;  // first point, i forward difference
+    t = sqrt(ddi*ddi + ddj*ddj) ; grad = (t > grad) ? t : grad ; gradbar += t;
+    sum += fa[0] ; sum2 += (fa[0] * fa[0]) ;
+    fmin = (fa[0] < fmin) ? fa[0] : fmin ; fmax = (fa[0] > fmax) ? fa[0] : fmax ;
+    for(i = 1 ; i < ni-1 ; i++){
+      ddi = (fa[i+1] - fa[i-1]) * 0.5 ; ddj = cj * (fa[i+jp] - fa[i+jm]) ; 
+      t = sqrt(ddi*ddi + ddj*ddj) ; grad = (t > grad) ? t : grad ; gradbar += t;
+      sum += fa[i] ; sum2 += (fa[i] * fa[i]) ;
+      fmin = (fa[i] < fmin) ? fa[i] : fmin ; fmax = (fa[i] > fmax) ? fa[i] : fmax ;
+    }
+    ddi = fa[ni-1] - fa[ni-2] ; ddj = cj * (fa[ni-1+jp] - fa[ni-1+jm]) ;  // last point, i backward difference
+    t = sqrt(ddi*ddi + ddj*ddj) ; grad = (t > grad) ? t : grad ; gradbar += t;
+    sum += fa[ni-1] ; sum2 += (fa[ni-1] * fa[ni-1]) ;
+    fmin = (fa[ni-1] < fmin) ? fa[ni-1] : fmin ; fmax = (fa[ni-1] > fmax) ? fa[ni-1] : fmax ;
+    fa += lni ;   // next base row
+  }
+  i = 0;
+  stats[i++] = fmin ;            // min
+  stats[i++] = fmax ;            // max
+  stats[i++] = sum / (ni*nj) ;   // average
+  stats[i++] = sum2 ;            // sum of squares
+  stats[i++] = grad ;            // largest gradient
+  stats[i++] = gradbar/(ni*nj) ; // average gradient
+  printf("[%7d pts] min/max/rng/avg = %9.3g %9.3g %9.3g %9.3g, max/avg gradients a = %9.3g %9.3g\n",
+         ni*nj, fmin, fmax, fmax-fmin, sum/(ni*nj), grad, gradbar/(ni*nj));
+}
+
+//   interface                                                   !InTf!
 //     subroutine AnalyzeFields(a, b, ni, lni, nj, small, stats) bind(C,name='AnalyzeFields')   !InTf!
 //       import :: C_INTPTR_T, C_INT, C_FLOAT                    !InTf!
 //       integer(C_INTPTR_T), intent(IN), value :: a, b          !InTf!
@@ -38,9 +96,9 @@ void AnalyzeFields(float *fa, float *fb, int ni, int lni, int nj, float small, f
     cj = ((jp - jm) > 1 ) ? 0.5f : 1.0f ;    // scaling factor (.5 if centered difference, 1.0 otherwise)
     im = (i > 0) ? i-1 : i ;
     ip = (i < ni-1) ? i+1 : i ;
-    ddi = fa[1] - fa[0] ; ddj = cj * (fa[0+jp] - fa[0+jm]) ;  // first point, i backward difference
+    ddi = fa[1] - fa[0] ; ddj = cj * (fa[0+jp] - fa[0+jm]) ;  // first point, i forward difference
     t = sqrt(ddi*ddi + ddj*ddj) ; grada = (t > grada) ? t : grada ; gradbara += t;
-    ddi = fb[1] - fb[0] ; ddj = cj * (fb[0+jp] - fb[0+jm]) ;  // first point, i backward difference
+    ddi = fb[1] - fb[0] ; ddj = cj * (fb[0+jp] - fb[0+jm]) ;  // first point, i forward difference
     t = sqrt(ddi*ddi + ddj*ddj) ; gradb = (t > gradb) ? t : gradb ; gradbarb += t;
     for(i = 1 ; i < ni-1 ; i++){
       ddi = (fa[i+1] - fa[i-1]) * 0.5 ; ddj = cj * (fa[i+jp] - fa[i+jm]) ; 
@@ -48,9 +106,9 @@ void AnalyzeFields(float *fa, float *fb, int ni, int lni, int nj, float small, f
       ddi = (fb[i+1] - fb[i-1]) * 0.5 ; ddj = cj * (fb[i+jp] - fb[i+jm]) ; 
       t = sqrt(ddi*ddi + ddj*ddj) ; gradb = (t > gradb) ? t : gradb ; gradbarb += t;
     }
-    ddi = fa[ni-1] - fa[ni-2] ; ddj = cj * (fa[ni-1+jp] - fa[ni-1+jm]) ;  // last point, i forward difference
+    ddi = fa[ni-1] - fa[ni-2] ; ddj = cj * (fa[ni-1+jp] - fa[ni-1+jm]) ;  // last point, i backward difference
     t = sqrt(ddi*ddi + ddj*ddj) ; grada = (t > grada) ? t : grada ; gradbara += t;
-    ddi = fb[ni-1] - fb[ni-2] ; ddj = cj * (fb[ni-1+jp] - fb[ni-1+jm]) ;  // last point, i forward difference
+    ddi = fb[ni-1] - fb[ni-2] ; ddj = cj * (fb[ni-1+jp] - fb[ni-1+jm]) ;  // last point, i backward difference
     t = sqrt(ddi*ddi + ddj*ddj) ; gradb = (t > gradb) ? t : gradb ; gradbarb += t;
     fa += lni ;   // next base row
     fb += lni ;   // next base row
@@ -63,16 +121,16 @@ void AnalyzeFields(float *fa, float *fb, int ni, int lni, int nj, float small, f
 }
 
 //   interface                                                   !InTf!
-//     subroutine AnalyzeErrors(a, b, n, small, str) bind(C,name='AnalyzeErrors')   !InTf!
+//     subroutine CompareFields(a, b, n, small, str) bind(C,name='CompareFields')   !InTf!
 //       import :: C_INTPTR_T, C_INT, C_FLOAT, C_CHAR            !InTf!
 //       integer(C_INTPTR_T), intent(IN), value :: a, b          !InTf!
 //       integer(C_INT), intent(IN), value :: n                  !InTf!
 //       real(C_FLOAT), intent(IN), value :: small               !InTf!
 //       character(C_CHAR), dimension(*) :: str                  !InTf!
-//     end subroutine AnalyzeErrors                              !InTf!
+//     end subroutine CompareFields                              !InTf!
 //   end interface                                               !InTf!
 // quick and dirty error analysis
-void AnalyzeErrors(float *fa, float *fb, int np, float small, char *str){  // will have to add a few options
+void CompareFields(float *fa, float *fb, int np, float small, char *str){  // will have to add a few options
   int i;
   float maxval, minval, relerr, rdiff, snr;
   double err, errmax, errsum, errsuma, sum2, acc2, acc0;
@@ -122,7 +180,7 @@ void AnalyzeErrors(float *fa, float *fb, int np, float small, char *str){  // wi
     errsuma += err ;                    // sum of absolute errors
     if(err > errmax) {errmax = err ; iabs = i; } ;
     if(fabsf(fa[i]) <= small) continue ;  // ignore absolute values smaller than threshold
-    if(fa[i] < 0.0f || fb[i] < 0.0f ) continue ;  // opposite signs, ignore
+    if(fa[i] * fb[i] < 0.0f ) continue ;  // opposite signs, ignore
     n++;
     rdiff = fabsf(fa[i] - fb[i]) ;
     rdiff = rdiff / fa[i] ;              // fa[i] should never be zero at this point
@@ -131,7 +189,7 @@ void AnalyzeErrors(float *fa, float *fb, int np, float small, char *str){  // wi
     idif64 += idiff;
     if(idiff > ierr) { ierr = idiff ; iacc = i ; }
   }
-//   printf("np, n = %d %d\n",np,n);
+  if(n == 0) n = 1 ;
   avga  = suma/np;
   vara  = suma2/np - avga*avga ; // variance of a
   avgb  = sumb / np;
