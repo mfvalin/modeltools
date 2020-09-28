@@ -16,15 +16,16 @@
 #include <stdlib.h>
 #include <stdint.h>
 //   interface                                                   !InTf!
-//     subroutine AnalyzeField(a, ni, lni, nj, small, stats) bind(C,name='AnalyzeField')   !InTf!
-//       import :: C_INTPTR_T, C_INT, C_FLOAT                    !InTf!
+//     subroutine AnalyzeField(a, ni, lni, nj, small, stats, str) bind(C,name='AnalyzeField')   !InTf!
+//       import :: C_INTPTR_T, C_INT, C_FLOAT, C_CHAR            !InTf!
 //       integer(C_INTPTR_T), intent(IN), value :: a             !InTf!
 //       integer(C_INT), intent(IN), value :: ni, lni, nj        !InTf!
 //       real(C_FLOAT), intent(IN), value :: small               !InTf!
 //       real(C_FLOAT), intent(OUT), dimension(*) :: stats       !InTf!
+//       character(C_CHAR), dimension(*) :: str                  !InTf!
 //     end subroutine AnalyzeField                               !InTf!
 //   end interface                                               !InTf!
-void AnalyzeField(float *fa, int ni, int lni, int nj, float small, float *stats){
+void AnalyzeField(float *fa, int ni, int lni, int nj, float small, float *stats, char *str){
   int i, j, im, ip, jm, jp ;
   double ci, cj, grad, gradbar, t, ddi, ddj ; // for gradient computation
   double sum, sum2;
@@ -68,9 +69,10 @@ void AnalyzeField(float *fa, int ni, int lni, int nj, float small, float *stats)
   stats[i++] = sum / (ni*nj) ;   // average
   stats[i++] = sum2 ;            // sum of squares
   stats[i++] = grad ;            // largest gradient
-  stats[i++] = gradbar/(ni*nj) ; // average gradient
-  printf("[%7d pts] min/max/rng/avg = %9.3g %9.3g %9.3g %9.3g, max/avg gradients a = %9.3g %9.3g\n",
-         ni*nj, fmin, fmax, fmax-fmin, sum/(ni*nj), grad, gradbar/(ni*nj));
+  gradbar /= (ni*nj) ;
+  stats[i++] = gradbar ;         // average gradient
+  printf("[%4d %4d %6s] min/max/avg/rng = %9.3g %9.3g %9.3g %9.3g, max/avg gradients = %9.3g %9.3g [%6.3f %6.3f]\n",
+         ni, nj, str, fmin, fmax, sum/(ni*nj), fmax-fmin, grad, gradbar, grad/(fmax-fmin), gradbar/(fmax-fmin)    );
 }
 
 //   interface                                                   !InTf!
@@ -159,9 +161,9 @@ void CompareFields(float *fa, float *fb, int np, float small, char *str){  // wi
   ierr   = 0;        // largest bit inaccuracy
   idif64 = 0;        // sum of bit inaccuracies
   relerr = 0.0f;     // largest relative error
-  errmax = 0.0f;     // largest absolute error
-  errsum = 0.0f;     // sum of errors (for BIAS)
-  errsuma = 0.0f;    // sum of absolute errors
+  errmax = 0.0;     // largest absolute error
+  errsum = 0.0;     // sum of errors (for BIAS)
+  errsuma = 0.0;    // sum of absolute errors
   maxval = fa[0];    // highest signed value in array fa
   minval = fa[0];    // lowest signed value in array fa
   n      = 0;
@@ -173,7 +175,9 @@ void CompareFields(float *fa, float *fb, int np, float small, char *str){  // wi
     sumab += ( fb[i] * fa[i] ) ;
     maxval = (fa[i] > maxval ) ? fa[i] : maxval ;
     minval = (fa[i] < minval ) ? fa[i] : minval ;
-    err = fb[i] - fa[i] ;               // signed error
+//     err = 1.0*fb[i] - 1.0*fa[i] ;               // signed error
+    err = fb[i] ;
+    err -= fa[i] ;
     sum2 = sum2 + err * err ;           // sum of squared error (to compute RMS)
     errsum += err ;                     // sum of signed errors (to compute BIAS)
     err = fabs(err) ;                   // absolute error
@@ -189,7 +193,10 @@ void CompareFields(float *fa, float *fb, int np, float small, char *str){  // wi
     idif64 += idiff;
     if(idiff > ierr) { ierr = idiff ; iacc = i ; }
   }
-  if(n == 0) n = 1 ;
+  if(n == 0) {
+//     printf(">>%g>>>",small);
+    n = 1 ;
+  }
   avga  = suma/np;
   vara  = suma2/np - avga*avga ; // variance of a
   avgb  = sumb / np;
@@ -200,16 +207,19 @@ void CompareFields(float *fa, float *fb, int np, float small, char *str){  // wi
   idif64 = idif64/n;                                  // average ULP difference
   acc2 = log2(1.0+idif64);                     // accuracy (in agreed upon bits)
   if(acc2 < 0) acc2 = 0;
+  if(acc2 > 24) acc2 = 24;
   acc0 = log2(1.0+ierr);                       // worst accuracy
   if(acc0 < 0) acc0 = 0;
+  if(acc0 > 24) acc0 = 24;
   sum2 = sum2 / np;                                    // average quadratic error
   snr  = .25 * (maxval - minval) * (maxval - minval);
   snr  = 10.0 * log10(snr / sum2);                    // Peak Signal / Noise Ratio
+  if(snr < 0.0) snr = 0.0 ;
 //   if(relerr < .000001f) relerr = .000001f;
   if(relerr == 0.0) relerr = 1.0E-10;
-  printf("%s[%6.4f] ",str,small);
-  printf("max/avg/bias/rms/rel err = (%8.6f, %8.6f, %8.6f, %8.6f, 1/%8.2g), range = %10.6f",errmax, errsuma/n, errsum/n, sqrt(sum2),1.0/relerr, maxval-minval);
-  printf(", worst/avg accuracy = (%6.2f,%6.2f) bits, PSNR = %5.0f",24-acc0, 24-acc2, snr);  // probably not relevant for FCST verif
+  printf("%s[%6.4f %6d] ",str,small,n);
+  printf("max/avg/bias/rms/rel err (%8.6f, %8.6f, %8.6f, %8.6f, 1/%8.2g), range = %10.6f",errmax, errsuma/n, errsum/n, sqrt(sum2),1.0/relerr, maxval-minval);
+  printf(", worst/avg accuracy (%6.2f,%6.2f)b, PSNR = %5.0f",24-acc0, 24-acc2, snr);  // probably not relevant for FCST verif
 //   printf(", DISSIM = %12.6g, Pearson = %12.6g", 1.0 - ssim,1.0-rab);   // not very useful for packing error analysis, maybe for FCST verif ?
   printf(" [%.0f]\n",(maxval-minval)/errmax);
   accuracy = 0;

@@ -62,10 +62,10 @@ zfp_compress_3d.o: zfp_compress_3d.c
 	${CC} -I. -O2 -I${ZFP_HOME}/include -c $<
 
 test_zfp.Abs: $(LIBTOOLS) $(F90_INCLUDES) test_zfp.F90
-	s.f90 test_zfp.F90 -I$(INCDIR) -L$(LIBDIR) -L${ZFP_HOME}/lib -ltools -lrmn -lzfp -lm -o $@
+	s.f90 test_zfp.F90 -I$(INCDIR) -L$(LIBDIR) -L${ZFP_HOME}/lib -ltools -lrmn -lzfp -lfse -lm -o $@
 
 clean:
-	rm -f *.o *.mod *.Abs a.out *.inc.*
+	rm -f *.o *.mod *.Abs a.out *.inc.* diag_file
 
 veryclean: clean
 	ar d $(LIBTOOLS) $(OBJECTS)
