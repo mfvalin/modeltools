@@ -1,6 +1,25 @@
-#define VERSION '1.0_rc22 2018/07/17'
+!/* 
+! * Copyright (C) 2017-2020  UQAM centre ESCER
+! *
+! * This software is free software; you can redistribute it and/or
+! * modify it under the terms of the GNU Lesser General Public
+! * License as published by the Free Software Foundation,
+! * version 2.1 of the License.
+! *
+! * This software is distributed in the hope that it will be useful,
+! * but WITHOUT ANY WARRANTY; without even the implied warranty of
+! * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+! * Lesser General Public License for more details.
+! *
+! * You should have received a copy of the GNU Lesser General Public
+! * License along with this software; if not, write to the
+! * Free Software Foundation, Inc., 59 Temple Place - Suite 330,
+! * Boston, MA 02111-1307, USA.
+! */
+#define VERSION '1.0_rc24 2020/03/31'
 #define AVG_MARKER '/'
 #define VAR_MARKER '%'
+#define STD_MARKER '7'
   module averages_common   ! tables and table management routines
     use iso_c_binding
     implicit none
@@ -19,6 +38,7 @@
       integer :: nsamples, sample                  ! number of samples collected, duration of sample
 !       integer :: npas_min, npas_max                ! lowest and highest time step collected
       integer :: ip1, ip2, ip3, dateo, deet        ! from field's standard file parameters
+      integer :: npas
       integer :: ig1, ig2, ig3, ig4                ! grid
       integer :: level2                            ! second level if 2 level data
       character(len=12) :: etiket                  ! from field's standard file parameters
@@ -52,6 +72,7 @@
     logical, save :: weight_abs = .false.  ! use a specific constant weight
     integer, save :: time_weight = 24      ! weight is in days, set to 1 for weight in hours
     logical, save :: strict = .false.      ! non strict mode by default
+    logical, save :: ensemble = .false.    ! ensemble mode
     logical, save :: strictsample = .false.  ! non strictsample mode by default (sample interval mismatches tolerated)
     logical, save :: select_etiket = .false. ! etiket 1s a significant item if .true.
 
@@ -129,6 +150,7 @@
       ptab(pg)%p(slot)%date_hi = 0
       ptab(pg)%p(slot)%sample = 0
       ptab(pg)%p(slot)%deet = -1
+      ptab(pg)%p(slot)%npas = -1
       ptab(pg)%p(slot)%ip1 = -1
       ptab(pg)%p(slot)%level2 = -1
       ptab(pg)%p(slot)%ip2 = -1
@@ -237,7 +259,8 @@
       ix = -1
       level2 = -1  ! a priori, one level data
       call convip_plus( ip1, r1, it1, -1, string, .false. )    ! convert ip1
-      if(ip3 == 0 .and. ip2 < 1000000) then    ! special "old style coding" for time in hours
+!     if(ip3 == 0 .and. ip2 < 1000000) then    ! special "old style coding" for time in hours
+      if(ip2 < 1000000) then    ! special "old style coding" for time in hours
         it2 = 10
         r2 = ip2
       else
@@ -245,9 +268,13 @@
       endif
       call convip_plus( ip3, r3, it3, -1, string, .false. )    ! convert ip3
 
-
-      if( (it1 == it3) .and. (ip1 > 0) .and. (ip3 > 0) ) level2 = ip3   ! 2 level data
-      if( (it1 == it2) .and. (ip1 > 0) .and. (ip2 > 0) ) level2 = ip2   ! 2 level data
+!  2 level data DISALLOWED
+!       if( (it1 == it3) .and. (ip1 > 0) .and. (ip3 > 0) .and. (.not. weight_ip3) ) then
+!         level2 = ip3   ! 2 level data
+!       endif
+!       if( (it1 == it2) .and. (ip1 > 0) .and. (ip2 > 0) ) then
+!         level2 = ip2   ! 2 level data
+!       endif
 
       dnp = npas
       dnp = dnp * deet
@@ -259,7 +286,7 @@
 !         print *,'DEBUG: sample, r2, r3 =',sample,r2,r3,ip1,ip2,ip3
         if(verbose > 4) print *,'DEBUG: sample =',sample
       endif
-      if(is_special) then   !  special names
+      if(is_special .or. ensemble) then   !  special names or ensemble mode
         date_lo = 0
         date_hi = 0
       else                  ! regular data / averages
@@ -294,7 +321,7 @@
         if((p%ig1 .ne. ig1) .or. (p%ig2 .ne. ig2) .or. (p%ig3 .ne. ig3) .or. (p%ig4 .ne. ig4) ) cycle  ! not same grid
         if(trim(p%etiket) .ne. trim(etiket) .and. select_etiket) cycle            ! not same experiment
         if((p%dateo .ne. dateo) .and. check_dateo) cycle      ! dateo verification is optional
-        if(is_special)then
+        if(is_special .or. ensemble)then                      ! ensemble mode : records must have same ip1/ip2/ip3
           if(p%ip2 .ne. ip2 .or. p%ip3 .ne. ip3) cycle        ! special records must have same ip1/ip2/ip3
         endif
         if(p%typvar(2:2) .eq. AVG_MARKER) p%typvar = trim(typvar)  ! force typvar into p%typvar if average
@@ -326,6 +353,7 @@
         p%date_hi = date_hi
         p%sample = sample
         p%deet = deet
+        p%npas = npas
         p%ip1 = ip1
         p%level2 = level2
         p%ip2 = ip2
@@ -350,7 +378,7 @@
       do j = 1 , nj
       do i = 1 , ni
          p%stats(i,j,1) = p%stats(i,j,1) + z(i,j)*weight               ! update sum
-         if(variance) p%stats(i,j,2) = p%stats(i,j,2) + z(i,j)*z(i,j)*weight  ! update sum of squares if necessary
+         if(variance) p%stats(i,j,2) = p%stats(i,j,2) + DBLE(z(i,j))*DBLE(z(i,j))*weight  ! update sum of squares if necessary
       enddo
       enddo
     end function process_entry
@@ -361,7 +389,7 @@
     character(len=*) :: name
     print *,'USAGE: '//trim(name)//' [-h|--help] [-version] [-newtags] [-strict] [-strictsample] [-novar] [-stddev] [-tag nomvar] \'
     print *,'           [-npas0] [-dateo] [-mean mean_out] [-var var_out] [-weight ip3|time|hours|days|nnn] \'
-    print *,'           [-etiket] [-status path/to/status/file] [-test] [-q[q]] [-v[v][v]] [--|-f] \'
+    print *,'           [-ens] [-etiket] [-status path/to/status/file] [-test] [-q[q]] [-v[v][v]] [--|-f] \'
     print *,'           [mean_out] [var_out] in_1 ... in_n'
     print *,'        var_out(variances file)  MUST NOT be present if -novar or -var is used'
     print *,'        mean_out(means file) MUST NOT be present if -mean is used'
@@ -372,6 +400,7 @@
     print *,'        etiket is ignored except if -etiket used on the command line'
     print *,'        -strict: abort upon unrecognized option, existing mean/variance file, or missing data file'
     print *,'        -strictsample: abort upon inconsistent sample interval or missing sample'
+    print *,'        -ens activates the ensemble mode, averages/stds across files'
     print *,'example :'
     print *,"  "//trim(name)//" -status stat.dot -vv -mean mean.fst -var var.fst -tag HY -tag '>>' my_dir/dm*"
     return
@@ -419,11 +448,12 @@
     arg_count = command_argument_count()
     call get_command_argument(0,progname,arg_len,status)  ! get program name
 
-    nspecials = 4
+    nspecials = 5
     specials(1) = ">>  "
     specials(2) = "^^  "
     specials(3) = "!!  "
     specials(4) = "HY  "
+    specials(5) = "^>  "
 
     if(arg_count < 1) then             ! no arguments, OUCH !!
       call print_usage(progname)
@@ -455,6 +485,9 @@
 
       else if( option == '-etiket' ) then
         select_etiket = .true.
+
+      else if( option == '-ens' ) then ! ensemble mode flag (normally false)
+        ensemble = .true.
 
       else if( option == '-weight' ) then     ! -mean file_for_averages
         if(curarg > arg_count) then
@@ -569,7 +602,8 @@
 
       else
         print *,"ERROR: unrecognized option = '"//trim(option)//"'"
-        call f_exit(1)    ! abort if strict mode
+        if(strict) call f_exit(1)    ! abort if strict mode
+        cycle
       endif
     enddo
 
@@ -577,7 +611,11 @@
 
     if(strict)  verbose = max(2 , verbose)          ! ERROR + WARNING messages at least
 
-    allocate(ptab(0:MAX_PAGES-1))   ! allocate and initialize page table
+    allocate(ptab(0:MAX_PAGES-1),STAT=status)   ! allocate and initialize page table
+    if(status .ne. 0) then
+      print *,'FATAL: cannot allocate page table'
+      call f_exit(1)
+    endif
     do i = 0 , MAX_PAGES-1          ! nullify all page pointers
       nullify(ptab(i)%p)
     enddo
@@ -626,9 +664,8 @@
         status = process_file(trim(filename))
         if(status<0) then
           print *,"ERROR: problem opening or processing file '"//trim(filename)//"'"
-          call f_exit(1)
         endif
-!         if(status<0 .and. strict) call f_exit(1)   ! strict mode, error is fatal
+        if(status<0 .and. strict) call f_exit(1)   ! strict mode, error is fatal
       endif
     enddo
 
@@ -738,10 +775,12 @@
       if(status == -1) return                    ! ERROR
       if(nbits == 64) call fst_data_length(8)    ! if 64 bit data
       if(verbose > 4) print *,'DEBUG: special record - dateo', dateo
-      call fstecr(z,z,-nbits,fstdmean,dateo,deet,npas,ni,nj,nk,ip1,ip2,ip3,typvar,nomvar,etiket,grtyp,ig1,ig2,ig3,ig4,datyp,.false.)
+      call fstecr(z,z,-nbits,fstdmean,dateo,deet,npas,ni,nj,nk,ip1,ip2,ip3, &
+                  typvar,nomvar,etiket,grtyp,ig1,ig2,ig3,ig4,datyp,.false.)
       if(variance) then  ! if there is a variance file, write it there too
         if(nbits == 64) call fst_data_length(8)    ! 64 bit data
-        call fstecr(z,z,-nbits,fstdvar,dateo,deet,npas,ni,nj,nk,ip1,ip2,ip3,typvar,nomvar,etiket,grtyp,ig1,ig2,ig3,ig4,datyp,.false.)
+        call fstecr(z,z,-nbits,fstdvar,dateo,deet,npas,ni,nj,nk,ip1,ip2,ip3, &
+                    typvar,nomvar,etiket,grtyp,ig1,ig2,ig3,ig4,datyp,.false.)
       endif
       return
     endif   ! end of if special record
@@ -784,7 +823,7 @@
     endif
 
     if(lni .ne. ni .or. lnj .ne. nj .or. lnk .ne. nk) then  ! this should NEVER happen
-      if(verbose > 1) print *,'ERROR:skipping record - dimension mismatch (should never happen)'
+      if(verbose > 1) print *,'WARNING:skipping record - dimension mismatch (should never happen)'
       status = -1
       return
     endif
@@ -865,7 +904,11 @@
         print 100,"DEBUG: ",p%nsamples,p%nomvar,p%typvar,p%etiket,p%grtyp,p%ip1,associated(p%stats),p%ni,p%nj
 100     format(A,I5,A5,A3,A13,A2,I10,L2,2I5,2I8)
       endif
-      allocate(z(p%ni,p%nj))   ! allocate space for averages
+      allocate(z(p%ni,p%nj),STAT=status)   ! allocate space for averages
+      if(status .ne. 0) then
+        ! add error message
+        return
+      endif
       ov_sample = 1.0
       ov_sample = ov_sample / p%nsamples
       do jj = 1 , p%nj
@@ -895,6 +938,7 @@
       call datmgp2(date_array)
       ip2 = ip2 + date_array(5)             ! zulu hour at start of period
       ip2 = ip2 + 24 * (date_array(3)-1)    ! force back to first day of month
+      if(ensemble) ip2 = p%ip2
       ip3 = p%nsamples                      ! number of samples
       ip1 = p%ip1
 !       if(verbose > 2) print *,'INFO: ',p%nsamples,' '//p%nomvar//' "samples" every',p%sample/3600.0,' hours'
@@ -905,26 +949,32 @@
         else
           deet = (p%date_hi - p%date_lo) / (p%nsamples - 1)
         endif
-	npas = nint(hours*3600/deet)
+        npas = nint(hours*3600/deet)
         r4 = ip3       ! force ip3 to new style coding
         call convip_plus( ip3, r4, 15, 2, string, .false. ) ! ip kind 15,  number of samples
         if( p%level2 > 0 ) then   ! 2 level data, put level2 in ip2 for output instead of hours since beginning of integration
           ip2 = p%level2
         else
-	  call difdatr(new_dateo,p%dateo,hours)   ! ip2 = hours from start of model run
-	  r4 = hours       ! force ip2 to new style coding
-	  call convip_plus( ip2, r4, 10, 2, string, .false. ) ! ip kind 10,  hours
+          call difdatr(new_dateo,p%dateo,hours)   ! ip2 = hours from start of model run
+          r4 = hours       ! force ip2 to new style coding
+          call convip_plus( ip2, r4, 10, 2, string, .false. ) ! ip kind 10,  hours
         endif
       endif
       p%typvar(2:2) = AVG_MARKER
       wtype = 5   ! E32
       if(p%ni > 16 .and. p%nj > 16) wtype = wtype + 128   ! activate E32 compression for averages
+      if(ensemble)then
+        new_dateo = p%dateo
+        deet      = p%deet
+        npas      = p%npas
+      endif
       call fstecr(z,z,-32,fstdmean, &
                   new_dateo,deet,npas,p%ni,p%nj,1,ip1,ip2,ip3,p%typvar,p%nomvar,p%etiket, &
                   p%grtyp,p%ig1,p%ig2,p%ig3,p%ig4,wtype,.false.)
       if(variance) then            ! use IEEE 64 bit format for variances
         call fst_data_length(8)    ! 64 bit format
         p%typvar(2:2) = VAR_MARKER
+        if(std_dev) p%typvar(2:2) = STD_MARKER
         call fstecr(p%stats(1,1,2),p%stats(1,1,2),-64,fstdvar, &
                     new_dateo,deet,npas,p%ni,p%nj,1,ip1,ip2,ip3,p%typvar,p%nomvar,p%etiket, &
                     p%grtyp,p%ig1,p%ig2,p%ig3,p%ig4,5,.false.)

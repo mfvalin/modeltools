@@ -225,6 +225,9 @@ static void get_cpu_capabilities()
   int j;
   float freq;
 
+  X86_cpuid( 0, 0, regs )   ; printf("EAX(00H) : %8.8x\n", regs[0]);
+  X86_cpuid( 0x16, 0, regs ); printf("EAX(16H) : %d\n", regs[0]&0xFFFF);
+  
   X86_cpuid( 1, 0, regs );  /* get CPU capabilities EAX=1, ECX=0 */
   eax1 = regs[0];
   if((1 <<  0) & regs[2]) ProcessorCapabilities |= FLAG_SSE3 ;  /* SSE3   ECX bit  0 */
