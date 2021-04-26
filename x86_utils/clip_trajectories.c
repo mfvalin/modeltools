@@ -92,110 +92,6 @@ void ClipTrajectories(float *alpha, float *beta, int *l1, int *l2, int ni, int *
   *indx2 = ix2 ;
 }
 
-
-#if defined(__AVX2__) && defined(__x86_64__) && defined(USE_SIMD)
-#include <immintrin.h>
-#define CMP_LT_OS 17 
-#define CMP_GT_OS 14
-
-static int mask[16] = { -1, -1, -1, -1, -1, -1, -1, -1, 0, 0, 0, 0, 0, 0, 0, 0 } ;
-
-int ClipTrajectoriesAVX2(float *alpha, float *beta, int *l1, int *l2, int ni, int *indx1, int *indx2){
-  int i, k, ix1, ix2, count, active ;
-  __m256 msk ;
-  __m256 a, b, c1, c2 ;
-  __m256 cmini, cmaxi, cminj, cmaxj ;
-  __m256 gmini, gmaxi, gminj, gmaxj ;
-  int xc1[8], xc2[8] ;
-  int ni7 = ni & 7 ;
-
-  ix1 = 0 ;
-  ix2 = 0 ;
-  count = 0 ;
-  cmini = _mm256_broadcast_ss(&c_mini) ;
-  cmaxi = _mm256_broadcast_ss(&c_maxi) ;
-  cminj = _mm256_broadcast_ss(&c_minj) ;
-  cmaxj = _mm256_broadcast_ss(&c_maxj) ;
-  gmini = _mm256_broadcast_ss(&g_mini) ;
-  gmaxi = _mm256_broadcast_ss(&g_maxi) ;
-  gminj = _mm256_broadcast_ss(&g_minj) ;
-  gmaxj = _mm256_broadcast_ss(&g_maxj) ;
-
-  // take care of mod(ni,8) first points if necessary
-  if(ni7 > 0){
-    msk   = _mm256_loadu_ps((float *) &mask[8 - ni7]) ;      // first ni7 points only
-    a     = _mm256_loadu_ps(alpha) ;         // fetch alpah
-    a     = _mm256_and_ps(a,msk) ;           // ignore masked points (force to 0)
-    b     = _mm256_loadu_ps(beta) ;          // fetch beta
-    b     = _mm256_and_ps(b, msk) ;          // ignore masked points (force to 0)
-    // check against tile bounds
-    c1    =                  _mm256_cmp_ps(a, cmini, CMP_LT_OS)  ;  // a < c_mini
-    c1    = _mm256_or_ps(c1, _mm256_cmp_ps(b, cminj, CMP_LT_OS)) ;  // b < c_minj
-    c1    = _mm256_or_ps(c1, _mm256_cmp_ps(a, cmaxi, CMP_GT_OS)) ;  // a > c_maxi
-    c1    = _mm256_or_ps(c1, _mm256_cmp_ps(b, cmaxj, CMP_GT_OS)) ;  // b > c_maxj
-    c1    = _mm256_and_ps(c1, msk) ;   // ignore masked points (force result to 0, no clipping)
-    // check against domain bounds
-    c2    =                  _mm256_cmp_ps(a, gmini, CMP_LT_OS)  ;  // a < g_mini
-    c2    = _mm256_or_ps(c2, _mm256_cmp_ps(b, gminj, CMP_LT_OS)) ;  // b < g_minj
-    c2    = _mm256_or_ps(c2, _mm256_cmp_ps(a, gmaxi, CMP_GT_OS)) ;  // a > g_maxi
-    c2    = _mm256_or_ps(c2, _mm256_cmp_ps(b, gmaxj, CMP_GT_OS)) ;  // b > g_maxj
-    c2    = _mm256_and_ps(c2, msk) ;   // ignore masked points (force result to 0, no clipping)
-    active = _mm256_movemask_ps (_mm256_or_ps(c2,c1) ) ;
-    // if outside both cell and domain bounds, mark as outside domain
-    c1    = _mm256_andnot_ps (c2, c1) ;   // c1 = ~c2 & c1  set to zero if c2 is one
-
-    if( active ){  // at least one condition is true
-      _mm256_storeu_ps ((float *) xc1, c1);
-      _mm256_storeu_ps ((float *) xc2, c2);
-      for(k=0 ; k<8 ; k++){
-        l1[ix1] = k ;
-        l2[ix2] = k ;
-        ix1 = ix1 - xc1[k] ;
-        ix2 = ix2 - xc2[k] ;
-      }
-    }
-    alpha += ni7 ;  // bump source pointers by effective loop count
-    beta  += ni7 ;
-  }
-
-  for(i=ni7 ; i+7< ni ; i+=8){
-
-    a     = _mm256_loadu_ps(alpha) ;    // fetch alpha
-    b     = _mm256_loadu_ps(beta) ;     // fetch beta
-    // check against tile bounds
-    c1    =                  _mm256_cmp_ps(a, cmini, CMP_LT_OS)  ;  // a < c_mini
-    c1    = _mm256_or_ps(c1, _mm256_cmp_ps(b, cminj, CMP_LT_OS)) ;  // b  < c_minj
-    c1    = _mm256_or_ps(c1, _mm256_cmp_ps(a, cmaxi, CMP_GT_OS)) ;  // a > c_maxi
-    c1    = _mm256_or_ps(c1, _mm256_cmp_ps(b, cmaxj, CMP_GT_OS)) ;  // b  > c_maxj
-    // check against domain bounds
-    c2    =                  _mm256_cmp_ps(a, gmini, CMP_LT_OS)  ;  // a < g_mini
-    c2    = _mm256_or_ps(c2, _mm256_cmp_ps(b, gminj, CMP_LT_OS)) ;  // b  < g_minj
-    c2    = _mm256_or_ps(c2, _mm256_cmp_ps(a, gmaxi, CMP_GT_OS)) ;  // a > g_maxi
-    c2    = _mm256_or_ps(c2, _mm256_cmp_ps(b, gmaxj, CMP_GT_OS)) ;  // b  > g_maxj
-    active = _mm256_movemask_ps (_mm256_or_ps(c2,c1) ) ;
-    // if outside both cell and domain bounds, mark as outside domain
-    c1    = _mm256_andnot_ps (c2, c1) ;   // c1 = ~c2 & c1  set to zero if c2 is one
-
-    if( active ){  // at least one condition is true
-      _mm256_storeu_ps ((float *) xc1, c1);
-      _mm256_storeu_ps ((float *) xc2, c2);
-      count++ ;
-      for(k=0 ; k<8 ; k++){      // process lists
-        l1[ix1] = i+k ;          // cell clip list
-        l2[ix2] = i+k ;          // global clip list
-        ix1 = ix1 - xc1[k] ;
-        ix2 = ix2 - xc2[k] ;
-      }
-    }
-    alpha += 8 ;  // bump source pointers by loop count
-    beta  += 8 ;
-  }
-  *indx1 = ix1 ;
-  *indx2 = ix2 ;
-  return count ;
-}
-#endif
-
 #if defined(SELF_TEST)
 
 #include <stdio.h>
@@ -233,11 +129,7 @@ int main(int argc, char **argv){
   t0 = LOCAL_time() ;
   indx1 = 0 ;
   indx2 = 0 ;
-#if defined(USE_SIMD)
-  ii = ClipTrajectoriesAVX2(alpha, beta, l1, l2, NPTS, &indx1, &indx2) ;
-#else
   ClipTrajectories(alpha, beta, l1, l2, NPTS, &indx1, &indx2) ;
-#endif
   t1 = LOCAL_time() ;
   printf("indx1 = %d, indx2 = %d, count = %d, t = %8.3f\n",indx1, indx2, ii, (t1 - t0)/NPTS * 1.0E9);
 //   for(i=0 ; i<10 && i < indx1 ; i++) printf(" %8d",l1[i]) ; printf(" indx1\n") ;
