@@ -107,6 +107,11 @@ test_arena.Abs: test_memory_arena.F90 memory_arena.c memory_arena.h memory_arena
 	s.cc -c -O 2 memory_arena.c circular_buffer.c 
 	s.f90 -mpi test_memory_arena.F90 memory_arena.o circular_buffer.o -o test_arena.Abs
 
+test_memory_arena.Abs: test_memory_arena.F90
+	mpicc -c -O2 -I. circular_buffer.c memory_arena.c
+	mpif90 $< circular_buffer.o memory_arena.o -o $@
+	rm -f circular_buffer.o memory_arena.o
+
 clean:
 	rm -f intrp_bicub_yx0 intrp_bicub_yx intrp_bicub_yx.o intrp_bicub_yx.s a.out fp_x87_xmm_control.o intrp_bicub_yx.inc
 	rm -f test_search_list search_list.o test_bicub test_arena.Abs memory_arena.o xxhash_testc.Abs xxhash_testf.Abs xxhash.o
@@ -121,3 +126,6 @@ xxhash_test: test_xxhash.c testf_xxhash.F90 xxhash.c xxhash.inc xxhash.h
 	$(CCOMPILER) -I. ${EXTRA_C} xxhash.c -O3 -c -DTIMING
 	$(CCOMPILER) test_xxhash.c xxhash.o -o xxhash_testc.Abs
 	$(FCOMPILER) ${EXTRA_FTN} testf_xxhash.F90 xxhash.o -o xxhash_testf.Abs
+
+veryclean:
+	rm -f *.Abs *.o *.mod

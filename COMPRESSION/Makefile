@@ -2,6 +2,8 @@
 # environment variable ZFP_HOME is expected to point to the install directory of the zfp compression package
 
 CC = cc
+FC = gfortran
+FCFLAGS = -ffree-line-length-0 -fcray-pointer -fconvert=big-endian -frecord-marker=4 -fno-second-underscore
 
 LIBDIR = ../lib
 INCDIR = ../include
@@ -14,7 +16,7 @@ F90_PART_INCLUDES = model_tools.inc.000 \
 
 LIBTOOLS = $(LIBDIR)/libtools.a
 
-OBJECTS = zfp_compress_3d.o analyze_errors.o cdf97.o cdf53.o
+OBJECTS = zfp_compress_3d.o analyze_errors.o cdf97.o cdf53.o dwthaar.o
 
 all: inc test_zfp.Abs
 
@@ -49,6 +51,9 @@ model_tools.inc.003: cdf53.c
 $(LIBTOOLS): $(OBJECTS)
 	ar rcv $(LIBTOOLS) $(OBJECTS)
 
+dwthaar.o: dwthaar.c
+	${CC} -I. -O2 -c $<
+
 cdf53.o: cdf53.c
 	${CC} -I. -O2 -c $<
 
@@ -62,7 +67,7 @@ zfp_compress_3d.o: zfp_compress_3d.c
 	${CC} -I. -O2 -I${ZFP_HOME}/include -c $<
 
 test_zfp.Abs: $(LIBTOOLS) $(F90_INCLUDES) test_zfp.F90
-	s.f90 test_zfp.F90 -I$(INCDIR) -L$(LIBDIR) -L${ZFP_HOME}/lib -ltools -lrmn -lzfp -lfse -lm -o $@
+	${FC} ${FCFLAGS} -I. test_zfp.F90 -I$(INCDIR) -L$(LIBDIR) -L${ZFP_HOME}/lib -ltools -lrmn -lzfp -lfse -lm -o $@
 
 clean:
 	rm -f *.o *.mod *.Abs a.out *.inc.* diag_file

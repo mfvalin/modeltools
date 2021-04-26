@@ -26,7 +26,8 @@
 //     end subroutine AnalyzeField                               !InTf!
 //   end interface                                               !InTf!
 void AnalyzeField(float *fa, int ni, int lni, int nj, float small, float *stats, char *str){
-  int i, j, im, ip, jm, jp ;
+  int i, j, jm, jp ;
+//   int im, ip ;
   double ci, cj, grad, gradbar, t, ddi, ddj ; // for gradient computation
   double sum, sum2;
   float fmin, fmax ;
@@ -45,8 +46,8 @@ void AnalyzeField(float *fa, int ni, int lni, int nj, float small, float *stats,
     jm = (j > 0) ? -lni : 0 ;                // row below current row (or row itself if row 0)
     jp = (j < nj-1) ? lni : 0 ;              // row above current row (or row itself if top row)
     cj = ((jp - jm) > 1 ) ? 0.5f : 1.0f ;    // scaling factor (.5 if centered difference, 1.0 otherwise)
-    im = (i > 0) ? i-1 : i ;
-    ip = (i < ni-1) ? i+1 : i ;
+//     im = (i > 0) ? i-1 : i ;
+//     ip = (i < ni-1) ? i+1 : i ;
     ddi = fa[1] - fa[0] ; ddj = cj * (fa[0+jp] - fa[0+jm]) ;  // first point, i forward difference
     t = sqrt(ddi*ddi + ddj*ddj) ; grad = (t > grad) ? t : grad ; gradbar += t;
     sum += fa[0] ; sum2 += (fa[0] * fa[0]) ;
