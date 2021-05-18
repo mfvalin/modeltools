@@ -26,6 +26,14 @@ static float g_maxi = 0.0f ;
 static float g_minj = 0.0f ;
 static float g_maxj = 0.0f ;
 
+// interface
+//   subroutine SetClippingLimits(cmini, cmaxi, cminj, cmaxj , gmini, gmaxi, gminj, gmaxj) bind(C,name='SetClippingLimits')
+//     import :: C_FLOAT
+//     implicit none
+//     real(C_FLOAT), intent(IN), value :: cmini, cmaxi, cminj, cmaxj  ! cell (tile) limits
+//     real(C_FLOAT), intent(IN), value :: gmini, gmaxi, gminj, gmaxj  ! grid limits
+//   end subroutine SetClippingLimits
+// end interface
 void SetClippingLimits(float cmini, float cmaxi, float cminj, float cmaxj , float gmini, float gmaxi, float gminj, float gmaxj){
   c_mini = cmini ;
   c_maxi = cmaxi ;
@@ -38,7 +46,19 @@ void SetClippingLimits(float cmini, float cmaxi, float cminj, float cmaxj , floa
 }
 
 #define VL 16
-
+// interface
+//   subroutine ClipTrajectories(alpha, beta, l1, l2, ni, indx1, indx2) bind(C,name='ClipTrajectories')
+//     import :: C_INT, C_FLOAT
+//     implicit none
+//     real(C_FLOAT), dimension(ni), intent(IN) :: alpha   ! tartgets along x (i)
+//     real(C_FLOAT), dimension(ni), intent(IN) :: beta    ! tartgets along y (j)
+//     integer(C_INT), dimension(*), intent(OUT) :: l1     ! clipping list for tile (cell)
+//     integer(C_INT), dimension(*), intent(OUT) :: l2     ! clipping list for grid
+//     integer(C_INT), intent(IN), value :: ni             ! dimension of alpha and beta
+//     integer(C_INT), intent(OUT) :: indx1                ! number of points clipped in l1 list
+//     integer(C_INT), intent(OUT) :: indx2                ! number of points clipped in l2 list
+//   end subroutine ClipTrajectories
+// end interface
 void ClipTrajectories(float *alpha, float *beta, int *l1, int *l2, int ni, int *indx1, int *indx2){
   int i, k, ix1, ix2 ;
   int clip1[VL], clip2[VL] ;
