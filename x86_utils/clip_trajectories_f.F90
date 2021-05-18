@@ -1,20 +1,23 @@
 
 module clip_trajectories_data
+  use ISO_C_BINDING
+  implicit none
   save
-  real(kind=4) :: c_mini = 0.0
-  real(kind=4) :: c_maxi = 0.0
-  real(kind=4) :: c_minj = 0.0
-  real(kind=4) :: c_maxj = 0.0
-  real(kind=4) :: g_mini = 0.0
-  real(kind=4) :: g_maxi = 0.0
-  real(kind=4) :: g_minj = 0.0
-  real(kind=4) :: g_maxj = 0.0
+  real(C_FLOAT) :: c_mini = 0.0
+  real(C_FLOAT) :: c_maxi = 0.0
+  real(C_FLOAT) :: c_minj = 0.0
+  real(C_FLOAT) :: c_maxj = 0.0
+  real(C_FLOAT) :: g_mini = 0.0
+  real(C_FLOAT) :: g_maxi = 0.0
+  real(C_FLOAT) :: g_minj = 0.0
+  real(C_FLOAT) :: g_maxj = 0.0
 end module
 
-subroutine Set_Clipping_Limits(cmini, cmaxi, cminj, cmaxj , gmini, gmaxi, gminj, gmaxj)
+subroutine SetClippingLimits(cmini, cmaxi, cminj, cmaxj , gmini, gmaxi, gminj, gmaxj) bind(C,name='SetClippingLimits')
   use clip_trajectories_data
   implicit none
-  real(kind=4), intent(IN) :: cmini, cmaxi, cminj, cmaxj , gmini, gmaxi, gminj, gmaxj
+  real(C_FLOAT), intent(IN), value :: cmini, cmaxi, cminj, cmaxj
+  real(C_FLOAT), intent(IN), value :: gmini, gmaxi, gminj, gmaxj
 
   c_mini = cmini
   c_maxi = cmaxi
@@ -27,15 +30,15 @@ subroutine Set_Clipping_Limits(cmini, cmaxi, cminj, cmaxj , gmini, gmaxi, gminj,
 end subroutine
 
 #define VL 16
-subroutine clip_trajectories_f(alpha, beta, l1, l2, ni, indx1, indx2)
+subroutine ClipTrajectories(alpha, beta, l1, l2, ni, indx1, indx2) bind(C,name='ClipTrajectories')
   use clip_trajectories_data
   implicit none
-  integer, intent(IN)                     :: ni
-  real(kind=4), dimension(ni), intent(IN) :: alpha, beta
-  integer, dimension(*), intent(OUT)      :: l1, l2
-  integer, intent(INOUT)                  :: indx1       ! number of points in list l1 (output)
-                                                         ! last valid entry in l1 or l2 (input) (0 = none)
-  integer, intent(INOUT)                  :: indx2       ! number of points in list l2 (output)
+  integer, intent(IN), value               :: ni
+  real(C_FLOAT), dimension(ni), intent(IN) :: alpha, beta
+  integer, dimension(*), intent(OUT)       :: l1, l2
+  integer, intent(INOUT)                   :: indx1       ! number of points in list l1 (output)
+                                                          ! last valid entry in l1 or l2 (input) (0 = none)
+  integer, intent(INOUT)                   :: indx2       ! number of points in list l2 (output)
 
   logical, dimension(0:VL-1) :: clip1, clip2
   integer :: i, k ,vl7, ix1, ix2
@@ -102,15 +105,37 @@ function Wall_Time() result(t)
 end function Wall_Time
 
 program test_clip
+  use ISO_C_BINDING
   implicit none
-  real(kind=4), dimension(NPTS) :: alpha, beta
+  interface
+    subroutine SetClippingLimits(cmini, cmaxi, cminj, cmaxj , gmini, gmaxi, gminj, gmaxj) bind(C,name='SetClippingLimits')
+      import :: C_FLOAT
+      implicit none
+      real(C_FLOAT), intent(IN), value :: cmini, cmaxi, cminj, cmaxj  ! cell (tile) limits
+      real(C_FLOAT), intent(IN), value :: gmini, gmaxi, gminj, gmaxj  ! grid limits
+    end subroutine SetClippingLimits
+    subroutine ClipTrajectories(alpha, beta, l1, l2, ni, indx1, indx2) bind(C,name='ClipTrajectories')
+      import :: C_INT, C_FLOAT
+      implicit none
+      real(C_FLOAT), dimension(ni), intent(IN) :: alpha   ! tartgets along x (i)
+      real(C_FLOAT), dimension(ni), intent(IN) :: beta    ! tartgets along y (j)
+      integer(C_INT), dimension(*), intent(OUT) :: l1     ! clipping list for tile (cell)
+      integer(C_INT), dimension(*), intent(OUT) :: l2     ! clipping list for grid
+      integer(C_INT), intent(IN), value :: ni             ! dimension of alpha and beta
+      integer(C_INT), intent(OUT) :: indx1                ! number of points clipped in l1 list
+      integer(C_INT), intent(OUT) :: indx2                ! number of points clipped in l2 list
+    end subroutine ClipTrajectories
+
+
+  end interface
+  real(C_FLOAT), dimension(NPTS) :: alpha, beta
   integer, dimension(NPTS) :: l1, l2
   integer :: i, ii, indx1, indx2
   real(kind=8) :: t0, t1
   real(kind=8), external :: Wall_Time
   integer :: ierr
 
-  call Set_Clipping_Limits(0.06, 0.94, 0.06, 0.94, 0.03, .97, 0.03, .97)
+  call SetClippingLimits(0.06, 0.94, 0.06, 0.94, 0.03, .97, 0.03, .97)
   ii = 1
   do i = 0,NPTS-1
      alpha(ii) = (1.0 * i) / (NPTS - 1)
@@ -121,7 +146,7 @@ program test_clip
   indx1 = 0 ;
   indx2 = 0 ;
   t0 = Wall_Time()
-  call clip_trajectories_f(alpha, beta, l1, l2, NPTS, indx1, indx2)
+  call ClipTrajectories(alpha, beta, l1, l2, NPTS, indx1, indx2)
   t1 = Wall_Time()
   print *, indx1, indx2,(t1 - t0)/NPTS * 1.0E9
   if(indx1 < 10) write(6,'(A,10I8)')'indx1 =',l1(1:indx1)
