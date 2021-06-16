@@ -1,3 +1,19 @@
+//
+// Copyright (C) 2021  Environnement et Changement climatique Canada
+//
+// This is free software; you can redistribute it and/or
+// modify it under the terms of the GNU Lesser General Public
+// License as published by the Free Software Foundation,
+// version 2.1 of the License.
+//
+// This software is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+// Lesser General Public License for more details.
+//
+// Author:
+//     M. Valin,   Recherche en Prevision Numerique, 2021
+//
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
@@ -5,22 +21,22 @@
 #define MAX_LINE 2048
 
 static int header_written = 0 ;
-static FILE *outfile = NULL ;
-char *filename = NULL ;
+static FILE *outfile      = NULL ;
+static char *filename     = NULL ;
 
 void write_header(char *header_tag){   // write listing header (once)
   char header[256] ;
   size_t nb, one ;
   FILE *out = NULL;
 
-  if(header_written) return ;
-  outfile = stdout ;
+  if(header_written) return ;  // already done, quit
+  outfile = stdout ;           // default to stdout
 
   if(filename != NULL) out = fopen(filename, "w") ;
-  if(out      != NULL) outfile = out ; // cannot open file, will send output to stdout
+  if(out      != NULL) outfile = out ; // successfully opened file, send output to file rather than stdout
 
   header_written = 1 ;
-  if(header_tag[0] == '\0') return ;  // no title
+  if(header_tag[0] == '\0') return ;   // no title
 
   nb = snprintf(header, sizeof(header), "\n================================================== %s ==================================================\n\n", header_tag) ;
   one = 1 ;
@@ -49,8 +65,8 @@ int main(int argc, char **argv){
   char *header_tag = "" ;
 
   if(argc > 1) minlines = atoi(argv[1]) ;   // minimum number of lines to avoid suppression [0]
-  if(argc > 2) line_tag = argv[2] ;         // tag at start of lines [none]
-  if(argc > 3) header_tag = argv[3] ;       // title header
+  if(argc > 2) line_tag = argv[2] ;         // tag at start of lines                        [none]
+  if(argc > 3) header_tag = argv[3] ;       // title header                                 [none]
   if(argc > 4) filename = argv[4] ;         // file to receive output                       [stdout]
 
   maxbuf = (((minlines > 0) ? minlines : 1)+1) * MAX_LINE ;
