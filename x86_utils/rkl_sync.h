@@ -13,7 +13,14 @@
 
 // set of inline functions used to implement locks
 
+#include <stdint.h>
+
 static inline void acquire_idlock(volatile void *lock, int32_t id){
+  while(__sync_val_compare_and_swap((volatile uint32_t *)lock, 0, id) != 0) ;
+}
+
+static inline void acquire_fence_idlock(volatile void *lock, int32_t id){
+  asm("mfence": : :"memory") ;
   while(__sync_val_compare_and_swap((volatile uint32_t *)lock, 0, id) != 0) ;
 }
 
@@ -21,14 +28,27 @@ static inline void acquire_lock(volatile void *lock){   // no id, use 1
   acquire_idlock(lock, 1) ;
 }
 
+static inline void acquire_fence_lock(volatile void *lock){   // no id, use 1
+  acquire_fence_idlock(lock, 1) ;
+}
+
 // this will deadlock if attempt is made to release a lock with the wrong id
 static inline void release_idlock(volatile void *lock, int32_t id){
+  while(__sync_val_compare_and_swap((volatile uint32_t *)lock, id, 0) != id) ;
+}
+
+static inline void release_fence_idlock(volatile void *lock, int32_t id){
+  asm("mfence": : :"memory") ;
   while(__sync_val_compare_and_swap((volatile uint32_t *)lock, id, 0) != id) ;
 }
 
 // this will deadlock if attempt is made to release a lock with id other than 1
 static inline void release_lock(volatile void *lock){   // no id, use 1
   release_idlock(lock, 1) ;
+}
+
+static inline void release_fence_lock(volatile void *lock){   // no id, use 1
+  release_fence_idlock(lock, 1) ;
 }
 
 static inline int32_t test_idlock(volatile void *lock, int32_t id){
