@@ -11,10 +11,11 @@
 //     MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
 //     Lesser General Public License for more details.
 
-//****P* librkl/RPN kernel library locks and barriers
+//****P* librkl/RPN kernel library locks and barriers and shared memory allocator
 // DESCRIPTION
 // set of routines to implement locks and barriers that can be used between threads belonging
 // to the same process or between processes running on the same shared memory node (MPI, etc...)
+// a routine to allocate node shared memory is included
 //
 #if defined(NEVER_EVER_TRUE)
 // EXAMPLES
@@ -74,20 +75,21 @@
 // interface   !InTf!
 
 // default number of locks/barriers = 16
-#define MAXLOCKID 15
-static uint32_t maxlockid = MAXLOCKID;
+// #define MAXLOCKID 15
+// static uint32_t maxlockid = MAXLOCKID;
+static uint32_t maxlockid = 0 ;
 
 // locks
-static uint32_t volatile lock0[MAXLOCKID+1] __attribute__ ((aligned (64)));
-static uint32_t volatile *locks;       // in case we want to allocate to another address
+// static uint32_t volatile lock0[MAXLOCKID+1] __attribute__ ((aligned (64)));
+static uint32_t volatile *locks = NULL ;       // in case we want to allocate to another address
 
 // barrier (partial) done flags
-static uint32_t volatile barrs0[MAXLOCKID+1] __attribute__ ((aligned (64)));
-static uint32_t volatile *barrs;       // in case we want to allocate to another address
+// static uint32_t volatile barrs0[MAXLOCKID+1] __attribute__ ((aligned (64)));
+static uint32_t volatile *barrs = NULL ;       // in case we want to allocate to another address
 
 // barrier (partial) counts
-static uint32_t volatile count0[MAXLOCKID+1] __attribute__ ((aligned (64)));
-static uint32_t volatile *count;       // in case we want to allocate to another address
+// static uint32_t volatile count0[MAXLOCKID+1] __attribute__ ((aligned (64)));
+static uint32_t volatile *count = NULL ;       // in case we want to allocate to another address
 
 //****f* librkl/allocate_safe_shared_memory
 // Synopsis
@@ -112,13 +114,17 @@ void *allocate_safe_shared_memory(int32_t *sid, uint32_t size)   // !InTc!
   void *ptr;
   struct shmid_ds shm_buf;
 
-  id  = shmget(IPC_PRIVATE,siz,IPC_CREAT|S_IRUSR|S_IWUSR);  // allocate shared memory segment
-  if(id < 0) return NULL;         // error if id < 0
-  ptr = shmat(id,NULL,0);
-  if(ptr == NULL) return NULL;    // something is very wrong
-  shmctl(id,IPC_RMID,&shm_buf);   // mark segment for deletion preventively (only works on linux)
-  *sid  = id;                     // return shared memory segment id
-  return ptr;                     // return address of shared memory segment
+  if(*sid <= 0) {                   // allocate shared memory segment
+    id  = shmget(IPC_PRIVATE,siz,IPC_CREAT|S_IRUSR|S_IWUSR);
+    if(id < 0) return NULL;         // error if id < 0
+    ptr = shmat(id,NULL,0);
+    if(ptr == NULL) return NULL;    // something is very wrong
+    shmctl(id,IPC_RMID,&shm_buf);   // mark segment for deletion preventively (only works on linux)
+    *sid  = id;                     // return shared memory segment id
+  }else{                            // attach shared memory segment
+    ptr = shmat(*sid, NULL, 0) ;
+  }
+  return ptr;                       // return address of shared memory segment
 }
 
 //****f* librkl/setup_locks_and_barriers
@@ -150,6 +156,38 @@ void *setup_locks_and_barriers(void *p, uint32_t size, uint32_t maxitems)   // !
   barrs = locks + maxitems;
   count = barrs + maxitems;
   return (void *)(count + maxitems);     // next free address (after lock/barrier tables)
+}
+
+#pragma weak BasicNodeBarrier_=BasicNodeBarrier
+void BasicNodeBarrier_(volatile int32_t *flag, volatile int32_t *count, int32_t maxcount) ;
+//****f* librkl/BasicNodeBarrier
+// Synopsis
+// implement a barrier between threads or processes (on the same SMP node)
+// unsophisticated version (uses "flag flip")
+// flag     : variable that will be complemented in th ebarrier process (MUST have a value of 1 or 0)
+// count    : variable used to count participants (MUST be zero upon entry, will be zero upon exit)
+// maxcount : number of threads/processes for this barrier
+//
+// the function will return 0 upon success, 1 in case of error (invalid id)
+//
+// Fortran interface
+//   subroutine BasicNodeBarrier(flag, count, maxcount) bind(C,name='BasicNodeBarrier')  !InTf!
+//     import :: C_INT                                           !InTf!
+//     integer(C_INT), intent(INOUT) :: flag                     !InTf!
+//     integer(C_INT), intent(INOUT) :: count                    !InTf!
+//     integer(C_INT), intent(IN), value :: maxcount             !InTf!
+//   end subroutine BasicNodeBarrier                             !InTf!
+//   subroutine BasicNodeBarrier_(flag, count, maxcount) bind(C,name='BasicNodeBarrier_')  !InTf!
+//     import :: C_INT, C_PTR                                    !InTf!
+//     type(C_PTR), intent(IN), value :: flag                    !InTf!
+//     type(C_PTR), intent(IN), value :: count                   !InTf!
+//     integer(C_INT), intent(IN), value :: maxcount             !InTf!
+//   end subroutine BasicNodeBarrier_                            !InTf!
+// ARGUMENTS
+void BasicNodeBarrier(volatile int32_t *flag, volatile int32_t *count, int32_t maxcount)   // !InTc!
+//****
+{
+  trivial_barrier(flag, count, maxcount) ;
 }
 
 //****f* librkl/simple_node_barrier
@@ -226,6 +264,8 @@ uint32_t node_barrier_multi(int32_t id, int32_t maxcount)   // !InTc!
 }
 #endif
 
+#pragma weak AcquireLock_=AcquireLock
+void AcquireLock_(volatile int32_t *lock, int32_t fence) ;
 //****f* librkl/AcquireLock
 // Synopsis
 // acquire a lock, using 4 byte variable at address lock
@@ -233,17 +273,29 @@ uint32_t node_barrier_multi(int32_t id, int32_t maxcount)   // !InTc!
 // lock   : address of lock variable
 //
 // Fortran interface
-//   subroutine AcquireLock(lock) bind(C,name='AcquireLock')         !InTf!
+//   subroutine AcquireLock(lock, fence) bind(C,name='AcquireLock')         !InTf!
 //     import :: C_INT                               !InTf!
 //     integer(C_INT), intent(INOUT) :: lock         !InTf!
+//     integer(C_INT), intent(IN), value :: fence    !InTf!
 //   end subroutine AcquireLock                      !InTf!
+//   subroutine AcquireLock_(lock, fence) bind(C,name='AcquireLock_')       !InTf!
+//     import :: C_INT, C_PTR                        !InTf!
+//     type(C_PTR), intent(IN), value :: lock        !InTf!
+//     integer(C_INT), intent(IN), value :: fence    !InTf!
+//   end subroutine AcquireLock_                     !InTf!
 // ARGUMENTS
-void AcquireLock(volatile int32_t *lock)   // !InTc!
+void AcquireLock(volatile int32_t *lock, int32_t fence)   // !InTc!
 //****
 {
-  acquire_lock(lock) ;
+  if(fence == 0){
+    acquire_lock(lock) ;
+  }else{
+    acquire_fence_lock(lock) ;
+  }
 }
 
+#pragma weak AcquireIdLock_=AcquireIdLock
+void AcquireIdLock_(volatile int32_t *lock, int32_t id, int32_t fence) ;
 //****f* librkl/AcquireIdLock
 // Synopsis
 // acquire a lock, using 4 byte variable at address lock
@@ -253,35 +305,60 @@ void AcquireLock(volatile int32_t *lock)   // !InTc!
 // id     : identifier for this thread/process
 //
 // Fortran interface
-//   subroutine AcquireIdLock(lock, id) bind(C,name='AcquireIdLock')         !InTf!
+//   subroutine AcquireIdLock(lock, id, fence) bind(C,name='AcquireIdLock')         !InTf!
 //     import :: C_INT                               !InTf!
 //     integer(C_INT), intent(INOUT) :: lock         !InTf!
 //     integer(C_INT), intent(IN), value :: id       !InTf!
+//     integer(C_INT), intent(IN), value :: fence    !InTf!
 //   end subroutine AcquireIdLock                    !InTf!
+//   subroutine AcquireIdLock_(lock, id, fence) bind(C,name='AcquireIdLock_')       !InTf!
+//     import :: C_INT, C_PTR                        !InTf!
+//     type(C_PTR), intent(IN), value :: lock        !InTf!
+//     integer(C_INT), intent(IN), value :: id       !InTf!
+//     integer(C_INT), intent(IN), value :: fence    !InTf!
+//   end subroutine AcquireIdLock_                   !InTf!
 // ARGUMENTS
-void AcquireIdLock(volatile int32_t *lock, int32_t id)   // !InTc!
+void AcquireIdLock(volatile int32_t *lock, int32_t id, int32_t fence)   // !InTc!
 //****
 {
-  acquire_idlock(lock, id) ;
+  if(fence == 0){
+    acquire_idlock(lock, id) ;
+  }else{
+    acquire_fence_idlock(lock, id) ;
+  }
 }
 
+#pragma weak ReleaseLock_=ReleaseLock
+void ReleaseLock_(volatile int32_t *lock, int32_t fence) ;
 //****f* librkl/ReleaseLock
 // Synopsis
 // release a lock acquired via AcquireLock using 4 byte variable at address lock
 // attempting to release a lock that is not acquired will result in a deadlock
 //
 // Fortran interface
-//   subroutine ReleaseLock(lock) bind(C,name='ReleaseLock')         !InTf!
+//   subroutine ReleaseLock(lock, fence) bind(C,name='ReleaseLock')         !InTf!
 //     import :: C_INT                               !InTf!
 //     integer(C_INT), intent(INOUT) :: lock         !InTf!
+//     integer(C_INT), intent(IN), value :: fence    !InTf!
 //   end subroutine ReleaseLock                      !InTf!
+//   subroutine ReleaseLock_(lock, fence) bind(C,name='ReleaseLock_')       !InTf!
+//     import :: C_INT, C_PTR                        !InTf!
+//     type(C_PTR), intent(IN), value :: lock        !InTf!
+//     integer(C_INT), intent(IN), value :: fence    !InTf!
+//   end subroutine ReleaseLock_                     !InTf!
 // ARGUMENTS
-void ReleaseLock(volatile int32_t *lock)   // !InTc!
+void ReleaseLock(volatile int32_t *lock, int32_t fence)   // !InTc!
 //****
 {
-  release_lock(lock) ;
+  if(fence == 0){
+    release_lock(lock) ;
+  }else{
+    release_fence_lock(lock) ;
+  }
 }
 
+#pragma weak ReleaseIdLock_=ReleaseIdLock
+void ReleaseIdLock_(volatile int32_t *lock, int32_t id, int32_t fence) ;
 //****f* librkl/ReleaseIdLock
 // Synopsis
 // release a lock acquired via AcquireIdLock using 4 byte variable at address lock
@@ -290,16 +367,27 @@ void ReleaseLock(volatile int32_t *lock)   // !InTc!
 // id     : identifier for this thread/process
 //
 // Fortran interface
-//   subroutine ReleaseIdLock(lock, id) bind(C,name='ReleaseIdLock')         !InTf!
+//   subroutine ReleaseIdLock(lock, id, fence) bind(C,name='ReleaseIdLock')         !InTf!
 //     import :: C_INT                               !InTf!
 //     integer(C_INT), intent(INOUT) :: lock         !InTf!
 //     integer(C_INT), intent(IN), value :: id       !InTf!
+//     integer(C_INT), intent(IN), value :: fence    !InTf!
 //   end subroutine ReleaseIdLock                    !InTf!
+//   subroutine ReleaseIdLock_(lock, id, fence) bind(C,name='ReleaseIdLock_')        !InTf!
+//     import :: C_INT, C_PTR                        !InTf!
+//     type(C_PTR), intent(IN), value :: lock        !InTf!
+//     integer(C_INT), intent(IN), value :: id       !InTf!
+//     integer(C_INT), intent(IN), value :: fence    !InTf!
+//   end subroutine ReleaseIdLock_                   !InTf!
 // ARGUMENTS
-void ReleaseIdLock(volatile int32_t *lock, int32_t id)   // !InTc!
+void ReleaseIdLock(volatile int32_t *lock, int32_t id, int32_t fence)   // !InTc!
 //****
 {
-  release_idlock(lock, id) ;
+  if(fence == 0){
+    release_idlock(lock, id) ;
+  }else{
+    release_fence_idlock(lock, id) ;
+  }
 }
 
 // end interface   !InTf!
