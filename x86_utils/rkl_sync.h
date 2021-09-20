@@ -30,12 +30,15 @@ static inline void full_memory_fence(){
 }
 
 static inline void acquire_idlock(volatile int32_t *lock, int32_t id){
+  asm("": : :"memory") ;
   while(__sync_val_compare_and_swap(lock, 0, (id+1)) != 0) ;
+  asm("": : :"memory") ;
 }
 
 static inline void acquire_fence_idlock(volatile int32_t *lock, int32_t id){
   full_memory_fence() ;
   while(__sync_val_compare_and_swap(lock, 0, (id+1)) != 0) ;
+  asm("": : :"memory") ;
 }
 
 static inline void acquire_lock(volatile int32_t *lock){   // no id, use 1
@@ -48,12 +51,15 @@ static inline void acquire_fence_lock(volatile int32_t *lock){   // no id, use 1
 
 // this will deadlock if attempt is made to release a lock with the wrong id
 static inline void release_idlock(volatile int32_t *lock, int32_t id){
+  asm("": : :"memory") ;
   while(__sync_val_compare_and_swap(lock, (id+1), 0) != (id+1)) ;
+  asm("": : :"memory") ;
 }
 
 static inline void release_fence_idlock(volatile int32_t *lock, int32_t id){
   full_memory_fence() ;
   while(__sync_val_compare_and_swap(lock, (id+1), 0) != (id+1)) ;
+  asm("": : :"memory") ;
 }
 
 // this will deadlock if attempt is made to release a lock with id other than 1
