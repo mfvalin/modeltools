@@ -13,6 +13,9 @@
 
 // set of inline functions used to implement locks
 
+// Authors :: M. Valin,   RPN, 2021
+//            V. Magnoux, RPN, 2021
+
 #include <stdint.h>
 
 void *allocate_safe_shared_memory(int32_t *sid, uint32_t size) ;
