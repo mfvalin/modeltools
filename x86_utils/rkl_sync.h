@@ -75,7 +75,7 @@ static inline void release_fence_lock(volatile int32_t *lock){   // no id, use 1
 }
 
 static inline int32_t test_idlock(volatile int32_t *lock, int32_t id){
-  return (*lock != (id+1) );   // true if locked with id
+  return (*lock == (id+1) );   // true if locked with id
 }
 
 static inline int32_t test_lock(volatile int32_t *lock){
