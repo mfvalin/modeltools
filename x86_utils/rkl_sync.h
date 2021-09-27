@@ -19,11 +19,15 @@
 #include <stdint.h>
 
 void *allocate_safe_shared_memory(int32_t *sid, uint32_t size) ;
+
 void ReleaseLock(volatile int32_t *lock, int32_t fence) ;
 void ReleaseIdLock(volatile int32_t *lock, int32_t id, int32_t fence) ;
 void AcquireLock(volatile int32_t *lock, int32_t fence) ;
 void AcquireIdLock(volatile int32_t *lock, int32_t id, int32_t fence) ;
+int32_t TryAcquireLock(volatile int32_t *lock, int32_t fence) ;
+int32_t TryAcquireIdLock(volatile int32_t *lock, int32_t id, int32_t fence) ;
 void BasicNodeBarrier(volatile int32_t *flag, volatile int32_t *count, int32_t maxcount) ;
+int32_t LockOwner(volatile int32_t *lock) ;
 
 uint32_t simple_node_barrier(int32_t id, int32_t maxcount) ;
 uint32_t node_barrier_multi(int32_t id, int32_t maxcount) ;
@@ -32,13 +36,18 @@ static inline void full_memory_fence(){
   asm("mfence": : :"memory") ;
 }
 
-static inline void acquire_idlock(volatile int32_t *lock, int32_t id){
-  asm("": : :"memory") ;
-  while(__sync_val_compare_and_swap(lock, 0, (id+1)) != 0) ;
-  asm("": : :"memory") ;
+static inline int32_t try_acquire_idlock(volatile int32_t *lock, int32_t id) {
+  __asm__ volatile("": : :"memory");
+  if (__sync_val_compare_and_swap(lock, 0, (id+1)) != 0) return 0;
+  full_memory_fence() ;
+  return 1;
 }
 
-static inline void acquire_fence_idlock(volatile int32_t *lock, int32_t id){
+static inline int32_t try_acquire_lock(volatile int32_t *lock) {
+  return try_acquire_idlock(lock, 1) ;
+}
+
+static inline void acquire_idlock(volatile int32_t *lock, int32_t id){
   full_memory_fence() ;
   while(__sync_val_compare_and_swap(lock, 0, (id+1)) != 0) ;
   asm("": : :"memory") ;
@@ -48,18 +57,17 @@ static inline void acquire_lock(volatile int32_t *lock){   // no id, use 1
   acquire_idlock(lock, 1) ;
 }
 
-static inline void acquire_fence_lock(volatile int32_t *lock){   // no id, use 1
-  acquire_fence_idlock(lock, 1) ;
+// this will not deadlock if an attempt is made to release a lock with the wrong id
+static inline int32_t try_release_idlock(volatile int32_t *lock, int32_t id){
+  full_memory_fence() ;
+  if(__sync_val_compare_and_swap(lock, (id+1), 0) != (id+1)) return 0 ;  // failure, not lock owner
+  asm("": : :"memory") ;
+  return 1 ;                                                             // success
 }
 
 // this will deadlock if attempt is made to release a lock with the wrong id
 static inline void release_idlock(volatile int32_t *lock, int32_t id){
-  asm("": : :"memory") ;
-  while(__sync_val_compare_and_swap(lock, (id+1), 0) != (id+1)) ;
-  asm("": : :"memory") ;
-}
-
-static inline void release_fence_idlock(volatile int32_t *lock, int32_t id){
+  if( *lock <= 0) return ;                                             // NOOP, was not even locked
   full_memory_fence() ;
   while(__sync_val_compare_and_swap(lock, (id+1), 0) != (id+1)) ;
   asm("": : :"memory") ;
@@ -70,8 +78,13 @@ static inline void release_lock(volatile int32_t *lock){   // no id, use 1
   release_idlock(lock, 1) ;
 }
 
-static inline void release_fence_lock(volatile int32_t *lock){   // no id, use 1
-  release_fence_idlock(lock, 1) ;
+// this will not deadlock if an attempt is made to release a lock with id other than 1
+static inline int32_t try_release_lock(volatile int32_t *lock){   // no id, use 1
+  return try_release_idlock(lock, 1) ;
+}
+
+static inline int32_t lock_owner(volatile int32_t *lock){   // find ID of lock owner
+  return  (*lock - 1) ;  // < 0 if lock is free
 }
 
 static inline int32_t test_idlock(volatile int32_t *lock, int32_t id){
@@ -81,7 +94,6 @@ static inline int32_t test_idlock(volatile int32_t *lock, int32_t id){
 static inline int32_t test_lock(volatile int32_t *lock){
   return (*lock != 0 );   // true if locked with any id
 }
-
 
 static inline void reset_lock(volatile int32_t *lock){   // forcefully reset lock
   *lock = 0 ;
@@ -102,4 +114,47 @@ static inline void trivial_barrier(volatile int32_t *flag, volatile int32_t *cou
   }else{
     while(lgo == *flag) ;                   // wait until flag is inverted
   }
+}
+
+static inline int32_t try_acquire_fence_idlock(volatile int32_t *lock, int32_t id) {
+  __asm__ volatile("": : :"memory");
+  if (__sync_val_compare_and_swap(lock, 0, (id+1)) != 0) return 0;
+  full_memory_fence() ;
+  return 1;
+}
+
+static inline int32_t try_acquire_fence_lock(volatile int32_t *lock) {
+  return try_acquire_fence_idlock(lock, 1) ;
+}
+
+static inline void acquire_fence_idlock(volatile int32_t *lock, int32_t id){
+  full_memory_fence() ;
+  while(__sync_val_compare_and_swap(lock, 0, (id+1)) != 0) ;
+  asm("": : :"memory") ;
+}
+
+static inline void acquire_fence_lock(volatile int32_t *lock){   // no id, use 1
+  acquire_fence_idlock(lock, 1) ;
+}
+
+static inline int32_t try_release_fence_idlock(volatile int32_t *lock, int32_t id){
+  full_memory_fence() ;
+  if(__sync_val_compare_and_swap(lock, (id+1), 0) != (id+1)) return 0 ;  // failure, not lock owner
+  asm("": : :"memory") ;
+  return 1 ;                                                             // success
+}
+
+static inline int32_t try_release_fence_lock(volatile int32_t *lock){   // no id, use 1
+  return try_release_idlock(lock, 1) ;
+}
+
+static inline void release_fence_idlock(volatile int32_t *lock, int32_t id){
+  if( *lock <= 0) return ;                                             // NOOP, was not even locked
+  full_memory_fence() ;
+  while(__sync_val_compare_and_swap(lock, (id+1), 0) != (id+1)) ;
+  asm("": : :"memory") ;
+}
+
+static inline void release_fence_lock(volatile int32_t *lock){   // no id, use 1
+  release_fence_idlock(lock, 1) ;
 }

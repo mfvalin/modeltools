@@ -25,8 +25,12 @@ module rkl_sync_mod
     procedure, PASS(this) :: init   => InitLock
     procedure, PASS(this) :: initp  => InitLockP
     procedure, PASS(this) :: lock   => SetIdLock, SetLock
+    procedure, PASS(this) :: trylock   => TrySetIdLock, TrySetLock
     procedure, PASS(this) :: unlock => ClearIdLock, ClearLock
+    procedure, PASS(this) :: tryunlock => TryClearIdLock, TryClearLock
     procedure, PASS(this) :: valid  => ValidLock
+    procedure, PASS(this) :: owner  => OwnerOfLock
+    procedure, PASS(this) :: reset  => ResetOfLock
   end type
 
   private :: InitBarrier, InitBarrierP, ValidBarrier
@@ -105,6 +109,26 @@ module rkl_sync_mod
      valid = C_ASSOCIATED(this%p)
   end function ValidLock
 
+  function OwnerOfLock(this) result(owner)
+     class(rkl_lock), intent(IN) :: this
+     integer(C_INT) :: owner
+     owner = LockOwner_(this%p)
+  end function OwnerOfLock
+
+  function TrySetLock(this, fence) result(status)
+    class(rkl_lock), intent(IN) :: this
+    integer(C_INT), intent(IN), value :: fence
+    integer(C_INT) :: status
+    status = TryAcquireLock_(this%p, fence)
+  end function TrySetLock
+  function TrySetIdLock(this, id, fence) result(status)
+    class(rkl_lock), intent(IN) :: this
+    integer(C_INT), intent(IN), value :: id
+    integer(C_INT), intent(IN), value :: fence
+    integer(C_INT) :: status
+    status = TryAcquireIdLock_(this%p, id, fence)
+  end function TrySetIdLock
+
   subroutine SetLock(this, fence)
     class(rkl_lock), intent(IN) :: this
     integer(C_INT), intent(IN), value :: fence
@@ -116,6 +140,25 @@ module rkl_sync_mod
     integer(C_INT), intent(IN), value :: fence
     call AcquireIdLock_(this%p, id, fence)
   end subroutine SetIdLock
+
+  subroutine ResetOfLock(this)
+    class(rkl_lock), intent(IN) :: this
+    call ResetLock_(this%p)
+  end subroutine ResetOfLock
+
+  function TryClearLock(this, fence) result(status)
+    class(rkl_lock), intent(IN) :: this
+    integer(C_INT), intent(IN), value :: fence
+    integer(C_INT) :: status
+    status = TryReleaseLock_(this%p, fence)
+  end function TryClearLock
+  function TryClearIdLock(this, id, fence) result(status)
+    class(rkl_lock), intent(IN) :: this
+    integer(C_INT), intent(IN), value :: id
+    integer(C_INT), intent(IN), value :: fence
+    integer(C_INT) :: status
+    status = TryReleaseIdLock_(this%p, id, fence)
+  end function TryClearIdLock
 
   subroutine ClearLock(this, fence)
     class(rkl_lock), intent(IN) :: this

@@ -264,13 +264,48 @@ uint32_t node_barrier_multi(int32_t id, int32_t maxcount)   // !InTc!
 }
 #endif
 
+#pragma weak TryAcquireLock_=TryAcquireLock
+int32_t TryAcquireLock_(volatile int32_t *lock, int32_t fence) ;
+//****f* librkl/TryAcquireLock
+// Synopsis
+// try to acquire a lock, using 4 byte variable at address lock (try once)
+// the variable pointed to by lock must have been initialized to zero
+// lock   : address of lock variable
+// fence  : if non zero, use memory fencing
+// status : 1 if successful, 0 otherwise
+//
+// Fortran interface
+//   function TryAcquireLock(lock, fence) result(status) bind(C,name='TryAcquireLock')         !InTf!
+//     import :: C_INT                               !InTf!
+//     integer(C_INT), intent(INOUT) :: lock         !InTf!
+//     integer(C_INT), intent(IN), value :: fence    !InTf!
+//     integer(C_INT) :: status                      !InTf!
+//   end function TryAcquireLock                     !InTf!
+//   function TryAcquireLock_(lock, fence) result(status) bind(C,name='TryAcquireLock_')       !InTf!
+//     import :: C_INT, C_PTR                        !InTf!
+//     type(C_PTR), intent(IN), value :: lock        !InTf!
+//     integer(C_INT), intent(IN), value :: fence    !InTf!
+//     integer(C_INT) :: status                      !InTf!
+//   end function TryAcquireLock_                    !InTf!
+// ARGUMENTS
+int32_t TryAcquireLock(volatile int32_t *lock, int32_t fence)   // !InTc!
+//****
+{
+  if(fence == 0){
+    return try_acquire_lock(lock) ;
+  }else{
+    return try_acquire_fence_lock(lock) ;
+  }
+}
+
 #pragma weak AcquireLock_=AcquireLock
 void AcquireLock_(volatile int32_t *lock, int32_t fence) ;
 //****f* librkl/AcquireLock
 // Synopsis
-// acquire a lock, using 4 byte variable at address lock
+// acquire a lock, using 4 byte variable at address lock (try until successful)
 // the variable pointed to by lock must have been initialized to zero
 // lock   : address of lock variable
+// fence  : if non zero, use memory fencing
 //
 // Fortran interface
 //   subroutine AcquireLock(lock, fence) bind(C,name='AcquireLock')         !InTf!
@@ -294,15 +329,54 @@ void AcquireLock(volatile int32_t *lock, int32_t fence)   // !InTc!
   }
 }
 
-#pragma weak AcquireIdLock_=AcquireIdLock
-void AcquireIdLock_(volatile int32_t *lock, int32_t id, int32_t fence) ;
-//****f* librkl/AcquireIdLock
+#pragma weak TryAcquireIdLock_=TryAcquireIdLock
+int32_t TryAcquireIdLock_(volatile int32_t *lock, int32_t id, int32_t fence) ;
+//****f* librkl/TryAcquireIdLock
 // Synopsis
-// acquire a lock, using 4 byte variable at address lock
+// try to acquire a lock, using 4 byte variable at address lock (try once)
 // the variable pointed to by lock must have been initialized to zero
 // and will be set to id when lock is acquired
 // lock   : address of lock variable
 // id     : identifier for this thread/process
+// fence  : if non zero, use memory fencing
+// status : 1 if successful, 0 otherwise
+//
+// Fortran interface
+//   function TryAcquireIdLock(lock, id, fence) result(status) bind(C,name='TryAcquireIdLock')         !InTf!
+//     import :: C_INT                               !InTf!
+//     integer(C_INT), intent(INOUT) :: lock         !InTf!
+//     integer(C_INT), intent(IN), value :: id       !InTf!
+//     integer(C_INT), intent(IN), value :: fence    !InTf!
+//     integer(C_INT) :: status                      !InTf!
+//   end function TryAcquireIdLock                 !InTf!
+//   function TryAcquireIdLock_(lock, id, fence) result(status) bind(C,name='TryAcquireIdLock_')       !InTf!
+//     import :: C_INT, C_PTR                        !InTf!
+//     type(C_PTR), intent(IN), value :: lock        !InTf!
+//     integer(C_INT), intent(IN), value :: id       !InTf!
+//     integer(C_INT), intent(IN), value :: fence    !InTf!
+//     integer(C_INT) :: status                      !InTf!
+//   end function TryAcquireIdLock_                !InTf!
+// ARGUMENTS
+int32_t TryAcquireIdLock(volatile int32_t *lock, int32_t id, int32_t fence)   // !InTc!
+//****
+{
+  if(fence == 0){
+    return try_acquire_idlock(lock, id) ;
+  }else{
+    return try_acquire_fence_idlock(lock, id) ;
+  }
+}
+
+#pragma weak AcquireIdLock_=AcquireIdLock
+void AcquireIdLock_(volatile int32_t *lock, int32_t id, int32_t fence) ;
+//****f* librkl/AcquireIdLock
+// Synopsis
+// acquire a lock, using 4 byte variable at address lock (try until successful)
+// the variable pointed to by lock must have been initialized to zero
+// and will be set to id when lock is acquired
+// lock   : address of lock variable
+// id     : identifier for this thread/process
+// fence  : if non zero, use memory fencing
 //
 // Fortran interface
 //   subroutine AcquireIdLock(lock, id, fence) bind(C,name='AcquireIdLock')         !InTf!
@@ -328,12 +402,47 @@ void AcquireIdLock(volatile int32_t *lock, int32_t id, int32_t fence)   // !InTc
   }
 }
 
+#pragma weak TryReleaseLock_=TryReleaseLock
+int32_t TryReleaseLock_(volatile int32_t *lock, int32_t fence) ;
+//****f* librkl/TryReleaseLock
+// Synopsis
+// try to release a lock acquired via AcquireLock using 4 byte variable at address lock
+// lock   : address of lock variable
+// fence  : if non zero, use memory fencing
+// status : 1 if successful, 0 otherwise
+//
+// Fortran interface
+//   function TryReleaseLock(lock, fence) result(status) bind(C,name='TryReleaseLock')         !InTf!
+//     import :: C_INT                               !InTf!
+//     integer(C_INT), intent(INOUT) :: lock         !InTf!
+//     integer(C_INT), intent(IN), value :: fence    !InTf!
+//     integer(C_INT) :: status                      !InTf!
+//   end function TryReleaseLock                      !InTf!
+//   function TryReleaseLock_(lock, fence) result(status) bind(C,name='TryReleaseLock_')       !InTf!
+//     import :: C_INT, C_PTR                        !InTf!
+//     type(C_PTR), intent(IN), value :: lock        !InTf!
+//     integer(C_INT), intent(IN), value :: fence    !InTf!
+//     integer(C_INT) :: status                      !InTf!
+//   end function TryReleaseLock_                     !InTf!
+// ARGUMENTS
+int32_t TryReleaseLock(volatile int32_t *lock, int32_t fence)   // !InTc!
+//****
+{
+  if(fence == 0){
+    return try_release_lock(lock) ;
+  }else{
+    return try_release_fence_lock(lock) ;
+  }
+}
+
 #pragma weak ReleaseLock_=ReleaseLock
 void ReleaseLock_(volatile int32_t *lock, int32_t fence) ;
 //****f* librkl/ReleaseLock
 // Synopsis
 // release a lock acquired via AcquireLock using 4 byte variable at address lock
 // attempting to release a lock that is not acquired will result in a deadlock
+// lock   : address of lock variable
+// fence  : if non zero, use memory fencing
 //
 // Fortran interface
 //   subroutine ReleaseLock(lock, fence) bind(C,name='ReleaseLock')         !InTf!
@@ -357,6 +466,39 @@ void ReleaseLock(volatile int32_t *lock, int32_t fence)   // !InTc!
   }
 }
 
+#pragma weak TryReleaseIdLock_=TryReleaseIdLock
+int32_t TryReleaseIdLock_(volatile int32_t *lock, int32_t id, int32_t fence) ;
+//****f* librkl/TryReleaseIdLock
+// Synopsis
+// release a lock acquired via AcquireIdLock using 4 byte variable at address lock
+// attempting to release a lock that was not acquired with this id will result in a deadlock
+// lock   : address of lock variable
+// id     : identifier for this thread/process
+// fence  : if non zero, use memory fencing
+// status : 1 if successful, 0 otherwise
+//
+// Fortran interface
+//   function TryReleaseIdLock(lock, id, fence) result(status) bind(C,name='TryReleaseIdLock')         !InTf!
+//     import :: C_INT                               !InTf!
+//     integer(C_INT), intent(INOUT) :: lock         !InTf!
+//     integer(C_INT), intent(IN), value :: id       !InTf!
+//     integer(C_INT), intent(IN), value :: fence    !InTf!
+//     integer(C_INT) :: status                      !InTf!
+//   end function TryReleaseIdLock                    !InTf!
+//   function TryReleaseIdLock_(lock, id, fence) result(status) bind(C,name='TryReleaseIdLock_')        !InTf!
+//     import :: C_INT, C_PTR                        !InTf!
+//     type(C_PTR), intent(IN), value :: lock        !InTf!
+//     integer(C_INT), intent(IN), value :: id       !InTf!
+//     integer(C_INT), intent(IN), value :: fence    !InTf!
+//     integer(C_INT) :: status                      !InTf!
+//   end function TryReleaseIdLock_                   !InTf!
+// ARGUMENTS
+int32_t TryReleaseIdLock(volatile int32_t *lock, int32_t id, int32_t fence)   // !InTc!
+//****
+{
+  return try_release_idlock(lock, id) ;
+}
+
 #pragma weak ReleaseIdLock_=ReleaseIdLock
 void ReleaseIdLock_(volatile int32_t *lock, int32_t id, int32_t fence) ;
 //****f* librkl/ReleaseIdLock
@@ -365,6 +507,7 @@ void ReleaseIdLock_(volatile int32_t *lock, int32_t id, int32_t fence) ;
 // attempting to release a lock that was not acquired with this id will result in a deadlock
 // lock   : address of lock variable
 // id     : identifier for this thread/process
+// fence  : if non zero, use memory fencing
 //
 // Fortran interface
 //   subroutine ReleaseIdLock(lock, id, fence) bind(C,name='ReleaseIdLock')         !InTf!
@@ -388,6 +531,54 @@ void ReleaseIdLock(volatile int32_t *lock, int32_t id, int32_t fence)   // !InTc
   }else{
     release_fence_idlock(lock, id) ;
   }
+}
+
+#pragma weak LockOwner_=LockOwner
+int32_t LockOwner_(volatile int32_t *lock) ;
+//****f* librkl/LockOwner
+// Synopsis
+// find the ID of the process owning the lock (< 0 means lock is NOT owned and therefore free)
+// lock   : address of lock variable
+//
+// Fortran interface
+//   function LockOwner(lock) result(status) bind(C,name='LockOwner')         !InTf!
+//     import :: C_INT                               !InTf!
+//     integer(C_INT), intent(INOUT) :: lock         !InTf!
+//     integer(C_INT) :: status                      !InTf!
+//   end function LockOwner                    !InTf!
+//   function LockOwner_(lock) result(status) bind(C,name='LockOwner_')         !InTf!
+//     import :: C_INT, C_PTR                        !InTf!
+//     type(C_PTR), intent(IN), value :: lock        !InTf!
+//     integer(C_INT) :: status                      !InTf!
+//   end function LockOwner_                   !InTf!
+// ARGUMENTS
+int32_t LockOwner(volatile int32_t *lock)    // !InTc!
+//****
+{
+  return lock_owner(lock) ;
+}
+
+#pragma weak ResetLock_=ResetLock
+void ResetLock_(volatile int32_t *lock) ;
+//****f* librkl/ResetLock
+// Synopsis
+// forcefully (unsafely) force a locj to the "free" state
+// lock   : address of lock variable
+//
+// Fortran interface
+//   subroutine ResetLock(lock) bind(C,name='ResetLock')         !InTf!
+//     import :: C_INT                               !InTf!
+//     integer(C_INT), intent(INOUT) :: lock         !InTf!
+//   end subroutine ResetLock                        !InTf!
+//   subroutine ResetLock_(lock) bind(C,name='ResetLock_')         !InTf!
+//     import :: C_PTR                               !InTf!
+//     type(C_PTR), intent(IN), value :: lock        !InTf!
+//   end subroutine ResetLock_                       !InTf!
+// ARGUMENTS
+void ResetLock(volatile int32_t *lock)    // !InTc!
+//****
+{
+  reset_lock(lock) ;
 }
 
 // end interface   !InTf!
