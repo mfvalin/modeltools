@@ -114,17 +114,18 @@ void *allocate_safe_shared_memory(int32_t *sid, uint32_t size)   // !InTc!
   void *ptr;
   struct shmid_ds shm_buf;
 
-  if(*sid <= 0) {                   // allocate shared memory segment
-    id  = shmget(IPC_PRIVATE,siz,IPC_CREAT|S_IRUSR|S_IWUSR);
-    if(id < 0) return NULL;         // error if id < 0
-    ptr = shmat(id,NULL,0);
-    if(ptr == NULL) return NULL;    // something is very wrong
-    shmctl(id,IPC_RMID,&shm_buf);   // mark segment for deletion preventively (only works on linux)
-    *sid  = id;                     // return shared memory segment id
-  }else{                            // attach shared memory segment
-    ptr = shmat(*sid, NULL, 0) ;
+  if(*sid > 0){                         // possibly valid segment id
+    ptr = shmat(*sid, NULL, 0) ;        // try to attach segment
+    if(ptr != (void *) -1) return ptr ; // success !
   }
-  return ptr;                       // return address of shared memory segment
+
+  id  = shmget(IPC_PRIVATE,siz,IPC_CREAT|S_IRUSR|S_IWUSR);
+  if(id < 0) return NULL;                // error if id < 0
+  ptr = shmat(id,NULL,0);
+  if(ptr == (void *) -1) return NULL;    // something is very wrong
+  shmctl(id,IPC_RMID,&shm_buf);          // mark segment for deletion preventively (only works on linux)
+  *sid  = id;                            // return shared memory segment id
+  return ptr;                            // return address of shared memory segment
 }
 
 //****f* librkl/setup_locks_and_barriers
