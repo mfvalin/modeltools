@@ -70,6 +70,7 @@
 #include <sys/shm.h>
 #include <sys/stat.h>
 
+// include inline functions providing lock/barrier functionality
 #include <rkl_sync.h>
 
 // interface   !InTf!
@@ -98,18 +99,20 @@ static uint32_t volatile *count = NULL ;       // in case we want to allocate to
 // return address and id of shared memory segment (in sid)
 // in case of error id is <0 and the returned address is NULL
 //
+// sid     : shared memory identifier
+// siz     : size in bytes of shared memory segment to allocate
+// 
 // Fortran interface
 //   function allocate_safe_shared_memory(sid, siz) result(p) bind(C,name='allocate_safe_shared_memory')   !InTf!
-//     import :: C_INT, C_PTR                      !InTf!
+//     import :: C_INT, C_PTR, C_SIZE_T            !InTf!
 //     integer(C_INT), intent(OUT) :: sid          !InTf!
-//     integer(C_INT), intent(IN), value :: siz    !InTf!
+//     integer(C_SIZE_T), intent(IN), value :: siz !InTf!
 //     type(C_PTR) :: p                            !InTf!
 //   end function allocate_safe_shared_memory      !InTf!
 // ARGUMENTS
-void *allocate_safe_shared_memory(int32_t *sid, uint32_t size)   // !InTc!
+void *allocate_safe_shared_memory(int32_t *sid, size_t siz)   // !InTc!
 //****
 {
-  size_t siz = size;
   int32_t id;
   void *ptr;
   struct shmid_ds shm_buf;
@@ -118,13 +121,13 @@ void *allocate_safe_shared_memory(int32_t *sid, uint32_t size)   // !InTc!
     ptr = shmat(*sid, NULL, 0) ;        // try to attach segment
     if(ptr != (void *) -1) return ptr ; // success !
   }
-
-  id  = shmget(IPC_PRIVATE,siz,IPC_CREAT|S_IRUSR|S_IWUSR);
+  // *sid <= 0 or attach failed, try to allocate new shared memory segment
+  id  = shmget(IPC_PRIVATE, siz, IPC_CREAT|S_IRUSR|S_IWUSR);
   if(id < 0) return NULL;                // error if id < 0
   ptr = shmat(id,NULL,0);
   if(ptr == (void *) -1) return NULL;    // something is very wrong
   shmctl(id,IPC_RMID,&shm_buf);          // mark segment for deletion preventively (only works on linux)
-  *sid  = id;                            // return shared memory segment id
+  *sid  = id;                            // store shared memory segment id
   return ptr;                            // return address of shared memory segment
 }
 
@@ -165,9 +168,9 @@ void BasicNodeBarrier_(volatile int32_t *flag, volatile int32_t *count, int32_t 
 // Synopsis
 // implement a barrier between threads or processes (on the same SMP node)
 // unsophisticated version (uses "flag flip")
-// flag     : variable that will be complemented in th ebarrier process (MUST have a value of 1 or 0)
-// count    : variable used to count participants (MUST be zero upon entry, will be zero upon exit)
-// maxcount : number of threads/processes for this barrier
+// flag     : variable that will be complemented in the barrier process (MUST have a value of 1 or 0)
+// count    : variable used to count participants (MUST be zero upon entry, WILL be zero upon exit)
+// maxcount : number of threads/processes participants for this barrier
 //
 // the function will return 0 upon success, 1 in case of error (invalid id)
 //
@@ -265,11 +268,12 @@ uint32_t node_barrier_multi(int32_t id, int32_t maxcount)   // !InTc!
 }
 #endif
 
+// Fortran needs 2 different symbols as targets even if the same code is used
 #pragma weak TryAcquireLock_=TryAcquireLock
 int32_t TryAcquireLock_(volatile int32_t *lock, int32_t fence) ;
 //****f* librkl/TryAcquireLock
 // Synopsis
-// try to acquire a lock, using 4 byte variable at address lock (try once)
+// try to acquire a lock, using 4 byte variable at address lock (try once, return status)
 // the variable pointed to by lock must have been initialized to zero
 // lock   : address of lock variable
 // fence  : if non zero, use memory fencing
@@ -299,6 +303,7 @@ int32_t TryAcquireLock(volatile int32_t *lock, int32_t fence)   // !InTc!
   }
 }
 
+// Fortran needs 2 different symbols as targets even if the same code is used
 #pragma weak AcquireLock_=AcquireLock
 void AcquireLock_(volatile int32_t *lock, int32_t fence) ;
 //****f* librkl/AcquireLock
@@ -330,11 +335,12 @@ void AcquireLock(volatile int32_t *lock, int32_t fence)   // !InTc!
   }
 }
 
+// Fortran needs 2 different symbols as targets even if the same code is used
 #pragma weak TryAcquireIdLock_=TryAcquireIdLock
 int32_t TryAcquireIdLock_(volatile int32_t *lock, int32_t id, int32_t fence) ;
 //****f* librkl/TryAcquireIdLock
 // Synopsis
-// try to acquire a lock, using 4 byte variable at address lock (try once)
+// try to acquire a lock, using 4 byte variable at address lock (try once, return status)
 // the variable pointed to by lock must have been initialized to zero
 // and will be set to id when lock is acquired
 // lock   : address of lock variable
@@ -368,6 +374,7 @@ int32_t TryAcquireIdLock(volatile int32_t *lock, int32_t id, int32_t fence)   //
   }
 }
 
+// Fortran needs 2 different symbols as targets even if the same code is used
 #pragma weak AcquireIdLock_=AcquireIdLock
 void AcquireIdLock_(volatile int32_t *lock, int32_t id, int32_t fence) ;
 //****f* librkl/AcquireIdLock
@@ -403,11 +410,12 @@ void AcquireIdLock(volatile int32_t *lock, int32_t id, int32_t fence)   // !InTc
   }
 }
 
+// Fortran needs 2 different symbols as targets even if the same code is used
 #pragma weak TryReleaseLock_=TryReleaseLock
 int32_t TryReleaseLock_(volatile int32_t *lock, int32_t fence) ;
 //****f* librkl/TryReleaseLock
 // Synopsis
-// try to release a lock acquired via AcquireLock using 4 byte variable at address lock
+// try to release a lock acquired via AcquireLock using 4 byte variable at address lock (try once, return status)
 // lock   : address of lock variable
 // fence  : if non zero, use memory fencing
 // status : 1 if successful, 0 otherwise
@@ -436,11 +444,12 @@ int32_t TryReleaseLock(volatile int32_t *lock, int32_t fence)   // !InTc!
   }
 }
 
+// Fortran needs 2 different symbols as targets even if the same code is used
 #pragma weak ReleaseLock_=ReleaseLock
 void ReleaseLock_(volatile int32_t *lock, int32_t fence) ;
 //****f* librkl/ReleaseLock
 // Synopsis
-// release a lock acquired via AcquireLock using 4 byte variable at address lock
+// release a lock acquired via AcquireLock using 4 byte variable at address lock (try until successful)
 // attempting to release a lock that is not acquired will result in a deadlock
 // lock   : address of lock variable
 // fence  : if non zero, use memory fencing
@@ -467,12 +476,12 @@ void ReleaseLock(volatile int32_t *lock, int32_t fence)   // !InTc!
   }
 }
 
+// Fortran needs 2 different symbols as targets even if the same code is used
 #pragma weak TryReleaseIdLock_=TryReleaseIdLock
 int32_t TryReleaseIdLock_(volatile int32_t *lock, int32_t id, int32_t fence) ;
 //****f* librkl/TryReleaseIdLock
 // Synopsis
-// release a lock acquired via AcquireIdLock using 4 byte variable at address lock
-// attempting to release a lock that was not acquired with this id will result in a deadlock
+// try to release a lock acquired via AcquireIdLock using 4 byte variable at address lock (try once, return status)
 // lock   : address of lock variable
 // id     : identifier for this thread/process
 // fence  : if non zero, use memory fencing
@@ -500,11 +509,12 @@ int32_t TryReleaseIdLock(volatile int32_t *lock, int32_t id, int32_t fence)   //
   return try_release_idlock(lock, id) ;
 }
 
+// Fortran needs 2 different symbols as targets even if the same code is used
 #pragma weak ReleaseIdLock_=ReleaseIdLock
 void ReleaseIdLock_(volatile int32_t *lock, int32_t id, int32_t fence) ;
 //****f* librkl/ReleaseIdLock
 // Synopsis
-// release a lock acquired via AcquireIdLock using 4 byte variable at address lock
+// release a lock acquired via AcquireIdLock using 4 byte variable at address lock (try until successful)
 // attempting to release a lock that was not acquired with this id will result in a deadlock
 // lock   : address of lock variable
 // id     : identifier for this thread/process
@@ -534,6 +544,7 @@ void ReleaseIdLock(volatile int32_t *lock, int32_t id, int32_t fence)   // !InTc
   }
 }
 
+// Fortran needs 2 different symbols as targets even if the same code is used
 #pragma weak LockOwner_=LockOwner
 int32_t LockOwner_(volatile int32_t *lock) ;
 //****f* librkl/LockOwner
@@ -559,11 +570,12 @@ int32_t LockOwner(volatile int32_t *lock)    // !InTc!
   return lock_owner(lock) ;
 }
 
+// Fortran needs 2 different symbols as targets even if the same code is used
 #pragma weak ResetLock_=ResetLock
 void ResetLock_(volatile int32_t *lock) ;
 //****f* librkl/ResetLock
 // Synopsis
-// forcefully (unsafely) force a locj to the "free" state
+// forcefully (unsafely) force a lock to the "free" state
 // lock   : address of lock variable
 //
 // Fortran interface
@@ -608,7 +620,8 @@ int main(int argc, char **argv){
   MPI_Comm temp_comm;
   int myhost, myhost0, myhost1;
   void *ptr;
-  int32_t sid, size;
+  int32_t sid ;
+  size_t size ;
   uint64_t t0 , t1;
   double tmin, tmax, tavg, tmp;
   volatile int32_t *kount;
@@ -647,9 +660,9 @@ int main(int argc, char **argv){
 // performance and correctness test of increment under lock
   t0 = rdtsc();
   for(i=0 ; i<100 ; i++){
-    AcquireLock(kount);
+    AcquireLock(kount, 0);
     kount[1]++;
-    ReleaseLock(kount);  // release_idlock
+    ReleaseLock(kount, 0);  // release_idlock
   }
   t1 = rdtsc();
   ierr = MPI_Barrier(MY_World);   // wait until all PEs are done
@@ -694,7 +707,7 @@ int main(int argc, char **argv){
   }
 
 #if defined(TEST_MULTI)
-test of more complex barrier algorithm
+// test of more complex barrier algorithm
   t0 = rdtsc();
   for(i=0 ; i<100 ; i++){
     node_barrier_multi(localrank, localsize);

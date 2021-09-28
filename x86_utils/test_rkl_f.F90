@@ -6,7 +6,7 @@ program test
   integer(C_INT), target :: dummyvar
   type(C_PTR) :: p0, p1, p2
   integer, dimension(:), pointer :: array
-  integer, parameter :: MEMSIZE = 4096
+  integer(C_SIZE_T), parameter :: MEMSIZE = 4096*1024
   real(kind=8) :: t0, t1
   integer :: t
   type(rkl_lock) :: mylock, dummylock

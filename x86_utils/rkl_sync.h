@@ -18,7 +18,7 @@
 
 #include <stdint.h>
 
-void *allocate_safe_shared_memory(int32_t *sid, uint32_t size) ;
+void *allocate_safe_shared_memory(int32_t *sid, size_t size) ;
 
 void ReleaseLock(volatile int32_t *lock, int32_t fence) ;
 void ReleaseIdLock(volatile int32_t *lock, int32_t id, int32_t fence) ;
