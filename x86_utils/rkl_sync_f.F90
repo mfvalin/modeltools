@@ -22,15 +22,19 @@ module rkl_sync_mod
     private
     type(C_PTR) :: p = C_NULL_PTR  ! C pointer to address used for the lock
   contains
-    procedure, PASS(this) :: init   => InitLock
-    procedure, PASS(this) :: initp  => InitLockP
-    procedure, PASS(this) :: lock   => SetIdLock, SetLock
-    procedure, PASS(this) :: trylock   => TrySetIdLock, TrySetLock
-    procedure, PASS(this) :: unlock => ClearIdLock, ClearLock
-    procedure, PASS(this) :: tryunlock => TryClearIdLock, TryClearLock
-    procedure, PASS(this) :: valid  => ValidLock
-    procedure, PASS(this) :: owner  => OwnerOfLock
-    procedure, PASS(this) :: reset  => ResetOfLock
+    procedure, PASS(this) :: init       => InitLock
+    procedure, PASS(this) :: initp      => InitLockP
+    procedure, PASS(this) :: lockf      => SetIdLock, SetLock
+    procedure, PASS(this) :: lock       => SetIdLock1, SetLock1
+    procedure, PASS(this) :: trylock    => TrySetIdLock1, TrySetLock1
+    procedure, PASS(this) :: trylockf   => TrySetIdLock, TrySetLock
+    procedure, PASS(this) :: unlock     => ClearIdLock1, ClearLock1
+    procedure, PASS(this) :: unlockf    => ClearIdLock, ClearLock
+    procedure, PASS(this) :: tryunlock  => TryClearIdLock1, TryClearLock1
+    procedure, PASS(this) :: tryunlockf => TryClearIdLock, TryClearLock
+    procedure, PASS(this) :: valid      => ValidLock
+    procedure, PASS(this) :: owner      => OwnerOfLock
+    procedure, PASS(this) :: reset      => ResetOfLock
   end type
 
   private :: InitBarrier, InitBarrierP, ValidBarrier
@@ -115,30 +119,54 @@ module rkl_sync_mod
      owner = LockOwner_(this%p)
   end function OwnerOfLock
 
+  function TrySetLock1(this) result(status)
+    class(rkl_lock), intent(IN) :: this
+    integer(C_INT) :: status
+    status = TryAcquireLock_(this%p, 1)
+  end function TrySetLock1
   function TrySetLock(this, fence) result(status)
     class(rkl_lock), intent(IN) :: this
-    integer(C_INT), intent(IN), value :: fence
+    logical, intent(IN), value :: fence
     integer(C_INT) :: status
-    status = TryAcquireLock_(this%p, fence)
+    if(fence) status = TryAcquireLock_(this%p, 1)
+    if(.not. fence) status = TryAcquireLock_(this%p, 0)
   end function TrySetLock
+  function TrySetIdLock1(this, id) result(status)
+    class(rkl_lock), intent(IN) :: this
+    integer(C_INT), intent(IN), value :: id
+    integer(C_INT) :: status
+    status = TryAcquireIdLock_(this%p, id, 1)
+  end function TrySetIdLock1
   function TrySetIdLock(this, id, fence) result(status)
     class(rkl_lock), intent(IN) :: this
     integer(C_INT), intent(IN), value :: id
-    integer(C_INT), intent(IN), value :: fence
+    logical, intent(IN), value :: fence
     integer(C_INT) :: status
-    status = TryAcquireIdLock_(this%p, id, fence)
+    if(fence) status = TryAcquireIdLock_(this%p, id, 1)
+    if(.not. fence) status = TryAcquireIdLock_(this%p, id, 0)
   end function TrySetIdLock
 
+  subroutine SetLock1(this)
+    class(rkl_lock), intent(IN) :: this
+    call AcquireLock_(this%p, 1)
+  end subroutine SetLock1
   subroutine SetLock(this, fence)
     class(rkl_lock), intent(IN) :: this
-    integer(C_INT), intent(IN), value :: fence
-    call AcquireLock_(this%p, fence)
+    logical, intent(IN), value :: fence
+    if(fence) call AcquireLock_(this%p, 1)
+    if(.not. fence) call AcquireLock_(this%p, 0)
   end subroutine SetLock
+  subroutine SetIdLock1(this, id)
+    class(rkl_lock), intent(IN) :: this
+    integer(C_INT), intent(IN), value :: id
+    call AcquireIdLock_(this%p, id, 1)
+  end subroutine SetIdLock1
   subroutine SetIdLock(this, id, fence)
     class(rkl_lock), intent(IN) :: this
     integer(C_INT), intent(IN), value :: id
-    integer(C_INT), intent(IN), value :: fence
-    call AcquireIdLock_(this%p, id, fence)
+    logical, intent(IN), value :: fence
+    if(fence) call AcquireIdLock_(this%p, id, 1)
+    if(.not. fence) call AcquireIdLock_(this%p, id, 0)
   end subroutine SetIdLock
 
   subroutine ResetOfLock(this)
@@ -146,29 +174,53 @@ module rkl_sync_mod
     call ResetLock_(this%p)
   end subroutine ResetOfLock
 
+  function TryClearLock1(this) result(status)
+    class(rkl_lock), intent(IN) :: this
+    integer(C_INT) :: status
+    status = TryReleaseLock_(this%p, 1)
+  end function TryClearLock1
   function TryClearLock(this, fence) result(status)
     class(rkl_lock), intent(IN) :: this
-    integer(C_INT), intent(IN), value :: fence
+    logical, intent(IN), value :: fence
     integer(C_INT) :: status
-    status = TryReleaseLock_(this%p, fence)
+    if(fence) status = TryReleaseLock_(this%p, 1)
+    if(.not. fence) status = TryReleaseLock_(this%p, 0)
   end function TryClearLock
+  function TryClearIdLock1(this, id) result(status)
+    class(rkl_lock), intent(IN) :: this
+    integer(C_INT), intent(IN), value :: id
+    integer(C_INT) :: status
+    status = TryReleaseIdLock_(this%p, id, 1)
+  end function TryClearIdLock1
   function TryClearIdLock(this, id, fence) result(status)
     class(rkl_lock), intent(IN) :: this
     integer(C_INT), intent(IN), value :: id
-    integer(C_INT), intent(IN), value :: fence
+    logical, intent(IN), value :: fence
     integer(C_INT) :: status
-    status = TryReleaseIdLock_(this%p, id, fence)
+    if(fence) status = TryReleaseIdLock_(this%p, id, 1)
+    if(.not. fence) status = TryReleaseIdLock_(this%p, id, 0)
   end function TryClearIdLock
 
+  subroutine ClearLock1(this)
+    class(rkl_lock), intent(IN) :: this
+    call ReleaseLock_(this%p, 1)
+  end subroutine ClearLock1
   subroutine ClearLock(this, fence)
     class(rkl_lock), intent(IN) :: this
-    integer(C_INT), intent(IN), value :: fence
-    call ReleaseLock_(this%p, fence)
+    logical, intent(IN), value :: fence
+    if(fence) call ReleaseLock_(this%p, 1)
+    if(.not. fence) call ReleaseLock_(this%p, 0)
   end subroutine ClearLock
+  subroutine ClearIdLock1(this, id)
+    class(rkl_lock), intent(IN) :: this
+    integer(C_INT), intent(IN), value :: id
+    call ReleaseIdLock_(this%p, id, 1)
+  end subroutine ClearIdLock1
   subroutine ClearIdLock(this, id, fence)
     class(rkl_lock), intent(IN) :: this
     integer(C_INT), intent(IN), value :: id
-    integer(C_INT), intent(IN), value :: fence
-    call ReleaseIdLock_(this%p, id, fence)
+    logical, intent(IN), value :: fence
+    if(fence) call ReleaseIdLock_(this%p, id, 1)
+    if(.not. fence) call ReleaseIdLock_(this%p, id, 0)
   end subroutine ClearIdLock
 end module

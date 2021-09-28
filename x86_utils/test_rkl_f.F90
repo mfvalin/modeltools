@@ -11,6 +11,8 @@ program test
   integer :: t
   type(rkl_lock) :: mylock, dummylock
   type(rkl_barrier) :: mybarrier
+  logical :: true = .true.
+  logical :: false = .false.
 
   call mpi_init()
   call mpi_comm_size(MPI_COMM_WORLD, npes)
@@ -18,16 +20,16 @@ program test
 
 !   if(rank == 0) then
     call dummylock%init(dummyvar)
-    call dummylock%lock(999, 1)
+    call dummylock%lockf(999, .true.)
     if(dummylock%owner() .ne. 999) print *,'dummylock%lock : ERROR, not owner of lock when it should be'
   !   if(dummylock%owner() .eq. 999) print *,'dummylock%lock : SUCCESS, owner of lock when it should be'
 !     status = TryReleaseIdLock(dummyvar, 999, 1)
 !     if(status .ne. 1) print *,'TryReleaseIdLock 1 : ERROR, expected 1, status =',status
-    status = dummylock%tryunlock(999, 1)
+    status = dummylock%tryunlock(999)
     if(status .ne. 1) print *,'dummylock%tryunlock 1 : ERROR, expected 1, status =',status
 ! 
 !     call dummylock%lock(999, 1)
-    status = dummylock%trylock(999, 1)    ! trylock should succeed
+    status = dummylock%trylock(999)    ! trylock should succeed
     if(status .ne. 1) print *,'dummylock%trylock : expected 1, status =',status
     if(dummylock%owner() .ne. 999) print *,'dummylock%lock : ERROR, not owner of lock when it should be'
   !   if(dummylock%owner() .eq. 999) print *,'dummylock%lock : SUCCESS, owner of lock when it should be'
@@ -37,7 +39,7 @@ program test
   !   if(dummylock%owner() .eq. -1) print *,'dummylock%lock : SUCCESS, owner is -1 when it should be'
 
     call ReleaseIdLock(dummyvar, 999, 1)  ! lock has already been reset, test that this will not deadlock
-    status = dummylock%tryunlock(999, 1)  ! tryunlock is expected to fail
+    status = dummylock%tryunlockf(999, .true.)  ! tryunlock is expected to fail
     if(status .ne. 0) print *,'dummylock%tryunlock 2 : ERROR, expected 0, status =',status
 !     status = TryReleaseIdLock_(C_LOC(dummyvar), 999, 1)
 !     if(status .ne. 0) print *,'TryReleaseIdLock_ 2 : ERROR, expected 0, status =',status
@@ -68,9 +70,9 @@ program test
   call mpi_barrier(MPI_COMM_WORLD)
   t0 = mpi_wtime()
   do i = 1, 100
-    call mylock%lock(rank, 1)
+    call mylock%lock(rank)
     array(512) = array(512) + 1
-    call mylock%unlock(rank, 1)
+    call mylock%unlockf(rank, .true.)
   enddo
   t1 = mpi_wtime() - t0
   t1 = t1 / 100
@@ -84,15 +86,15 @@ program test
   call mpi_barrier(MPI_COMM_WORLD)
   t0 = mpi_wtime()
   do i = 1, 100
-    call mylock%lock(rank, 0)
+    call mylock%lock(rank)
     array(512) = array(512) + 1
-    call mylock%unlock(rank, 0)
+    call mylock%unlock(rank)
   enddo
   t1 = mpi_wtime() - t0
-  call mylock%lock(rank, 0)
+  call mylock%lock(rank)
   if(mylock%owner() .ne. rank) print *,'mylock%owner : ERROR, not owner of lock when it should be'
 !   if(mylock%owner() .eq. rank) print *,'mylock%owner : SUCCESS, owner of lock when it should be'
-  call mylock%unlock(rank, 0)
+  call mylock%unlockf(rank, .false.)
   t1 = t1 / 100
   t = (t1 * 1.0E+9) + .5
   call mpi_barrier(MPI_COMM_WORLD)
