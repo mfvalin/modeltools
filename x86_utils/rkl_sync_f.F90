@@ -24,14 +24,14 @@ module rkl_sync_mod
   contains
     procedure, PASS(this) :: init       => InitLock
     procedure, PASS(this) :: initp      => InitLockP
-    procedure, PASS(this) :: lockf      => SetIdLock, SetLock
-    procedure, PASS(this) :: lock       => SetIdLock1, SetLock1
-    procedure, PASS(this) :: trylock    => TrySetIdLock1, TrySetLock1
-    procedure, PASS(this) :: trylockf   => TrySetIdLock, TrySetLock
-    procedure, PASS(this) :: unlock     => ClearIdLock1, ClearLock1
-    procedure, PASS(this) :: unlockf    => ClearIdLock, ClearLock
-    procedure, PASS(this) :: tryunlock  => TryClearIdLock1, TryClearLock1
-    procedure, PASS(this) :: tryunlockf => TryClearIdLock, TryClearLock
+    procedure, PASS(this) :: lock       => SetIdLock1, SetLock1              ! implies a fence
+    procedure, PASS(this) :: lockf      => SetIdLock, SetLock                ! explicit fence argument
+    procedure, PASS(this) :: trylock    => TrySetIdLock1, TrySetLock1        ! implies a fence
+    procedure, PASS(this) :: trylockf   => TrySetIdLock, TrySetLock          ! explicit fence argument
+    procedure, PASS(this) :: unlock     => ClearIdLock1, ClearLock1          ! implies a fence
+    procedure, PASS(this) :: unlockf    => ClearIdLock, ClearLock            ! explicit fence argument
+    procedure, PASS(this) :: tryunlock  => TryClearIdLock1, TryClearLock1    ! implies a fence
+    procedure, PASS(this) :: tryunlockf => TryClearIdLock, TryClearLock      ! explicit fence argument
     procedure, PASS(this) :: valid      => ValidLock
     procedure, PASS(this) :: owner      => OwnerOfLock
     procedure, PASS(this) :: reset      => ResetOfLock
