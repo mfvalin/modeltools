@@ -1,7 +1,186 @@
+! Copyright (C) 2021  Environnement et Changement climatique Canada
+!
+! This is free software; you can redistribute it and/or
+! modify it under the terms of the GNU Lesser General Public
+! License as published by the Free Software Foundation,
+! version 2.1 of the License.
+!
+! This software is distributed in the hope that it will be useful,
+! but WITHOUT ANY WARRANTY; without even the implied warranty of
+! MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+! Lesser General Public License for more details.
+!
+! Author:
+!     M. Valin,   Recherche en Prevision Numerique, 2021
 
-module clip_trajectories_data
+#if ! defined(VL)
+#define VL 8
+#endif
+
+module clip_trajectories_d_mod
   use ISO_C_BINDING
   implicit none
+
+  private
+  interface
+    subroutine SetClippingLimits_d_avx512(cmini, cmaxi, cminj, cmaxj , gmini, gmaxi, gminj, gmaxj) bind(C,name='SetClippingLimitsD_avx')
+      import :: C_DOUBLE
+      implicit none
+      real(C_DOUBLE), intent(IN), value :: cmini, cmaxi, cminj, cmaxj
+      real(C_DOUBLE), intent(IN), value :: gmini, gmaxi, gminj, gmaxj
+    end subroutine
+    subroutine ClipTrajectories_d_avx512(alpha, beta, l1, l2, ni, nj, mini,maxi,minj,maxj, nk, indx1, indx2) bind(C,name='ClipTrajectoriesD_avx512')
+      import :: C_DOUBLE, C_INT
+      implicit none
+      integer(C_INT), intent(IN), value :: ni, nj, mini,maxi,minj,maxj, nk    ! dimensions of alpha and beta
+      real(C_DOUBLE), dimension(mini:maxi,minj:maxj,nk), intent(IN) :: alpha   ! targets along x (i)
+      real(C_DOUBLE), dimension(mini:maxi,minj:maxj,nk), intent(IN) :: beta    ! targets along y (j)
+      integer(C_INT), dimension(*), intent(OUT) :: l1            ! clipping list for tile (cell)
+      integer(C_INT), dimension(*), intent(OUT) :: l2            ! clipping list for grid
+      integer(C_INT), intent(INOUT) :: indx1                     ! number of points clipped in l1 list
+      integer(C_INT), intent(INOUT) :: indx2                     ! number of points clipped in l2 list
+    end subroutine
+    function ClipTrajectories_avx512_d() result(available) bind(C,name='ClipTrajectories_avx512D')
+      import :: C_INT
+      implicit none
+      integer(C_INT) :: available
+    end function
+    function ClipTrajectories_avx2_d() result(available) bind(C,name='ClipTrajectories_avx2D')
+      import :: C_INT
+      implicit none
+      integer(C_INT) :: available
+    end function
+  end interface
+
+  save
+  real(C_DOUBLE) :: c_mini = 0.0
+  real(C_DOUBLE) :: c_maxi = 0.0
+  real(C_DOUBLE) :: c_minj = 0.0
+  real(C_DOUBLE) :: c_maxj = 0.0
+  real(C_DOUBLE) :: g_mini = 0.0
+  real(C_DOUBLE) :: g_maxi = 0.0
+  real(C_DOUBLE) :: g_minj = 0.0
+  real(C_DOUBLE) :: g_maxj = 0.0
+  integer(C_INT) :: avx512 = -1
+  integer(C_INT) :: avx2   = -1
+
+  public :: SetClippingLimits_d, ClipTrajectories_d, ClipTrajectories_avx512_d, ClipTrajectories_avx2_d
+
+  contains
+
+  subroutine SetClippingLimits_d(cmini, cmaxi, cminj, cmaxj , gmini, gmaxi, gminj, gmaxj) bind(C,name='SetClippingLimitsD')
+    implicit none
+    real(C_DOUBLE), intent(IN), value :: cmini, cmaxi, cminj, cmaxj
+    real(C_DOUBLE), intent(IN), value :: gmini, gmaxi, gminj, gmaxj
+
+    if(avx512 == -1) then
+      avx512 = ClipTrajectories_avx512_d()
+      if(avx512 == 1) print *,'AVX512 version available'
+    endif
+    if(avx2 == -1) then
+      avx2 = ClipTrajectories_avx2_d()
+      if(avx2 == 1) print *,'AVX2 version available'
+    endif
+    if(avx512 == 1 .or. avx2 == 1) call SetClippingLimits_d_avx512(cmini, cmaxi, cminj, cmaxj , gmini, gmaxi, gminj, gmaxj)
+    c_mini = cmini
+    c_maxi = cmaxi
+    c_minj = cminj
+    c_maxj = cmaxj
+    g_mini = gmini
+    g_maxi = gmaxi
+    g_minj = gminj
+    g_maxj = gmaxj
+  end subroutine
+
+  subroutine ClipTrajectories_d(alpha, beta, l1, l2, ni, nj, mini,maxi,minj,maxj, nk, indx1, indx2) bind(C,name='ClipTrajectoriesD')
+    implicit none
+    integer(C_INT), intent(IN), value :: ni, nj, mini,maxi,minj,maxj, nk    ! dimensions of alpha and beta
+    real(C_DOUBLE), dimension(mini:maxi,minj:maxj,nk), intent(IN) :: alpha   ! targets along x (i)
+    real(C_DOUBLE), dimension(mini:maxi,minj:maxj,nk), intent(IN) :: beta    ! targets along y (j)
+    integer(C_INT), dimension(*), intent(OUT) :: l1            ! clipping list for tile (cell)
+    integer(C_INT), dimension(*), intent(OUT) :: l2            ! clipping list for grid
+    integer(C_INT), intent(INOUT) :: indx1                     ! number of points clipped in l1 list
+    integer(C_INT), intent(INOUT) :: indx2                     ! number of points clipped in l2 list
+
+    integer :: i, j, k, l, nim
+    integer :: ix1, ix2, ijk, jk
+    logical, dimension(1:ni) :: clip1, clip2
+
+    if(avx512 == 1) then
+      call ClipTrajectories_d_avx512(alpha, beta, l1, l2, ni, nj, mini,maxi,minj,maxj, nk, indx1, indx2)
+      return
+    endif
+    ix1 = indx1 + 1  ! next store position
+    ix2 = indx2 + 1
+    nim = mod(ni,VL)
+    if(nim == 0) nim = VL
+    do k = 1, nk
+      do j = 1, nj
+        jk = j * 4096 + k * 4096 * 4096
+        if(VL > ni) then
+          do i = 1, ni
+            clip2(i) = (alpha(i,j,k) < g_mini) .or. (alpha(i,j,k) > g_maxi) .or. (beta(i,j,k) < g_minj) .or. (beta(i,j,k) > g_maxj)
+            clip1(i) = (alpha(i,j,k) < c_mini) .or. (alpha(i,j,k) > c_maxi) .or. (beta(i,j,k) < c_minj) .or. (beta(i,j,k) > c_maxj)
+            clip1(i) = clip1(i) .and. (.not. clip2(i))
+          enddo
+        else
+          do i = 1, VL     ! force a vector pass instead of a scalar pass for slice 1
+            clip2(i) = (alpha(i,j,k) < g_mini) .or. (alpha(i,j,k) > g_maxi) .or. (beta(i,j,k) < g_minj) .or. (beta(i,j,k) > g_maxj)
+            clip1(i) = (alpha(i,j,k) < c_mini) .or. (alpha(i,j,k) > c_maxi) .or. (beta(i,j,k) < c_minj) .or. (beta(i,j,k) > c_maxj)
+            clip1(i) = clip1(i) .and. (.not. clip2(i))
+          enddo
+          do i = nim+1, ni, VL
+            do l=1,VL
+              clip2(i+l) = (alpha(i+l,j,k) < g_mini) .or. (alpha(i+l,j,k) > g_maxi) .or. (beta(i+l,j,k) < g_minj) .or. (beta(i+l,j,k) > g_maxj)
+              clip1(i+l) = (alpha(i+l,j,k) < c_mini) .or. (alpha(i+l,j,k) > c_maxi) .or. (beta(i+l,j,k) < c_minj) .or. (beta(i+l,j,k) > c_maxj)
+              clip1(i+l) = clip1(i+l) .and. (.not. clip2(i+l))
+            enddo
+          enddo
+        endif
+        do i = 1, ni
+          ijk = i + jk
+          l1(ix1) = ijk
+          if(clip1(i)) ix1 = ix1 + 1
+          l2(ix2) = ijk
+          if(clip2(i)) ix2 = ix2 + 1
+        enddo
+      enddo
+    enddo
+    indx1 = ix1 - 1  ! position of last store
+    indx2 = ix2 - 1
+  end subroutine ClipTrajectories_d
+
+end module
+
+module clip_trajectories_f_mod
+  use ISO_C_BINDING
+  implicit none
+
+  private
+  interface
+    subroutine SetClippingLimits_f_avx512(cmini, cmaxi, cminj, cmaxj , gmini, gmaxi, gminj, gmaxj) bind(C,name='SetClippingLimitsF_avx512')
+      import :: C_FLOAT
+      implicit none
+      real(C_FLOAT), intent(IN), value :: cmini, cmaxi, cminj, cmaxj
+      real(C_FLOAT), intent(IN), value :: gmini, gmaxi, gminj, gmaxj
+    end subroutine
+    subroutine ClipTrajectories_f_avx512(alpha, beta, l1, l2, ni, nj, mini,maxi,minj,maxj, nk, indx1, indx2) bind(C,name='ClipTrajectoriesF_avx512')
+      import :: C_FLOAT, C_INT
+      implicit none
+      integer(C_INT), intent(IN), value :: ni, nj, mini,maxi,minj,maxj, nk    ! dimensions of alpha and beta
+      real(C_FLOAT), dimension(mini:maxi,minj:maxj,nk), intent(IN) :: alpha   ! targets along x (i)
+      real(C_FLOAT), dimension(mini:maxi,minj:maxj,nk), intent(IN) :: beta    ! targets along y (j)
+      integer(C_INT), dimension(*), intent(OUT) :: l1            ! clipping list for tile (cell)
+      integer(C_INT), dimension(*), intent(OUT) :: l2            ! clipping list for grid
+      integer(C_INT), intent(INOUT) :: indx1                     ! number of points clipped in l1 list
+      integer(C_INT), intent(INOUT) :: indx2                     ! number of points clipped in l2 list
+    end subroutine
+    function ClipTrajectories_avx512_f() result(available) bind(C,name='ClipTrajectories_avx512F')
+      import :: C_INT
+      implicit none
+      integer(C_INT) :: available
+    end function
+  end interface
   save
   real(C_FLOAT) :: c_mini = 0.0
   real(C_FLOAT) :: c_maxi = 0.0
@@ -11,145 +190,87 @@ module clip_trajectories_data
   real(C_FLOAT) :: g_maxi = 0.0
   real(C_FLOAT) :: g_minj = 0.0
   real(C_FLOAT) :: g_maxj = 0.0
+  integer(C_INT) :: avx512 = -1
+
+  public :: SetClippingLimits_f, ClipTrajectories_f, ClipTrajectories_avx512_f
+
+  contains
+
+  subroutine SetClippingLimits_f(cmini, cmaxi, cminj, cmaxj , gmini, gmaxi, gminj, gmaxj) bind(C,name='SetClippingLimitsF')
+    implicit none
+    real(C_FLOAT), intent(IN), value :: cmini, cmaxi, cminj, cmaxj
+    real(C_FLOAT), intent(IN), value :: gmini, gmaxi, gminj, gmaxj
+
+!     if(avx512 == -1) avx512 = ClipTrajectories_avx512_f()
+!     if(avx512 == 1) call SetClippingLimits_f_avx512(cmini, cmaxi, cminj, cmaxj , gmini, gmaxi, gminj, gmaxj)
+    c_mini = cmini
+    c_maxi = cmaxi
+    c_minj = cminj
+    c_maxj = cmaxj
+    g_mini = gmini
+    g_maxi = gmaxi
+    g_minj = gminj
+    g_maxj = gmaxj
+  end subroutine
+
+  subroutine ClipTrajectories_f(alpha, beta, l1, l2, ni, nj, mini,maxi,minj,maxj, nk, indx1, indx2) bind(C,name='ClipTrajectoriesF')
+    implicit none
+    integer(C_INT), intent(IN), value :: ni, nj, mini,maxi,minj,maxj, nk    ! dimensions of alpha and beta
+    real(C_FLOAT), dimension(mini:maxi,minj:maxj,nk), intent(IN) :: alpha   ! targets along x (i)
+    real(C_FLOAT), dimension(mini:maxi,minj:maxj,nk), intent(IN) :: beta    ! targets along y (j)
+    integer(C_INT), dimension(*), intent(OUT) :: l1            ! clipping list for tile (cell)
+    integer(C_INT), dimension(*), intent(OUT) :: l2            ! clipping list for grid
+    integer(C_INT), intent(INOUT) :: indx1                     ! number of points clipped in l1 list
+    integer(C_INT), intent(INOUT) :: indx2                     ! number of points clipped in l2 list
+
+    integer :: i, j, k, l, nim
+    integer :: ix1, ix2, ijk, jk
+    logical, dimension(1:ni) :: clip1, clip2
+
+    ix1 = indx1 + 1  ! next store position
+    ix2 = indx2 + 1
+    nim = mod(ni,VL)
+    if(nim == 0) nim = VL
+    do k = 1, nk
+      do j = 1, nj
+        jk = j * 4096 + k * 4096 * 4096
+        if(VL > ni) then
+          do i = 1, ni
+            clip2(i) = (alpha(i,j,k) < g_mini) .or. (alpha(i,j,k) > g_maxi) .or. (beta(i,j,k) < g_minj) .or. (beta(i,j,k) > g_maxj)
+            clip1(i) = (alpha(i,j,k) < c_mini) .or. (alpha(i,j,k) > c_maxi) .or. (beta(i,j,k) < c_minj) .or. (beta(i,j,k) > c_maxj)
+            clip1(i) = clip1(i) .and. (.not. clip2(i))
+          enddo
+        else
+          do i = 1, VL     ! force a vector pass instead of a scalar pass for slice 1
+            clip2(i) = (alpha(i,j,k) < g_mini) .or. (alpha(i,j,k) > g_maxi) .or. (beta(i,j,k) < g_minj) .or. (beta(i,j,k) > g_maxj)
+            clip1(i) = (alpha(i,j,k) < c_mini) .or. (alpha(i,j,k) > c_maxi) .or. (beta(i,j,k) < c_minj) .or. (beta(i,j,k) > c_maxj)
+            clip1(i) = clip1(i) .and. (.not. clip2(i))
+          enddo
+          do i = nim+1, ni, VL
+            do l=1,VL
+              clip2(i+l) = (alpha(i+l,j,k) < g_mini) .or. (alpha(i+l,j,k) > g_maxi) .or. (beta(i+l,j,k) < g_minj) .or. (beta(i+l,j,k) > g_maxj)
+              clip1(i+l) = (alpha(i+l,j,k) < c_mini) .or. (alpha(i+l,j,k) > c_maxi) .or. (beta(i+l,j,k) < c_minj) .or. (beta(i+l,j,k) > c_maxj)
+              clip1(i+l) = clip1(i+l) .and. (.not. clip2(i+l))
+            enddo
+          enddo
+        endif
+        do i = 1, ni
+          ijk = i + jk
+          l1(ix1) = ijk
+          if(clip1(i)) ix1 = ix1 + 1
+          l2(ix2) = ijk
+          if(clip2(i)) ix2 = ix2 + 1
+        enddo
+      enddo
+    enddo
+    indx1 = ix1 - 1  ! position of last store
+    indx2 = ix2 - 1
+  end subroutine ClipTrajectories_f
+
 end module
 
-subroutine SetClippingLimits(cmini, cmaxi, cminj, cmaxj , gmini, gmaxi, gminj, gmaxj) bind(C,name='SetClippingLimits')
-  use clip_trajectories_data
+module clip_trajectories_mod
+  use clip_trajectories_d_mod
+  use clip_trajectories_f_mod
   implicit none
-  real(C_FLOAT), intent(IN), value :: cmini, cmaxi, cminj, cmaxj
-  real(C_FLOAT), intent(IN), value :: gmini, gmaxi, gminj, gmaxj
-
-  c_mini = cmini
-  c_maxi = cmaxi
-  c_minj = cminj
-  c_maxj = cmaxj
-  g_mini = gmini
-  g_maxi = gmaxi
-  g_minj = gminj
-  g_maxj = gmaxj
-end subroutine
-
-#define VL 16
-subroutine ClipTrajectories(alpha, beta, l1, l2, ni, indx1, indx2) bind(C,name='ClipTrajectories')
-  use clip_trajectories_data
-  implicit none
-  integer, intent(IN), value               :: ni
-  real(C_FLOAT), dimension(ni), intent(IN) :: alpha, beta
-  integer, dimension(*), intent(OUT)       :: l1, l2
-  integer, intent(INOUT)                   :: indx1       ! number of points in list l1 (output)
-                                                          ! last valid entry in l1 or l2 (input) (0 = none)
-  integer, intent(INOUT)                   :: indx2       ! number of points in list l2 (output)
-
-  logical, dimension(0:VL-1) :: clip1, clip2
-  integer :: i, k ,vl7, ix1, ix2
-
-  vl7 = mod(ni,VL)
-  ix1 = indx1 + 1
-  ix2 = indx2 + 1
-
-  do i = 1, ni-VL, VL     !  VL long slices
-    do k = 0,VL-1
-      clip2(k) = (alpha(i+k) < g_mini) .or. (alpha(i+k) > g_maxi) .or. (beta(i+k) < g_minj) .or. (beta(i+k) > g_maxj)
-      clip1(k) = (alpha(i+k) < c_mini) .or. (alpha(i+k) > c_maxi) .or. (beta(i+k) < c_minj) .or. (beta(i+k) > c_maxj)
-      clip1(k) = clip1(k) .and. (.not. clip2(k))
-    enddo
-    do k = 0,VL-1
-      l1(ix1) = i+k
-      if(clip1(k)) ix1 = ix1 + 1
-      l2(ix2) = i+k
-      if(clip2(k)) ix2 = ix2 + 1
-    enddo
-  enddo
-  i = ni - vl7 + 1
-  do k = 0, vl7-1       ! letfovers after VL slices
-    clip2(k) = (alpha(i+k) < g_mini) .or. (alpha(i+k) > g_maxi) .or. (beta(i+k) < g_minj) .or. (beta(i+k) > g_maxj)
-    clip1(k) = (alpha(i+k) < c_mini) .or. (alpha(i+k) > c_maxi) .or. (beta(i+k) < c_minj) .or. (beta(i+k) > c_maxj)
-    clip1(k) = clip1(k) .and. (.not. clip2(k))
-  enddo
-  do k = 0,vl7-1
-    l1(ix1) = i+k
-    if(clip1(k)) ix1 = ix1 + 1
-    l2(ix2) = i+k
-    if(clip2(k)) ix2 = ix2 + 1
-  enddo
-
-  indx1 = ix1-1   ! set to number of points
-  indx2 = ix2-1   ! set to number of points
-end subroutine
-
-#if defined(SELF_TEST)
-#if ! defined(NPTS)
-#define NPTS 128007
-#endif
-
-function Wall_Time() result(t)
-  use ISO_C_BINDING
-  implicit none
-  real(kind=8) :: t
-  interface
-    function gettimeofday(tv, tz) result(status) bind(C,name='gettimeofday')
-      import :: C_PTR, C_INT
-      type(C_PTR), intent(IN), value :: tv, tz
-      integer(C_INT) :: status
-    end function gettimeofday
-  end interface
-  type, bind(C) :: timeval
-    integer(C_LONG_LONG) :: tv_sec
-    integer(C_LONG_LONG) :: tv_usec
-  end type
-  integer :: status
-  type(timeval), target :: tv
-  status = gettimeofday(C_LOC(tv), C_NULL_PTR)
-  t = tv % tv_sec
-  t = t + tv % tv_usec * 1E-6 ;
-end function Wall_Time
-
-program test_clip
-  use ISO_C_BINDING
-  implicit none
-  interface
-    subroutine SetClippingLimits(cmini, cmaxi, cminj, cmaxj , gmini, gmaxi, gminj, gmaxj) bind(C,name='SetClippingLimits')
-      import :: C_FLOAT
-      implicit none
-      real(C_FLOAT), intent(IN), value :: cmini, cmaxi, cminj, cmaxj  ! cell (tile) limits
-      real(C_FLOAT), intent(IN), value :: gmini, gmaxi, gminj, gmaxj  ! grid limits
-    end subroutine SetClippingLimits
-    subroutine ClipTrajectories(alpha, beta, l1, l2, ni, indx1, indx2) bind(C,name='ClipTrajectories')
-      import :: C_INT, C_FLOAT
-      implicit none
-      real(C_FLOAT), dimension(ni), intent(IN) :: alpha   ! tartgets along x (i)
-      real(C_FLOAT), dimension(ni), intent(IN) :: beta    ! tartgets along y (j)
-      integer(C_INT), dimension(*), intent(OUT) :: l1     ! clipping list for tile (cell)
-      integer(C_INT), dimension(*), intent(OUT) :: l2     ! clipping list for grid
-      integer(C_INT), intent(IN), value :: ni             ! dimension of alpha and beta
-      integer(C_INT), intent(OUT) :: indx1                ! number of points clipped in l1 list
-      integer(C_INT), intent(OUT) :: indx2                ! number of points clipped in l2 list
-    end subroutine ClipTrajectories
-
-
-  end interface
-  real(C_FLOAT), dimension(NPTS) :: alpha, beta
-  integer, dimension(NPTS) :: l1, l2
-  integer :: i, ii, indx1, indx2
-  real(kind=8) :: t0, t1
-  real(kind=8), external :: Wall_Time
-  integer :: ierr
-
-  call SetClippingLimits(0.06, 0.94, 0.06, 0.94, 0.03, .97, 0.03, .97)
-  ii = 1
-  do i = 0,NPTS-1
-     alpha(ii) = (1.0 * i) / (NPTS - 1)
-     beta(ii)  = (1.0 * i) / (NPTS - 1)
-     ii = ii + 41
-     if(ii > NPTS) ii = ii - NPTS
-  enddo
-  indx1 = 0 ;
-  indx2 = 0 ;
-  t0 = Wall_Time()
-  call ClipTrajectories(alpha, beta, l1, l2, NPTS, indx1, indx2)
-  t1 = Wall_Time()
-  print *, indx1, indx2,(t1 - t0)/NPTS * 1.0E9
-  if(indx1 < 10) write(6,'(A,10I8)')'indx1 =',l1(1:indx1)
-  if(indx2 < 10) write(6,'(A,10I8)')'indx2 =',l2(1:indx2)
-end program
-#endif
+end module

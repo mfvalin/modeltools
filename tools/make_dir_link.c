@@ -73,9 +73,9 @@ void usage(char *msg, int status){
   fprintf(stderr," usage: makedirs [directory_name] ndirs n [link_target link_name]\n");
   fprintf(stderr,"        makedirs [directory_name] n1xn2 n [link_target link_name]\n");
   fprintf(stderr," ndirs: number of directories with name nnnn to create (0 -> ndirs-1)\n");
-  fprintf(stderr,"        ndirs may also use a first,increment,last syntax\n");
+  fprintf(stderr,"        ndirs may also use a first,increment,last or  first,last syntax\n");
   fprintf(stderr," n    : number of digits to use (1-9) for directory name elements\n");
-  fprintf(stderr," n1,n2  directories with names in nny-nnx (nnx = 0->n1-1 , nny = 0->n2-1) will be created\n");
+  fprintf(stderr," n1,n2  directories with names nny-nnx (nnx = 0->n1-1 , nny = 0->n2-1) will be created\n");
   fprintf(stderr," n1 = number of processes per group, n2 = number of process groups\n");
   fprintf(stderr," if optional argument directory_name is an existing directory name, cd into that directory first\n");
   exit(status);
@@ -107,7 +107,7 @@ int main(int argc, char **argv){
 
   nx = 0 ; 
   ny = 0 ;
-  // makedirs [ndirs | nx/ny]  ndigits   [link_target   link_name]
+  // makedirs [ndirs | first,step,last | nx/ny]  ndigits   [link_target   link_name]
   ndirs   = get_ndirs(argv[1], &first, &delta, &last) ;
   ndigits = atoi(argv[2]);
   if(ndirs<=0 || ndigits <=0 || ndigits>9) usage("ndirs must be > 0 ; ndigits must be >0 and <10", 1);

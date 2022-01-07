@@ -154,10 +154,12 @@ int main(int argc, char **argv){
   ClipTrajectories(alpha, beta, l1, l2, NPTS, &indx1, &indx2) ;
   t1 = LOCAL_time() ;
   printf("indx1 = %d, indx2 = %d, count = %d, t = %8.3f\n",indx1, indx2, ii, (t1 - t0)/NPTS * 1.0E9);
-  if(indx1 < 10)
+  if(indx1 < 10){
     for(i=0 ; i<10 && i < indx1 ; i++) printf(" %8d",l1[i]) ; printf(" indx1\n") ;
-  if(indx2 < 10)
+  }
+  if(indx2 < 10){
     for(i=0 ; i<10 && i < indx2 ; i++) printf(" %8d",l2[i]) ; printf(" indx2\n") ;
+  }
 }
 
 #endif

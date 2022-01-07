@@ -115,6 +115,7 @@ test_memory_arena.Abs: test_memory_arena.F90
 clean:
 	rm -f intrp_bicub_yx0 intrp_bicub_yx intrp_bicub_yx.o intrp_bicub_yx.s a.out fp_x87_xmm_control.o intrp_bicub_yx.inc
 	rm -f test_search_list search_list.o test_bicub test_arena.Abs memory_arena.o xxhash_testc.Abs xxhash_testf.Abs xxhash.o
+        rm -f *.o *.mod
 
 xxhash.inc: xxhash.h
 	grep InTf xxhash.h >xxhash.inc

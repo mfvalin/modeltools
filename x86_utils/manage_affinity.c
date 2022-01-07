@@ -102,50 +102,61 @@ if(nthreads > nbound) {  /* need more threads than cores we can run on , unbind 
 return;
 }
 
-#include <mpi.h>
 static cpu_set_t set;
 static int lo_core=-1;
 static int hi_core=-1;
 
-int get_cpu_hyperthreads(){
+// only valid where /sys/devices/system/cpu/smt/active is defined
+// not working with RHEL/CentOS 7
+// working with Ubuntu 18/20 , RHEL/CentOS 8 , Gentoo 2.6
+static int get_cpu_hyperthreads(){
   int fd=open("/sys/devices/system/cpu/smt/active",O_RDONLY);
-  char ht = '0';
-  read(fd,&ht,1l);
-  close(fd);
-  if(ht == '0') return 1;
-  return 2;
+  char ht = '0' ;
+  if(fd < 0) return 1 ;     // we do not know, assuming no hyperthreading
+  read(fd,&ht,1l) ;
+  close(fd) ;
+  if(ht == '0') return 1 ;  // one thread per core
+  return 2 ;                // two threads per core
 }
 
-void RebindBySocket(int init) {
-  int rank, rank0, size, ncores, i, npersock;
-  char *omp;
-  MPI_Comm comm;
-  int color;
-  int get_cpu_cores();
+// rank = rank of process on node ( 0, ... , size-1 )
+// size = number of processes on node
+// optional overriding environment variables
+// CPU_CORES_PER_NODE    : number of cores per node
+// HYPERTHREADS_PER_CORE : logical threads per core
+// SOCKETS_PER_NODE      : number of sockets per node
+//
+// TO DO
+// maybe add a logical to physical CORE map for CPU_SET
+// to cover irregular core number mapping
+void RebindBySocket(int rank, int size) {
+  int ncores, i, npersock, nsockets, ranks_per_socket, hyperthreads ;
   int get_cpu_hyperthreads();
-  int *flag;
 
-if(init){
-  omp=getenv("OMP_NUM_THREADS");
-  color=gethostid();
-  color &= 0x7FFFFFFF;
-  MPI_Comm_rank(MPI_COMM_WORLD, &rank0);
-  MPI_Comm_split(MPI_COMM_WORLD,color,rank0,&comm);
-  MPI_Comm_size(comm, &size);
-  MPI_Comm_rank(comm, &rank);
+if(lo_core == -1){
 
-  ncores=sysconf(_SC_NPROCESSORS_CONF);
-  ncores /= get_cpu_hyperthreads();
-  npersock=ncores/2;
-  CPU_ZERO(&set);
-  if(rank < size/2) {
-    lo_core = 0 ;
-    hi_core = npersock - 1 ;
+  if(getenv("CPU_CORES_PER_NODE")) {
+    ncores = atoi( getenv("CPU_CORES_PER_NODE") ) ;
   }else{
-    lo_core = npersock ;
-    hi_core = ncores - 1;
+    ncores=sysconf(_SC_NPROCESSORS_CONF);
   }
-  for(i=lo_core ; i < hi_core ;  i++) { CPU_SET(i,&set) ;}
+  if(getenv("HYPERTHREADS_PER_CORE")) {
+    hyperthreads = atoi( getenv("HYPERTHREADS_PER_CORE")) ;
+  }else{
+    hyperthreads = get_cpu_hyperthreads() ;
+  }
+  ncores /= hyperthreads ;
+  if(getenv("SOCKETS_PER_NODE")) {
+    nsockets = atoi( getenv("SOCKETS_PER_NODE") ) ;
+  }else{
+    nsockets = 2 ;
+  }
+  npersock = ncores / nsockets ;
+  CPU_ZERO(&set);
+  ranks_per_socket = (size + nsockets - 1) / nsockets ;
+  lo_core = npersock * (rank / ranks_per_socket) ;  // lower multiple of npersock
+  hi_core = lo_core + npersock - 1 ;                // top core for this socket
+  for(i=lo_core ; i <= hi_core ;  i++) { CPU_SET(i,&set) ;}
 }
   sched_setaffinity(0,sizeof(set),&set);
 }
