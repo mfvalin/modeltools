@@ -27,7 +27,7 @@
 #define FP_STATUS_DE     2
 #define FP_STATUS_IE     1
 
-#if defined(IN_FORTRAN_CODE)
+#if defined(IN_FORTRAN_CODE)  || defined(__GFORTRAN__)
   interface
     function cpu_has_feature(feature) result(status)
       import :: C_INT
